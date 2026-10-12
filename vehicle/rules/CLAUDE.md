@@ -14,12 +14,12 @@
 | `rules_library/rules.db` | 双版本产物（'14' 39 条 + '15' 179 条，每版启用 14/22） |
 | `android/` | Gradle 工程：Room 实体/DAO、RulesVerifier、验证页、设备侧测试 |
 | `python/` | 抽取/校准/构建流水线（全部零第三方依赖） |
-| `research/RELATED_WORK.md` | 研究文档（改算法前先读） |
+| `archive/research/RELATED_WORK.md` | 研究文档（已归档到 archive/，改算法前先读） |
 
 ## 怎么跑
 
 ```bash
-PY="C:/Users/OneKyubey/AppData/Local/Programs/Python/Python313/python.exe"
+PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
 # 离线演示（最小路径，零依赖）
 "$PY" python/demo.py --out demo/demo-rules.db
 

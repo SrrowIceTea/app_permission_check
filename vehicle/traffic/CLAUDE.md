@@ -27,7 +27,7 @@ mitmdump -s addon.py --mode reverse:http://127.0.0.1:8080 \
          --listen-host 0.0.0.0 --listen-port 8888
 
 # 另一终端：应用进程内观测出站（归因主来源）+ SSL 绕过（HTTPS 明文需要）
-PY313="C:/Users/OneKyubey/AppData/Local/Programs/Python/Python313/python.exe"
+PY313="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
 "$PY313" ../core/frida_host/run.py --package com.vscanner.targetapp \
     --script ../core/frida_host/dist/hook_egress.bundle.js --seconds 60 \
     --out logs/egress_events.jsonl &

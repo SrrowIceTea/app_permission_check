@@ -26,7 +26,7 @@ cd target-app
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 # 点按钮：用 trigger.py 而不是写死坐标——坐标在布局一变就会静默点到别处
-cd .. && PY="C:/Users/OneKyubey/AppData/Local/Programs/Python/Python313/python.exe"
+cd .. && PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
 "$PY" trigger.py --package com.vscanner.targetapp --button btnRead
 "$PY" trigger.py --package com.vscanner.targetapp --button btnEgressHttp
 "$PY" trigger.py --package com.vscanner.targetapp --button btnEgressHttps

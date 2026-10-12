@@ -21,7 +21,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| Python | `C:/Users/OneKyubey/AppData/Local/Programs/Python/Python313/python.exe`（**只有它**装了 frida/mitmproxy/reportlab，默认 `python` 没有） |
+| Python | `C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe`（**只有它**装了 frida/mitmproxy/reportlab，默认 `python` 没有） |
 | SDK | `E:\Android\android-sdk`（2026-09-24 用户更新）；`JAVA_HOME=本项目 .tools/jdk21/jdk-21.0.12.1+1`（JDK 21，**不要用 JBR 25**） |
 | 设备 | AAOS 模拟器 `emulator-5554`，Android 15 / API 35 / userdebug；**应用跑在 user 10** |
 | frida-server | 设备 `/data/local/tmp/frida-server -l 127.0.0.1:27043`（**27043 不是 27042**）；spawn 超时，用 attach |

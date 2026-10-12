@@ -20,7 +20,7 @@
 
 ```bash
 cd vehicle/analyze
-PY="C:/Users/OneKyubey/AppData/Local/Programs/Python/Python313/python.exe"   # 只有它装了 reportlab
+PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"   # 只有它装了 reportlab
 
 # 1) 关联分析。--window-override-ms 不加会漏掉全部外发结论（见下）
 "$PY" correlate.py --rules ../rules/rules_library/rules.db \

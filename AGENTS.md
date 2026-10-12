@@ -10,7 +10,7 @@ vscanner/
 ├── core/           # 平台无关内核（唯一一份）：事件库/流量采集/代码行号/规则契约/Frida驱动/静态内核
 ├── vehicle/        # 车载 AAOS 产品线：rules→targets→hooks→traffic→analyze→dashboard→workbench
 ├── mobile/         # 移动端产品线：规则库/钩子/政策/AI/报告/工具（详见 mobile/CLAUDE.md）
-├── frontend/       # 前端壳（待接 platform 分流）
+├── frontend/       # 前端壳（车载工作台专用；移动端报告在 output/mobile-*/ 下）
 └── tools/          # 验收 / 回归脚本
 ```
 
@@ -94,11 +94,12 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
 - ✅ `core/rules_contract.py` + 两份 `rules.manifest.json`（规则库分开的契约层）
 - ✅ `core/frida_host/`（Frida 驱动 + 共享 bundle，斩断 mobile 对 vehicle/hooks 的引用）
 - ✅ `core/static/`（静态分析内核，斩断 mobile 对 vehicle/workbench 的引用）
-- ✅ `vehicle/rules–7` → `vehicle/*` 语义化改名（rules/targets/hooks/traffic/analyze/dashboard/workbench）
+- ✅ `phase1–7` → `vehicle/*` 语义化改名（rules/targets/hooks/traffic/analyze/dashboard/workbench）
+- ✅ `frontend/` 明确车载专用：清除移动端 PDF 污染，`--android-version` 从 manifest 读
 
-**待办**（按依赖顺序）：
-- `frontend/` platform 分流（车载/移动 PDF 与 AI 词汇表分开）
-- `archive/` 归档死内容 + 根文档路径彻底更新
+**待办**：拆分主体已完成。剩余可选整理（见 archive/README.md）：
+- `apk/` 样本按平台分目录（车载 ximalaya-car 与移动端样本分开）
+- `output/` 历史产物归档——涉及 `latest-*.txt` 指针与 DELIVERY_INDEX 引用链，需确认后再动
 
 边界仍须保留：native TLS/未解析协议无明文能力；Gadget 需要自有源码与安装授权，
 不支持无条件注入任意第三方 APK；统计归因遇歧义不关联；代码行号不证明违规语义。

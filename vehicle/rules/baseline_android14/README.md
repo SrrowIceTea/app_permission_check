@@ -48,7 +48,7 @@ python -B python/build_seed.py --verify baseline_android14/rules.db
 没有系统 python 命令时，替换为已有完整路径：
 
 ```bash
-"C:/Users/OneKyubey/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe" -B python/build_seed.py --verify baseline_android14/rules.db
+"C:/Users/毛宇淇/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe" -B python/build_seed.py --verify baseline_android14/rules.db
 ```
 
 预期：counts 为 6/8/3/22，total_records=41，enabled_rules=0，device_verified=false。

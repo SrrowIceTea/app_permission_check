@@ -24,7 +24,7 @@
 
 ```bash
 cd vehicle/dashboard
-PY="C:/Users/OneKyubey/AppData/Local/Programs/Python/Python313/python.exe"
+PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
 "$PY" dashboard.py --findings ../analyze/logs/findings.jsonl \
     --summary ../analyze/logs/findings.summary.json \
     --verify ../analyze/logs/codeloc-verify.json \

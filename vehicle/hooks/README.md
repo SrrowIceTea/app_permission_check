@@ -55,7 +55,7 @@ export PATH="D:/Anroid/SDK/platform-tools:$PATH"
 adb forward tcp:27043 tcp:27043          # 必需，见下
 adb shell am start -n com.vscanner.targetapp/.MainActivity
 
-PY313="C:/Users/OneKyubey/AppData/Local/Programs/Python/Python313/python.exe"   # 只有它装了 frida 模块
+PY313="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"   # 只有它装了 frida 模块
 "$PY313" run.py --package com.vscanner.targetapp \
     --script dist/hook_vhal.bundle.js --seconds 45 --out logs/hook_vhal.jsonl
 ```
