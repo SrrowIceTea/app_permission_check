@@ -11,8 +11,12 @@ CHECKS = [
     ('codeloc', 'phase5', [sys.executable, '-m', 'unittest', 'test_codeloc',
                            'test_event_lookup']),
     ('correlate', 'phase5', [sys.executable, '-m', 'unittest', 'test_experiment']),
-    ('proxy', 'phase4', [sys.executable, '-m', 'unittest', 'test_attribution', 'test_tagging',
-                         'test_unanswered', 'test_experiment']),
+    # 归因/载荷/失败流落盘/报文扫描是平台无关的，已抽到 core/collector/；
+    # 车载 VHAL 指纹表留在 phase4。
+    ('collector', 'core/collector', [sys.executable, '-m', 'unittest', 'test_body',
+                                     'test_attribution', 'test_unanswered',
+                                     'test_experiment']),
+    ('tagging-vehicle', 'phase4', [sys.executable, '-m', 'unittest', 'test_tagging']),
     ('dashboard', 'phase6', [sys.executable, '-m', 'unittest', 'test_dashboard']),
     ('runtime', 'phase3', ['node', 'test_runtime.mjs']),
     ('parity', 'phase1', [sys.executable, 'android/tools/verify_schema_parity.py']),

@@ -13,16 +13,21 @@ restate the old assumption that every app's traffic arrives here — it does not
    `Socket.connect` 观测——方法与取舍见 `attribution.py`。归因不到就标
    `attribution: "unresolved"` 并照常落盘，**不猜**。
 
-2. **敏感字段打标**。指纹表与扫描见 `tagging.py`。命中只是线索，不构成"泄露"结论。
+2. **敏感字段打标**。报文怎么读、读全了没有见 `body.py`（平台无关）；
+   指纹表本身是**平台专有**的，由 `VSCAN_TAGGING` 指定（见 `_load_tagging`）。
+   命中只是线索，不构成"泄露"结论。
 
 3. **JSON 落盘**。每条流一行 JSON。
 
-用法:
-  mitmdump -s addon.py --mode reverse:http://127.0.0.1:8080 --listen-port 8888
-  VSCAN_PACKAGES=a.b,c.d VSCAN_ATTRIB_SOURCES=../phase3/logs/egress.jsonl mitmdump -s addon.py
+用法（`VSCAN_TAGGING` 必填，不给就启动即失败，不猜平台）:
+  VSCAN_TAGGING=phase4/tagging.py mitmdump -s core/collector/addon.py \
+      --mode reverse:http://127.0.0.1:8080 --listen-port 8888
+  VSCAN_PACKAGES=a.b,c.d VSCAN_ATTRIB_SOURCES=../phase3/logs/egress.jsonl \
+      VSCAN_TAGGING=mobile/traffic/tagging_mobile.py mitmdump -s core/collector/addon.py
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import sys
@@ -32,14 +37,47 @@ from pathlib import Path
 
 from mitmproxy import ctx, http
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from attribution import ATTRIB_SOURCES, TimeAttribution  # noqa: E402
-from tagging import scan_body, tag_sensitive  # noqa: E402
-import flow_entry
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from core.event_store import EventStore
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from core.collector.attribution import ATTRIB_SOURCES, TimeAttribution  # noqa: E402
+from core.collector.body import scan_body  # noqa: E402
+from core.collector import flow_entry  # noqa: E402
+from core.event_store import EventStore  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
+
+
+def _load_tagging():
+    """加载**平台专有**的打标表；文件路径由 `VSCAN_TAGGING` 给出。
+
+    为什么不给默认值：拿车载的 VHAL 指纹表去扫移动端流量，结果是"一个标签都不打"，
+    而这在报告里与"这条流不含敏感字段"长得一模一样——正是本项目反复吃亏的那类
+    静默失败。宁可启动即报错，也不猜平台。
+
+    为什么走环境变量而不是 import 参数：mitmproxy 用 `-s addon.py` 加载脚本，
+    宿主机与它之间只有环境变量这一条通道（`VSCAN_FLOW_LOG` / `VSCAN_PACKAGES` 同理）。
+    移动端原先的做法是在 `addon_mobile.py` 里抢先 `sys.modules["tagging"] = tagging_mobile`
+    再 import 本模块——能跑，但注入点藏在另一个文件的副作用里，读代码的人看不出来。
+    """
+    path = os.environ.get("VSCAN_TAGGING")
+    if not path:
+        raise SystemExit(
+            "[fatal] 未设 VSCAN_TAGGING。它必须指向本次审计所属产品的打标表："
+            "车载 phase4/tagging.py，移动端 mobile/traffic/tagging_mobile.py。")
+    src = Path(path)
+    if not src.is_absolute():
+        src = ROOT / src
+    if not src.exists():
+        raise SystemExit(f"[fatal] VSCAN_TAGGING 指向的文件不存在：{src}")
+    spec = importlib.util.spec_from_file_location("vscan_tagging", src)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    if not hasattr(module, "tag_sensitive"):
+        raise SystemExit(f"[fatal] {src} 缺少 tag_sensitive(text)->(labels,tokens)")
+    return module
+
+
+tag_sensitive = _load_tagging().tag_sensitive
 
 FLOW_LOG = Path(os.environ.get("VSCAN_FLOW_LOG") or (HERE / "logs" / "flows.jsonl"))
 # 请求被观察到、但没拿到响应的流。**必须与 flows.jsonl 分开**：前者是"一次外发"，

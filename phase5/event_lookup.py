@@ -9,7 +9,7 @@
    报告里的外发代码位置就可能来自一次失败连接。
 
 两条判定都必须与 Phase 4 同源，所以 `MATCH_TOLERANCE_MS` 与 `is_ok_outcome` 直接从
-`phase4/attribution.py` 导入，**不在这里重新定义**。
+`core/collector/attribution.py` 导入，**不在这里重新定义**。
 """
 from __future__ import annotations
 
@@ -19,12 +19,13 @@ from pathlib import Path
 # phase4 与 phase5 的判定必须同源，两边一旦漂移，"addon 认为这条流属于 A"和
 # "codeloc 认为这条流属于 A 的那次连接"就会给出不一致的答案，而这种不一致极难发现
 # （两处都"看起来对"）。`is_ok_outcome` 就是 2026-09-28 实测漂移过的那一条。
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phase4"))
+# 归因内核已抽到平台无关的 core/collector/，从那里导入，保持单一来源。
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 try:
-    from attribution import MATCH_TOLERANCE_MS, is_ok_outcome  # noqa: E402
+    from core.collector.attribution import MATCH_TOLERANCE_MS, is_ok_outcome  # noqa: E402
 except ImportError as exc:  # 明确失败，不静默退回一个"差不多的"默认值
     raise SystemExit(
-        f"event_lookup 需要 phase4/attribution.py 里的 MATCH_TOLERANCE_MS 与 is_ok_outcome，"
+        f"event_lookup 需要 core/collector/attribution.py 里的 MATCH_TOLERANCE_MS 与 is_ok_outcome，"
         f"但导入失败：{exc}\n两个阶段的判定必须同源，否则归因结论会不一致。"
     ) from exc
 

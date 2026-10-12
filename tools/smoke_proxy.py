@@ -35,11 +35,12 @@ def main():
     worker.start()
     port = free_port()
     env = dict(os.environ, VSCAN_FLOW_LOG=str(flows), VSCAN_ATTRIB_SOURCES=str(events),
+               VSCAN_TAGGING=str(ROOT / 'phase4/tagging.py'),
                VSCAN_SESSION='host-smoke-synthetic-events', PYTHONUTF8='1')
     with (out / 'mitm.log').open('w', encoding='utf-8') as log:
         proc = subprocess.Popen([sys.executable, '-c',
             'from mitmproxy.tools.main import mitmdump; mitmdump()',
-            '-s', str(ROOT / 'phase4/addon.py'), '--listen-host', '127.0.0.1',
+            '-s', str(ROOT / 'core/collector/addon.py'), '--listen-host', '127.0.0.1',
             '--listen-port', str(port), '--mode', f'reverse:http://127.0.0.1:{upstream.server_port}',
             '--set', f'confdir={out / "certs"}'], env=env, stdout=log, stderr=log)
         try:

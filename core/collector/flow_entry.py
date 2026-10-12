@@ -14,8 +14,12 @@
 """
 from __future__ import annotations
 
-from payloads import capture
-from tagging import body_of
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core.collector.body import body_of  # noqa: E402
+from core.collector.payloads import capture  # noqa: E402
 
 
 def _common(flow, found, ts_ms: int, session: str) -> dict:

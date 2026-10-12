@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""V-Scanner Phase 4 — 敏感指纹的离线回归测试（不需要设备、不需要 mitmproxy）。
+"""V-Scanner 车载版敏感指纹表的离线回归（不需要设备、不需要 mitmproxy）。
 
 仅用于授权测试（自有设备与自有 APK）/ For authorized testing on owned devices and APKs only.
 
     python -m unittest test_tagging
+
+**范围**：只测车载指纹表（VHAL 属性名/ID、VIN、车载 JSON 键）本身。
+"报文读出来了没有、读全了没有"是平台无关的，测在 `core/collector/test_body.py`。
 
 **为什么值得存在**：指纹表写错一条正则，**永远不会报错**——它只会少打一个标签。
 少打标签的后果不是"这条流丢了"，而是它**照常落盘、看着完整**，
@@ -18,7 +21,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from tagging import MAX_BODY_SCAN, tag_sensitive  # noqa: E402
+from tagging import tag_sensitive  # noqa: E402
 
 
 class TagSensitiveTest(unittest.TestCase):
@@ -63,81 +66,6 @@ class TagSensitiveTest(unittest.TestCase):
         """健康检查：普通报文不该被打标，否则标签就没有区分力。"""
         labels, tokens = tag_sensitive('{"msg":"hello","count":3}')
         self.assertEqual((labels, tokens), ([], []))
-
-    def test_scan_cap_is_well_above_real_payloads(self) -> None:
-        """实测载荷约 2.4KB；上限必须远大于它，否则真正的载荷会被截断在打标之前。"""
-        self.assertGreaterEqual(MAX_BODY_SCAN, 64 * 1024)
-
-
-class BodyOfTest(unittest.TestCase):
-    class Boom:
-        def get_text(self, strict=False):
-            raise ValueError("decode failed")
-
-    def test_undecodable_body_returns_empty_not_raise(self) -> None:
-        """一条解不开的报文不该让整条流丢失——"没打上标签"与"没抓到"是两回事。"""
-        from tagging import body_of
-        self.assertEqual(body_of(self.Boom()), "")
-
-    def test_body_is_capped(self) -> None:
-        from tagging import body_of
-
-        class Big:
-            def get_text(self, strict=False):
-                return "x" * (MAX_BODY_SCAN + 5000)
-
-        self.assertEqual(len(body_of(Big())), MAX_BODY_SCAN)
-
-    def test_truncated_scan_reports_itself(self) -> None:
-        """截断必须能被看见：否则"没命中"读作"不含敏感字段"，而实际是"没扫完"。
-
-        实测：把属性名放到 256KB 之后，标签一个都没有，日志里看不出任何异常——
-        未命中与未扫到长得完全一样。
-        """
-        from tagging import scan_body
-
-        class Big:
-            def get_text(self, strict=False):
-                return "x" * (MAX_BODY_SCAN + 5000)
-
-        text, status = scan_body(Big())
-        self.assertEqual(len(text), MAX_BODY_SCAN)
-        self.assertTrue(status["truncated"])
-        self.assertEqual(status["chars"], MAX_BODY_SCAN + 5000)
-        self.assertEqual(status["scanned_chars"], MAX_BODY_SCAN)
-        self.assertFalse(status["decode_error"])
-
-    def test_property_name_past_the_cap_is_visibly_unscanned(self) -> None:
-        """标签为空 + truncated=True 必须同时成立——这正是需要被区分出来的那种情况。"""
-        from tagging import scan_body
-
-        class Late:
-            def get_text(self, strict=False):
-                return "x" * MAX_BODY_SCAN + "PERF_VEHICLE_SPEED"
-
-        text, status = scan_body(Late())
-        self.assertEqual(tag_sensitive(text), ([], []))    # 扫到的部分确实没有
-        self.assertTrue(status["truncated"])               # 但这句话只在"已扫部分"成立
-
-    def test_decode_error_is_reported_not_silent(self) -> None:
-        from tagging import scan_body
-        text, status = scan_body(self.Boom())
-        self.assertEqual(text, "")
-        self.assertTrue(status["decode_error"])
-        self.assertFalse(status["truncated"])
-
-    def test_normal_body_is_not_flagged(self) -> None:
-        """健康检查：正常报文不能被标成截断，否则这个字段就没有区分力。"""
-        from tagging import scan_body
-
-        class Small:
-            def get_text(self, strict=False):
-                return "PERF_VEHICLE_SPEED"
-
-        text, status = scan_body(Small())
-        self.assertEqual(text, "PERF_VEHICLE_SPEED")
-        self.assertFalse(status["truncated"])
-        self.assertFalse(status["decode_error"])
 
 
 if __name__ == "__main__":

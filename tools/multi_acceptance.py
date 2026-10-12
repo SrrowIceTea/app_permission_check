@@ -31,6 +31,7 @@ def main():
     env = dict(os.environ, PYTHONUTF8='1', VSCAN_SESSION=session,
         VSCAN_FLOW_LOG=str(out / 'flows.jsonl'), VSCAN_EVENT_DB=str(out / 'events.sqlite'),
         VSCAN_ATTRIB_SOURCES=os.pathsep.join(str(out / f'egress-{i}.jsonl') for i in range(2)),
+        VSCAN_TAGGING=str(ROOT / 'phase4/tagging.py'),
         PATH=str(Path(ADB).parent) + os.pathsep + os.environ['PATH'])
     handles, processes, sessions, controls = [], [], [], []
     upstream = ThreadingHTTPServer(('127.0.0.1', 0), Collector)
@@ -51,7 +52,7 @@ def main():
         # 本轮隔离模拟器 SLIRP 丢连接因素，仍由真实App建立Socket/发送原始载荷。
         adb('reverse', 'tcp:8888', 'tcp:8888')
         launch([sys.executable, '-c', 'from mitmproxy.tools.main import mitmdump; mitmdump()',
-            '-s', str(ROOT / 'phase4/addon.py'), '--listen-host', '0.0.0.0', '--listen-port', '8888',
+            '-s', str(ROOT / 'core/collector/addon.py'), '--listen-host', '0.0.0.0', '--listen-port', '8888',
             '--mode', f'reverse:http://127.0.0.1:{upstream.server_port}', '--set', 'keep_host_header=true',
             '--set', f'confdir={out / "certs"}'], 'mitm')
         device = frida.get_device_manager().add_remote_device('127.0.0.1:27043')

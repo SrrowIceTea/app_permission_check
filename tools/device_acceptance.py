@@ -114,6 +114,7 @@ def main():
                VSCAN_FLOW_LOG=str(out / 'flows.jsonl'),
                VSCAN_EVENT_DB=str(out / 'events.sqlite'),
                VSCAN_ATTRIB_SOURCES=str(out / 'egress.jsonl'),
+               VSCAN_TAGGING=str(ROOT / 'phase4/tagging.py'),
                PATH=str(Path(ADB).parent) + os.pathsep + os.environ['PATH'])
     upstream = ThreadingHTTPServer(('127.0.0.1', 0), Collector)
     worker = threading.Thread(target=upstream.serve_forever, daemon=True)
@@ -151,7 +152,7 @@ def main():
 
     try:
         launch([sys.executable, '-c', 'from mitmproxy.tools.main import mitmdump; mitmdump()',
-                '-s', str(ROOT / 'phase4/addon.py'), '--listen-host', '0.0.0.0',
+                '-s', str(ROOT / 'core/collector/addon.py'), '--listen-host', '0.0.0.0',
                 '--listen-port', '8888', '--mode', f'reverse:http://127.0.0.1:{upstream.server_port}',
                 '--set', f'confdir={out / "certs"}', '--set', 'keep_host_header=true',
                 '--certs', '*=' + str(create(out / 'test-proxy.pem'))], 'mitm')
@@ -174,7 +175,7 @@ def main():
         trigger('btnOkHttp')
         wait_for(lambda: len(read_events(out / 'flows.jsonl')) >= 2, 20)
         reads, tls, flows = (read_events(out / (n + '.jsonl')) for n in ('reads', 'tls', 'flows'))
-        # 无响应请求单独落盘（见 phase4/addon.py 的 error()）。**必须在这里断言**：
+        # 无响应请求单独落盘（见 core/collector/addon.py 的 error()）。**必须在这里断言**：
         # 只写文件而没人看，等于换了个地方静默丢弃——而"发出去了但没收到响应"
         # 与"什么都没有发生"对审计是完全不同的两件事。
         unanswered = read_events(out / 'flows-unanswered.jsonl')

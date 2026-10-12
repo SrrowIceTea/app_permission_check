@@ -20,8 +20,8 @@ for sub in ('phase5', 'phase4', 'phase3', 'phase1/python'):
 from core.event_store import EventStore
 from evaluation import evaluate_data_egress, evaluate_sensitive_read, coverage
 from ownership import lookup, normalize, parse_rdap
-from payloads import capture
-from collector_server import Collector
+from core.collector.payloads import capture
+from core.collector.collector_server import Collector
 from correlate import body_scan_totals, load_rules, load_jsonl
 from egress_calibration import calibrate
 from report_extras import payload_images

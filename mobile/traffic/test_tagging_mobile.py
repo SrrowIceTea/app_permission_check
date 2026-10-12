@@ -11,49 +11,13 @@ from __future__ import annotations
 
 import hashlib
 import unittest
+from pathlib import Path
 
 import tagging_mobile as tm
 
 
-class FakeMessage:
-    def __init__(self, text: str | None = None, raise_on_text: bool = False):
-        self._text = text
-        self._raise = raise_on_text
-
-    def get_text(self, strict: bool = False):
-        if self._raise:
-            raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "boom")
-        return self._text
-
-
 def h16(v: str) -> str:
     return hashlib.sha256(v.encode("utf-8")).hexdigest()[:16]
-
-
-class ScanBodyTest(unittest.TestCase):
-    def test_decode_error_is_reported_not_swallowed(self):
-        """解码失败必须与「内容为空」区分开 —— 否则读作"这条流不含敏感字段"。"""
-        text, status = tm.scan_body(FakeMessage(raise_on_text=True))
-        self.assertEqual(text, "")
-        self.assertTrue(status["decode_error"])
-
-    def test_normal_body_reports_length(self):
-        text, status = tm.scan_body(FakeMessage("hello 世界"))
-        self.assertEqual(text, "hello 世界")
-        self.assertFalse(status["decode_error"])
-        self.assertEqual(status["chars"], 8)
-        self.assertFalse(status["truncated"])
-
-    def test_truncation_is_reported(self):
-        long_text = "a" * (tm.MAX_BODY_SCAN + 100)
-        text, status = tm.scan_body(FakeMessage(long_text))
-        self.assertEqual(len(text), tm.MAX_BODY_SCAN)
-        self.assertTrue(status["truncated"])
-
-    def test_none_body_is_empty_not_error(self):
-        text, status = tm.scan_body(FakeMessage(None))
-        self.assertEqual(text, "")
-        self.assertFalse(status["decode_error"])
 
 
 class TagSensitiveTest(unittest.TestCase):
@@ -130,12 +94,39 @@ class TypesForLabelsTest(unittest.TestCase):
         self.assertEqual(out[0]["strength"], "unknown")
 
 
-class AddonShimTest(unittest.TestCase):
-    def test_tagging_module_has_the_interface_addon_imports(self):
-        """addon.py 第 37 行 `from tagging import scan_body, tag_sensitive`——
-        接口少一个，报错会发生在 mitmdump 启动时（那时人已经以为开始抓包了）。"""
-        for name in ("scan_body", "body_of", "tag_sensitive"):
-            self.assertTrue(callable(getattr(tm, name, None)), f"缺少接口 {name}")
+class AddonContractTest(unittest.TestCase):
+    """`core/collector/addon.py` 按 `VSCAN_TAGGING` 路径加载本文件，契约只剩一个函数。
+
+    为什么在这里测：接口少一个，报错会发生在 mitmdump 启动时——那时人已经以为
+    开始抓包了，而"没打上标签"与"这条流不含敏感字段"在报告里长得一模一样。
+    用与 addon 相同的加载方式（按文件路径 spec_from_file_location）复核一遍。
+    """
+
+    def test_tag_sensitive_is_callable_and_returns_two_str_lists(self):
+        self.assertTrue(callable(getattr(tm, "tag_sensitive", None)), "缺少接口 tag_sensitive")
+        labels, tokens = tm.tag_sensitive("imei 123456789012345")
+        self.assertIsInstance(labels, list)
+        self.assertIsInstance(tokens, list)
+        self.assertTrue(all(isinstance(x, str) for x in labels + tokens))
+
+    def test_module_loads_standalone_by_path(self):
+        """addon 是按路径加载的，模块必须不依赖调用方的 sys.path 才能导入成功。"""
+        import importlib.util
+        src = Path(__file__).resolve().parent / "tagging_mobile.py"
+        spec = importlib.util.spec_from_file_location("vscan_tagging", src)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertTrue(callable(module.tag_sensitive))
+
+    def test_tokens_never_contain_the_matched_plaintext(self):
+        """移动版的 tokens 是 `标签:sha256前16位`；报告与 LLM 不该再拿到个人信息副本。"""
+        secret = "13800138000"
+        labels, tokens = tm.tag_sensitive(secret)
+        self.assertIn("phone_cn_shape", labels)
+        self.assertTrue(tokens, "应当产出令牌")
+        for token in tokens:
+            self.assertNotIn(secret, token)
+            self.assertEqual(token, f"phone_cn_shape:{h16(secret)}")
 
 
 if __name__ == "__main__":

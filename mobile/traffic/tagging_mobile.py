@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""移动版敏感载荷打标 —— 与 phase4/tagging.py 同接口，供 phase4 的 addon 原样调用。
+"""移动版敏感载荷打标表 —— 与 `phase4/tagging.py`（车载版）同一契约。
 
 仅用于授权测试（已获授权的样本与设备）。
 
-接口契约（必须与 phase4/tagging.py 一致，addon.py 直接 `from tagging import ...`）：
-    scan_body(message)  -> (text, status)
-    body_of(message)    -> str
+接口契约（`core/collector/addon.py` 按 `VSCAN_TAGGING` 路径加载本文件）：
     tag_sensitive(text) -> (labels, tokens)
 
-与车载版的**关键差异**（这是必须换掉整张表的原因）：
+"怎么把报文读出来、读全了没有"（`scan_body` / `body_of` / `MAX_BODY_SCAN`）与平台无关，
+在 `core/collector/body.py`，本模块**不再各存一份**——那两份曾逐字相同。
+
+与车载版的**关键差异**（这是必须有独立一张表的原因）：
   1) 敏感面从「VHAL 属性名/ID + VIN」换成个人信息的**形态**（15 位数字标识、
      16 位十六进制 AndroidID、MAC、手机号、身份证号、坐标、含个人信息的 JSON 键）。
   2) `tokens` 不再回传原文，而是回传 **`标签:sha256前16位`**。
@@ -24,8 +25,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-
-MAX_BODY_SCAN = 256 * 1024
 
 # 标签 → (数据类别, 强度)。
 #
@@ -69,30 +68,6 @@ HASH_MAX_LEN = 256
 
 def _hash16(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
-
-
-def scan_body(message) -> tuple[str, dict]:
-    """报文文本 + **这次扫描本身的状态**（与车载版同语义，理由见 phase4/tagging.py）。
-
-    为什么必须返回状态：解码失败返回空串、超限截断，两者都让「没打上标签」
-    与「内容根本没被完整看过」无法区分，而报告里前者读作"这条流不含敏感字段"。
-    """
-    try:
-        raw = message.get_text(strict=False)
-    except Exception:  # noqa: BLE001
-        return "", {"decode_error": True, "chars": None, "truncated": False,
-                    "scanned_chars": 0, "limit_chars": MAX_BODY_SCAN}
-    text = raw or ""
-    return text[:MAX_BODY_SCAN], {
-        "decode_error": False, "chars": len(text),
-        "truncated": len(text) > MAX_BODY_SCAN,
-        "scanned_chars": min(len(text), MAX_BODY_SCAN),
-        "limit_chars": MAX_BODY_SCAN,
-    }
-
-
-def body_of(message) -> str:
-    return scan_body(message)[0]
 
 
 def tag_sensitive(text: str) -> tuple[list[str], list[str]]:

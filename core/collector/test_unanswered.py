@@ -25,7 +25,7 @@ from attribution import Attribution  # noqa: E402
 
 
 class _Message:
-    """够 `payloads.capture` 和 `tagging.scan_body` 用的最小报文。"""
+    """够 `payloads.capture` 和 `body.scan_body` 用的最小报文。"""
 
     def __init__(self, body: bytes = b'{"vhal":"PERF_VEHICLE_SPEED"}'):
         self.raw_content = body
@@ -120,6 +120,11 @@ class EmitRoutingTest(unittest.TestCase):
     """
 
     def test_error_entries_go_to_the_unanswered_file(self) -> None:
+        import os
+
+        # addon 在导入期就按 VSCAN_TAGGING 加载平台打标表（不给即启动失败，不猜平台）。
+        # 本用例只验失败流落盘与 _emit 分流，不碰打标表，指向车载表即可。
+        os.environ.setdefault("VSCAN_TAGGING", "phase4/tagging.py")
         import addon
 
         with tempfile.TemporaryDirectory() as tmp:
