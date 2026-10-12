@@ -31,6 +31,25 @@ if not Path(ADB).exists():
 PACKAGE = 'com.vscanner.targetapp'
 SERIAL = os.environ.get('VSCAN_SERIAL', 'emulator-5554')
 
+# 钩子 bundle 的搜索目录：**共享的两个已移到 core**（hook_egress / ssl_pinning_bypass，
+# 移动端也在用），车载自己的留在 vehicle/hooks/dist。
+#
+# 为什么要有这个解析函数而不是写死一个目录：拆分时移动端三处引用都改了，
+# 唯独本文件漏了——症状是 run.py 打印 `no such script` 并返回 2，
+# 接着下面等 ARMED 的循环**空等 40 秒**，日志读起来像"钩子没挂上"，
+# 排查方向会整个跑偏。找不到时**响亮失败并列出找过的地方**，不退回一个猜的路径。
+HOOK_BUNDLE_DIRS = (ROOT / 'vehicle/hooks/dist', ROOT / 'core/frida_host/dist')
+
+
+def hook_bundle(script: str) -> Path:
+    for base in HOOK_BUNDLE_DIRS:
+        candidate = base / f'{script}.bundle.js'
+        if candidate.exists():
+            return candidate
+    searched = '、'.join(str(b) for b in HOOK_BUNDLE_DIRS)
+    raise SystemExit(f'找不到钩子 bundle：{script}.bundle.js（找过：{searched}）。'
+                     f'先构建：由各自的 build 脚本产出，见对应目录的 README。')
+
 
 def installed_apk_sha256(serial: str, package: str) -> tuple:
     """装机 APK 的 sha256，**在主机侧对原始字节算**。
@@ -81,9 +100,13 @@ def write_manifest(out: Path, session: str, serial: str, adb, params: dict) -> N
     manifest['installed_apk_hash_error'] = error    # 失败如实记，不拿空哈希冒充成功
     rules = ROOT / 'vehicle/rules/rules_library/rules.db'
     manifest['rules_sha256'] = hashlib.sha256(rules.read_bytes()).hexdigest() if rules.exists() else None
+    # 两个目录都扫：这个清单的全部意义是证明"这批证据是哪个 bundle 产的"，
+    # 只扫 vehicle/ 会**静默漏掉**移到 core 的那两个（hook_egress / ssl_pinning_bypass），
+    # 证据链就断在这里而没有任何报错。
     manifest['hook_bundles'] = {
         path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in sorted((ROOT / 'vehicle/hooks/dist').glob('*.bundle.js'))
+        for base in HOOK_BUNDLE_DIRS
+        for path in sorted(base.glob('*.bundle.js'))
     }
     (out / 'session-manifest.json').write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
@@ -164,7 +187,7 @@ def main():
         wait_for(app_pid, 30)
         for name, script in [('reads', 'hook_vhal'), ('egress', 'hook_egress'), ('tls', 'ssl_pinning_bypass')]:
             launch([sys.executable, str(ROOT / 'core/frida_host/run.py'), '--package', PACKAGE,
-                    '--script', str(ROOT / 'vehicle/hooks/dist' / (script + '.bundle.js')),
+                    '--script', str(hook_bundle(script)),
                     '--seconds', '150', '--out', str(out / (name + '.jsonl')),
                     '--session', session, '--event-db', str(out / 'events.sqlite')], name)
         wait_for(lambda: all(any(e.get('ev') == ('PINNING_ARMED' if n == 'tls' else 'ARMED') for e in read_events(out / (n + '.jsonl')))

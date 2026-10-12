@@ -25,6 +25,10 @@ CHECKS = [
     # 需要真的反编译的验证在 tools/workbench_acceptance.py，那里慢，不进回归。
     ('workbench', 'core/static', [sys.executable, '-m', 'unittest',
                              'test_static_rules', 'test_crosscheck', 'test_jobs']),
+    # 验收脚本点名的钩子 bundle 必须解析得到。改名/抽取时"引用没跟着改"会
+    # **离线全绿、真跑才炸**（2026-10-12 实测：device_acceptance 漏改两个路径）。
+    # 这条不需要设备，纯粹查"脚本点名 -> 文件在不在"。
+    ('hook-bundles', 'tools', [sys.executable, '-m', 'unittest', 'test_hook_bundles']),
 ]
 
 

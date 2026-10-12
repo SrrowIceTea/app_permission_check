@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""批量跑第三方样本：`apk/` 下每个 APK → 静态分析 → 设备检测 → AI → PDF。
+"""批量跑第三方样本：`apk/mobile/` 下每个 APK → 静态分析 → 设备检测 → AI → PDF。
 
 仅用于授权测试（自有设备 / 已授权的公开第三方样本）。
 
@@ -17,7 +17,7 @@
 汇总：output/thirdparty-<时间戳>/batch-summary.json（判据看这个）
 
 用法：
-    python batch_thirdparty.py                       # 跑 apk/ 下全部
+    python batch_thirdparty.py                       # 跑 apk/mobile/ 下全部
     python batch_thirdparty.py --apk-dir D:/samples  # 换目录
     python batch_thirdparty.py --static-only         # 只做静态（不需要设备）
     python batch_thirdparty.py --skip-ai             # 不跑 AI 阶段
@@ -112,7 +112,9 @@ def run(cmd: list[str], log: Path, timeout: int) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--apk-dir", default=str(ROOT / "apk"))
+    ap.add_argument("--apk-dir", default=str(ROOT / "apk" / "mobile"),
+                    help="样本目录；默认 apk/mobile/（车载样本在 apk/vehicle/，用错平台会"
+                         "表现为设备检测卡在 app_started，见 apk/README.md）")
     ap.add_argument("--out", default=None, help="批次输出目录（默认 output/thirdparty-<时间戳>）")
     ap.add_argument("--app-category", default="utility",
                     help="默认类目 key（39 类）；单个样本可用 --category 覆盖")

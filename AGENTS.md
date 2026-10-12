@@ -100,9 +100,14 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
 - ✅ `core/static/`（静态分析内核，斩断 mobile 对 vehicle/workbench 的引用）
 - ✅ `phase1–7` → `vehicle/*` 语义化改名（rules/targets/hooks/traffic/analyze/dashboard/workbench）
 - ✅ `frontend/` 明确车载专用：清除移动端 PDF 污染，`--android-version` 从 manifest 读
+- ✅ `apk/` 按平台分目录：`apk/mobile/`（手机样本）与 `apk/vehicle/`（车载样本），
+  移动端取样本的默认目录跟着改；见 `apk/README.md`
+- ✅ 修 `tools/device_acceptance.py` 的钩子路径（拆分漏改）：`hook_egress`/`ssl_pinning_bypass`
+  已移到 `core/frida_host/dist/`，原路径导致 run.py `no such script` + **空等 40 秒**等 ARMED；
+  `session-manifest` 的 `hook_bundles` 同时补上 core 目录（原先静默漏记这两个的哈希）。
+  新增离线守卫 `tools/test_hook_bundles.py`（已并入 `run_regressions.py`）
 
 **待办**：拆分主体已完成。剩余可选整理（见 archive/README.md）：
-- `apk/` 样本按平台分目录（车载 ximalaya-car 与移动端样本分开）
 - `output/` 历史产物归档——涉及 `latest-*.txt` 指针与 DELIVERY_INDEX 引用链，需确认后再动
 
 边界仍须保留：native TLS/未解析协议无明文能力；Gadget 需要自有源码与安装授权，

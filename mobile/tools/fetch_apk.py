@@ -21,8 +21,9 @@ sha256/md5、商店给出的版本号/开发者/权限清单/隐私政策地址�
 
 用法：
     python fetch_apk.py --probe com.moji.mjweather com.sina.weibo   # 只看元数据，不下载
-    python fetch_apk.py --out ../../apk com.moji.mjweather ...      # 下载
-    python fetch_apk.py --out ../../apk --packages-file list.txt
+    python fetch_apk.py com.moji.mjweather ...                      # 下载到 apk/mobile/
+    python fetch_apk.py --packages-file list.txt
+    python fetch_apk.py --out <repo>/apk/vehicle <车机包名>          # 车载样本显式给目录
 """
 from __future__ import annotations
 
@@ -37,7 +38,10 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_OUT = ROOT / "apk"
+# 样本按平台分目录（见 apk/README.md）：本工具是移动端链路，默认落 apk/mobile/。
+# 下**车载**样本时显式 --out apk/vehicle，否则会被移动端批处理当成手机 App 跑，
+# 症状是设备检测卡在 app_started，看起来像冷启动问题。
+DEFAULT_OUT = ROOT / "apk" / "mobile"
 AAPT2 = "D:/Anroid/SDK/build-tools/36.1.0/aapt2.exe"
 # **必须用移动端 UA**：同一个详情页，桌面 UA 只给「应用宝 PC 版」的下载链接，
 # 移动端 UA 才给出目标 App 自己的 APK 直链。实测：换 UA 前 10 个包全部 not_found，
