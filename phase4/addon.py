@@ -37,7 +37,7 @@ from attribution import ATTRIB_SOURCES, TimeAttribution  # noqa: E402
 from tagging import scan_body, tag_sensitive  # noqa: E402
 import flow_entry
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from audit_store import EventStore
+from core.event_store import EventStore
 
 HERE = Path(__file__).resolve().parent
 

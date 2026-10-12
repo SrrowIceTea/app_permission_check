@@ -11,7 +11,7 @@
 | --- | --- |
 | 域名/IP 归属 | `phase5/ownership.py`：RDAP 注册信息、HTTPS IP 地理估计、可校验离线缓存、可选 MMDB。注册商不当成接收机构，注册国家不当成服务器位置；缺失明确标未知。 |
 | 明文截图 | `phase4/payloads.py` 捕获请求/响应字节和摘要；PDF 按真实载荷生成 PNG。原始捕获上限1MiB，报告展示上限160行；截断与旧 preview 单独标示。 |
-| 时序存储 | `audit_store.py`：SQLite WAL，按会话/包名/时间索引、范围查询、时间桶统计、JSONL 导入导出；采集时双写原始 JSONL。属于单机时序事件库。 |
+| 时序存储 | `core/event_store.py`：SQLite WAL，按会话/包名/时间索引、范围查询、时间桶统计、JSONL 导入导出；采集时双写原始 JSONL。属于单机时序事件库。 |
 | Gadget | `phase3/gadget_prepare.py` 为自有源码生成 Gadget 构建变体，在 Application.attachBaseContext 加载，loopback:27044、on_load=wait；`run.py --gadget` 注入后恢复。 |
 | OkHttp | 两个夹具增加错误 pin 的 OkHttp 4.12 请求按钮；已实测触发 CertificatePinner 绕过并收到200。 |
 | 订阅 | 两夹具增加10秒订阅按钮；已实测 GEAR_SELECTION 回调。注册事件不算成功读取。 |
@@ -63,8 +63,8 @@ Gadget需要自有源码构建和安装权限；该路径不重打包、不反�
 server attach只能观察附加后的行为；Gadget wait覆盖应用恢复后的行为，不能追溯加载前动作。
 
 ```powershell
-& $VScanPython audit_store.py --db output/session.sqlite --session SESSION --bucket-ms 1000
-& $VScanPython audit_store.py --db output/session.sqlite --session SESSION --start-ms START --end-ms END --export-jsonl output/range.jsonl
+& $VScanPython core/event_store.py --db output/session.sqlite --session SESSION --bucket-ms 1000
+& $VScanPython core/event_store.py --db output/session.sqlite --session SESSION --start-ms START --end-ms END --export-jsonl output/range.jsonl
 & $VScanPython phase5/ownership.py --flows output/flows.jsonl --cache output/rdap-cache --out output/ownership.json
 ```
 

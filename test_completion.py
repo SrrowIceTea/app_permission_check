@@ -14,9 +14,10 @@ from urllib.request import Request, urlopen
 from http.server import ThreadingHTTPServer
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
 for sub in ('phase5', 'phase4', 'phase3', 'phase1/python'):
     sys.path.insert(0, str(ROOT / sub))
-from audit_store import EventStore
+from core.event_store import EventStore
 from evaluation import evaluate_data_egress, evaluate_sensitive_read, coverage
 from ownership import lookup, normalize, parse_rdap
 from payloads import capture
