@@ -56,10 +56,11 @@ export function splitGrantResults(perms, results) {
   var granted = [], denied = [], other = [];
   for (var i = 0; i < perms.length; i++) {
     var p = perms[i];
+    var s = shortName(p);
     var r = i < results.length ? results[i] : -1;
-    if (r === 0) granted.push(p);
-    else if (r === -1) denied.push(p);
-    else other.push(p);
+    if (r === 0) granted.push(s);
+    else if (r === -1) denied.push(s);
+    else other.push({ permission: s, result: r });
   }
   return { granted: granted, denied: denied, other: other };
 }
@@ -143,13 +144,18 @@ export function discriminator(spec, args) {
   if (!spec || spec.kind === 'direct') return null;
   var idx = spec.arg_index;
   if (idx === undefined || idx === null) return null;
-  return preview(args[idx], 120);
+  return preview(args[idx], 200);
 }
 
 export function unmappedKey(entry, spec, args) {
   if (!spec) return null;
   var idx = spec.arg_index;
   if (idx === undefined || idx === null) return null;
-  var v = preview(args[idx], 80);
+  var raw = args[idx];
+  if (raw === null || raw === undefined) return null;
+  var s = String(raw);
+  var q = s.indexOf('?');
+  if (q >= 0) s = s.slice(0, q);
+  var v = preview(s, 80);
   return entry.cls + '.' + entry.method + '|' + (spec.kind || '?') + '|' + String(v);
 }
