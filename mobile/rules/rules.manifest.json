@@ -1,0 +1,8 @@
+{
+  "platform": "mobile",
+  "rule_id_prefix": "MOB-",
+  "subject_column": "data_type_key",
+  "common_tables": ["risk_rules", "dangerous_apis", "permissions"],
+  "extension_tables": ["sensitive_data_types", "app_categories", "policy_requirements"],
+  "note": "移动端规则库；无 vhal_properties，sensitive_read/data_egress 用 data_type_key 描述数据类别。"
+}

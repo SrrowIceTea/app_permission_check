@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CHECKS = [
     ('completion', '.', [sys.executable, '-m', 'unittest', 'test_completion']),
+    ('rules-contract', 'core', [sys.executable, '-m', 'unittest', 'test_rules_contract']),
     ('codeloc', 'core/evidence', [sys.executable, '-m', 'unittest', 'test_codeloc',
                            'test_event_lookup']),
     ('correlate', 'phase5', [sys.executable, '-m', 'unittest', 'test_experiment']),

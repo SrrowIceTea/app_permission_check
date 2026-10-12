@@ -21,7 +21,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from core.rules_contract import load_rules as _load_rules  # noqa: E402
 
 LEVEL_ORDER = ["candidate", "observed", "correlated", "policy_violation"]
 
@@ -32,20 +36,12 @@ def open_rules(db: Path) -> sqlite3.Connection:
 
 
 def load_rules(db: Path, android_version: str) -> dict:
-    conn = open_rules(db)
-    conn.row_factory = sqlite3.Row
-    try:
-        rules = [dict(r) for r in conn.execute(
-            "SELECT * FROM risk_rules WHERE android_version = ? ORDER BY rule_id", (android_version,))]
-        props = {r["property_key"]: dict(r) for r in conn.execute(
-            "SELECT * FROM vhal_properties WHERE android_version = ?", (android_version,))}
-        apis = {r["api_key"]: dict(r) for r in conn.execute(
-            "SELECT * FROM dangerous_apis WHERE android_version = ?", (android_version,))}
-        perms = {r["permission_name"] for r in conn.execute(
-            "SELECT permission_name FROM permissions WHERE android_version = ?", (android_version,))}
-    finally:
-        conn.close()
-    return {"rules": rules, "properties": props, "apis": apis, "known_permissions": perms}
+    """平台无关地读规则库（公共表 + 按平台读扩展表）。
+
+    具体契约见 `core/rules_contract.py`：车载库读 `vhal_properties`，移动库不读
+    （返回空 `properties`），这样移动库**不需要伪造空表**就能被同一套 evaluate() 处理。
+    """
+    return _load_rules(db, android_version)
 
 
 def cap_level(declared: str) -> str:

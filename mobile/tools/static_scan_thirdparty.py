@@ -7,10 +7,9 @@
 为什么需要这个脚本（而不是直接用 phase7/server.py）：
   * `phase7/server.py` 是绑 127.0.0.1 的交互式服务，且默认 `--android-version 15`
     （车载 rules.db）。移动侧要的是 `mobile/rules/rules_mobile.db` + 版本 36。
-  * `phase7/static_rules.load_rules()` **无条件**读 `vhal_properties` 表，
-    而移动规则库没有这张表（移动规则没有"属性信号"这个维度）。
-    本脚本在输出目录生成一份**适配副本**（原库 + 一张空的 vhal_properties），
-    从而 **phase7 内核一行不改** 也能跑移动库。
+  * `phase7/static_rules.load_rules()` 已按 `rule_id` 前缀（`MOB-`）判别平台，
+    **不再无条件**读 `vhal_properties` 表（见 `core/rules_contract.py`），所以本脚本
+    把 `rules_mobile.db` 直接传给 phase7 内核即可，**不再伪造空表适配副本**。
   * phase7 的 `evaluate()` 只处理 over_permission / sensitive_read / data_egress
     三类；移动库八类里另外五类会进 `unhandled_rule_types`。这是设计边界，如实记录。
   * 此外，移动库的 sensitive_read / data_egress 用 `data_type` 描述，
@@ -27,35 +26,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import shutil
 import sqlite3
 import sys
 from pathlib import Path
-
-# 车载 vhal_properties 的原始 DDL（phase1/rules_library/rules.db）。
-# 适配副本里建一张**空表**，只为让 load_rules() 不抛 OperationalError。
-VHAL_DDL = """
-CREATE TABLE vhal_properties (
-    property_key TEXT NOT NULL,
-    android_version TEXT NOT NULL,
-    property_name TEXT,
-    property_id INTEGER,
-    value_type TEXT,
-    access_mode TEXT,
-    change_mode TEXT,
-    area_type TEXT,
-    unit TEXT,
-    data_category TEXT,
-    read_permission_expr_json TEXT,
-    write_permission_expr_json TEXT,
-    definition_status TEXT NOT NULL DEFAULT 'pending'
-        CHECK (definition_status IN ('pending', 'source_verified')),
-    source_refs_json TEXT NOT NULL DEFAULT '[]',
-    device_calibration_json TEXT NOT NULL DEFAULT '[]',
-    notes TEXT,
-    PRIMARY KEY (property_key, android_version)
-)
-"""
 
 
 def _sha256(p: Path) -> str:
@@ -64,35 +37,6 @@ def _sha256(p: Path) -> str:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
-
-
-def make_adapted_db(src: Path, dst: Path) -> dict:
-    """复制移动规则库并补一张空的 vhal_properties。已存在则复用。"""
-    if not dst.exists():
-        shutil.copy2(src, dst)
-        conn = sqlite3.connect(str(dst))
-        try:
-            tables = {r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'")}
-            added = "vhal_properties" not in tables
-            if added:
-                conn.execute(VHAL_DDL)
-                conn.commit()
-        finally:
-            conn.close()
-    else:
-        added = False
-    return {
-        "adapted_db": str(dst),
-        "source_db": str(src),
-        "source_sha256": _sha256(src),
-        "adapted_sha256": _sha256(dst),
-        "vhal_properties_created": added,
-        "note": ("移动规则库缺少 vhal_properties 表；本副本补建同名**空表**，"
-                 "使 phase7 的 load_rules() 可原样运行。空表意味着移动样本"
-                 "没有'属性信号'维度，sensitive_read/data_egress 在 phase7 侧"
-                 "不产生结论（见 static_mobile_supplement.json）。"),
-    }
 
 
 def supplement(facts: dict, rules_db: Path, version: str, static_rules) -> dict:
@@ -186,11 +130,8 @@ def main() -> int:
     rules_src = (repo / args.rules).resolve() if not Path(args.rules).is_absolute() \
         else Path(args.rules)
 
-    adapted = make_adapted_db(rules_src, out / "rules_mobile_phase7.db")
-
-    # --- 1) phase7 原样静态扫描 -------------------------------------------------
-    result = analysis.scan_static(apk, out / "rules_mobile_phase7.db",
-                                  args.version, out)
+    # --- 1) phase7 原样静态扫描（load_rules 按 MOB- 前缀判别平台，直接吃移动库） ---
+    result = analysis.scan_static(apk, rules_src, args.version, out)
     by_type: dict[str, int] = {}
     for f in result.get("findings", []):
         by_type[f["rule_type"]] = by_type.get(f["rule_type"], 0) + 1
@@ -216,7 +157,7 @@ def main() -> int:
     manifest = {
         "apk": str(apk),
         "apk_sha256": _sha256(apk),
-        "rules": adapted,
+        "rules": {"db": str(rules_src), "platform": "mobile"},
         "android_version": args.version,
         "phase7": {
             "rules_evaluated": result.get("rules_evaluated"),
