@@ -40,6 +40,23 @@ MIME = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=ut
         ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml"}
 
 
+def _manifest_versions(rules: Path) -> list[str]:
+    """从规则库旁的 rules.manifest.json 读 android_versions，作为 --android-version 的合法取值。
+
+    单一来源是契约文件，不在这里写死 ["14","15"]：车载库是 14/15，移动库只有 36，
+    一旦 workbench 复用到其他平台，这里不该再改代码。
+    """
+    manifest = rules.parent / "rules.manifest.json"
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        versions = data.get("android_versions")
+        if isinstance(versions, list) and versions:
+            return [str(v) for v in versions]
+    except (OSError, json.JSONDecodeError):
+        pass
+    return ["14", "15"]
+
+
 def _work(apk: Path, digest: str, session: Path | None, out: Path, decompile: bool):
     """后台任务体：静态扫描 → 反编译 → 可选静动对照。
 
@@ -234,7 +251,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8770)
     parser.add_argument("--rules", type=Path, default=DEFAULT_RULES)
-    parser.add_argument("--android-version", default="15", choices=["14", "15"])
+    versions = _manifest_versions(DEFAULT_RULES)
+    parser.add_argument("--android-version", default=versions[-1], choices=versions)
     parser.add_argument("--session", type=Path,
                         help="采集会话目录（提供 session-manifest.json，用于证明是同一个 APK）")
     parser.add_argument("--findings", type=Path,

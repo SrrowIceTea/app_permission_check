@@ -2,6 +2,7 @@
   "platform": "vehicle",
   "rule_id_prefix": "VSC-",
   "subject_column": "property_key",
+  "android_versions": ["14", "15"],
   "common_tables": ["risk_rules", "dangerous_apis", "permissions"],
   "extension_tables": ["vhal_properties"],
   "note": "车载 AAOS 规则库；vhal_properties 提供属性信号维度，risk_rules 用 property_key 指 VHAL 属性。"
