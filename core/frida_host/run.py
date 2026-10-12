@@ -36,9 +36,9 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
+sys.path.insert(0, str(HERE.parent.parent))
 from core.event_store import EventStore
-from bundle_config import configure
+from core.frida_host.bundle_config import configure
 # frida-server on this device is started with `-l 127.0.0.1:27043`, not the default
 # 27042. Connecting to 27042 fails with "connection closed"; the forward is required.
 FRIDA_PORT = 27043

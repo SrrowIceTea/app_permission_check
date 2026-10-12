@@ -37,14 +37,15 @@ mitmdump -s addon.py --mode reverse:http://127.0.0.1:8080 \
 # 2) 应用进程内观测出站连接（**归因的主来源**，与上一步并行）
 #    另开一个终端，同时挂 SSL 绕过（HTTPS 明文需要）
 cd ../phase3
-python build.py                                   # 首次需要
-PY313="C:/Users/OneKyubey/AppData/Local/Programs/Python/Python313/python.exe"
+python build.py                                   # 首次需要（共享 bundle 会输出到 core/frida_host/dist）
+cd ../core/frida_host
+PY313="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
 "$PY313" run.py --package com.vscanner.targetapp \
     --script dist/hook_egress.bundle.js --seconds 60 \
-    --out ../phase4/logs/egress_events.jsonl &
+    --out ../../phase4/logs/egress_events.jsonl &
 "$PY313" run.py --package com.vscanner.targetapp \
     --script dist/ssl_pinning_bypass.bundle.js --seconds 60 \
-    --out logs/integ_ssl.jsonl &
+    --out ../../phase4/logs/integ_ssl.jsonl &
 
 # 3) 靶子 App 先读 VHAL，再点外泄按钮（顺序不能反，见 D404）
 #    用 phase2/trigger.py 而不是写死坐标：它会现读按钮 bounds 并回读 logcat 确认点中

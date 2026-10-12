@@ -61,8 +61,10 @@ def main():
                 adb('shell', 'pm', 'grant', '--user', '10', package, 'android.car.permission.' + permission)
             adb('shell', 'am', 'start', '--user', '10', '-W', '-n', package + '/.MainActivity')
             for name, script in [('reads', 'hook_vhal'), ('egress', 'hook_egress')]:
-                launch([sys.executable, str(ROOT / 'phase3/run.py'), '--package', package,
-                    '--script', str(ROOT / 'phase3/dist' / (script + '.bundle.js')), '--seconds', '120',
+                # hook_egress 是共享成品（已抽到 core/frida_host/dist），hook_vhal 是车载专用（留 phase3/dist）
+                script_dir = ROOT / 'core/frida_host/dist' if script == 'hook_egress' else ROOT / 'phase3/dist'
+                launch([sys.executable, str(ROOT / 'core/frida_host/run.py'), '--package', package,
+                    '--script', str(script_dir / (script + '.bundle.js')), '--seconds', '120',
                     '--session', session, '--event-db', str(out / 'events.sqlite'),
                     '--out', str(out / f'{name}-{i}.jsonl')], f'{name}-{i}')
             attached = device.attach(int(adb('shell', 'pidof', package))); sessions.append(attached)

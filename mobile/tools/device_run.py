@@ -64,7 +64,7 @@ def wait_boot(timeout_s: int = 240) -> bool:
 def wait_for_app(package: str, timeout_s: int = 40) -> str | None:
     """**冷启动竞争**：am start 投出 intent 就返回，进程要几秒后才出现；
     立刻 pidof 退出码是 1，与"应用真的起不来"无法区分。
-    钩子是 attach 模式（phase3/run.py 靠 pidof 找进程），所以必须先等到 pid 再挂。"""
+    钩子是 attach 模式（core/frida_host/run.py 靠 pidof 找进程），所以必须先等到 pid 再挂。"""
     end = time.time() + timeout_s
     while time.time() < end:
         pid = adb("shell", "pidof", package, timeout=20).stdout.strip()
@@ -174,7 +174,7 @@ def start_hook(script: str, session: Path, out_name: str, log: Path,
     env = dict(os.environ)
     env["VSCAN_SESSION"] = session.name
     proc = subprocess.Popen(
-        [PY, str(ROOT / "phase3" / "run.py"), "--package", PKG,
+        [PY, str(ROOT / "core" / "frida_host" / "run.py"), "--package", PKG,
          "--script", str(script), "--seconds", str(seconds),
          "--allow-package", PKG, "--session", session.name,
          "--out", str(session / out_name)],
@@ -286,7 +286,7 @@ def main() -> int:
     adb("shell", "logcat", "-c", timeout=30)
 
     # **先启动应用、等到进程真的出现，再挂钩子。**
-    # 钩子是 attach 模式（phase3/run.py 用 pidof 找进程）；顺序反了会得到
+    # 钩子是 attach 模式（core/frida_host/run.py 用 pidof 找进程）；顺序反了会得到
     # CalledProcessError: pidof 退出码 1 —— 与"应用装机失败"看起来一样。
     start_cmd = ["shell", "am", "start"]
     if args.user is not None:
@@ -313,13 +313,13 @@ def main() -> int:
                    "reads.jsonl", out / "hook-privacy.log", args.seconds),
         start_hook(MOBILE / "hooks" / "dist" / "hook_consent.bundle.js", session,
                    "consent.jsonl", out / "hook-consent.log", args.seconds),
-        # egress 直接复用 phase3 的成品（Socket.connect 与车载无关）
-        start_hook(ROOT / "phase3" / "dist" / "hook_egress.bundle.js", session,
+        # egress 直接复用 core/frida_host 的成品（Socket.connect 与车载无关）
+        start_hook(ROOT / "core" / "frida_host" / "dist" / "hook_egress.bundle.js", session,
                    "egress.jsonl", out / "hook-egress.log", args.seconds),
-        # TLS 绕过也复用 phase3 成品：夹具不做证书固定，但目标 SDK 35 不信任用户证书，
+        # TLS 绕过也复用 core/frida_host 成品：夹具不做证书固定，但目标 SDK 35 不信任用户证书，
         # 不加这一路 HTTPS 会在握手就失败（实测 SSLHandshakeException: Trust anchor not found）。
         # 只对白名单进程生效，仅为审计流量捕获。
-        start_hook(ROOT / "phase3" / "dist" / "ssl_pinning_bypass.bundle.js", session,
+        start_hook(ROOT / "core" / "frida_host" / "dist" / "ssl_pinning_bypass.bundle.js", session,
                    "tls.jsonl", out / "hook-tls.log", args.seconds),
     ]
     time.sleep(8)   # 等钩子挂上；D309：钩子掉线与"应用没动作"长得一样

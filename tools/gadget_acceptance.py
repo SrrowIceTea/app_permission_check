@@ -32,7 +32,7 @@ def main():
     before = adb('logcat', '-d', '-s', 'VSCTarget')
     (out / 'before-resume.log').write_text(before, encoding='utf-8')
     with (out / 'driver.log').open('w', encoding='utf-8') as log:
-        proc = subprocess.Popen([sys.executable, str(ROOT / 'phase3/run.py'), '--gadget',
+        proc = subprocess.Popen([sys.executable, str(ROOT / 'core/frida_host/run.py'), '--gadget',
             '--package', PACKAGE, '--script', str(ROOT / 'phase3/dist/hook_vhal.bundle.js'),
             '--seconds', '50', '--out', str(out / 'reads.jsonl'), '--session', session],
             env=env, stdout=log, stderr=log)

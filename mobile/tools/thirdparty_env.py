@@ -232,7 +232,7 @@ def start_hook(script: Path, session: Path, out_name: str, log: Path,
     env = dict(os.environ)
     env["VSCAN_SESSION"] = session.name
     proc = subprocess.Popen(
-        [PY, str(ROOT / "phase3" / "run.py"), "--package", package,
+        [PY, str(ROOT / "core" / "frida_host" / "run.py"), "--package", package,
          "--script", str(script), "--seconds", str(seconds),
          "--allow-package", package, "--session", session.name,
          "--out", str(session / out_name)],

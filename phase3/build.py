@@ -41,6 +41,10 @@ DEFAULT_SCRIPTS = (
     "hook_cipher.js", "hook_native_ssl.js",
 )
 
+# 平台无关的成品 bundle：移动端设备脚本直接复用 core/frida_host/dist/ 下的这两个，
+# 因此重建时也要输出到那边，避免 core 与 phase3 各存一份漂移的 bundle。
+SHARED_SCRIPTS = ("ssl_pinning_bypass.js", "hook_egress.js")
+
 
 def find_frida_compile() -> str:
     local = HERE / "node_modules/frida-compile/dist/cli.js"
@@ -103,9 +107,11 @@ def main() -> int:
 
     compiler = find_frida_compile()
     names = args.only or list(DEFAULT_SCRIPTS)
+    shared_out = HERE.parent / "frida_host" / "dist"   # core/frida_host/dist
     for name in names:
-        build_one(HERE / name, args.out_dir, compiler)
-    print("\nnext: python run.py --help")
+        out_dir = shared_out if name in SHARED_SCRIPTS else args.out_dir
+        build_one(HERE / name, out_dir, compiler)
+    print("\nnext: python ../core/frida_host/run.py --help")
     return 0
 
 

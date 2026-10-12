@@ -44,7 +44,7 @@ for (const name of targets) {
   writeFileSync(entry, PRELUDE + body, 'utf8');
   try {
     execFileSync(process.execPath, [cli, entry, '-o', out], { stdio: 'inherit', timeout: 600000 });
-    // 宿主机驱动（phase3/run.py）用这个字面量判断"是不是打包过的脚本"。
+    // 宿主机驱动（core/frida_host/run.py）用这个字面量判断"是不是打包过的脚本"。
     // 少了它，运行期会死在 ReferenceError: 'Java' is not defined。
     if (!readFileSync(out, 'utf8').includes('frida-java-bridge')) {
       console.error(`[fatal] ${out} 里没有 frida-java-bridge 标记，拒绝产出`);

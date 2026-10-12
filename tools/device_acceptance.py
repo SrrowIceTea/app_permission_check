@@ -158,12 +158,12 @@ def main():
                 '--certs', '*=' + str(create(out / 'test-proxy.pem'))], 'mitm')
         adb('shell', 'am', 'start', '--user', '10', '-n', PACKAGE + '/.MainActivity')
         # am start 只把 intent 投出去就返回，进程要几秒后才出现：实测启动后立即 pidof 退出码 1，
-        # 约 4 秒后才有 pid。不等的话 phase3/run.py 的 resolve_pid 直接 CalledProcessError，
+        # 约 4 秒后才有 pid。不等的话 core/frida_host/run.py 的 resolve_pid 直接 CalledProcessError，
         # 三个钩子一条 ARMED 都留不下——而现象与「钩子没挂上」完全一样，排查方向会跑偏。
         # 这一步是必需的：build_delivery 的 APK 哈希校验强制重装夹具，重装后必然是冷启动。
         wait_for(app_pid, 30)
         for name, script in [('reads', 'hook_vhal'), ('egress', 'hook_egress'), ('tls', 'ssl_pinning_bypass')]:
-            launch([sys.executable, str(ROOT / 'phase3/run.py'), '--package', PACKAGE,
+            launch([sys.executable, str(ROOT / 'core/frida_host/run.py'), '--package', PACKAGE,
                     '--script', str(ROOT / 'phase3/dist' / (script + '.bundle.js')),
                     '--seconds', '150', '--out', str(out / (name + '.jsonl')),
                     '--session', session, '--event-db', str(out / 'events.sqlite')], name)
