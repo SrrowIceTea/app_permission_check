@@ -10,6 +10,7 @@
 - ``toolchain.py``   —— Android 构建工具链（aapt2/dexdump/jadx/java）定位
 - ``crosscheck.py``  —— 交叉校验
 - ``jobs.py``        —— 反编译任务调度
+- ``winpath.py``     —— Windows 长路径（MAX_PATH 260）兼容层
 
 车载 workbench 的交互式 HTTP 服务（``vehicle/workbench/server.py`` → ``vehicle/workbench/server.py``）
 仍在车载侧，它 import 这里的内核。

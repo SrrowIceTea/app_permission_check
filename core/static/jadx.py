@@ -17,7 +17,13 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
+
+# 同目录下的构建工具链模块：仓库根入 sys.path，便于既被 `core.static.jadx`（服务端）
+# 也被顶层 `import jadx`（离线回归）两种方式加载。
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core.static import winpath  # noqa: E402
 
 PROGRESS_RE = re.compile(r"progress: (?P<done>\d+) of (?P<total>\d+)")
 ERRORS_RE = re.compile(r"finished with errors, count: (?P<count>\d+)")
@@ -89,8 +95,10 @@ def source_tree(root: Path) -> list[dict]:
         return []
     entries = []
     for path in sorted(sources.rglob("*.java")):
+        # stat 走 winpath：深包名的类文件绝对路径会超过 Windows 的 260，
+        # 直接 stat 会抛 WinError 3（详见 winpath 模块头）。rglob 本身不受影响。
         entries.append({"path": path.relative_to(sources).as_posix(),
-                        "size": path.stat().st_size})
+                        "size": winpath.size(path)})
     return entries
 
 
@@ -110,9 +118,10 @@ def read_source(root: Path, relative: str, max_bytes: int = 512 * 1024) -> dict:
     target = (sources / relative).resolve()
     if not target.is_relative_to(sources):
         raise ValueError(f"路径越界：{relative}")
-    if not target.is_file():
+    # 越界判断用普通 Path（词法比较即可），真正的 IO 走 winpath 以扛住长路径。
+    if not winpath.is_file(target):
         raise FileNotFoundError(relative)
-    raw = target.read_bytes()
+    raw = winpath.read_bytes(target)
     truncated = len(raw) > max_bytes
     return {"path": relative, "size": len(raw), "truncated": truncated,
             "text": raw[:max_bytes].decode("utf-8", errors="replace")}

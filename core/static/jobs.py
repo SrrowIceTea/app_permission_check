@@ -15,11 +15,15 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
+import sys
 import threading
 import time
 import uuid
 from pathlib import Path
+
+# 同目录模块：仓库根入 sys.path，兼容 `core.static.jobs`（服务端）与顶层 `import jobs`（离线回归）。
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core.static import winpath  # noqa: E402
 
 # 单个 APK 上限。超了**明确拒绝**，而不是拖垮磁盘或内存。
 MAX_APK_BYTES = 512 * 1024 * 1024
@@ -70,7 +74,9 @@ class Cache:
             self.evict(protect=digest)
 
     def usage(self) -> int:
-        return sum(f.stat().st_size for f in self.root.rglob("*") if f.is_file())
+        # 走 winpath：反编译产物的深层类文件会超过 Windows 260，普通 stat 会抛 WinError 3；
+        # 而 usage() 在**成功路径**上被 mark_complete -> evict 调用，一炸就把成功记成 failed。
+        return sum(winpath.size(f) for f in self.root.rglob("*") if winpath.is_file(f))
 
     def evict(self, protect: str | None = None) -> list[str]:
         """按最近使用时间淘汰，直到降到上限之下。`protect` 不被淘汰（正在用的那个）。
@@ -82,15 +88,15 @@ class Cache:
         for child in self.root.iterdir():
             if not child.is_dir() or child.name == protect:
                 continue
-            mtime = max((f.stat().st_mtime for f in child.rglob("*")), default=child.stat().st_mtime)
+            mtime = max((winpath.mtime(f) for f in child.rglob("*")), default=winpath.mtime(child))
             entries.append((mtime, child))
         entries.sort()
         removed, total = [], self.usage()
         for _, child in entries:
             if total <= self.limit_bytes:
                 break
-            size = sum(f.stat().st_size for f in child.rglob("*") if f.is_file())
-            shutil.rmtree(child, ignore_errors=True)
+            size = sum(winpath.size(f) for f in child.rglob("*") if winpath.is_file(f))
+            winpath.rmtree(child)
             total -= size
             removed.append(child.name)
         return removed
