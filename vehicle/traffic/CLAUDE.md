@@ -1,4 +1,4 @@
-# Phase 4 — Mitmproxy 流量层
+# Mitmproxy 流量层（vehicle/traffic，原 Phase 4）
 
 **仅用于授权测试（自有设备与自有 APK）。** 只抓取、只标注、不改写任何报文。**已完成。**
 决策见 `DECISIONS.md`（D401–D410），全局约束见根 `CLAUDE.md`。

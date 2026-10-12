@@ -1,6 +1,6 @@
 > 2026-09-24 当前增补与复现见 [根 COMPLETION.md](../COMPLETION.md)。以下旧实测条数、时间与未实现描述属于历史轮次，以当前交付说明和对应 verification.json 为准。
 
-# Phase 2：靶子 App（V-Scanner 测试夹具）
+# 靶子 App（vehicle/targets，原 Phase 2）
 
 仅用于授权测试（自有设备与自有 APK）/ For authorized testing on owned devices and APKs only.
 本 App 是被审计的对象：它故意过度索权、读取 VHAL、外发 JSON，供 V-Scanner

@@ -1,4 +1,4 @@
-# Phase 1 — 规则库与 Android 工程
+# 规则库与 Android 工程（vehicle/rules，原 Phase 1）
 
 车载隐私特征数据库：双版本规则库（android-14 = AOSP 源码抽取，android-15 = 设备实测）
 + 一个在真实设备上验证过 Room 预置库加载的 Android 工程。**已完成。**

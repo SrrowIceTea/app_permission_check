@@ -1,6 +1,6 @@
 > 2026-09-24 当前增补与复现见 [根 COMPLETION.md](../COMPLETION.md)。以下旧实测条数、时间与未实现描述属于历史轮次，以当前交付说明和对应 verification.json 为准。
 
-# Phase 3：Frida 动态插桩层
+# Frida 动态插桩层（vehicle/hooks，原 Phase 3）
 
 **仅用于授权测试（自有设备与自有 APK）。** 观察模式：不阻断调用、不改写返回值、不篡改数据。
 默认只记录白名单包名（`com.vscanner.targetapp`）。

@@ -55,6 +55,10 @@ vscanner/
 各目录的实测教训记录在各自 `DECISIONS.md`（D101–D7xx 编号），
 改任何模块前先读对应目录的 DECISIONS——几乎每个坑都是**静默失败**。
 
+**命名对照**（目录已从 `phase1–7` 改名，子目录 `DECISIONS.md` 仍按旧 Phase N / D1xx–D7xx 记录历史决策）：
+Phase 1=`vehicle/rules/`，Phase 2=`vehicle/targets/`，Phase 3=`vehicle/hooks/`，Phase 4=`vehicle/traffic/`，
+Phase 5=`vehicle/analyze/`，Phase 6=`vehicle/dashboard/`，Phase 7=`vehicle/workbench/`。
+
 ## 规则库（已分开，2026-10-12）
 
 两套 `.db` 物理独立、schema 大同小异，通过 `core/rules_contract.py` 以 **rule_id 前缀**

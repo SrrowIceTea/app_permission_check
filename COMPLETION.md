@@ -30,10 +30,13 @@ node vehicle/hooks/node_modules/frida-compile/dist/cli.js vehicle/hooks/fixture_
 & $VScanPython tools/run_regressions.py
 ```
 
-SDK 为 `E:\Android\android-sdk`；使用 Python313 实际解释器，WindowsApps 是别名。
-已安装本项目本地 JDK21、Gradle8.13、API36 与构建工具36。
+SDK 为 `D:\Anroid\SDK`，`JAVA_HOME=D:\Anroid\JDK`（JDK 21，不是 JBR 25）；使用 Python313 实际解释器，WindowsApps 是别名。
+Gradle8.13、API36 与构建工具36 已装（Gradle 由各工程 gradlew 包装器提供，发行版缓存于 `~\.gradle\wrapper\dists`）。
 `environment.ps1` 配置 JDK 的短临时目录，避免 Windows 非ASCII路径导致 NIO 本地套接字失败。
 新建独立 AVD `VScanner_AAOS_35`，Android15，应用 user10，不改既有 Pixel AVD。
+
+> 注：本文件早先段落里的 `E:\Android\android-sdk` / `.tools\jdk21` 是**旧开发机**（OneKyubey 用户）的
+> 路径，已于 2026-10-12 拆分收尾时校正为当前主机；换机只改 `environment.ps1` 顶部三个 `$VScan*` 默认值。
 
 ## 设备验收
 
@@ -155,3 +158,22 @@ dex 40 项核对（38 VERIFIED / 2 INCOMPLETE）、PDF 与看板 QA、前端 22 
 3 个 dex 全扫、`GEAR_SELECTION` 在 `classes3.dex` 找到、静态等级封顶、
 四象限 16 both / 6 static_only / 0 dynamic_only、身份证明为同一个 APK、
 反编译 930 个类、5 个部分失败被记成缺口。
+
+## 2026-10-11/12 增补：产品线拆分 + 内存 Hook + 透明代理
+
+**拆分**（已提交，每步离线回归全绿）：仓库重构为 `core/`（平台无关内核）+
+`vehicle/`（车载，原 phase1–7 语义化改名）+ `mobile/`（移动端）+ `frontend/`（车载前端壳）。
+规则库分开（`VSC-` / `MOB-` 前缀，见 `core/rules_contract.py`）。进度与待办见 [AGENTS.md](AGENTS.md)。
+
+**内存 Hook（车载 `vehicle/hooks/`，2026-10-11）**：补齐申报书「内存 Hook 截获明文 Buffer」缺口，
+新增 `hook_cipher.js`（JCE `Cipher.update/doFinal`，截获自绘加密**加密前明文**）、
+`hook_native_ssl.js`（BoringSSL `SSL_write/SSL_read`，截获 native TLS 明文）、共享 `stack_capture.js`；
+夹具新增 `CipherSender`（AES/GCM）+ 按钮「4. 自绘加密外泄」。离线编译与 `test_runtime.mjs` 通过，
+**设备端实测待跑**（AAOS 模拟器 + frida-server 27043）。边界：不覆盖静态链接自有 BoringSSL 且
+符号不导出的栈（Cronet 常见）、不经 JCE 的手工加密。
+
+**透明代理（移动 `mobile/traffic/transparent.py`，2026-10）**：模拟器级强制代理
+（`emulator -http-proxy`）+ 系统级 CA，让第三方 App 流量无法绕过抓包——不依赖 App 是否读取
+系统代理设置（实测 NewPipe 用 loopj/AsyncHttpClient 完全无视 `http_proxy`，而 `-http-proxy` 对其有效）。
+之所以不走设备上 `iptables -t nat REDIRECT`：代理跑在宿主机时 `SO_ORIGINAL_DST` 查不到原目标，
+必须代理与 iptables 同机。带 `test_transparent.py` 离线自检。

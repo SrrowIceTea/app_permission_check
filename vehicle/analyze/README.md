@@ -1,6 +1,6 @@
 > 2026-09-24 当前增补与复现见 [根 COMPLETION.md](../COMPLETION.md)。以下旧实测条数、时间与未实现描述属于历史轮次，以当前交付说明和对应 verification.json 为准。
 
-# Phase 5：关联分析与报告
+# 关联分析与报告（vehicle/analyze，原 Phase 5）
 
 **仅用于授权测试（自有设备与自有 APK）。**
 

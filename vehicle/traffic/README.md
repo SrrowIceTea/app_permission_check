@@ -1,6 +1,6 @@
 > 2026-09-24 当前增补与复现见 [根 COMPLETION.md](../COMPLETION.md)。以下旧实测条数、时间与未实现描述属于历史轮次，以当前交付说明和对应 verification.json 为准。
 
-# Phase 4：Mitmproxy 流量层
+# Mitmproxy 流量层（vehicle/traffic，原 Phase 4）
 
 **仅用于授权测试（自有设备与自有 APK）。** 只抓取、只标注、不改写任何报文。
 

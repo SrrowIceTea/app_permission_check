@@ -1,6 +1,6 @@
 > 2026-09-24 当前增补与复现见 [根 COMPLETION.md](../COMPLETION.md)。以下旧实测条数、时间与未实现描述属于历史轮次，以当前交付说明和对应 verification.json 为准。
 
-# V-Scanner Phase 1
+# V-Scanner 车载规则库（vehicle/rules，原 Phase 1）
 
 当前内容：四表 SQL、Room Entity、只查询 DAO、源码解析、离线校准和合成演示。
 android-14 部分是从 AOSP `android-14.0.0_r1` 抽取的 41 条（24 规则覆盖全部 8 个 VHAL 属性，P 按权限去重），见 [种子库说明](baseline_android14/README.md)。

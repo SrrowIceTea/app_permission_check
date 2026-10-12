@@ -1,4 +1,4 @@
-# Phase 3 — Frida 动态插桩层
+# Frida 动态插桩层（vehicle/hooks，原 Phase 3）
 
 **仅用于授权测试（自有设备与自有 APK）。** 观察模式：不阻断调用、不改写返回值、不篡改数据。
 默认只注入白名单包名。**已完成。** 决策见 `DECISIONS.md`（D301–D310），全局约束见根 `CLAUDE.md`。

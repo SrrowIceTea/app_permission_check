@@ -1,4 +1,4 @@
-# Phase 2 — 靶子 App（V-Scanner 测试夹具）
+# 靶子 App（vehicle/targets，原 Phase 2）
 
 被审计的对象：两个故意过度索权、读取 VHAL、外发 JSON 的 App，供 Phase 3/4 在自有
 AAOS 模拟器上检测。**不做任何规避、混淆或反分析——一切行为必须可被直接观察。**

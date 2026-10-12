@@ -1,4 +1,4 @@
-# Phase 7 — APK 静态分析工作台
+# APK 静态分析工作台（vehicle/workbench，原 Phase 7）
 
 **仅用于授权测试（自有设备与自有 APK）。** 拖入 APK → 现场看反编译源码 + 静态规则匹配
 + 与运行时观测的四象限对照。决策见 `DECISIONS.md`（D701–D710）。
