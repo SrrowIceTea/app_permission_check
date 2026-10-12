@@ -12,8 +12,8 @@
 | --- | --- |
 | `rules/` | **规则库**：schema v2 + 法规依据 + android.jar 签名抽取 + 构建器 |
 | `rules/regulations/` | 法规原文（认定方法 / 必要信息规定 / 个保法 / GB-T 35273），带条款号与 URL |
-| `hooks/` | Frida 钩子：敏感 API 读取 + 同意时序。监视表由规则库生成，不手抄 |
-| `traffic/` | mitmproxy 移动适配：打标表 + 注入壳（复用 core/collector/addon.py） |
+| `hooks/` | Frida 钩子：敏感 API 读取 + 同意时序 + 内存 Hook（JCE 加密前明文 / native TLS 明文）。监视表由规则库生成，不手抄 |
+| `traffic/` | mitmproxy 移动适配：打标表 + 注入壳（复用 core/collector/addon.py）+ 透明代理（transparent.py） |
 | `policy/` | 隐私政策获取 / 正文抽取 / 规则化检查 |
 | `analyze/` | 关联引擎与八种移动谓词（复用 core/evidence/codeloc.py 的行号链） |
 | `ai/` | **证据打包 + 三阶段提示词 + LLM 客户端 + 输出校验** |
@@ -86,6 +86,10 @@ cp mobile/ai/config.example.json mobile/ai/config.local.json   # ← 在这里�
   都是 `UTF-8 + sha256 前 16 位十六进制`。变了要同步改两边，否则值级匹配静默失效。
 - **构建失败不得留下半成品 DB**：`build_mobile_rules.py` 任何异常都清理输出——
   半成品与成功产物在文件系统上长得一模一样。
+- **第三方 App 抓不到流量先查透明代理**：不少 App（如 loopj/AsyncHttpClient）无视系统代理设置，
+  `emulator -http-proxy`（SLIRP 层强制代理）才对它们有效。`traffic/transparent.py` 只负责
+  算出启动参数 + 装系统 CA，不在设备上跑 `iptables REDIRECT`——代理跑在宿主机时
+  `SO_ORIGINAL_DST` 查不到原目标，那条路不通（见 transparent.py 顶部说明）。
 
 ## 状态（2026-10-03）
 
@@ -107,7 +111,10 @@ AI 三阶段研判（含编造校验）、PDF 报告（十章 + 三附录）、�
   E2E 已能量出真实的"读取→外发"间隔分布，下一步据此校准。
 - AI 阶段未用真实 key 跑过（提示词渲染与校验逻辑已测；真实调用的效果待用户填 key 后验证）。
 
-**能力边界**：native 层 / 加固壳 / QUIC / 自定义加密不在覆盖内；
+**能力边界**：加固壳 / QUIC 不在覆盖内；native TLS 与 JCE 自绘加密已由内存 Hook
+（`hook_cipher.js` / `hook_native_ssl.js`，从 vehicle/hooks 移植）覆盖**加密前明文**，
+但静态链接自有 BoringSSL（Cronet 常见，符号不导出）与不经 JCE 的手工加密 / XOR
+仍拿不到明文；
 剪贴板等无需运行时权限的 API，"无同意事件"需要结合 API 判断；
 政策关键词预扫是正则代理指标，未命中不等于未声明；
 静态扫描看不到被 D8 折叠掉的版本分支（M013）。

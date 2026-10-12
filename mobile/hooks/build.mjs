@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST = join(HERE, 'dist');
 const PRELUDE = "import Java from 'frida-java-bridge';\nglobalThis.Java = Java;\n";
-const SCRIPTS = ['hook_privacy.js', 'hook_consent.js', 'hook_egress_tp.js', 'ssl_pinning_tp.js'];
+const SCRIPTS = ['hook_privacy.js', 'hook_consent.js', 'hook_egress_tp.js', 'ssl_pinning_tp.js',
+                 'hook_cipher.js', 'hook_native_ssl.js'];
 
 const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
 const targets = only.length ? SCRIPTS.filter((s) => only.includes(s)) : SCRIPTS;

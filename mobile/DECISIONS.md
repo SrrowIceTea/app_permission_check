@@ -178,6 +178,21 @@ dev eth0 table eth0`），而 `ip route` 只显示 **main 表**——正常联�
 - 编排层旧条件只在 `stage3.json` 存在时才把 AI 目录交给报告，使 dry-run 渲染的
   提示词变成**孤儿文件**（躺在交付目录里、报告却不指向它）。→ 目录存在即传入。
 
+## M019 内存 Hook 从 vehicle/hooks 移植（复制而非 import 共享）
+
+`hook_cipher.js`（JCE 加密前明文）、`hook_native_ssl.js`（BoringSSL SSL_write/SSL_read
+明文）挂的全是**通用 Android API**，不含任何 `android.car` / VHAL / system_server 依赖，
+移动端同样需要「外发前明文」这类证据，故移植。
+- **复制而非共享**：frida-compile 按入口文件所在目录解析相对 import，跨项目根
+  import vehicle/hooks 的模块会静默失败（与 `tls_bypasses_tp.js` 同一个原因）。
+- **适配面只有三处**：① runtime `vscan_runtime.js` → `runtime.js`（接口 `makeLogger`/
+  `procName` 一致）；② 日志路径 `vscan.log` → `vscan-mobile.log`；③ `stack_capture.js`
+  逐字复用（纯函数）。`scope.js` 同名同接口，直接用。
+- **定位是独立落盘**：事件 `CIPHER_PLAINTEXT` / `SSL_*_PLAINTEXT` 只作证据写进日志，
+  **不接入** `correlate_mobile.py` 的判定（不改规则库、不产出违规结论）。
+- **能力边界保留**：静态链接自有 BoringSSL（Cronet，符号不导出）、不经 JCE 的
+  手工加密 / XOR，仍拿不到明文——这是 Hook 方案的固有边界，非移动端独有。
+
 ## 待办（已想清楚要做什么，尚未做）
 
 - **时间窗校准**：30000ms 是从车载侧沿用的**声明值**，未由移动夹具实测校准。
