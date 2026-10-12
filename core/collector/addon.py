@@ -20,9 +20,9 @@ restate the old assumption that every app's traffic arrives here — it does not
 3. **JSON 落盘**。每条流一行 JSON。
 
 用法（`VSCAN_TAGGING` 必填，不给就启动即失败，不猜平台）:
-  VSCAN_TAGGING=phase4/tagging.py mitmdump -s core/collector/addon.py \
+  VSCAN_TAGGING=vehicle/traffic/tagging.py mitmdump -s core/collector/addon.py \
       --mode reverse:http://127.0.0.1:8080 --listen-port 8888
-  VSCAN_PACKAGES=a.b,c.d VSCAN_ATTRIB_SOURCES=../phase3/logs/egress.jsonl \
+  VSCAN_PACKAGES=a.b,c.d VSCAN_ATTRIB_SOURCES=../vehicle/hooks/logs/egress.jsonl \
       VSCAN_TAGGING=mobile/traffic/tagging_mobile.py mitmdump -s core/collector/addon.py
 """
 from __future__ import annotations
@@ -63,7 +63,7 @@ def _load_tagging():
     if not path:
         raise SystemExit(
             "[fatal] 未设 VSCAN_TAGGING。它必须指向本次审计所属产品的打标表："
-            "车载 phase4/tagging.py，移动端 mobile/traffic/tagging_mobile.py。")
+            "车载 vehicle/traffic/tagging.py，移动端 mobile/traffic/tagging_mobile.py。")
     src = Path(path)
     if not src.is_absolute():
         src = ROOT / src

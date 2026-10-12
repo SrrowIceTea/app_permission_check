@@ -2,7 +2,7 @@
 // 仅用于授权测试（已获授权的样本与设备）。
 // V-Scanner Mobile — runtime.js：移动钩子的共享运行时。
 //
-// 与 phase3/vscan_runtime.js 的区别：
+// 与 vehicle/hooks/vscan_runtime.js 的区别：
 //   1) 新增 threadName() / stackStr() —— 同意链与隐私读取事件需要线程名与
 //      调用栈做时序归因（"同意前读取"靠的就是 ts 比对，栈用来确认是应用代码
 //      主动调用还是系统回调）。

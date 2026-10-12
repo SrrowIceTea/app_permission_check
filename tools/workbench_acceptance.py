@@ -28,7 +28,7 @@ sys.path.insert(0, str(ROOT))
 
 from core.static import analysis, apkmeta, crosscheck, dexfacts, toolchain  # noqa: E402
 
-DEFAULT_APK = ROOT / 'phase2/target-app/app/build/outputs/apk/debug/app-debug.apk'
+DEFAULT_APK = ROOT / 'vehicle/targets/target-app/app/build/outputs/apk/debug/app-debug.apk'
 EXPECTED_PROPERTY = 'GEAR_SELECTION'
 
 
@@ -52,7 +52,7 @@ def main() -> int:
 
     started = time.time()
     digest, why = crosscheck.resolve_findings(args.session, args.findings)
-    static = analysis.scan_static(apk, ROOT / 'phase1/rules_library/rules.db', '15', out)
+    static = analysis.scan_static(apk, ROOT / 'vehicle/rules/rules_library/rules.db', '15', out)
     details['static_seconds'] = round(time.time() - started, 1)
 
     # 1) 权限：静态取到的必须与动态路径记录的**同一批**

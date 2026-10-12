@@ -4,7 +4,7 @@
 
 跑法：cd core/collector && python -m unittest test_body
 
-这些用例原先**分存两处**：`phase4/test_tagging.py` 的 `BodyOfTest`（车载）与
+这些用例原先**分存两处**：`vehicle/traffic/test_tagging.py` 的 `BodyOfTest`（车载）与
 `mobile/traffic/test_tagging_mobile.py` 的 `ScanBodyTest`（移动端），测的是同一份
 逐字相同的实现。实现合并到 core 之后，测试也合并到这里：**一份实现，一份测试**。
 

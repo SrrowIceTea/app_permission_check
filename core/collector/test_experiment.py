@@ -6,7 +6,7 @@
 实验脚本里有一份按规则手写的 `predict()`，与真实的 `TimeAttribution` 独立算一遍；
 两者在扫描的每一个格子上都必须一致。一旦有人改了 `attribution.resolve()` 的判定
 （或改了常量）而没同步这边，这条测试就会红——这正是 2026-09-28 修过的那类漂移
-（phase4 排除失败连接、codeloc 没有，两边"看起来都对"）。
+（vehicle/traffic 排除失败连接、codeloc 没有，两边"看起来都对"）。
 """
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ class DesignedBoundaryTest(unittest.TestCase):
 
         这是时间归因的固有限制，不是 bug——但它是"错误归因比没有归因更糟"那条原则
         最可能被违反的地方，所以写进 DECISIONS 与报告，并在这里钉住。
-        若哪天改进了这条判定，请同步更新 phase4/DECISIONS 与实验结论，
+        若哪天改进了这条判定，请同步更新 vehicle/traffic/DECISIONS 与实验结论，
         而不是顺手把这条测试删掉。
         """
         wrong = [c["rival_gap_ms"] for c in ex.sweep_rival(1500) if c["observed"] == "wrong"]

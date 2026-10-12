@@ -1,6 +1,6 @@
 # 2026-09-25 缺口补齐与复现
 
-仅用于授权测试（自有设备、自有 APK）。APK 静态反编译作为独立工作台加入（phase7）；违规行号仍只取自运行时栈。
+仅用于授权测试（自有设备、自有 APK）。APK 静态反编译作为独立工作台加入（vehicle/workbench）；违规行号仍只取自运行时栈。
 本文件描述当前交付；各 DECISIONS 的旧记录保留为历史证据，不能当成当前状态。
 
 交付索引与验收结果见 [DELIVERY_INDEX.md](DELIVERY_INDEX.md)。
@@ -9,24 +9,24 @@
 
 | 项目 | 实现与边界 |
 | --- | --- |
-| 域名/IP 归属 | `phase5/ownership.py`：RDAP 注册信息、HTTPS IP 地理估计、可校验离线缓存、可选 MMDB。注册商不当成接收机构，注册国家不当成服务器位置；缺失明确标未知。 |
-| 明文截图 | `phase4/payloads.py` 捕获请求/响应字节和摘要；PDF 按真实载荷生成 PNG。原始捕获上限1MiB，报告展示上限160行；截断与旧 preview 单独标示。 |
+| 域名/IP 归属 | `vehicle/analyze/ownership.py`：RDAP 注册信息、HTTPS IP 地理估计、可校验离线缓存、可选 MMDB。注册商不当成接收机构，注册国家不当成服务器位置；缺失明确标未知。 |
+| 明文截图 | `vehicle/traffic/payloads.py` 捕获请求/响应字节和摘要；PDF 按真实载荷生成 PNG。原始捕获上限1MiB，报告展示上限160行；截断与旧 preview 单独标示。 |
 | 时序存储 | `core/event_store.py`：SQLite WAL，按会话/包名/时间索引、范围查询、时间桶统计、JSONL 导入导出；采集时双写原始 JSONL。属于单机时序事件库。 |
-| Gadget | `phase3/gadget_prepare.py` 为自有源码生成 Gadget 构建变体，在 Application.attachBaseContext 加载，loopback:27044、on_load=wait；`run.py --gadget` 注入后恢复。 |
+| Gadget | `vehicle/hooks/gadget_prepare.py` 为自有源码生成 Gadget 构建变体，在 Application.attachBaseContext 加载，loopback:27044、on_load=wait；`run.py --gadget` 注入后恢复。 |
 | OkHttp | 两个夹具增加错误 pin 的 OkHttp 4.12 请求按钮；已实测触发 CertificatePinner 绕过并收到200。 |
 | 订阅 | 两夹具增加10秒订阅按钮；已实测 GEAR_SELECTION 回调。注册事件不算成功读取。 |
-| 外发规则 | 每版 E001–E008 启用，window_ms=30000，revision=2；双版本共16条外发规则，全部44条风险规则启用。见 `phase1/EGRESS_CALIBRATION.md`。 |
+| 外发规则 | 每版 E001–E008 启用，window_ms=30000，revision=2；双版本共16条外发规则，全部44条风险规则启用。见 `vehicle/rules/EGRESS_CALIBRATION.md`。 |
 | 关联加固 | 只关联同会话、同包、非歧义的请求内容；默认用主机接收时间，禁用规则不求值，启动日志与失败连接不参与归因。 |
 | 覆盖缺口 | PDF 和看板按本轮数据计算无规则属性。核对备份库发现原库已含8属性规则，CURRENT_GEAR对应R004；不沿用“只有3属性”的旧描述。 |
-| 接收端 | `phase4/collector_server.py` 实现 POST /collect，返回200、字节数和摘要。 |
+| 接收端 | `vehicle/traffic/collector_server.py` 实现 POST /collect，返回200、字节数和摘要。 |
 
 ## 当前环境与入口
 
 ```powershell
 . .\environment.ps1
 & $VScanPython -m pip install -r requirements.txt
-node phase3/build.mjs
-node phase3/node_modules/frida-compile/dist/cli.js phase3/fixture_control.js -o phase3/dist/fixture_control.bundle.js
+node vehicle/hooks/build.mjs
+node vehicle/hooks/node_modules/frida-compile/dist/cli.js vehicle/hooks/fixture_control.js -o vehicle/hooks/dist/fixture_control.bundle.js
 & $VScanPython tools/run_regressions.py
 ```
 
@@ -59,13 +59,13 @@ Wi-Fi 掉线会使连接失败，失败连接不再作为归因候选；恢复�
 `VSCAN_EVENT_DB` 与 `--event-db` 可指向同一SQLite库；JSONL 各采集器独立文件。
 新授权包同时配置 `--allow-package` 与 `VSCAN_PACKAGES`，默认仍仅两个夹具。
 允许包名不等于已授权设备：只能在已获授权的自有测试环境使用。
-Gadget需要自有源码构建和安装权限；该路径不重打包、不反编译、不做无授权注入。（独立的静态分析工作台见 phase7，只读 APK、只分析已获授权样本。）
+Gadget需要自有源码构建和安装权限；该路径不重打包、不反编译、不做无授权注入。（独立的静态分析工作台见 vehicle/workbench，只读 APK、只分析已获授权样本。）
 server attach只能观察附加后的行为；Gadget wait覆盖应用恢复后的行为，不能追溯加载前动作。
 
 ```powershell
 & $VScanPython core/event_store.py --db output/session.sqlite --session SESSION --bucket-ms 1000
 & $VScanPython core/event_store.py --db output/session.sqlite --session SESSION --start-ms START --end-ms END --export-jsonl output/range.jsonl
-& $VScanPython phase5/ownership.py --flows output/flows.jsonl --cache output/rdap-cache --out output/ownership.json
+& $VScanPython vehicle/analyze/ownership.py --flows output/flows.jsonl --cache output/rdap-cache --out output/ownership.json
 ```
 
 归属查询默认离线；显式 `--online` 才查询公网，仅发送域名/IP，不发送载荷。
@@ -79,7 +79,7 @@ server attach只能观察附加后的行为；Gadget wait覆盖应用恢复后�
 - RDAP注册主体、IP网络机构、服务器实际运营者是不同事实；位置只是IP库/API估计。
 - 同时外发无法可靠区分时标 ambiguous，Phase5不产生 correlated；3秒延迟仍不能消除统计归因的全部误差。
 - 属性名/ID出现在请求中是内容线索，不证明具体属性值泄露；工具不产生 policy_violation。
-- dex核对保留；只证明行号属于装机APK的方法行号表，不证明违规语义。它**不是**静态反编译流水线——静态分析是 phase7 这个独立工作台，两条链不混用。
+- dex核对保留；只证明行号属于装机APK的方法行号表，不证明违规语义。它**不是**静态反编译流水线——静态分析是 vehicle/workbench 这个独立工作台，两条链不混用。
 - 窗口30000ms是既有夹具实测校准参数，不能当成法律阈值或所有App通用参数。
 - 订阅回调在运行时栈显示Native Method，2条位置记录无源码行号；保持INCOMPLETE，不推测行号。
 
@@ -94,7 +94,7 @@ server attach只能观察附加后的行为；Gadget wait覆盖应用恢复后�
 同一台设备上重跑并全部通过：设备验收 6/6（新增 `no_unanswered_requests`）、
 双应用 6/6、Gadget 23 条读取、交付 16 条结论（6 candidate / 5 observed / 5 correlated）、
 dex 40 项核对（38 VERIFIED / 2 INCOMPLETE）、PDF 与看板 QA、前端 22 项 × 3 视口。
-离线回归 108 项（含新增 21 项反例）。细节见 phase4/D411、phase5/D511。
+离线回归 108 项（含新增 21 项反例）。细节见 vehicle/traffic/D411、vehicle/analyze/D511。
 
 新增的可见字段：`summary.json` 的 `inputs.bodies_truncated` / `bodies_undecodable`、
 `provenance.json` 的 `unanswered_requests` 与 `session_manifest`、
@@ -103,7 +103,7 @@ dex 40 项核对（38 VERIFIED / 2 INCOMPLETE）、PDF 与看板 QA、前端 22 
 **新增的适用范围边界（实测，必须保留）**：无响应请求单独落盘（`flows-unanswered.jsonl`）
 覆盖的是"**连上了、然后失败**"（对端断开、响应中途失败、协议错误）。实测 mitmproxy 12.2.3
 反向模式下，**上游连接被拒时一个流 hook 都不调**（只有 `load`），客户端连接被直接丢弃——
-这条路径当前无法观测，不得声称覆盖了"上游不可达"。三情形对照见 phase4/D411。
+这条路径当前无法观测，不得声称覆盖了"上游不可达"。三情形对照见 vehicle/traffic/D411。
 
 **未做、且已想清楚为什么不做**（不是遗漏，是判断）：
 
@@ -133,10 +133,10 @@ dex 40 项核对（38 VERIFIED / 2 INCOMPLETE）、PDF 与看板 QA、前端 22 
 ## 2026-09-28 Phase 7：APK 静态分析工作台
 
 新增独立工作台：拖入 APK → 现场看反编译源码 + 用**本项目 rules.db** 做静态匹配
-+ 与某次采集会话做**四象限对照**。做法与坑见 [phase7/CLAUDE.md](phase7/CLAUDE.md)、
-[phase7/DECISIONS.md](phase7/DECISIONS.md)（D701–D710）。
++ 与某次采集会话做**四象限对照**。做法与坑见 [vehicle/workbench/CLAUDE.md](vehicle/workbench/CLAUDE.md)、
+[vehicle/workbench/DECISIONS.md](vehicle/workbench/DECISIONS.md)（D701–D710）。
 
-**这不是新增禁区，而是补上申报书原本就要的**：`phase1/spec_extract.txt:114`
+**这不是新增禁区，而是补上申报书原本就要的**：`vehicle/rules/spec_extract.txt:114`
 （"违规代码行号（通过反编译对齐）"）与 `:138`（"从 APK 自动反编译、权限静态分析…"）
 本来就是申报书条款；项目一度按用户要求把静态反编译排除（2026-09-28 由用户解除）。
 
@@ -148,7 +148,7 @@ dex 40 项核对（38 VERIFIED / 2 INCOMPLETE）、PDF 与看板 QA、前端 22 
 - **不做数据流分析**：只能得出"代码里引用了 X"，得不出"运行时的实参是 X"。
   实测夹具里 8 个属性 ID 同时出现，单条属性的 ID 出现**没有区分力**，已按 `weak` 报告。
 - 只读 APK：不重打包、不签名、不注入、不修改。只分析已获授权的样本。
-- **不替代 phase6 看板**：D601 要求看板静态单文件，而上传+反编译必须有服务端。
+- **不替代 vehicle/dashboard 看板**：D601 要求看板静态单文件，而上传+反编译必须有服务端。
   两者并存，`dashboard.html` 未改动，也未接进 `build_delivery.py` 的报告流水线。
 
 端到端验收 8 项全过（`output/latest-workbench.txt`）：权限 8 条与动态路径一致、

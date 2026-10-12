@@ -11,7 +11,7 @@
   * tls.jsonl         TLS 绕过钩子的挂载与命中（第三方专用裁剪版）；
   * conns.jsonl       设备侧连接采样（设备端每轮重解 pid，读**该进程命名空间**的
                       /proc/<pid>/net/tcp{,6}，逐行带 uid）；
-  * egress.jsonl      phase3 出站钩子（只挂 java.net.Socket.connect）。
+  * egress.jsonl      vehicle/hooks 出站钩子（只挂 java.net.Socket.connect）。
 
 其中 conns.jsonl 是**与客户端库无关**的地面真相：它回答"钩子零事件"到底是
 "真的没外发"还是"外层栈没被覆盖"。少了它，这两种情况在报告里长得一模一样。
@@ -68,9 +68,9 @@ def summarize(session: Path, out_dir: Path, package: str, app_uid: int | None = 
                             "urls": urls, "connections": conns, "hook_misses": misses,
                             "note": "挂到 libcore 汇聚点；不经 java.net.Socket.connect 重写路径"}
 
-    # 2) phase3 出站钩子（只挂 Socket.connect）：用作对照，说明"钩错层"长什么样。
+    # 2) vehicle/hooks 出站钩子（只挂 Socket.connect）：用作对照，说明"钩错层"长什么样。
     eg = read_jsonl(session / "egress.jsonl")
-    sources["egress_phase3"] = {"file": "session/egress.jsonl", "events": event_counts(eg),
+    sources["egress_vehicle/hooks"] = {"file": "session/egress.jsonl", "events": event_counts(eg),
                                 "note": "只挂 java.net.Socket.connect；被 conscrypt 子类重写后抓不到"}
 
     # 3) TLS 绕过：只摘挂载结果与命中，原文仍以 JSONL 为准。
@@ -141,7 +141,7 @@ def summarize(session: Path, out_dir: Path, package: str, app_uid: int | None = 
         "package": package,
         "warning": "本文件是索引，不是证据本体。证据本体是 session/ 下的原始 JSONL。",
         "not_in_bundle": ["egress_tp", "tls", "device_conns", "ui_actions",
-                          "egress_phase3"],
+                          "egress_vehicle/hooks"],
         "sources": sources,
     }
 

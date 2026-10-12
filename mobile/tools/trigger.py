@@ -3,7 +3,7 @@
 
 仅用于授权测试（已获授权的样本与设备）。
 
-两条照抄 phase2/target-app 的做法（那里踩过坑）：
+两条照抄 vehicle/targets/target-app 的做法（那里踩过坑）：
   1) **按 resource-id 找控件，不写死坐标**。dump 出来解析 bounds，点中心。
   2) **用 logcat 的成功标记判断"按钮真的点到了"**，不用 UI 文本——
      TextView 的可见文本随滚动区域变化，logcat 行是确定的。

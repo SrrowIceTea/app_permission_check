@@ -79,11 +79,11 @@ def write_manifest(out: Path, session: str, serial: str, adb, params: dict) -> N
     manifest['installed_apk_sha256'] = digest
     manifest['installed_apk_hash_method'] = method
     manifest['installed_apk_hash_error'] = error    # 失败如实记，不拿空哈希冒充成功
-    rules = ROOT / 'phase1/rules_library/rules.db'
+    rules = ROOT / 'vehicle/rules/rules_library/rules.db'
     manifest['rules_sha256'] = hashlib.sha256(rules.read_bytes()).hexdigest() if rules.exists() else None
     manifest['hook_bundles'] = {
         path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in sorted((ROOT / 'phase3/dist').glob('*.bundle.js'))
+        for path in sorted((ROOT / 'vehicle/hooks/dist').glob('*.bundle.js'))
     }
     (out / 'session-manifest.json').write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
@@ -114,7 +114,7 @@ def main():
                VSCAN_FLOW_LOG=str(out / 'flows.jsonl'),
                VSCAN_EVENT_DB=str(out / 'events.sqlite'),
                VSCAN_ATTRIB_SOURCES=str(out / 'egress.jsonl'),
-               VSCAN_TAGGING=str(ROOT / 'phase4/tagging.py'),
+               VSCAN_TAGGING=str(ROOT / 'vehicle/traffic/tagging.py'),
                PATH=str(Path(ADB).parent) + os.pathsep + os.environ['PATH'])
     upstream = ThreadingHTTPServer(('127.0.0.1', 0), Collector)
     worker = threading.Thread(target=upstream.serve_forever, daemon=True)
@@ -142,7 +142,7 @@ def main():
         return result.stdout.strip()
 
     def trigger(button):
-        result = subprocess.run([sys.executable, str(ROOT / 'phase2/trigger.py'), '--package', PACKAGE,
+        result = subprocess.run([sys.executable, str(ROOT / 'vehicle/targets/trigger.py'), '--package', PACKAGE,
                                  '--button', button, '--expect-endpoint',
                                  ('https' if button in ('btnOkHttp', 'btnEgressHttps') else 'http') + '://10.0.2.2:8888/collect'], env=env, capture_output=True,
                                 encoding='utf-8', errors='replace', timeout=50)
@@ -164,7 +164,7 @@ def main():
         wait_for(app_pid, 30)
         for name, script in [('reads', 'hook_vhal'), ('egress', 'hook_egress'), ('tls', 'ssl_pinning_bypass')]:
             launch([sys.executable, str(ROOT / 'core/frida_host/run.py'), '--package', PACKAGE,
-                    '--script', str(ROOT / 'phase3/dist' / (script + '.bundle.js')),
+                    '--script', str(ROOT / 'vehicle/hooks/dist' / (script + '.bundle.js')),
                     '--seconds', '150', '--out', str(out / (name + '.jsonl')),
                     '--session', session, '--event-db', str(out / 'events.sqlite')], name)
         wait_for(lambda: all(any(e.get('ev') == ('PINNING_ARMED' if n == 'tls' else 'ARMED') for e in read_events(out / (n + '.jsonl')))

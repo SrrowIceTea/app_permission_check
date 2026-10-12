@@ -60,7 +60,7 @@ def resolve_findings(session_dir: Path | None, findings: Path | None) -> tuple[P
 
 
 def load_dynamic(findings_path: Path | None) -> dict:
-    """读 phase5 的 `findings.jsonl`，按 rule_id 归纳。
+    """读 vehicle/analyze 的 `findings.jsonl`，按 rule_id 归纳。
 
     一条规则可能有多条结论（不同属性/不同包），这里保留最高等级那条，
     因为象限只看"这条规则在运行时到底有没有落地"。

@@ -92,7 +92,7 @@ def answered(flow, found, ts_ms: int, session: str, tags: dict, scans: dict) -> 
 def unanswered(flow, found, ts_ms: int, session: str, failure: str) -> dict:
     """一次**没拿到响应**的尝试（上游连接失败 / 超时 / 协议错误）。
 
-    `request_tokens` / `response_tags` 一律为空：`phase5/evaluation.py` 的外发判定
+    `request_tokens` / `response_tags` 一律为空：`vehicle/analyze/evaluation.py` 的外发判定
     **不看 `status_code`**，只要 tokens 里有属性名就会生成 `content_match=True` 的
     外发结论——那等于把一次失败的上传写成了"确实发出了这个数据"。
     """

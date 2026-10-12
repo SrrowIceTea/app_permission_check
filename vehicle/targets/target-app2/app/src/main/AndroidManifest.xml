@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  靶子 App 清单 —— 仅用于授权测试（自有设备与自有 APK）。
+  For authorized testing on owned devices and APKs only.
+
+  行为 1（过度索权）的静态信号就在这里：故意声明业务上毫无必要的 6 条
+  android.car.permission.*。其中 CAR_IDENTIFICATION / CAR_MILEAGE /
+  CAR_ENGINE_DETAILED 为 signature|privileged（出自 rules.db permissions 表），
+  普通应用永远不可能被授予 —— 声明本身即是审计工具的静态检测点。
+  不声明 <uses-library android:name="android.car">：见 DECISIONS.md。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 行为 3（外泄）需要的网络权限 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- 过度索权块：以下 6 条权限名全部取自 vehicle/rules/baseline_android14/rules.db permissions 表 -->
+    <uses-permission android:name="android.car.permission.CAR_IDENTIFICATION" />
+    <uses-permission android:name="android.car.permission.CAR_SPEED" />
+    <uses-permission android:name="android.car.permission.CAR_ENERGY" />
+    <uses-permission android:name="android.car.permission.CAR_MILEAGE" />
+    <uses-permission android:name="android.car.permission.CAR_ENGINE_DETAILED" />
+    <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" />
+
+    <!-- 刻意允许明文 HTTP（行为 3a 需要），且不加任何证书固定：可观察、可抓包，供 Phase 4 使用 -->
+    <application
+        android:label="@string/app_name"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.Light">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

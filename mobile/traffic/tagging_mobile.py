@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""移动版敏感载荷打标表 —— 与 `phase4/tagging.py`（车载版）同一契约。
+"""移动版敏感载荷打标表 —— 与 `vehicle/traffic/tagging.py`（车载版）同一契约。
 
 仅用于授权测试（已获授权的样本与设备）。
 

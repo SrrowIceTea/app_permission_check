@@ -7,8 +7,8 @@
 
 ```
 vscanner/
-├── core/           # 平台无关内核（唯一一份）：事件库/流量采集/代码行号/规则契约
-├── phase1–7/       # 车载 AAOS 产品线：规则库→靶子App→Frida→流量→关联报告→看板→静态工作台
+├── core/           # 平台无关内核（唯一一份）：事件库/流量采集/代码行号/规则契约/Frida驱动/静态内核
+├── vehicle/        # 车载 AAOS 产品线：rules→targets→hooks→traffic→analyze→dashboard→workbench
 ├── mobile/         # 移动端产品线：规则库/钩子/政策/AI/报告/工具（详见 mobile/CLAUDE.md）
 ├── frontend/       # 前端壳（待接 platform 分流）
 └── tools/          # 验收 / 回归脚本
@@ -25,7 +25,7 @@ vscanner/
 5. **判定可追溯**：每条违规结论带规则 ID + 依据来源。
 6. **失败可诊断**：Hook 脚本 try/catch + 日志落盘，区分"没读到数据"和"脚本崩了"。
 7. **禁止再让用户做环境探测**（Phase 0 已完成）。
-8. **单文件 ≤300 行**；超了按职责拆分（phase3/4/6 都有拆分的先例），拆后必须回归验证。
+8. **单文件 ≤300 行**；超了按职责拆分（hooks/traffic/dashboard 都有拆分的先例），拆后必须回归验证。
 
 ## 环境事实（当前主机；入口 environment.ps1）
 
@@ -43,16 +43,16 @@ vscanner/
 | 目录 | 内容 | 详情 |
 | --- | --- | --- |
 | `core/` | 平台无关内核（车载/移动共用） | `event_store.py` 时序事件库；`collector/` 流量采集；`evidence/` 代码行号+dex 核对；`rules_contract.py` 规则库契约 |
-| `phase1/` | 车载规则库（VSC-*，双版本 rules.db）+ Room 工程 | [phase1/CLAUDE.md](phase1/CLAUDE.md) |
-| `phase2/` | 靶子 App×2（被测对象）+ trigger.py | [phase2/CLAUDE.md](phase2/CLAUDE.md) |
-| `phase3/` | Frida 钩子（VHAL 读取/出站/TLS 绕过/内存明文/侦察） | [phase3/CLAUDE.md](phase3/CLAUDE.md) |
-| `phase4/` | Mitmproxy 反向代理 + 按包名归因 + 敏感打标（VHAL 指纹表） | [phase4/CLAUDE.md](phase4/CLAUDE.md) |
-| `phase5/` | 关联引擎 + PDF 报告（代码行号已抽到 core/evidence） | [phase5/CLAUDE.md](phase5/CLAUDE.md) |
-| `phase6/` | Web 可视化预警看板（交付物 B，静态单文件） | [phase6/CLAUDE.md](phase6/CLAUDE.md) |
-| `phase7/` | APK 静态反编译工作台（server + static_rules + crosscheck） | [phase7/CLAUDE.md](phase7/CLAUDE.md) |
+| `vehicle/rules/` | 车载规则库（VSC-*，双版本 rules.db）+ Room 工程 | [vehicle/rules/CLAUDE.md](vehicle/rules/CLAUDE.md) |
+| `vehicle/targets/` | 靶子 App×2（被测对象）+ trigger.py | [vehicle/targets/CLAUDE.md](vehicle/targets/CLAUDE.md) |
+| `vehicle/hooks/` | Frida 钩子（VHAL 读取/出站/TLS 绕过/内存明文/侦察） | [vehicle/hooks/CLAUDE.md](vehicle/hooks/CLAUDE.md) |
+| `vehicle/traffic/` | Mitmproxy 反向代理 + 按包名归因 + 敏感打标（VHAL 指纹表） | [vehicle/traffic/CLAUDE.md](vehicle/traffic/CLAUDE.md) |
+| `vehicle/analyze/` | 关联引擎 + PDF 报告（代码行号已抽到 core/evidence） | [vehicle/analyze/CLAUDE.md](vehicle/analyze/CLAUDE.md) |
+| `vehicle/dashboard/` | Web 可视化预警看板（交付物 B，静态单文件） | [vehicle/dashboard/CLAUDE.md](vehicle/dashboard/CLAUDE.md) |
+| `vehicle/workbench/` | APK 静态反编译工作台（server + static_rules + crosscheck） | [vehicle/workbench/CLAUDE.md](vehicle/workbench/CLAUDE.md) |
 | `mobile/` | 移动端产品线（MOB-* 规则库/钩子/政策/AI/报告/工具） | [mobile/CLAUDE.md](mobile/CLAUDE.md) |
 
-各 phase 的实测教训记录在各自 `DECISIONS.md`（D101–D7xx 编号），
+各目录的实测教训记录在各自 `DECISIONS.md`（D101–D7xx 编号），
 改任何模块前先读对应目录的 DECISIONS——几乎每个坑都是**静默失败**。
 
 ## 规则库（已分开，2026-10-12）
@@ -62,7 +62,7 @@ vscanner/
 
 | 库 | 路径 | 前缀 | 扩展表 |
 | --- | --- | --- | --- |
-| 车载 | `phase1/rules_library/rules.db` | `VSC-` | `vhal_properties` |
+| 车载 | `vehicle/rules/rules_library/rules.db` | `VSC-` | `vhal_properties` |
 | 移动 | `mobile/rules/rules_mobile.db` | `MOB-` | `sensitive_data_types` / `app_categories` / `policy_requirements` |
 
 移动库不再伪造空 `vhal_properties` 表去适配车载加载器（该 hack 已删除）。
@@ -78,25 +78,25 @@ PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
 ## 当前交付与拆分进度（2026-10-12）
 
 完整复现入口与证据说明见 [COMPLETION.md](COMPLETION.md)。
-APK 静态反编译作为**独立工作台**（phase7，2026-09-28，用户解除原排除）；违规代码行号仍**只**
+APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，用户解除原排除）；违规代码行号仍**只**
 取自运行时栈（D507 不变），静态证据不写进 code_locs。
 
 已补齐：RDAP 归属与 IP 位置估计/离线缓存、PDF 载荷截图、SQLite 单机时序事件库、
 自有源码 Gadget 模式、OkHttp 固定证书夹具、订阅回调、规则覆盖缺口展示、/collect 200 接收端。
 外发规则每版 8 条已正式启用，窗口 30000ms，revision=2；双版本 44 条风险规则全部启用。
-启用依据与范围见 phase1/EGRESS_CALIBRATION.md，不再依赖分析时窗口覆盖。
+启用依据与范围见 vehicle/rules/EGRESS_CALIBRATION.md，不再依赖分析时窗口覆盖。
 
 **拆分进度**（已提交、每步回归全绿）：
 - ✅ 建 git 仓库 + 快照（ce1859d）
 - ✅ `core/event_store.py`（audit_store 迁移）
-- ✅ `core/collector/`（phase4 流量采集内核 + `VSCAN_TAGGING` 平台打标表注入）
-- ✅ `core/evidence/`（phase5 代码行号/事件定位/dex 核对）
+- ✅ `core/collector/`（vehicle/traffic 流量采集内核 + `VSCAN_TAGGING` 平台打标表注入）
+- ✅ `core/evidence/`（vehicle/analyze 代码行号/事件定位/dex 核对）
 - ✅ `core/rules_contract.py` + 两份 `rules.manifest.json`（规则库分开的契约层）
+- ✅ `core/frida_host/`（Frida 驱动 + 共享 bundle，斩断 mobile 对 vehicle/hooks 的引用）
+- ✅ `core/static/`（静态分析内核，斩断 mobile 对 vehicle/workbench 的引用）
+- ✅ `vehicle/rules–7` → `vehicle/*` 语义化改名（rules/targets/hooks/traffic/analyze/dashboard/workbench）
 
 **待办**（按依赖顺序）：
-- `core/frida_host/` 抽 phase3 共享运行时（run.py + 共享 bundle），斩断 mobile 对 phase3 的引用
-- `core/static/` 抽 phase7 静态分析内核，斩断 mobile 对 phase7 的引用
-- `phase1–7` → `vehicle/*` 语义化改名（保留 D1xx–D6xx 编号）
 - `frontend/` platform 分流（车载/移动 PDF 与 AI 词汇表分开）
 - `archive/` 归档死内容 + 根文档路径彻底更新
 

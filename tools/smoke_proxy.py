@@ -35,7 +35,7 @@ def main():
     worker.start()
     port = free_port()
     env = dict(os.environ, VSCAN_FLOW_LOG=str(flows), VSCAN_ATTRIB_SOURCES=str(events),
-               VSCAN_TAGGING=str(ROOT / 'phase4/tagging.py'),
+               VSCAN_TAGGING=str(ROOT / 'vehicle/traffic/tagging.py'),
                VSCAN_SESSION='host-smoke-synthetic-events', PYTHONUTF8='1')
     with (out / 'mitm.log').open('w', encoding='utf-8') as log:
         proc = subprocess.Popen([sys.executable, '-c',

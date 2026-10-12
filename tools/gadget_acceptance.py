@@ -16,7 +16,7 @@ def main():
     out = ROOT / 'output' / session
     out.mkdir(parents=True)
     (ROOT / 'output/latest-gadget.txt').write_text(str(out), encoding='utf-8')
-    apk = ROOT / 'phase2/target-app/app/build/outputs/apk/gadget/app-gadget.apk'
+    apk = ROOT / 'vehicle/targets/target-app/app/build/outputs/apk/gadget/app-gadget.apk'
     env = dict(os.environ, PYTHONUTF8='1', PATH=str(Path(ADB).parent) + os.pathsep + os.environ['PATH'])
 
     def adb(*args):
@@ -33,12 +33,12 @@ def main():
     (out / 'before-resume.log').write_text(before, encoding='utf-8')
     with (out / 'driver.log').open('w', encoding='utf-8') as log:
         proc = subprocess.Popen([sys.executable, str(ROOT / 'core/frida_host/run.py'), '--gadget',
-            '--package', PACKAGE, '--script', str(ROOT / 'phase3/dist/hook_vhal.bundle.js'),
+            '--package', PACKAGE, '--script', str(ROOT / 'vehicle/hooks/dist/hook_vhal.bundle.js'),
             '--seconds', '50', '--out', str(out / 'reads.jsonl'), '--session', session],
             env=env, stdout=log, stderr=log)
         try:
             wait_for(lambda: any(e.get('ev') == 'ARMED' for e in read_events(out / 'reads.jsonl')), 30)
-            result = subprocess.run([sys.executable, str(ROOT / 'phase2/trigger.py'),
+            result = subprocess.run([sys.executable, str(ROOT / 'vehicle/targets/trigger.py'),
                 '--package', PACKAGE, '--button', 'btnRead'], env=env, capture_output=True,
                 encoding='utf-8', errors='replace', timeout=50)
             (out / 'trigger.log').write_text(result.stdout + result.stderr, encoding='utf-8')

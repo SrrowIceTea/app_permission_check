@@ -8,7 +8,7 @@
 真实比率取决于事件迟到与读取→外发间隔的**分布**，那需要长时间真机采集才能估计。
 把语义结果当成发生率是这类实验最常见的过度声称。
 
-## 一、归因（phase4/experiment_attribution.py）
+## 一、归因（vehicle/traffic/experiment_attribution.py）
 
 四类结果：`correct` / `ambiguous` / `unresolved`，以及最要紧的 **`wrong`**
 （归属到了别的包、且没标歧义——会被当真写进报告）。
@@ -23,7 +23,7 @@
 **结论**：容差与歧义窗都精确地按设计工作（解析预测与实测在 **228/228** 个格子上一致）。
 但**歧义保护只覆盖 ±500ms 一条窄带**：一旦本包事件离流较远、而另一个 App 的事件更近，
 归属会被整条拿走且**不做任何标记**。这正是"错误归因比没有归因更糟"最可能被违反的地方，
-已写进 phase4/D411 与报告边界。
+已写进 vehicle/traffic/D411 与报告边界。
 
 **夹具坐在安全区里**：实测锚点（自己早 2ms）下从不出错——这解释了为什么单靠夹具校准
 看不出这个风险区。
@@ -39,7 +39,7 @@
 宽限期不是白拿的：它用"少几条确定结论"换"少几条错误结论"。报告的 `ambiguous` 条数
 受采集时序影响，不全是算法退步。
 
-## 二、关联（phase5/experiment_correlation.py）
+## 二、关联（vehicle/analyze/experiment_correlation.py）
 
 15 条场景，声明"应当产出哪些 (read, flow) 配对"，与真实 `evaluate_data_egress` 比对：
 

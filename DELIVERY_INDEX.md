@@ -1,6 +1,6 @@
 # 交付索引（2026-09-25）
 
-已完成本轮开发与验证。APK 静态反编译见 [phase7/](phase7/)（独立工作台，2026-09-28 加入）。适用范围见 [COMPLETION.md](COMPLETION.md)。
+已完成本轮开发与验证。APK 静态反编译见 [vehicle/workbench/](vehicle/workbench/)（独立工作台，2026-09-28 加入）。适用范围见 [COMPLETION.md](COMPLETION.md)。
 
 ## 前端更新（2026-09-25）
 
@@ -15,10 +15,10 @@
 - [装机APK核对](output/delivery-20260924-193039/dex-verification.json)：38 VERIFIED、2 INCOMPLETE。
 - [数据来源及摘要](output/delivery-20260924-193039/provenance.json)。
 - [接收端归属](output/delivery-20260924-193039/ownership.json)：本次为私网地址，如实标non_public。
-- [主夹具Debug APK](phase2/target-app/app/build/outputs/apk/debug/app-debug.apk)。
-- [第二夹具Debug APK](phase2/target-app2/app/build/outputs/apk/debug/app-debug.apk)。
-- [主夹具Gadget APK](phase2/target-app/app/build/outputs/apk/gadget/app-gadget.apk)。
-- [规则库](phase1/rules_library/rules.db)：每版22条风险规则全部启用，8条外发规则窗口30000ms。
+- [主夹具Debug APK](vehicle/targets/target-app/app/build/outputs/apk/debug/app-debug.apk)。
+- [第二夹具Debug APK](vehicle/targets/target-app2/app/build/outputs/apk/debug/app-debug.apk)。
+- [主夹具Gadget APK](vehicle/targets/target-app/app/build/outputs/apk/gadget/app-gadget.apk)。
+- [规则库](vehicle/rules/rules_library/rules.db)：每版22条风险规则全部启用，8条外发规则窗口30000ms。
 
 ## 实测证据
 
@@ -55,5 +55,5 @@
 
 设备验收要求本项目自建AAOS模拟器与Frida服务已启动；仅用于授权测试。
 每轮产生独立目录；latest-*.txt指向最近一次尝试，是否成功必须检查verification.json。
-没有执行第三方APK重打包、签名或任意无授权App注入。静态分析见 phase7，只读 APK、只分析已获授权的样本。
+没有执行第三方APK重打包、签名或任意无授权App注入。静态分析见 vehicle/workbench，只读 APK、只分析已获授权的样本。
 

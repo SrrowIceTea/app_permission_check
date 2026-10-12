@@ -37,7 +37,7 @@ REQUIRED_RULE_COLUMNS = ("rule_id", "rule_revision", "rule_type", "severity",
 
 
 def _readonly(db: Path) -> sqlite3.Connection:
-    """只读打开——与 phase6/dashboard.py:43、phase7/static_rules.py 同一套 idiom。"""
+    """只读打开——与 vehicle/dashboard/dashboard.py:43、vehicle/workbench/static_rules.py 同一套 idiom。"""
     return sqlite3.connect(f"file:{db.resolve().as_posix()}?mode=ro", uri=True)
 
 
@@ -61,7 +61,7 @@ def detect_platform(conn: sqlite3.Connection) -> str | None:
 
 
 def load_rules(db: Path, android_version: str) -> dict:
-    """读公共表 + 按平台读扩展表，形状与 phase7/static_rules.load_rules 一致：
+    """读公共表 + 按平台读扩展表，形状与 vehicle/workbench/static_rules.load_rules 一致：
 
         {"rules": [...], "properties": {property_key: dict},
          "apis": {api_key: dict}, "known_permissions": set, "platform": str}

@@ -2,7 +2,7 @@
 // 仅用于授权测试（自有设备 / 已授权的公开第三方样本）。
 // V-Scanner Mobile — hook_egress_tp.js：第三方样本的出站连接观察钩子。
 //
-// **为什么 phase3 的 hook_egress.js 在真实第三方 App 上一条也抓不到**（实测，非推测）：
+// **为什么 vehicle/hooks 的 hook_egress.js 在真实第三方 App 上一条也抓不到**（实测，非推测）：
 //   它只挂钩 `java.net.Socket.connect`。真实样本的 HTTPS 由 Apache HttpClient
 //   （loopj AsyncHttpClient → cz.msebera.httpclient）发出，其 SSL socket 来自
 //   `SSLSocketFactory.createSocket()`，而 connect() 在 conscrypt 的子类
@@ -19,7 +19,7 @@
 // 那是比"只知道主机名"更有价值的**明文外发证据**。
 //
 // 只观察：先执行原实现 → 记录 → 原样返回；异常原样重抛。不阻断、不改值、不改目标。
-// 事件格式与 phase3 一致（src=egress、ev=EGRESS_CONNECT），Phase 4 的时间归因
+// 事件格式与 vehicle/hooks 一致（src=egress、ev=EGRESS_CONNECT），Phase 4 的时间归因
 // 无需改动；仅多一个 `via` 字段标明捕获层，以及新增 ev=EGRESS_URL。
 // ============================================================================
 'use strict';

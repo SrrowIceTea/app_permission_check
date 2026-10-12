@@ -3,8 +3,8 @@
 
 仅用于授权测试（已获授权的样本与设备）。
 
-与 phase5/correlate.py 的关系：
-  * 输出**沿用同一套 findings/summary 字段契约**，因此 phase6 看板可以不改代码直接读；
+与 vehicle/analyze/correlate.py 的关系：
+  * 输出**沿用同一套 findings/summary 字段契约**，因此 vehicle/dashboard 看板可以不改代码直接读；
   * 代码行号链**直接复用 core/evidence/codeloc.py**（它按 evidence_kind 分派，与车载共用一套）；
   * 求值器换成移动的八种谓词（见 evaluation_mobile.py）。
 

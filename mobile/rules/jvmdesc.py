@@ -51,5 +51,5 @@ def return_type(descriptor: str) -> str:
 
 
 def method_key(class_name: str, method_name: str, descriptor: str) -> str:
-    """与 phase7/dexfacts 相同的引用形态：com.x.Y.method(desc)"""
+    """与 vehicle/workbench/dexfacts 相同的引用形态：com.x.Y.method(desc)"""
     return f"{class_name}.{method_name}{descriptor}"

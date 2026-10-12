@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core.rules_contract import detect_platform, load_rules, _readonly  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-VEHICLE_DB = ROOT / "phase1" / "rules_library" / "rules.db"
+VEHICLE_DB = ROOT / "vehicle/rules" / "rules_library" / "rules.db"
 MOBILE_DB = ROOT / "mobile" / "rules" / "rules_mobile.db"
 
 

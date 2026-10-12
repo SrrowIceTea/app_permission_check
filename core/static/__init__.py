@@ -11,6 +11,6 @@
 - ``crosscheck.py``  —— 交叉校验
 - ``jobs.py``        —— 反编译任务调度
 
-车载 workbench 的交互式 HTTP 服务（``phase7/server.py`` → ``vehicle/workbench/server.py``）
+车载 workbench 的交互式 HTTP 服务（``vehicle/workbench/server.py`` → ``vehicle/workbench/server.py``）
 仍在车载侧，它 import 这里的内核。
 """

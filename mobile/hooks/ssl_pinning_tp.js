@@ -2,9 +2,9 @@
 // 仅用于授权测试（自有设备 / 已授权的公开第三方样本）。
 // V-Scanner Mobile — ssl_pinning_tp.js：第三方样本的 TLS 校验收宽入口
 //
-// 与 phase3/ssl_pinning_bypass.js 是**同一份契约**（白名单判断 + PINNING_ARMED 事件 +
+// 与 vehicle/hooks/ssl_pinning_bypass.js 是**同一份契约**（白名单判断 + PINNING_ARMED 事件 +
 // try/catch 包住一切），差别只在绕过手法集合：本入口用 mobile/hooks/tls_bypasses_tp.js，
-// 它裁掉了 phase3 版里会触发 ART abort 的 HttpsURLConnection 主机名钩子
+// 它裁掉了 vehicle/hooks 版里会触发 ART abort 的 HttpsURLConnection 主机名钩子
 // （完整裁剪记录与证据见该文件头部注释）。
 //
 // 事件记录于 /data/local/tmp/vscan.log（JSONL，src=tls），主通道是 send() 回宿主机。

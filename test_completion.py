@@ -15,7 +15,7 @@ from http.server import ThreadingHTTPServer
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-for sub in ('phase5', 'phase4', 'phase3', 'phase1/python'):
+for sub in ('vehicle/analyze', 'vehicle/traffic', 'vehicle/hooks', 'vehicle/rules/python'):
     sys.path.insert(0, str(ROOT / sub))
 from core.event_store import EventStore
 from evaluation import evaluate_data_egress, evaluate_sensitive_read, coverage
@@ -101,7 +101,7 @@ class EvaluationTests(unittest.TestCase):
 
     def test_real_multi_app_flows_with_synthetic_reads(self):
         # 原始流为实测；读取时间为合成，不能声称本用例是设备端到端实测。
-        flows = load_jsonl(ROOT / 'phase4/evidence/flows-multi-app.jsonl')
+        flows = load_jsonl(ROOT / 'vehicle/traffic/evidence/flows-multi-app.jsonl')
         chosen = [f for f in flows if f.get('package') and 'GEAR_SELECTION' in f.get('request_tokens', [])]
         self.assertEqual(2, len({f['package'] for f in chosen}))
         reads = [read(f['package'], f['ts'] - 1000) for f in chosen]
@@ -265,8 +265,8 @@ class CorrelateCliTest(unittest.TestCase):
         write('egress.jsonl', [])
         write('permissions.txt', [])
         return subprocess.run(
-            [sys.executable, str(ROOT / 'phase5/correlate.py'),
-             '--rules', str(ROOT / 'phase1/rules_library/rules.db'),
+            [sys.executable, str(ROOT / 'vehicle/analyze/correlate.py'),
+             '--rules', str(ROOT / 'vehicle/rules/rules_library/rules.db'),
              '--reads', str(root / 'reads.jsonl'), '--flows', str(root / 'flows.jsonl'),
              '--egress', str(root / 'egress.jsonl'),
              '--permissions', str(root / 'permissions.txt'),

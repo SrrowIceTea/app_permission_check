@@ -1,0 +1,106 @@
+/* Phase 7 工作台样式。调色板取自 vehicle/dashboard/style.css（D604），**暗色补齐了状态色**：
+   vehicle/dashboard 的 --status-* 只在亮色 :root 声明、暗色继承，在深色面上对比度不足。
+   状态色永不单独表意——一律配图标与文字标签。 */
+:root {
+  color-scheme: light;
+  --surface-1: #fcfcfb; --page: #f9f9f7;
+  --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11, 11, 11, 0.10);
+  --seq-250: #86b6ef; --seq-400: #3987e5; --seq-550: #1c5cab;
+  --status-good: #0ca30c; --status-warning: #fab219;
+  --status-serious: #ec835a; --status-critical: #d03b3b;
+  --code-bg: #f4f4f1;
+  --kw: #a626a4; --str: #0a7a3f; --com: #8a8a80; --num: #b4560a; --ann: #1c5cab;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --page: #0d0d0d;
+    --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, 0.10);
+    --seq-250: #184f95; --seq-400: #3987e5; --seq-550: #86b6ef;
+    /* 深色面上重新取值，保证 3:1 以上对比 */
+    --status-good: #35c135; --status-warning: #f5c542;
+    --status-serious: #f1966f; --status-critical: #ef6a6a;
+    --code-bg: #141413;
+    --kw: #d9a0ff; --str: #7ad39a; --com: #7c7c74; --num: #f0a868; --ann: #86b6ef;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1: #1a1a19; --page: #0d0d0d;
+  --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, 0.10);
+  --seq-250: #184f95; --seq-400: #3987e5; --seq-550: #86b6ef;
+  --status-good: #35c135; --status-warning: #f5c542;
+  --status-serious: #f1966f; --status-critical: #ef6a6a;
+  --code-bg: #141413;
+  --kw: #d9a0ff; --str: #7ad39a; --com: #7c7c74; --num: #f0a868; --ann: #86b6ef;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink-1);
+  font: 14px/1.6 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; }
+.wrap { max-width: 1400px; margin: 0 auto; padding: 18px 20px 60px; }
+h1 { font-size: 20px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 22px 0 8px; }
+.sub { color: var(--ink-2); font-size: 13px; margin-bottom: 14px; }
+.card { background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+.row { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.grow { flex: 1 1 320px; min-width: 0; }
+
+/* 拖放区 */
+#drop { border: 2px dashed var(--axis); border-radius: 12px; padding: 28px;
+  text-align: center; color: var(--ink-2); background: var(--surface-1);
+  transition: border-color .15s, background .15s; }
+#drop.hot { border-color: var(--seq-400); background: var(--seq-250); color: #fff; }
+#drop input { display: none; }
+#drop label { color: var(--seq-550); text-decoration: underline; cursor: pointer; }
+:root[data-theme="dark"] #drop label { color: var(--seq-550); }
+
+/* 徽章（复用 vehicle/dashboard 语义：状态色 + 图标 + 文字，三重编码） */
+.badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
+  border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.s-good { background: var(--status-good); color: #fff; }
+.s-warning { background: var(--status-warning); color: #0b0b0b; }
+.s-serious { background: var(--status-serious); color: #0b0b0b; }
+.s-critical { background: var(--status-critical); color: #fff; }
+.s-muted { background: var(--grid); color: var(--ink-2); }
+
+.bar { height: 8px; background: var(--grid); border-radius: 999px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--seq-400); width: 0; }
+.kpi { display: flex; gap: 10px; flex-wrap: wrap; }
+.tile { background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px; min-width: 104px; }
+.tile b { display: block; font-size: 20px; font-weight: 600; }
+.tile span { font-size: 12px; color: var(--ink-2); }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid);
+  vertical-align: top; }
+th { color: var(--ink-2); font-weight: 600; }
+td.mono, .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.hint { color: var(--ink-3); font-size: 12px; }
+
+/* 文件树 + 源码 */
+.tree { max-height: 460px; overflow: auto; font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px; }
+.tree button { display: block; width: 100%; text-align: left; background: none;
+  border: 0; color: var(--ink-1); padding: 2px 6px; border-radius: 4px; cursor: pointer;
+  font: inherit; }
+.tree button:hover { background: var(--grid); }
+.tree button[aria-current="true"] { background: var(--seq-250); }
+pre.code { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px; overflow: auto; max-height: 620px; margin: 0;
+  font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; line-height: 1.5; }
+.tok-kw { color: var(--kw); } .tok-str { color: var(--str); } .tok-com { color: var(--com); }
+.tok-num { color: var(--num); } .tok-ann { color: var(--ann); }
+
+.theme-toggle { position: fixed; top: 12px; right: 14px; background: var(--surface-1);
+  color: var(--ink-1); border: 1px solid var(--border); border-radius: 999px;
+  padding: 4px 12px; cursor: pointer; }
+.notice { border-left: 3px solid var(--status-warning); padding: 6px 10px;
+  background: var(--surface-1); font-size: 13px; }
+.notice.bad { border-left-color: var(--status-critical); }
+.notice.ok { border-left-color: var(--status-good); }

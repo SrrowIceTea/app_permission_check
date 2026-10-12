@@ -8,9 +8,9 @@
                         与车载概念无关，移动端设备脚本直接复用
 
 hook **源码**（hook_egress.js / ssl_pinning_bypass.js / scope.js / vscan_runtime.js 等）
-以及 frida-compile 构建链仍留在车载侧（phase3/ → vehicle/hooks/），因为：
+以及 frida-compile 构建链仍留在车载侧（vehicle/hooks/ → vehicle/hooks/），因为：
 frida-compile 按入口所在目录解析相对 import，把 scope.js / vscan_runtime.js 抽到 core
 会让车载 hook 的 import 断裂；而成品 bundle 是自包含的，运行时不需要源码。
-重建共享 bundle 时，在 phase3 下跑 ``python build.py``，并把 dist/<name>.bundle.js
-拷回这里（见 phase3/build.py 顶部注释）。
+重建共享 bundle 时，在 vehicle/hooks 下跑 ``python build.py``，并把 dist/<name>.bundle.js
+拷回这里（见 vehicle/hooks/build.py 顶部注释）。
 """

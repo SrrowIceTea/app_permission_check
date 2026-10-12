@@ -16,10 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # (名字, 工作目录, 命令, 产出文件名)
 EXPERIMENTS = [
-    ('attribution', 'phase4',
+    ('attribution', 'vehicle/traffic',
      [sys.executable, 'experiment_attribution.py', '--out', '{out}/attribution.json'],
      'attribution.json'),
-    ('correlation', 'phase5',
+    ('correlation', 'vehicle/analyze',
      [sys.executable, 'experiment_correlation.py', '--out', '{out}/correlation.json'],
      'correlation.json'),
 ]

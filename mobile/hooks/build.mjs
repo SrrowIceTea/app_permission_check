@@ -1,7 +1,7 @@
 // 仅用于授权测试（已获授权的样本与设备）。
 // 打包移动隐私钩子：为每个入口前置 frida-java-bridge 的 Java 全局，再交给 frida-compile。
 //
-// 两个必须照做的细节（照抄 phase3 的实测结论）：
+// 两个必须照做的细节（照抄 vehicle/hooks 的实测结论）：
 //   1) 临时入口 `.entry.<name>.js` 必须放在**本目录**：frida-compile 按入口文件自身
 //      所在目录解析相对 import，放到别处会变成静默的「模块找不到」。
 //   2) 单文件入口已经含 frida-java-bridge 时必须拒绝，否则 bridge 被注入两次。

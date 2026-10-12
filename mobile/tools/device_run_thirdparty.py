@@ -183,12 +183,12 @@ def main() -> int:
         # egress / TLS 绕过直接复用 core/frida_host 成品：Socket.connect 与证书校验与"车载"无关
         env.start_hook(ROOT / "core" / "frida_host" / "dist" / "hook_egress.bundle.js", session,
                        "egress.jsonl", out / "hook-egress.log", args.seconds, args.package),
-        # **第三方专用**出站钩子：phase3 版只挂 `java.net.Socket.connect`，而真实样本的
+        # **第三方专用**出站钩子：vehicle/hooks 版只挂 `java.net.Socket.connect`，而真实样本的
         # HTTPS 走 Apache HttpClient，connect() 在 conscrypt 子类里被重写，钩子一条抓不到。
         # 这一版挂到 libcore 汇聚点 + URI/URL 构造，见 mobile/hooks/hook_egress_tp.js。
         env.start_hook(MOBILE / "hooks" / "dist" / "hook_egress_tp.bundle.js", session,
                        "egress_tp.jsonl", out / "hook-egress-tp.log", args.seconds, args.package),
-        # **第三方专用** TLS 绕过：裁掉了 phase3 版里会触发 ART abort 的
+        # **第三方专用** TLS 绕过：裁掉了 vehicle/hooks 版里会触发 ART abort 的
         # HttpsURLConnection 主机名钩子（证据见 mobile/hooks/tls_bypasses_tp.js 头部）。
         env.start_hook(MOBILE / "hooks" / "dist" / "ssl_pinning_tp.bundle.js", session,
                        "tls.jsonl", out / "hook-tls.log", args.seconds, args.package),

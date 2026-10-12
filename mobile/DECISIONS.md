@@ -5,14 +5,14 @@
 
 ## M001 独立目录树，通用部件靠 import 复用
 
-移动产品自成一套（`mobile/`），车载 phase1–7 一个字节不动。理由是车载那套有
+移动产品自成一套（`mobile/`），车载 vehicle/ 一个字节不动。理由是车载那套有
 108 项回归与已交付的证据链，就地改造会让"哪一版是交付物"无法回答。
-通用部件（phase4 代理层、phase5 行号链、reportlab 字体方案）以 import 复用，
+通用部件（vehicle/traffic 代理层、vehicle/analyze 行号链、reportlab 字体方案）以 import 复用，
 不复制——复制会立刻产生两份会漂移的实现。
 
 ## M002 规则库 schema v2：只加列加表，不改名
 
-下游（phase7 静态匹配、phase6 看板）按 v1 的四张表名与列名读。v2 因此只做：
+下游（vehicle/workbench 静态匹配、vehicle/dashboard 看板）按 v1 的四张表名与列名读。v2 因此只做：
 新增 `sensitive_data_types` / `app_categories` / `policy_requirements` 三张表，
 `dangerous_apis` 加 `data_type_key` 与 `observation_spec_json`，
 `risk_rules` 的 `rule_type` CHECK 枚举从 3 种扩到 8 种。
@@ -66,7 +66,7 @@
 
 ## M008 流量层不复制 addon，只换打标模块
 
-`phase4/addon.py` 是纯 HTTP 逻辑（反向代理、挂起重试式归因、宽限期、
+`vehicle/traffic/addon.py` 是纯 HTTP 逻辑（反向代理、挂起重试式归因、宽限期、
 失败流单列落盘、白名单门），与车载无关。移动侧只在 `addon_mobile.py` 里
 `sys.modules["tagging"] = tagging_mobile`，再显式再导出钩子函数
 （mitmproxy 在脚本模块的命名空间里找钩子；不导出会"加载成功但一个钩子都没注册"）。

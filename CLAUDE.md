@@ -15,7 +15,7 @@
 5. **判定可追溯**：每条违规结论带规则 ID + 依据来源。
 6. **失败可诊断**：Hook 脚本 try/catch + 日志落盘，区分"没读到数据"和"脚本崩了"。
 7. **禁止再让用户做环境探测**（Phase 0 已完成）。
-8. **单文件 ≤300 行**；超了按职责拆分（phase3/4/6 都有拆分的先例），拆后必须回归验证。
+8. **单文件 ≤300 行**；超了按职责拆分（hooks/traffic/dashboard 都有拆分的先例），拆后必须回归验证。
 
 ## 环境事实（旧设备记录与当前主机路径；入口 environment.ps1）
 
@@ -32,37 +32,34 @@
 
 | 目录 | 内容 | 详情 |
 | --- | --- | --- |
-| `phase1/` | 规则库（双版本 rules.db）+ Android Room 工程 | [phase1/CLAUDE.md](phase1/CLAUDE.md) |
-| `phase2/` | 靶子 App×2（被测对象）+ trigger.py | [phase2/CLAUDE.md](phase2/CLAUDE.md) |
-| `phase3/` | Frida 钩子（VHAL 读取/出站/TLS 绕过/侦察） | [phase3/CLAUDE.md](phase3/CLAUDE.md) |
-| `phase4/` | Mitmproxy 反向代理 + 按包名归因 + 敏感打标 | [phase4/CLAUDE.md](phase4/CLAUDE.md) |
-| `phase5/` | 关联引擎 + PDF 报告 + 违规代码行号（dex 核对） | [phase5/CLAUDE.md](phase5/CLAUDE.md) |
-| `phase6/` | Web 可视化预警看板（交付物 B，静态单文件） | [phase6/CLAUDE.md](phase6/CLAUDE.md) |
-| `phase7/` | APK 静态分析工作台（拖入看源码 + 规则匹配 + 静动四象限） | [phase7/CLAUDE.md](phase7/CLAUDE.md) |
+| `vehicle/rules/` | 规则库（双版本 rules.db）+ Android Room 工程 | [vehicle/rules/CLAUDE.md](vehicle/rules/CLAUDE.md) |
+| `vehicle/targets/` | 靶子 App×2（被测对象）+ trigger.py | [vehicle/targets/CLAUDE.md](vehicle/targets/CLAUDE.md) |
+| `vehicle/hooks/` | Frida 钩子（VHAL 读取/出站/TLS 绕过/侦察） | [vehicle/hooks/CLAUDE.md](vehicle/hooks/CLAUDE.md) |
+| `vehicle/traffic/` | Mitmproxy 反向代理 + 按包名归因 + 敏感打标 | [vehicle/traffic/CLAUDE.md](vehicle/traffic/CLAUDE.md) |
+| `vehicle/analyze/` | 关联引擎 + PDF 报告 + 违规代码行号（dex 核对） | [vehicle/analyze/CLAUDE.md](vehicle/analyze/CLAUDE.md) |
+| `vehicle/dashboard/` | Web 可视化预警看板（交付物 B，静态单文件） | [vehicle/dashboard/CLAUDE.md](vehicle/dashboard/CLAUDE.md) |
+| `vehicle/workbench/` | APK 静态分析工作台（拖入看源码 + 规则匹配 + 静动四象限） | [vehicle/workbench/CLAUDE.md](vehicle/workbench/CLAUDE.md) |
 
-各 phase 的实测教训记录在各自 `DECISIONS.md`（D101–D606 编号），
-改任何模块前先读对应 phase 的 DECISIONS——几乎每个坑都是**静默失败**。
+各目录的实测教训记录在各自 `DECISIONS.md`（D101–D606 编号），
+改任何模块前先读对应目录的 DECISIONS——几乎每个坑都是**静默失败**。
 
 ## 离线回归（改完代码先跑，不需要设备）
 
 ```bash
-PY="C:/Users/OneKyubey/AppData/Local/Programs/Python/Python313/python.exe"
-(cd phase5 && "$PY" -m unittest test_codeloc)                        # 25 用例
-(cd phase4 && "$PY" -m unittest test_attribution test_tagging)       # 22 用例
-(cd phase6 && "$PY" -m unittest test_dashboard)                      # 8 用例
-(cd phase3 && node test_runtime.mjs)                                 # 10 用例
-(cd phase1 && "$PY" android/tools/verify_schema_parity.py)           # schema 三方核对
+PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
+"$PY" tools/run_regressions.py        # 10 组：completion/rules-contract/codeloc/correlate/
+                                      #       collector/tagging-vehicle/dashboard/runtime/parity/workbench
 ```
 
 ## 当前交付（2026-09-24）
 
 完整复现入口与证据说明见 [COMPLETION.md](COMPLETION.md)。
-APK 静态反编译作为**独立工作台**加入（phase7，2026-09-28，用户解除原排除）；违规代码行号仍**只**取自运行时栈（D507 不变），静态证据不写进 code_locs。
+APK 静态反编译作为**独立工作台**加入（vehicle/workbench，2026-09-28，用户解除原排除）；违规代码行号仍**只**取自运行时栈（D507 不变），静态证据不写进 code_locs。
 
 已补齐：RDAP归属与IP位置估计/离线缓存、PDF载荷截图、SQLite单机时序事件库、
 自有源码Gadget模式、OkHttp固定证书夹具、订阅回调、规则覆盖缺口展示、/collect 200接收端。
 外发规则每版8条已正式启用，窗口30000ms，revision=2；双版本44条风险规则全部启用。
-启用依据与范围见 phase1/EGRESS_CALIBRATION.md，不再依赖分析时窗口覆盖。
+启用依据与范围见 vehicle/rules/EGRESS_CALIBRATION.md，不再依赖分析时窗口覆盖。
 
 边界仍须保留：native TLS/未解析协议无明文能力；Gadget需要自有源码与安装授权，
 不支持无条件注入任意第三方APK；统计归因遇歧义不关联；代码行号不证明违规语义。

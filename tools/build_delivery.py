@@ -77,7 +77,7 @@ def main():
     installed = command([ADB, '-s', 'emulator-5554', 'shell', 'pm', 'path', 'com.vscanner.targetapp'], 'apk-path').strip()
     apk_path = installed.splitlines()[0].removeprefix('package:')
     command([ADB, '-s', 'emulator-5554', 'pull', apk_path, out / 'installed.apk'], 'pull-apk')
-    built = ROOT / 'phase2/target-app/app/build/outputs/apk/debug/app-debug.apk'
+    built = ROOT / 'vehicle/targets/target-app/app/build/outputs/apk/debug/app-debug.apk'
     digest = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
     if digest(built) != digest(out / 'installed.apk'):
         raise ValueError('装机APK与通过验收的Debug构建不一致')
@@ -87,8 +87,8 @@ def main():
     if manifest['installed_apk_sha256'] != pulled:
         raise ValueError(f"装机APK与会话清单不一致：采集时 {manifest['installed_apk_sha256']}，"
                          f"现在 {pulled}。这批日志不是这个 APK 产生的，拒绝出报告。")
-    rules = ROOT / 'phase1/rules_library/rules.db'
-    command([sys.executable, ROOT / 'phase5/correlate.py', '--rules', rules,
+    rules = ROOT / 'vehicle/rules/rules_library/rules.db'
+    command([sys.executable, ROOT / 'vehicle/analyze/correlate.py', '--rules', rules,
         '--reads', source / 'reads.jsonl', '--egress', source / 'egress.jsonl', '--flows', source / 'flows.jsonl',
         '--permissions', out / 'requested-permissions.txt', '--session', verification['session'],
         '--out', out / 'findings.jsonl', '--summary', out / 'summary.json'], 'correlate')
@@ -103,12 +103,12 @@ def main():
         raise ValueError(f"本轮没有任何代码位置可核对（checks_total={dex.get('checks_total')}）——"
                          "这通常意味着事件编号歧义或钩子没采到栈，不是「全部通过」")
     # native回调没有运行时行号时保留INCOMPLETE和定位缺口；不伪造全量通过徽章。
-    command([sys.executable, ROOT / 'phase5/ownership.py', '--flows', source / 'flows.jsonl',
+    command([sys.executable, ROOT / 'vehicle/analyze/ownership.py', '--flows', source / 'flows.jsonl',
         '--cache', ROOT / 'output/completion/rdap-cache', '--out', out / 'ownership.json'], 'ownership')
-    command([sys.executable, ROOT / 'phase5/report.py', '--rules', rules, '--findings', out / 'findings.jsonl',
+    command([sys.executable, ROOT / 'vehicle/analyze/report.py', '--rules', rules, '--findings', out / 'findings.jsonl',
         '--summary', out / 'summary.json', '--flows', source / 'flows.jsonl', '--ownership', out / 'ownership.json',
         '--out', out / 'audit-report.pdf'], 'report')
-    command([sys.executable, ROOT / 'phase6/dashboard.py', '--rules', rules, '--findings', out / 'findings.jsonl',
+    command([sys.executable, ROOT / 'vehicle/dashboard/dashboard.py', '--rules', rules, '--findings', out / 'findings.jsonl',
         '--summary', out / 'summary.json', '--verify', out / 'dex-verification.json', '--out', out / 'dashboard.html'], 'dashboard')
     # 无响应请求：不进 findings（它们不构成外发证据），但**必须在交付里如实记数**——
     # "发出去了但没收到响应"与"没有外发"是两件事，只躺在 session 目录里等于没人知道。

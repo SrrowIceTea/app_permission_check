@@ -31,7 +31,7 @@ LEVEL_ORDER = ["candidate", "observed", "correlated", "policy_violation"]
 
 
 def open_rules(db: Path) -> sqlite3.Connection:
-    """只读打开——与 `phase6/dashboard.py:43` 同一套 idiom，避免误写规则库。"""
+    """只读打开——与 `vehicle/dashboard/dashboard.py:43` 同一套 idiom，避免误写规则库。"""
     return sqlite3.connect(f"file:{db.resolve().as_posix()}?mode=ro", uri=True)
 
 
@@ -63,7 +63,7 @@ def cpm_read_api_referenced(loaded: dict, facts: dict) -> bool:
 
     判据用 `dangerous_apis` 的 `(class_name, method_name, jvm_descriptor)` **三元组**，
     不用 `api_key`——`api_key` 只由 method+descriptor 组成、不含类名，
-    跟着它走会把别的类的同名方法也算进来（`phase1/python/extract_seed.py:134`）。
+    跟着它走会把别的类的同名方法也算进来（`vehicle/rules/python/extract_seed.py:134`）。
 
     这是**整个 APK 级的**事实，不是逐属性的事实。早先把它算进每个属性的 signals，
     于是 8 条规则一起显示"strong"——看起来证据很强，其实毫无区分力。
@@ -122,7 +122,7 @@ def _finding(rule: dict, kind: str, signals: dict, note: str, context: dict) -> 
 
 
 def evaluate(loaded: dict, facts: dict, apk_permissions: list[str]) -> dict:
-    """对每条启用的规则求静态匹配。禁用规则不产出结论（与 phase5 一致）。"""
+    """对每条启用的规则求静态匹配。禁用规则不产出结论（与 vehicle/analyze 一致）。"""
     declared_perms = set(apk_permissions)
     known_ids = {p["property_id"] for p in loaded["properties"].values()
                  if p.get("property_id") is not None}

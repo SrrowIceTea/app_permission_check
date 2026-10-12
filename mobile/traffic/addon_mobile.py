@@ -10,9 +10,9 @@
 打标表由 `core/collector/addon.py` 通过 `VSCAN_TAGGING` 环境变量按路径加载。
 本文件只做两件事：把默认值指到移动版那张表（`mobile/traffic/tagging_mobile.py`），
 再把 mitmproxy 需要的钩子原样转发出去。想抓车载流量就显式设
-`VSCAN_TAGGING=phase4/tagging.py` 并直接 `-s core/collector/addon.py`。
+`VSCAN_TAGGING=vehicle/traffic/tagging.py` 并直接 `-s core/collector/addon.py`。
 
-跑法（环境变量必须显式给全，缺一项的后果见 phase4 文档：归因失败与"今天没流量"
+跑法（环境变量必须显式给全，缺一项的后果见 vehicle/traffic 文档：归因失败与"今天没流量"
 长得一模一样）：
     VSCAN_FLOW_LOG=<会话目录>/flows.jsonl
     VSCAN_ATTRIB_SOURCES=<会话目录>/egress.jsonl

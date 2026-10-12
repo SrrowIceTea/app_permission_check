@@ -27,7 +27,7 @@ Android 给应用隔离了网络命名空间。读 `/proc/net/tcp`（= adb shell
 
 **为什么循环跑在设备上**：主机侧 `adb shell` 轮询约 13 次/秒（每次往返 ~72ms），
 而一次 HTTP 外发只活几十毫秒，整段漏掉。循环放设备上写设备文件可 10ms 级采样
-（与 phase4/uid_sampler.py 同一结论，见 DECISIONS D402）。
+（与 vehicle/traffic/uid_sampler.py 同一结论，见 DECISIONS D402）。
 
 **它回答什么**：给定目标进程，在给定时间窗内，
   * 有没有连接（有→"没抓到"是覆盖缺口；没有→应用确实没外发）；

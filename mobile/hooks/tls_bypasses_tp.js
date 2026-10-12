@@ -2,13 +2,13 @@
 // 仅用于授权测试（自有设备 / 已授权的公开第三方样本）。
 // V-Scanner Mobile — tls_bypasses_tp.js：第三方样本专用的 TLS 校验收宽
 //
-// 与 phase3/pinning_bypasses.js 的关系：**同源、裁剪版**。
-// phase3 的模块不能跨项目根被 import（frida-compile 按入口所在目录解析相对路径，
-// 与 mobile/hooks/runtime.js 重复 phase3/vscan_runtime.js 是同一个原因），
+// 与 vehicle/hooks/pinning_bypasses.js 的关系：**同源、裁剪版**。
+// vehicle/hooks 的模块不能跨项目根被 import（frida-compile 按入口所在目录解析相对路径，
+// 与 mobile/hooks/runtime.js 重复 vehicle/hooks/vscan_runtime.js 是同一个原因），
 // 所以这里放一份本地副本；但**不是逐行复制**——裁剪掉了一条已被证伪的路径（见下）。
 //
 // 裁剪记录（必须留痕，不许静默删除能力）：
-//   phase3 版的第 4 条手法 `HttpsURLConnection` 默认主机名校验（getDefaultHostnameVerifier
+//   vehicle/hooks 版的第 4 条手法 `HttpsURLConnection` 默认主机名校验（getDefaultHostnameVerifier
 //   / setDefaultHostnameVerifier / setHostnameVerifier 三个钩子）在本样本上被证实会触发
 //   **ART 层 abort**：logcat 记录到
 //     F/libc: Fatal signal 6 (SIGABRT) ... in tid <n> (glide-source-th), pid <p>
@@ -38,7 +38,7 @@ var MAX_LOGS_PER_KIND = 50;
 // 校验失败实际抛的是 CertPathValidatorException（"Trust anchor for certification path
 // not found"），它与 CertificateException **是兄弟**（同继承 GeneralSecurityException，
 // 互不为 isInstance）。只匹配 CertificateException 会让 swallow 分支一次都进不去——
-// 这是 phase3 最初的根因（那边有完整记录）。
+// 这是 vehicle/hooks 最初的根因（那边有完整记录）。
 var EXC_CACHE = { cert: null, peer: null, genSec: null, certPath: null };
 
 function loadExcTypes() {

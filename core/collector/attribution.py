@@ -41,7 +41,7 @@ def is_egress_connect(record: dict) -> bool:
 
 
 def is_ok_outcome(record: dict) -> bool:
-    """连接是否成功。**失败连接不作为归因候选**（见 phase4/DECISIONS D408）。
+    """连接是否成功。**失败连接不作为归因候选**（见 vehicle/traffic/DECISIONS D408）。
 
     必须是否定式：只有明确写了 `outcome == 'error'` 才排除。缺 `outcome` 字段的记录
     （历史证据 `output/host-smoke/egress.jsonl` 与多处测试夹具都长这样）**仍然合格**——

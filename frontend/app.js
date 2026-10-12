@@ -1,7 +1,7 @@
-/* V-Scanner 工作台逻辑。对接 phase7 后端 API（127.0.0.1:8770）。
+/* V-Scanner 工作台逻辑。对接 vehicle/workbench 后端 API（127.0.0.1:8770）。
    仅用于授权测试（自有设备与自有 APK）。
 
-   后端端点（见 phase7/server.py）：
+   后端端点（见 vehicle/workbench/server.py）：
      POST /api/apk?name=..            -> { digest, job, cached }
      GET  /api/jobs/<id>              -> { state: queued|running|done|failed|cancelled, ... }
      GET  /api/apk/<digest>/tree      -> { files: [{path,size}] }   // 扁平列表

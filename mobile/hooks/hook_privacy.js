@@ -7,7 +7,7 @@
 // **API 清单只有一个真源（规则库）**；规则库改了重新生成即可，钩子不手抄。
 // 纯判断逻辑在 dispatch.js（可离线测试），本文件只做 Frida 装配与事件拼装。
 //
-// 与 phase3/hook_vhal.js 的差异：移动侧直接 attach 应用进程，
+// 与 vehicle/hooks/hook_vhal.js 的差异：移动侧直接 attach 应用进程，
 // 不需要 system_server 模式与 Binder.getCallingUid 归因；其余契约一致。
 // ============================================================================
 'use strict';

@@ -7,7 +7,7 @@ package com.vscanner.privacydemo
 // 主机侧触发器（tools/trigger.py）就是按这个标签的成功标记行判断"按钮真的点到了"。
 //
 // 为什么不用 UI 文本判断成功：TextView 的可见文本随滚动区域变化，
-// 而 logcat 行是确定的（phase2/D 记录的结论）。
+// 而 logcat 行是确定的（vehicle/targets/D 记录的结论）。
 
 import android.util.Log
 import java.text.SimpleDateFormat

@@ -3,7 +3,7 @@
 **仅用于授权测试（已获授权的样本与设备）。**
 面向第九届浙江省大学生网络与信息安全竞赛企业命题（浙江省质量科学研究院）。
 
-车载 phase1–7 是已交付成果，本目录**不改动它**；通用部件以 import 复用（见下表）。
+车载 vehicle/ 是已交付成果，本目录**不改动它**；通用部件以 import 复用（见下表）。
 决策见 `DECISIONS.md`（M001– ），全局约束沿用根 `CLAUDE.md`。
 
 ## 目录
@@ -13,7 +13,7 @@
 | `rules/` | **规则库**：schema v2 + 法规依据 + android.jar 签名抽取 + 构建器 |
 | `rules/regulations/` | 法规原文（认定方法 / 必要信息规定 / 个保法 / GB-T 35273），带条款号与 URL |
 | `hooks/` | Frida 钩子：敏感 API 读取 + 同意时序。监视表由规则库生成，不手抄 |
-| `traffic/` | mitmproxy 移动适配：打标表 + 注入壳（复用 phase4/addon.py） |
+| `traffic/` | mitmproxy 移动适配：打标表 + 注入壳（复用 core/collector/addon.py） |
 | `policy/` | 隐私政策获取 / 正文抽取 / 规则化检查 |
 | `analyze/` | 关联引擎与八种移动谓词（复用 core/evidence/codeloc.py 的行号链） |
 | `ai/` | **证据打包 + 三阶段提示词 + LLM 客户端 + 输出校验** |
@@ -58,19 +58,19 @@ cp mobile/ai/config.example.json mobile/ai/config.local.json   # ← 在这里�
 
 | 复用对象 | 方式 |
 | --- | --- |
-| `phase4/addon.py`、`attribution.py`、`flow_entry.py`、`payloads.py` | 直接 import；`traffic/addon_mobile.py` 只把 `sys.modules["tagging"]` 换成移动版 |
-| `phase3/hook_egress.js`、`phase3/run.py`、`bundle_config.py` | 原样使用（Socket.connect 与车载无关；run.py 的注入器也替换 `__VSCAN_SESSION_PACKAGES__`） |
+| `core/collector/addon.py`、`attribution.py`、`flow_entry.py`、`payloads.py` | 直接 import；`traffic/addon_mobile.py` 通过 `VSCAN_TAGGING` 注入移动打标表 |
+| `core/frida_host/run.py`、`bundle_config.py` + `dist/` 共享 bundle（hook_egress / ssl_pinning_bypass） | 原样使用（Socket.connect 与车载无关；run.py 的注入器替换 `__VSCAN_SESSION_PACKAGES__`） |
 | `core/evidence/codeloc.py` | 直接 import，`evidence_kind` 沿用同名种类（`read_event` / `read_then_egress`） |
-| reportlab 中文字体方案 | 照抄 `phase5/report.py` 的候选链（SimHei → DengXian → 雅黑 → STSong） |
+| reportlab 中文字体方案 | 照抄 `vehicle/analyze/report.py` 的候选链（SimHei → DengXian → 雅黑 → STSong） |
 | 输出约定 | `output/mobile-regression-*/verification.json` + `latest-mobile.txt`，与车载一致 |
 
 ## 本目录的坑（全部实测）
 
 - **签名绝不手写**：所有 API 签名由 `javap -s` 从本机 `android.jar` 抽取。
   抽不到的落 `build/api_missing.json` 作为探测 TODO，**不编造**。
-  （照抄 phase7 的 `(class_name, method_name, jvm_descriptor)` 三元组口径。）
+  （照抄 core/static 的 `(class_name, method_name, jvm_descriptor)` 三元组口径。）
 - **npm 装依赖必须跳过原生编译**：`frida-compile` 依赖 `frida` 包的原生绑定，
-  本机没有 make，`npm install` 会失败。绕过办法是**直接复用 phase3 已装好的
+  本机没有 make，`npm install` 会失败。绕过办法是**直接复用 vehicle/hooks 已装好的
   `node_modules`**（同一套依赖，绑定已构建）。
 - **`/tmp` 在 Git Bash 与 Python 眼里不是同一个目录**：Bash 会把**实参**里的
   POSIX 路径转成 Windows 路径，但脚本正文里的字符串不转——`python -c` 里的

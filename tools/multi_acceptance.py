@@ -13,8 +13,8 @@ import frida
 from device_acceptance import ADB, ROOT, read_events, wait_for
 from core.collector.collector_server import Collector
 
-sys.path.insert(0, str(ROOT / 'phase4'))
-sys.path.insert(0, str(ROOT / 'phase5'))
+sys.path.insert(0, str(ROOT / 'vehicle/traffic'))
+sys.path.insert(0, str(ROOT / 'vehicle/analyze'))
 from verify_multi_app import verdict
 from correlate import load_rules
 from evaluation import evaluate_data_egress, evaluate_sensitive_read
@@ -31,7 +31,7 @@ def main():
     env = dict(os.environ, PYTHONUTF8='1', VSCAN_SESSION=session,
         VSCAN_FLOW_LOG=str(out / 'flows.jsonl'), VSCAN_EVENT_DB=str(out / 'events.sqlite'),
         VSCAN_ATTRIB_SOURCES=os.pathsep.join(str(out / f'egress-{i}.jsonl') for i in range(2)),
-        VSCAN_TAGGING=str(ROOT / 'phase4/tagging.py'),
+        VSCAN_TAGGING=str(ROOT / 'vehicle/traffic/tagging.py'),
         PATH=str(Path(ADB).parent) + os.pathsep + os.environ['PATH'])
     handles, processes, sessions, controls = [], [], [], []
     upstream = ThreadingHTTPServer(('127.0.0.1', 0), Collector)
@@ -48,7 +48,7 @@ def main():
         processes.append(process)
 
     try:
-        adb('install', '-r', str(ROOT / 'phase2/target-app/app/build/outputs/apk/debug/app-debug.apk'))
+        adb('install', '-r', str(ROOT / 'vehicle/targets/target-app/app/build/outputs/apk/debug/app-debug.apk'))
         # 本轮隔离模拟器 SLIRP 丢连接因素，仍由真实App建立Socket/发送原始载荷。
         adb('reverse', 'tcp:8888', 'tcp:8888')
         launch([sys.executable, '-c', 'from mitmproxy.tools.main import mitmdump; mitmdump()',
@@ -61,14 +61,14 @@ def main():
                 adb('shell', 'pm', 'grant', '--user', '10', package, 'android.car.permission.' + permission)
             adb('shell', 'am', 'start', '--user', '10', '-W', '-n', package + '/.MainActivity')
             for name, script in [('reads', 'hook_vhal'), ('egress', 'hook_egress')]:
-                # hook_egress 是共享成品（已抽到 core/frida_host/dist），hook_vhal 是车载专用（留 phase3/dist）
-                script_dir = ROOT / 'core/frida_host/dist' if script == 'hook_egress' else ROOT / 'phase3/dist'
+                # hook_egress 是共享成品（已抽到 core/frida_host/dist），hook_vhal 是车载专用（留 vehicle/hooks/dist）
+                script_dir = ROOT / 'core/frida_host/dist' if script == 'hook_egress' else ROOT / 'vehicle/hooks/dist'
                 launch([sys.executable, str(ROOT / 'core/frida_host/run.py'), '--package', package,
                     '--script', str(script_dir / (script + '.bundle.js')), '--seconds', '120',
                     '--session', session, '--event-db', str(out / 'events.sqlite'),
                     '--out', str(out / f'{name}-{i}.jsonl')], f'{name}-{i}')
             attached = device.attach(int(adb('shell', 'pidof', package))); sessions.append(attached)
-            script = attached.create_script((ROOT / 'phase3/dist/fixture_control.bundle.js').read_text(encoding='utf-8'))
+            script = attached.create_script((ROOT / 'vehicle/hooks/dist/fixture_control.bundle.js').read_text(encoding='utf-8'))
             script.load(); controls.append(script)
         wait_for(lambda: all(any(e.get('ev') == 'ARMED' for e in read_events(out / f'{name}-{i}.jsonl'))
                  for i in range(2) for name in ('reads', 'egress')), 40)
@@ -91,7 +91,7 @@ def main():
         reads = [e for i in range(2) for e in read_events(out / f'reads-{i}.jsonl')]
         egress = [e for i in range(2) for e in read_events(out / f'egress-{i}.jsonl')]
         flows = read_events(out / 'flows.jsonl')
-        rules = load_rules(ROOT / 'phase1/rules_library/rules.db', '15')
+        rules = load_rules(ROOT / 'vehicle/rules/rules_library/rules.db', '15')
         findings = evaluate_sensitive_read(rules, reads) + evaluate_data_egress(rules, reads, flows)
         findings = attach(findings, reads, flows, egress, PACKAGES[0])
         (out / 'findings.jsonl').write_text(''.join(json.dumps(f, ensure_ascii=False) + '\n' for f in findings), encoding='utf-8')

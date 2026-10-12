@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """离线回归：请求已被观察到、但没拿到响应时的证据形状。
 
-**为什么这条必须单独钉住**：`phase5/evaluation.py` 的外发判定**不看 `status_code`**，
+**为什么这条必须单独钉住**：`vehicle/analyze/evaluation.py` 的外发判定**不看 `status_code`**，
 只看时间窗、包名和 `request_tokens`。一条失败流只要带上了属性名 token，
 就会被判成 `content_match=True` 的"已外发"，报告里写成"确实出现了被读取的属性"——
 那是凭空造出来的关联，而且比"少一条证据"严重得多。
@@ -124,7 +124,7 @@ class EmitRoutingTest(unittest.TestCase):
 
         # addon 在导入期就按 VSCAN_TAGGING 加载平台打标表（不给即启动失败，不猜平台）。
         # 本用例只验失败流落盘与 _emit 分流，不碰打标表，指向车载表即可。
-        os.environ.setdefault("VSCAN_TAGGING", "phase4/tagging.py")
+        os.environ.setdefault("VSCAN_TAGGING", "vehicle/traffic/tagging.py")
         import addon
 
         with tempfile.TemporaryDirectory() as tmp:

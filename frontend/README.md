@@ -12,7 +12,7 @@ frontend/
 ├── landing.js      # 首页动画与交互
 ├── app.html        # 工作台主界面
 ├── app.css         # 工作台样式
-├── app.js          # 工作台逻辑（对接 phase7 后端）
+├── app.js          # 工作台逻辑（对接 vehicle/workbench 后端）
 ├── highlight.js    # 零依赖 Java/Kotlin 词法高亮器（自写，不引 CDN）
 └── pdfs/           # 静态 PDF 报告
 ```
@@ -34,10 +34,10 @@ frontend/
 
 ## 使用方式
 
-### 1. 启动后端服务（phase7）
+### 1. 启动后端服务（vehicle/workbench）
 
 ```bash
-cd phase7
+cd vehicle/workbench
 python server.py --port 8770
 # 可选：带采集会话做静动对照
 python server.py --port 8770 \
@@ -62,7 +62,7 @@ python -m http.server 8080
 - 后端后台分析（静态扫描秒级出结论，反编译分钟级），前端轮询进度
 - 完成后自动跳转到静态审计页
 
-## API 接口（phase7/server.py）
+## API 接口（vehicle/workbench/server.py）
 
 | 端点 | 方法 | 说明 |
 |------|------|------|

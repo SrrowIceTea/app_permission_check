@@ -5,7 +5,7 @@
 仅用于授权测试（自有设备与自有 APK）/ For authorized testing on owned devices and APKs only.
 
 **为什么用 aapt2 而不是自己解 AndroidManifest.xml**：清单是二进制 XML，手写解析器容易
-"解出来一半"。aapt2 在 build-tools 里已经有了（`phase7/toolchain.py` 负责定位）。
+"解出来一半"。aapt2 在 build-tools 里已经有了（`vehicle/workbench/toolchain.py` 负责定位）。
 
 实测（夹具 APK）：这里取到的 8 条权限与动态路径的 `requested-permissions.txt`
 **完全一致**——两条路同源，这正是静动交叉核对能成立的前提。
