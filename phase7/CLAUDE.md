@@ -40,7 +40,7 @@ PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
 
 - **多 dex 必须全扫**：夹具的属性名只在 `classes3.dex` 里，只扫第一个**静默 0 命中**（D702）。
 - **`dexdump` 用 `.` 连接类与方法**：`Lcom/x/Y;.m:(I)V`，不是 `->`。按 `->` 写正则全 dex 命中 0（D703）。
-- **`CLASS_RE` 要逐字抄 `phase5/dexlines.py:45`**：手打多一个分号就命中 0（D703）。
+- **`CLASS_RE` 要逐字抄 `core/evidence/dexlines.py:45`**：手打多一个分号就命中 0（D703）。
 - **危险 API 按三元组匹配**：`api_key` 不含类名，会误配同名方法（D704）。
 - **属性"命中"要带区分度**：8 个属性 ID 同时出现时报 8 条强证据是误导（D705）。
 - **逐类反编译太慢**（14s/类），必须全量一次（D706）。

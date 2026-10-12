@@ -43,7 +43,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import codeloc  # noqa: E402  # 违规代码行号：从运行时栈取应用自己的帧（见 codeloc.py）
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from core.evidence import codeloc  # noqa: E402  # 违规代码行号：从运行时栈取应用自己的帧（见 codeloc.py）
 
 # 默认同用主机时间。旧日志只能显式提供校准偏移；不猜固定偏移。
 DEFAULT_CLOCK_OFFSET_MS = None

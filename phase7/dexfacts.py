@@ -14,7 +14,7 @@
 2. **dexdump 用 `.` 连接类与方法**：`Lcom/x/Y;.send:(...)V`，**不是** JVM 标准的
    `Lcom/x/Y;->send(...)`。第一版按 `->` 写正则，全 dex 命中 0。
 3. **字段名 `name : '...'` 在字段区和方法区都出现**，不加区段判断就会把字段名当成方法名
-   （`phase5/dexlines.py:67-72` 已经为这条付过代价，这里沿用它的状态机）。
+   （`core/evidence/dexlines.py:67-72` 已经为这条付过代价，这里沿用它的状态机）。
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from pathlib import Path
 # 只匹配 classes.dex / classes2.dex / ...，且必须**在压缩包根**（`^` 锚定）。
 DEX_NAME_RE = re.compile(r"^classes\d*\.dex$")
 
-# 与 `phase5/dexlines.py:45` **逐字一致**。别手打——我第一版把结尾写成 `;)';`，
+# 与 `core/evidence/dexlines.py:45` **逐字一致**。别手打——我第一版把结尾写成 `;)';`，
 # 多一个分号，于是 classes 命中 0，而其它计数看起来都正常（静默失败）。
 CLASS_RE = re.compile(r"^  Class descriptor  : '(?P<desc>L[^;]+;)'")
 SECTION_RE = re.compile(r"^  (?P<name>Static fields|Instance fields|Direct methods|Virtual methods)")
@@ -99,7 +99,7 @@ def parse_dump(stream, facts: dict, dex_name: str) -> None:
 
 
 def _normalize(descriptor: str) -> str:
-    """`Lcom/x/Y;` → `com.x.Y`（与 `phase5/dexlines.py:80` 同一套归一）。"""
+    """`Lcom/x/Y;` → `com.x.Y`（与 `core/evidence/dexlines.py:80` 同一套归一）。"""
     return descriptor[1:-1].replace("/", ".")
 
 

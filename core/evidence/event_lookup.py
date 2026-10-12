@@ -20,7 +20,7 @@ from pathlib import Path
 # "codeloc 认为这条流属于 A 的那次连接"就会给出不一致的答案，而这种不一致极难发现
 # （两处都"看起来对"）。`is_ok_outcome` 就是 2026-09-28 实测漂移过的那一条。
 # 归因内核已抽到平台无关的 core/collector/，从那里导入，保持单一来源。
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 try:
     from core.collector.attribution import MATCH_TOLERANCE_MS, is_ok_outcome  # noqa: E402
 except ImportError as exc:  # 明确失败，不静默退回一个"差不多的"默认值

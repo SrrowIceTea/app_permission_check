@@ -15,7 +15,7 @@
 | `hooks/` | Frida 钩子：敏感 API 读取 + 同意时序。监视表由规则库生成，不手抄 |
 | `traffic/` | mitmproxy 移动适配：打标表 + 注入壳（复用 phase4/addon.py） |
 | `policy/` | 隐私政策获取 / 正文抽取 / 规则化检查 |
-| `analyze/` | 关联引擎与八种移动谓词（复用 phase5/codeloc.py 的行号链） |
+| `analyze/` | 关联引擎与八种移动谓词（复用 core/evidence/codeloc.py 的行号链） |
 | `ai/` | **证据打包 + 三阶段提示词 + LLM 客户端 + 输出校验** |
 | `report/` | PDF 报告（工具结论 + AI 研判 + 校验问题清单） |
 | `tools/` | 离线回归总入口、合成演示会话生成器 |
@@ -60,7 +60,7 @@ cp mobile/ai/config.example.json mobile/ai/config.local.json   # ← 在这里�
 | --- | --- |
 | `phase4/addon.py`、`attribution.py`、`flow_entry.py`、`payloads.py` | 直接 import；`traffic/addon_mobile.py` 只把 `sys.modules["tagging"]` 换成移动版 |
 | `phase3/hook_egress.js`、`phase3/run.py`、`bundle_config.py` | 原样使用（Socket.connect 与车载无关；run.py 的注入器也替换 `__VSCAN_SESSION_PACKAGES__`） |
-| `phase5/codeloc.py` | 直接 import，`evidence_kind` 沿用同名种类（`read_event` / `read_then_egress`） |
+| `core/evidence/codeloc.py` | 直接 import，`evidence_kind` 沿用同名种类（`read_event` / `read_then_egress`） |
 | reportlab 中文字体方案 | 照抄 `phase5/report.py` 的候选链（SimHei → DengXian → 雅黑 → STSong） |
 | 输出约定 | `output/mobile-regression-*/verification.json` + `latest-mobile.txt`，与车载一致 |
 

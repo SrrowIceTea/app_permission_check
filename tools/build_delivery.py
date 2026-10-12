@@ -92,7 +92,7 @@ def main():
         '--reads', source / 'reads.jsonl', '--egress', source / 'egress.jsonl', '--flows', source / 'flows.jsonl',
         '--permissions', out / 'requested-permissions.txt', '--session', verification['session'],
         '--out', out / 'findings.jsonl', '--summary', out / 'summary.json'], 'correlate')
-    command([sys.executable, ROOT / 'phase5/dexlines.py', '--apk', out / 'installed.apk',
+    command([sys.executable, ROOT / 'core/evidence/dexlines.py', '--apk', out / 'installed.apk',
         '--verify', out / 'findings.jsonl', '--cache', out / 'dex-index.json', '--out', out / 'dex-verification.json'], 'dex', (0, 1))
     dex = json.loads((out / 'dex-verification.json').read_text(encoding='utf-8'))
     if not dex.get('dex_index_available') or set(dex['by_status']) - {'VERIFIED', 'INCOMPLETE'}:

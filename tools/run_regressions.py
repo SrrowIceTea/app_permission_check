@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CHECKS = [
     ('completion', '.', [sys.executable, '-m', 'unittest', 'test_completion']),
-    ('codeloc', 'phase5', [sys.executable, '-m', 'unittest', 'test_codeloc',
+    ('codeloc', 'core/evidence', [sys.executable, '-m', 'unittest', 'test_codeloc',
                            'test_event_lookup']),
     ('correlate', 'phase5', [sys.executable, '-m', 'unittest', 'test_experiment']),
     # 归因/载荷/失败流落盘/报文扫描是平台无关的，已抽到 core/collector/；

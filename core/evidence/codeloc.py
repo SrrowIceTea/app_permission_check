@@ -24,7 +24,7 @@ LineNumberTable 去核对这些行号是否真的存在于该方法里。本模�
 
 用法（通常由 correlate.py 调用）:
 
-    from codeloc import attach
+    from core.evidence.codeloc import attach
     findings = attach(findings, reads, flows, egress_events, package)
 """
 from __future__ import annotations
@@ -34,10 +34,10 @@ import sys
 from pathlib import Path
 
 # "先确定说的是哪条事件"这一层拆到了 event_lookup.py（本文件曾超 300 行上限）。
-# 容差与候选判定仍然只有一份：那边从 phase4/attribution.py 导入，这里转出，
+# 容差与候选判定仍然只有一份：那边从 core/collector/attribution.py 导入，这里转出，
 # 所以 `codeloc.MATCH_TOLERANCE_MS` 对既有调用方照旧可用。
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from event_lookup import (  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core.evidence.event_lookup import (  # noqa: E402
     MATCH_TOLERANCE_MS, index_events, nearest_egress, resolve_event,
 )
 

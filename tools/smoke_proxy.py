@@ -12,8 +12,8 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'phase4'))
-from collector_server import Collector
+sys.path.insert(0, str(ROOT))
+from core.collector.collector_server import Collector
 
 
 def free_port():

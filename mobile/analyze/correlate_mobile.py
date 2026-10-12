@@ -5,7 +5,7 @@
 
 与 phase5/correlate.py 的关系：
   * 输出**沿用同一套 findings/summary 字段契约**，因此 phase6 看板可以不改代码直接读；
-  * 代码行号链**直接复用 phase5/codeloc.py**（它按 evidence_kind 分派，与车载共用一套）；
+  * 代码行号链**直接复用 core/evidence/codeloc.py**（它按 evidence_kind 分派，与车载共用一套）；
   * 求值器换成移动的八种谓词（见 evaluation_mobile.py）。
 
 三条不能省的记录：
@@ -25,8 +25,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(ROOT / "phase5"))
-import codeloc  # noqa: E402  复用（车载/移动共用一套行号提取）
+sys.path.insert(0, str(ROOT))
+from core.evidence import codeloc  # noqa: E402  复用（车载/移动共用一套行号提取）
 import evaluation_mobile as ev  # noqa: E402
 
 

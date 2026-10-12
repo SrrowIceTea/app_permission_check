@@ -32,7 +32,7 @@
 而且类名与方法/描述符要**分开取再拼**：整段拿去比对 `dangerous_apis` 对不上。
 拼出来的三段正好是 `class_name` / `method_name` / `jvm_descriptor`。
 
-另外 `CLASS_RE` 必须与 `phase5/dexlines.py:45` **逐字一致**——我手打时把结尾写成
+另外 `CLASS_RE` 必须与 `core/evidence/dexlines.py:45` **逐字一致**——我手打时把结尾写成
 `;)';`（多一个分号），于是类名命中 0，而其它计数都正常。
 
 ## D704 危险 API 按三元组匹配，不按 `api_key`

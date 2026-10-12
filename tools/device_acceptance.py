@@ -16,8 +16,8 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'phase4'))
-from collector_server import Collector
+sys.path.insert(0, str(ROOT))
+from core.collector.collector_server import Collector
 from test_proxy_cert import create
 
 # adb 定位：VSCAN_ADB 覆盖 > PATH 上的 adb > 本机 SDK 默认位置。

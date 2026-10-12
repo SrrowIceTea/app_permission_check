@@ -11,14 +11,14 @@ from pathlib import Path
 
 import frida
 from device_acceptance import ADB, ROOT, read_events, wait_for
-from collector_server import Collector
+from core.collector.collector_server import Collector
 
 sys.path.insert(0, str(ROOT / 'phase4'))
 sys.path.insert(0, str(ROOT / 'phase5'))
 from verify_multi_app import verdict
 from correlate import load_rules
 from evaluation import evaluate_data_egress, evaluate_sensitive_read
-from codeloc import attach
+from core.evidence.codeloc import attach
 
 PACKAGES = ['com.vscanner.targetapp', 'com.vscanner.targetapp2']
 

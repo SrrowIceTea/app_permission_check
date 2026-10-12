@@ -50,7 +50,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual([], evaluate_data_egress([rule()], [r], [f]))
 
     def test_native_callback_keeps_chain_and_reports_location_gap(self):
-        import codeloc
+        from core.evidence import codeloc
         r = dict(read(), stack='app.a.Callback.onChangeEvent(Native Method)')
         finding = dict(package='app.a', rule_id='TEST', evidence_kind='read_event', event_ids=[1])
         result = codeloc.attach([finding], [r], [], [], 'app.a')[0]

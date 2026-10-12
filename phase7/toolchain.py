@@ -36,7 +36,7 @@ def _newest_in(pattern: str, root_glob: str) -> str | None:
     """在 `root/*/pattern` 里取版本号最大的一个。
 
     按目录名里的**数字段**排序，不是按字符串——否则 build-tools/36.0.0 会排在 9.0.0 前面。
-    与 `phase5/dexlines.py` 的 `find_dexdump` 同一套办法（那边已经踩过）。
+    与 `core/evidence/dexlines.py` 的 `find_dexdump` 同一套办法（那边已经踩过）。
     """
     import re
     roots = Path().glob(root_glob) if not Path(root_glob).is_absolute() else [Path(root_glob)]
