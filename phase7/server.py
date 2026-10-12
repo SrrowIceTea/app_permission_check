@@ -19,15 +19,14 @@ import argparse
 import hashlib
 import json
 import shutil
+import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-import analysis
-import jadx
-import jobs
-import toolchain
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from core.static import analysis, jadx, jobs, toolchain  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 WEB = HERE / "web"

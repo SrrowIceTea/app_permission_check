@@ -118,11 +118,9 @@ def main() -> int:
     args = ap.parse_args()
 
     repo = Path(__file__).resolve().parents[2]
-    phase7 = repo / "phase7"
-    sys.path.insert(0, str(phase7))
+    sys.path.insert(0, str(repo))
 
-    import analysis          # noqa: E402
-    import static_rules      # noqa: E402
+    from core.static import analysis, static_rules  # noqa: E402
 
     apk = Path(args.apk).resolve()
     out = Path(args.out).resolve()

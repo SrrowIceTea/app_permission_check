@@ -24,13 +24,9 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'phase7'))
+sys.path.insert(0, str(ROOT))
 
-import analysis      # noqa: E402
-import apkmeta       # noqa: E402
-import crosscheck    # noqa: E402
-import dexfacts      # noqa: E402
-import toolchain     # noqa: E402
+from core.static import analysis, apkmeta, crosscheck, dexfacts, toolchain  # noqa: E402
 
 DEFAULT_APK = ROOT / 'phase2/target-app/app/build/outputs/apk/debug/app-debug.apk'
 EXPECTED_PROPERTY = 'GEAR_SELECTION'

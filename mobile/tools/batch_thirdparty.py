@@ -57,7 +57,7 @@ def short_slug(package: str, limit: int = 18) -> str:
     （用户名非 ASCII + 多层目录），而 jadx 解出的源码树是
     `sources/com/ximalaya/ting/android/car/sdk/ai_extension/tasks/tts/Xxx$1.java`
     这种深路径。实测：用完整包名做目录名时，`DefaultPlayTTSTask$addTTSFragment
-    $$inlined$launch$1.java` 恰好越界，phase7/jadx.py 的 `path.stat()` 抛
+    $$inlined$launch$1.java` 恰好越界，core/static/jadx.py 的 `path.stat()` 抛
     `FileNotFoundError: [WinError 3]`——**jadx 能写、Python 读不了**，
     报错还看不出是路径长度问题。
     """
@@ -147,7 +147,7 @@ def main() -> int:
     # **批次根目录刻意放在短路径下**：本工程根路径就有 67 字符（用户名非 ASCII +
     # 多层目录），而 jadx 解出的 Kotlin 源码里**单个文件名**最长见过 105 字符
     # （`Xxx$lambda$5$13$0$$inlined$itemsIndexed$default$1.java`）。
-    # 两者相加必然越过 Windows 的 MAX_PATH 260，症状是 phase7/jadx.py
+    # 两者相加必然越过 Windows 的 MAX_PATH 260，症状是 core/static/jadx.py
     # `path.stat()` 抛 FileNotFoundError —— jadx 写得进去、Python 读不出来。
     # 在 output/ 下留一个 junction 指向它，路径好找、字节仍然在短根上。
     stamp = time.strftime("%m%d%H%M")

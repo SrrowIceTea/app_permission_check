@@ -24,7 +24,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.rules_contract import load_rules as _load_rules  # noqa: E402
 
 LEVEL_ORDER = ["candidate", "observed", "correlated", "policy_violation"]

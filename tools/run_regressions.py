@@ -21,9 +21,9 @@ CHECKS = [
     ('dashboard', 'phase6', [sys.executable, '-m', 'unittest', 'test_dashboard']),
     ('runtime', 'phase3', ['node', 'test_runtime.mjs']),
     ('parity', 'phase1', [sys.executable, 'android/tools/verify_schema_parity.py']),
-    # phase7 的用例全部离线（不需要 jadx、不需要设备、不需要 APK）。
+    # core/static 的用例全部离线（不需要 jadx、不需要设备、不需要 APK）。
     # 需要真的反编译的验证在 tools/workbench_acceptance.py，那里慢，不进回归。
-    ('workbench', 'phase7', [sys.executable, '-m', 'unittest',
+    ('workbench', 'core/static', [sys.executable, '-m', 'unittest',
                              'test_static_rules', 'test_crosscheck', 'test_jobs']),
 ]
 

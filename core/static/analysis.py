@@ -15,12 +15,7 @@ import json
 import tempfile
 from pathlib import Path
 
-import apkmeta
-import crosscheck
-import dexfacts
-import jadx
-import static_rules
-import toolchain
+from core.static import apkmeta, crosscheck, dexfacts, jadx, static_rules, toolchain
 
 
 def _save(path: Path, payload) -> None:
