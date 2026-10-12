@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python)",
+      "Bash(python python/build_multiversion_rules.py --base baseline_android14/rules.db --calibration device_calibration/permissions-car-android15.jsonl --property-ids device_calibration/vhal-property-ids-device35.json --device-facts device_calibration/device-facts.json --out rules_library/rules.db --summary rules_library/rules.db.summary.json)",
+      "Bash(rm -rf rules_library)",
+      "Bash(python python/build_multiversion_rules.py --base baseline_android14/rules.db --calibration device_calibration/permissions-car-android15.jsonl --property-ids device_calibration/vhal-property-ids-device35.json --cpm-signatures device_calibration/cpm-signatures-device35.json --device-facts device_calibration/device-facts.json --out rules_library/rules.db --summary rules_library/rules.db.summary.json)",
+      "Bash(cp rules_library/rules.db android/app/src/main/assets/rules.db)",
+      "Bash(python -c ' *)",
+      "WebSearch",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:github.com)",
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "Bash(\"/c/Users/毛宇淇/AppData/Local/Programs/Python/Python313/Scripts/frida-compile.exe\" --version)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 15 \"https://registry.npmjs.org/frida-java-bridge\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 15 \"https://registry.npmmirror.com/frida-java-bridge\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -L --max-time 25 \"https://github.com/frida/frida\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -L --max-time 25 \"https://raw.githubusercontent.com/frida/frida/main/README.md\")"
+    ]
+  }
+}

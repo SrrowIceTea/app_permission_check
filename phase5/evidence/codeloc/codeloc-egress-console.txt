@@ -1,0 +1,10 @@
+[egress] START DEVICE_WRITE_DENIED
+[egress] ARMED DEVICE_WRITE_DENIED
+[egress] ARMED in com.vscanner.targetapp (2 overloads)
+attached pid 16239; collecting for 90s -> ..\phase5\logs\codeloc-egress.jsonl
+[egress] EGRESS_CONNECT DEVICE_WRITE_DENIED
+
+collected 3 JSONL records
+      1  ARMED
+      1  EGRESS_CONNECT
+      1  START

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 移动隐私演示夹具界面 —— 仅用于授权测试（自有设备与自有 APK）。
+     用 ScrollView 包裹：车机横屏矮，按钮多，不滚动会有一半点不到；
+     主机侧触发器按 resource-id 找按钮（不写死坐标），所以 id 名必须与
+     mobile/tools/trigger.py 的 BUTTONS 表一致。 -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scrollContent"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/header"
+            android:textSize="13sp"
+            android:paddingBottom="6dp" />
+
+        <EditText
+            android:id="@+id/etEndpoint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/endpoint_hint"
+            android:text="@string/endpoint_default"
+            android:inputType="textUri"
+            android:textSize="12sp" />
+
+        <Button android:id="@+id/btnPerm" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="@string/btn_perm" />
+        <Button android:id="@+id/btnDeviceId" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="@string/btn_device_id" />
+        <Button android:id="@+id/btnLocation" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="@string/btn_location" />
+        <Button android:id="@+id/btnContacts" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="@string/btn_contacts" />
+        <Button android:id="@+id/btnApps" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="@string/btn_apps" />
+        <Button android:id="@+id/btnClipboard" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="@string/btn_clipboard" />
+        <Button android:id="@+id/btnSms" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="@string/btn_sms" />
+        <Button android:id="@+id/btnEgressHttp" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="@string/btn_http" />
+        <Button android:id="@+id/btnEgressHttps" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="@string/btn_https" />
+        <Button android:id="@+id/btnPolicy" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="@string/btn_policy" />
+
+        <TextView
+            android:id="@+id/tvLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="8dp"
+            android:textSize="11sp"
+            android:textIsSelectable="true" />
+    </LinearLayout>
+</ScrollView>

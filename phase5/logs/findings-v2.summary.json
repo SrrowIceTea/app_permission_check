@@ -1,0 +1,22 @@
+{
+  "status": "correlated",
+  "android_version": "15",
+  "package": "com.vscanner.targetapp",
+  "inputs": {
+    "reads": 25,
+    "egress_connections": 4,
+    "proxy_flows": 2,
+    "requested_permissions": 8,
+    "rules_evaluated": 24,
+    "reads_path_sha256": "8d9c685859caed2d",
+    "flows_path_sha256": "263f9acb3b9b6325"
+  },
+  "findings_total": 12,
+  "findings_by_conclusion_level": {
+    "candidate": 8,
+    "observed": 2,
+    "correlated": 2
+  },
+  "clock_offset_ms": 530,
+  "caveat": "结论上限由规则自身设定；时间相关性不构成外泄证明。policy_violation 需人工判定，本工具不产出该级别结论。"
+}

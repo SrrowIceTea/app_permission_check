@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V-Scanner · 审计复核工作台</title>
+<style>__VSCAN_STYLE__</style>
+</head>
+<body>
+<a class="skip-link" href="#findings-card">跳至结论检索</a>
+<aside class="sidebar" aria-label="工作台导航">
+  <a class="brand" href="#overview"><span class="brand-mark" aria-hidden="true">V</span>V-Scanner</a>
+  <p class="brand-sub">车载应用 · 数据安全审计</p>
+  <nav>
+    <a href="#overview" aria-current="location">审计概览 <span>总览</span></a>
+    <a href="#findings-card">结论检索 <span id="nav-count"></span></a>
+    <a href="#chain-card">读取与外发 <span>证据链</span></a>
+    <a href="#coverage-card">规则覆盖 <span>范围</span></a>
+    <a href="#boundary-card">方法与边界 <span>说明</span></a>
+  </nav>
+  <div class="sidebar-note"><b>离线复核模式</b><p>基于已完成的审计会话。<br>数据内嵌，无网络请求。</p><span>仅用于授权测试</span></div>
+</aside>
+<div class="workspace">
+  <div class="topbar"><span>工作台 <span class="muted">/ 审计复核</span></span><div class="actions"><span class="offline-tag">静态快照</span><button id="theme-toggle" type="button" aria-label="切换深浅色">深色</button><button id="print-report" type="button">打印看板</button></div></div>
+  <main class="viz-root" id="overview">
+    <header class="page-head">
+      <div class="title-line"><div><h1>审计复核工作台</h1><p class="intro">从风险线索，到可追溯的证据。</p></div><a class="primary-link" href="#findings-card">查看审计结论 →</a></div>
+      <p class="authorization">仅用于授权测试（自有设备与自有 APK）。<b>本看板不产出违规判决</b>，候选、已观测与已关联均需结合规则依据人工复核。</p>
+    </header>
+    <section class="session-panel" aria-label="当前审计会话"><div class="session-title"><strong id="session-package">正在读取审计快照</strong><span id="session-id"></span></div><div id="meta-row" class="meta-row" aria-label="审计元信息"></div></section>
+    <div id="kpi-row" class="kpi-row" aria-label="结论总数概览"></div>
+    <div class="overview-grid">
+      <section class="card" id="dist-card"><h2>证据强度分布</h2><p class="card-sub">等级反映证据完整度，不代表违规判定。</p><div id="dist-chart" class="dist-chart"></div><div id="dist-legend" class="dist-legend"></div></section>
+      <section class="card review-guide"><h2>复核路径</h2><p><b>筛选线索</b><span>按规则、属性或源码位置检索</span></p><p><b>核对证据</b><span>展开代码位置与规则依据</span></p><p><b>确认边界</b><span>结合定位缺口与覆盖范围判断</span></p></section>
+    </div>
+    <section class="card" id="findings-card">
+      <div class="section-heading"><h2>审计结论</h2><span id="result-count" role="status" aria-live="polite"></span></div>
+      <div class="search-toolbar"><label class="search-label" for="finding-search">搜索结论<input id="finding-search" type="search" placeholder="规则 ID、权限、属性、文件或方法" autocomplete="off"></label><label for="finding-type">规则类型<select id="finding-type"><option value="">全部类型</option><option value="data_egress">数据外发</option><option value="sensitive_read">敏感读取</option><option value="over_permission">过度索权</option></select></label><button id="reset-filters" type="button">重置筛选</button></div>
+      <div id="filter-row" class="filter-row" aria-label="结论等级筛选"></div>
+      <div id="findings-table" class="findings-table" tabindex="0" role="region" aria-label="审计结论表，可横向滚动"></div>
+      <p class="table-note">窄屏可横向滚动查看代码位置与依据 · 优先显示已关联结论 · 总体统计不随筛选改变 · dex 核对仅证明行号归属</p>
+    </section>
+    <section class="card" id="chain-card"><h2>证据链：读取 → 外发</h2><p class="card-sub">与结论筛选同步。仪表条展示相对间隔，以该结论的分析时间窗为满格。</p><div id="chain-list" class="chain-list"></div></section>
+    <section class="card" id="boundary-card"><h2>方法与边界</h2><div id="boundary-list" class="boundary-list"></div></section>
+    <footer class="page-foot">V-Scanner · 仅用于授权测试（自有设备与自有 APK）<span id="generated-at"></span></footer>
+  </main>
+</div>
+<noscript>此看板需要启用 JavaScript 才能显示内嵌审计数据；不需要网络连接。</noscript>
+<script>
+window.VSCAN_DATA = __VSCAN_DATA__;
+</script>
+<script>
+__VSCAN_SCRIPT__
+</script>
+</body>
+</html>
+

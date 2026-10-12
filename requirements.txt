@@ -1,0 +1,8 @@
+# 当前主机实测版本；仅用于授权测试。
+frida==17.18.0
+frida-tools==14.10.4
+mitmproxy==12.2.3
+reportlab==5.0.1
+Pillow>=11,<13
+pypdf==6.19.0
+maxminddb==3.2.0

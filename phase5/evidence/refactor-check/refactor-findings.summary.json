@@ -1,0 +1,64 @@
+{
+  "status": "correlated",
+  "android_version": "15",
+  "package": "com.vscanner.targetapp",
+  "inputs": {
+    "reads": 25,
+    "egress_connections": 5,
+    "proxy_flows": 2,
+    "requested_permissions": 8,
+    "rules_evaluated": 22,
+    "reads_path_sha256": "ba4b2e360a7212aa",
+    "flows_path_sha256": "95ee1fa24a58faea"
+  },
+  "findings_total": 10,
+  "findings_by_conclusion_level": {
+    "candidate": 6,
+    "observed": 2,
+    "correlated": 2
+  },
+  "code_locs": {
+    "findings_total": 10,
+    "findings_with_code_loc": 4,
+    "distinct_files": [
+      "EgressSender.kt",
+      "VhalReader.kt"
+    ],
+    "findings_with_partial_loc": [],
+    "gaps": [],
+    "without_code_loc": [
+      {
+        "rule_id": "VSC-P001",
+        "evidence_kind": "manifest_permission",
+        "reason": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。"
+      },
+      {
+        "rule_id": "VSC-P002",
+        "evidence_kind": "manifest_permission",
+        "reason": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。"
+      },
+      {
+        "rule_id": "VSC-P003",
+        "evidence_kind": "manifest_permission",
+        "reason": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。"
+      },
+      {
+        "rule_id": "VSC-P004",
+        "evidence_kind": "manifest_permission",
+        "reason": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。"
+      },
+      {
+        "rule_id": "VSC-P005",
+        "evidence_kind": "manifest_permission",
+        "reason": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。"
+      },
+      {
+        "rule_id": "VSC-P006",
+        "evidence_kind": "manifest_permission",
+        "reason": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。"
+      }
+    ]
+  },
+  "clock_offset_ms": 530,
+  "caveat": "结论上限由规则自身设定；时间相关性不构成外泄证明。policy_violation 需人工判定，本工具不产出该级别结论。"
+}

@@ -1,0 +1,12 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Build logs. verification-from-device.json is NOT ignored: it is the device
+# acceptance record and belongs in version control.
+*.log

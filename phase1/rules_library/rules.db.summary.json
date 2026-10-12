@@ -1,0 +1,43 @@
+{
+  "status": "dual_version_library",
+  "counts": {
+    "14": {
+      "permissions": 6,
+      "vhal_properties": 8,
+      "dangerous_apis": 3,
+      "risk_rules": 22
+    },
+    "15": {
+      "permissions": 146,
+      "vhal_properties": 8,
+      "dangerous_apis": 3,
+      "risk_rules": 22
+    }
+  },
+  "enabled_rules": 44,
+  "android15_source": "device_observation",
+  "android15_rule_policy": "policy_mirrored_from_android14_with_device_provenance",
+  "enablement": {
+    "before": {
+      "over_permission": 0,
+      "sensitive_read": 0,
+      "data_egress": 0
+    },
+    "after": {
+      "over_permission": {
+        "total": 12,
+        "enabled": 12
+      },
+      "sensitive_read": {
+        "total": 16,
+        "enabled": 16
+      },
+      "data_egress": {
+        "total": 16,
+        "enabled": 16
+      }
+    }
+  },
+  "database_sha256": "c4297ac72e1a9f31a02dcbc4eea7e24ec7cc31185ebee56e1bf3b7e8dfd83bae",
+  "note": "android-15 rows are device observations (definition_status=pending). They are not source extractions and must not be reported as such."
+}

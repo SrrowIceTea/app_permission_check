@@ -1,0 +1,18 @@
+[tls] START DEVICE_WRITE_DENIED {"script":"ssl_pinning_bypass.js","pkg":"com.vscanner.targetapp","uid":1010250,"whitelist":["com.vscanner.targetapp"],"frida":"17.18.0","scope_note":"process-local only; bypasses trust verification for audit traffic capture"}
+[tls] TM_CLASS_HOOKED DEVICE_WRITE_DENIED {"target":"com.android.org.conscrypt.TrustManagerImpl","hooked":6,"methods":["conscrypt.checkTrusted([Ljava.security.cert.X509Certificate;,java.lang.String,javax.net.ssl.SSLSession,javax.net.ssl.SSLParameters,boolean)","conscrypt.checkTrusted([Ljava.security.cert.X509Certificate;,java.lang.String,javax.net.ssl.SSLSession,javax.net.ssl.SSLParameters,boolean)","conscrypt.checkTrusted([Ljava.security
+[tls] TM_CLASS_ABSENT DEVICE_WRITE_DENIED {"target":"org.conscrypt.TrustManagerImpl","note":"解析不到该类，跳过"}
+[tls] NOT_PRESENT DEVICE_WRITE_DENIED {"target":"okhttp3.CertificatePinner","note":"okhttp 不在本进程类路径（本夹具不用 okhttp）"}
+[tls] PINNING_ARMED DEVICE_WRITE_DENIED {"hooks":["conscrypt.checkTrusted([Ljava.security.cert.X509Certificate;,java.lang.String,javax.net.ssl.SSLSession,javax.net.ssl.SSLParameters,boolean)","conscrypt.checkTrusted([Ljava.security.cert.X509Certificate;,java.lang.String,javax.net.ssl.SSLSession,javax.net.ssl.SSLParameters,boolean)","conscrypt.checkTrusted([Ljava.security.cert.X509Certificate;,[B,[B,java.lang.String,java.lang.String,bool
+ssl_pinning_bypass.js PINNING_ARMED in com.vscanner.targetapp — audit-traffic mode; Ctrl+C to exit.
+attached pid 31724; collecting for 50s -> logs\integ_ssl.jsonl
+[tls] PINNING_BYPASS DEVICE_WRITE_DENIED {"target":"SSLContext.init","detail":"TrustManager checks relaxed for 0 TM(s)"}
+[tls] PINNING_BYPASS DEVICE_WRITE_DENIED {"target":"conscrypt.checkTrustedRecursive","signature":"[Ljava.security.cert.X509Certificate;,[B,[B,java.lang.String,boolean,java.util.ArrayList,java.util.ArrayList,java.util.Set","detail":"swallowed Error: java.security.cert.CertificateException: java.security.cert.CertPathValidatorException: Trust anchor for certification path not found."}
+[tls] PINNING_BYPASS DEVICE_WRITE_DENIED {"target":"HostnameVerifier","host":"10.0.2.2","detail":"hostname check relaxed"}
+
+collected 8 JSONL records
+      1  NOT_PRESENT
+      1  PINNING_ARMED
+      3  PINNING_BYPASS
+      1  START
+      1  TM_CLASS_ABSENT
+      1  TM_CLASS_HOOKED

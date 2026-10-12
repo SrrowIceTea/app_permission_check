@@ -1,0 +1,29 @@
+{
+  "_comment": "同意与隐私政策相关 API 的抽取目标（用于同意时序链，不进 dangerous_apis 表——它们不是敏感数据读取）。签名同样由 javap 从本机 android.jar 抽取，不手写。",
+  "android_version": "36",
+  "targets": [
+    {"class_name": "android.app.Activity", "method_name": "requestPermissions", "select": "all",
+     "data_type_key": null, "api_role": "observe",
+     "observation": {"kind": "consent", "signal": "permission_request",
+                     "args": {"permissions": 0, "request_code": 1}},
+     "note": "运行时权限请求的发起时刻。androidx 的 ActivityCompat 最终也走到这里。"},
+    {"class_name": "android.app.Activity", "method_name": "onRequestPermissionsResult", "select": "all",
+     "data_type_key": null, "api_role": "observe",
+     "observation": {"kind": "consent", "signal": "permission_result",
+                     "args": {"request_code": 0, "permissions": 1, "grant_results": 2}},
+     "note": "用户在系统弹窗上的选择结果——这是「同意」的权威时刻。"},
+    {"class_name": "android.content.Context", "method_name": "checkSelfPermission", "select": "all",
+     "data_type_key": null, "api_role": "observe",
+     "observation": {"kind": "consent", "signal": "permission_check", "args": {"permission": 0}},
+     "note": "应用自查权限状态的时刻；用来区分「检查后未读」与「未检查直读」。"},
+    {"class_name": "android.content.pm.PackageManager", "method_name": "checkPermission", "select": "all",
+     "data_type_key": null, "api_role": "observe",
+     "observation": {"kind": "consent", "signal": "permission_check", "args": {"permission": 0}},
+     "note": "PackageManager 上的另一条检查路径。"},
+    {"class_name": "android.webkit.WebView", "method_name": "loadUrl", "select": "all",
+     "data_type_key": null, "api_role": "observe",
+     "observation": {"kind": "policy_view", "signal": "policy_view", "args": {"url": 0},
+                     "match": ["privacy", "policy", "yinsi", "zhengce", "agreement", "terms", "隐私", "政策"]},
+     "note": "应用内展示隐私政策的最常见途径；只记录 URL 是否像政策页，不抓页面内容。"}
+  ]
+}

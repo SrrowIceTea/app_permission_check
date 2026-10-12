@@ -1,0 +1,69 @@
+# ── 密钥（绝不提交）─────────────────────────────────────────────
+# mobile/ai/config.local.json 含真实 LLM API key；文件自身的 _说明 也要求不提交。
+config.local.json
+**/config.local.json
+# mitmproxy 本地 CA 私钥（phase4/.mitmproxy/mitmproxy-ca.pem|.p12），可由 mitmdump 重新生成
+.mitmproxy/
+**/.mitmproxy/
+*.pem
+*.p12
+*.cer
+*.key
+*.pfx
+
+# ── 运行产物 ────────────────────────────────────────────────────
+output/
+apk/
+*.zip
+
+# ── 反编译 / 插桩缓存与二进制 ───────────────────────────────────
+.cache/
+**/.cache/
+gadget-cache/
+**/gadget-cache/
+# frida-gadget 本体是 26MB 下载物，可由 gadget_prepare.py 重新拉取。
+# 但同目录的 libgadget.config.so 是**手写配置**（121 字节 JSON，含 gadget 端口 27044），必须提交，
+# 所以这里只精确排除 libgadget.so，不用 blanket *.so。
+**/jniLibs/**/libgadget.so
+
+# ── Python ──────────────────────────────────────────────────────
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ── Node ────────────────────────────────────────────────────────
+node_modules/
+**/node_modules/
+
+# ── Gradle / Android 构建产物 ───────────────────────────────────
+# 注意：mobile/rules/build/ 是 javap 抽取的 API 事实证据（api_facts.jsonl），
+# 属于「绝不编造签名」的依据，**必须提交**，故这里只精确排除 Gradle 的 app/build。
+.gradle/
+**/.gradle/
+.kotlin/
+**/.kotlin/
+**/app/build/
+local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# ── 日志 ────────────────────────────────────────────────────────
+*.log
+**/*.log
+
+# ── IDE / 系统 ──────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Frida 打包产物（可由 core/frida_host/build.py 重新生成）──────
+dist/*.bundle.js
+**/dist/*.bundle.js

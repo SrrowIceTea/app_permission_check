@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "C:\Users\Ã«Óîä¿\Desktop\vscanner-phase1-seeds(1)\phase3\run.py", line 151, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "C:\Users\Ã«Óîä¿\Desktop\vscanner-phase1-seeds(1)\phase3\run.py", line 101, in main
+    session = device.attach(pid)
+  File "C:\Users\Ã«Óîä¿\AppData\Local\Programs\Python\Python313\Lib\site-packages\frida\__init__.py", line 662, in attach
+    return _wrap(_invoke(self._impl.attach, (pid, _make_options(_frida.SessionOptions, kwargs, {'linker_notifier_offsets': 'add_linker_notifier_offset'}), )))
+                 ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Ã«Óîä¿\AppData\Local\Programs\Python\Python313\Lib\site-packages\frida\__init__.py", line 240, in _invoke
+    raise error
+frida.PermissionDeniedError: unable to access process with pid 3969

@@ -1,0 +1,28 @@
+违规代码行号 —— 实测判定结果
+==============================================================================
+数据来源：真机一轮（hook_vhal + hook_egress + mitmproxy 反向代理）
+  读取事件 25 条 / 出站事件 3 条 / 代理流 1 条
+
+VSC-R003 [observed] GEAR_SELECTION
+   read   VhalReader.kt:128  VhalReader.readOne   dex=VERIFIED
+          / com.vscanner.targetapp.VhalReader.readAll(VhalReader.kt:105)
+          / com.vscanner.targetapp.MainActivity.doRead$lambda$9(MainActivity.kt:118)
+VSC-R004 [observed] CURRENT_GEAR
+   read   VhalReader.kt:128  VhalReader.readOne   dex=VERIFIED
+          / com.vscanner.targetapp.VhalReader.readAll(VhalReader.kt:105)
+          / com.vscanner.targetapp.MainActivity.doRead$lambda$9(MainActivity.kt:118)
+VSC-E003 [correlated] GEAR_SELECTION
+   read   VhalReader.kt:128  VhalReader.readOne   dex=VERIFIED
+          / com.vscanner.targetapp.VhalReader.readAll(VhalReader.kt:105)
+          / com.vscanner.targetapp.MainActivity.doRead$lambda$9(MainActivity.kt:118)
+   egress EgressSender.kt:46  EgressSender.doSend   dex=VERIFIED
+          / com.vscanner.targetapp.EgressSender.send$lambda$0(EgressSender.kt:27)
+VSC-E004 [correlated] CURRENT_GEAR
+   read   VhalReader.kt:128  VhalReader.readOne   dex=VERIFIED
+          / com.vscanner.targetapp.VhalReader.readAll(VhalReader.kt:105)
+          / com.vscanner.targetapp.MainActivity.doRead$lambda$9(MainActivity.kt:118)
+   egress EgressSender.kt:46  EgressSender.doSend   dex=VERIFIED
+          / com.vscanner.targetapp.EgressSender.send$lambda$0(EgressSender.kt:27)
+
+dex 核对：6/6 VERIFIED（核对 APK: phase2/target-app app-debug.apk, 1107 个类）
+语义复核：VhalReader.kt:128 = cpm.getProperty(...) 那行；EgressSender.kt:46 = 把载荷写入 socket 那行。

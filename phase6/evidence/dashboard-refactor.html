@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V-Scanner 预警看板</title>
+<style>
+/* V-Scanner 预警看板样式。色板全部取自 dataviz skill 的参考实例（palette.md），
+   未改任何色值；深浅两套按角色声明，正文只引用角色变量。 */
+.viz-root {
+  color-scheme: light;
+  --surface-1: #fcfcfb;
+  --page: #f9f9f7;
+  --ink-1: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-3: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --seq-250: #86b6ef;  --seq-400: #3987e5;  --seq-550: #1c5cab;
+  --status-good: #0ca30c;  --status-warning: #fab219;
+  --status-serious: #ec835a;  --status-critical: #d03b3b;
+  --delta-good: #006300;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --surface-1: #1a1a19;  --page: #0d0d0d;
+    --ink-1: #ffffff;  --ink-2: #c3c2b7;  --ink-3: #898781;
+    --grid: #2c2c2a;  --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --seq-250: #184f95;  --seq-400: #3987e5;  --seq-550: #86b6ef;
+    --delta-good: #0ca30c;
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --surface-1: #1a1a19;  --page: #0d0d0d;
+  --ink-1: #ffffff;  --ink-2: #c3c2b7;  --ink-3: #898781;
+  --grid: #2c2c2a;  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.10);
+  --seq-250: #184f95;  --seq-400: #3987e5;  --seq-550: #86b6ef;
+  --delta-good: #0ca30c;
+}
+:root[data-theme="light"] .viz-root {
+  color-scheme: light;
+  --surface-1: #fcfcfb;  --page: #f9f9f7;
+  --ink-1: #0b0b0b;  --ink-2: #52514e;  --ink-3: #898781;
+  --grid: #e1e0d9;  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --seq-250: #86b6ef;  --seq-400: #3987e5;  --seq-550: #1c5cab;
+  --delta-good: #006300;
+}
+
+body { margin: 0; background: var(--page); color: var(--ink-1);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+.viz-root { max-width: 1080px; margin: 0 auto; padding: 28px 20px 60px; }
+h1 { font-size: 20px; margin: 0; font-weight: 600; }
+h2 { font-size: 14px; margin: 0 0 10px; font-weight: 600; }
+p { margin: 0; }
+
+.page-head { margin-bottom: 14px; }
+.title-line { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.theme-toggle { font: inherit; color: var(--ink-2); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; cursor: pointer; }
+.theme-toggle:hover { color: var(--ink-1); }
+.authorization { margin-top: 6px; font-size: 12px; color: var(--ink-2); line-height: 1.6; }
+
+.meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.meta-chip { font-size: 12px; color: var(--ink-2); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 6px; padding: 3px 10px; }
+.meta-chip b { color: var(--ink-1); font-weight: 600; }
+
+.filter-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.filter-row .filter-label { font-size: 12px; color: var(--ink-3); margin-right: 4px; }
+.chip { font: inherit; font-size: 13px; color: var(--ink-2); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 999px; padding: 4px 14px; cursor: pointer; }
+.chip.on { color: var(--surface-1); background: var(--ink-1); border-color: var(--ink-1); }
+.chip.off { opacity: 0.45; }
+
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px; margin-bottom: 14px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 16px; }
+.tile .label { font-size: 12px; color: var(--ink-2); }
+.tile .value { font-size: 32px; font-weight: 600; line-height: 1.15; }
+.tile .sub { font-size: 11px; color: var(--ink-3); margin-top: 4px; }
+.tile.ghosted { opacity: 0.35; }
+
+.card { background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px 18px; margin-bottom: 14px; }
+.card-sub { font-size: 12px; color: var(--ink-3); margin: -4px 0 12px; }
+
+.dist-chart { position: relative; height: 24px; display: flex; gap: 2px; border-radius: 4px; }
+.dist-seg { position: relative; height: 100%; border-radius: 2px; }
+.dist-seg:first-child { border-radius: 4px 0 0 4px; }
+.dist-seg:last-child { border-radius: 0 4px 4px 0; }
+.dist-seg.ghost { opacity: 0.25; }
+.dist-seg .in-label { position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; font-size: 12px; font-weight: 600; color: #0b0b0b; }
+.dist-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+.swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.legend-item.ghost { opacity: 0.35; }
+
+.chain-item { margin-bottom: 16px; }
+.chain-head { font-size: 13px; margin-bottom: 4px; }
+.chain-head b { font-weight: 600; }
+.pair-row { margin: 6px 0 2px; }
+.pair-label { font-size: 12px; color: var(--ink-2); margin-bottom: 3px;
+  display: flex; gap: 10px; flex-wrap: wrap; }
+.meter { position: relative; height: 14px; background: var(--grid); border-radius: 4px; cursor: default; }
+.meter .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--seq-400);
+  border-radius: 4px; min-width: 4px; }
+.meter .tip { position: absolute; font-size: 12px; color: var(--ink-1);
+  transform: translate(-100%, -22%); }
+.pair-meta { font-size: 11px; color: var(--ink-3); margin-top: 6px; }
+.ok { color: var(--delta-good); }
+
+table.findings { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.findings th { text-align: left; font-weight: 600; color: var(--ink-3); font-size: 11px;
+  padding: 4px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+table.findings td { padding: 8px; border-bottom: 1px solid var(--grid);
+  vertical-align: top; font-variant-numeric: tabular-nums; }
+table.findings tr:hover td { background: var(--page); }
+td.rule-cell { white-space: nowrap; }
+td.rule-cell .rule-id { font-weight: 600; }
+td.rule-cell .rev { color: var(--ink-3); font-size: 11px; }
+
+.badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
+  border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.badge.s-warning { background: var(--status-warning); color: #0b0b0b; }
+.badge.s-serious { background: var(--status-serious); color: #0b0b0b; }
+.badge.s-critical { background: var(--status-critical); color: #fff; }
+.badge.s-good { background: var(--status-good); color: #fff; }
+.badge.s-muted { background: var(--grid); color: var(--ink-2); }
+.badge.small { font-size: 11px; padding: 1px 7px; }
+
+.loc-line { font-size: 12px; line-height: 1.7; white-space: nowrap; }
+.loc-line .file { font-family: ui-monospace, Consolas, monospace; color: var(--ink-1); }
+.gap-line { font-size: 12px; color: var(--status-serious); margin-top: 2px; }
+.muted { color: var(--ink-3); }
+.small { font-size: 11px; }
+
+.boundary-list { font-size: 12px; color: var(--ink-2); line-height: 1.9; }
+.boundary-list div { margin-bottom: 4px; }
+.page-foot { margin-top: 20px; font-size: 11px; color: var(--ink-3); text-align: center; }
+
+.tooltip { position: fixed; z-index: 10; pointer-events: none; background: var(--ink-1);
+  color: var(--surface-1); font-size: 12px; border-radius: 6px; padding: 6px 10px;
+  max-width: 320px; line-height: 1.6; display: none; }
+.tooltip .tt-val { font-weight: 600; }
+.tooltip .tt-name { opacity: 0.8; }
+
+.empty-note { font-size: 13px; color: var(--ink-3); padding: 8px 0; }
+
+@media print {
+  .filter-row, .theme-toggle { display: none; }
+  body { background: #fff; }
+}
+
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <header class="page-head">
+    <div class="title-line">
+      <h1>V-Scanner 车载 App 数据安全合规审计 · 预警看板</h1>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="切换深浅色">深色</button>
+    </div>
+    <p class="authorization">仅用于授权测试（自有设备与自有 APK）。
+      结论等级由规则库限定（候选 / 已观测 / 已关联），<b>本看板不产出违规判决</b>，
+      是否构成违规是政策判定，需人工完成。所有数据为静态内嵌，本页不发起任何网络请求。</p>
+  </header>
+  <div id="meta-row" class="meta-row" aria-label="审计元信息"></div>
+  <div id="filter-row" class="filter-row" aria-label="结论等级筛选"></div>
+  <div id="kpi-row" class="kpi-row" aria-label="结论总数概览"></div>
+  <section class="card" id="dist-card">
+    <h2>结论等级分布</h2>
+    <div id="dist-chart" class="dist-chart"></div>
+    <div id="dist-legend" class="dist-legend"></div>
+  </section>
+  <section class="card" id="chain-card" hidden>
+    <h2>证据链：读取 → 外发</h2>
+    <p class="card-sub">data_egress 结论的每一对“读取事件 → 代理流”。仪表条以该结论的分析时间窗为满格。</p>
+    <div id="chain-list" class="chain-list"></div>
+  </section>
+  <section class="card" id="findings-card">
+    <h2>逐条结论</h2>
+    <div id="findings-table" class="findings-table"></div>
+  </section>
+  <section class="card" id="boundary-card">
+    <h2>方法与边界</h2>
+    <div id="boundary-list" class="boundary-list"></div>
+  </section>
+  <footer class="page-foot">V-Scanner · 仅用于授权测试（自有设备与自有 APK）/ For authorized testing on owned devices and APKs only.</footer>
+</div>
+<script>
+window.VSCAN_DATA = {"meta": {"package": "com.vscanner.targetapp", "android_version": "15", "inputs": {"reads": 25, "egress_connections": 5, "proxy_flows": 2, "requested_permissions": 8, "rules_evaluated": 22, "reads_path_sha256": "ba4b2e360a7212aa", "flows_path_sha256": "95ee1fa24a58faea"}, "generated_at": "2026-09-24 02:22:24 UTC", "rule_versions": ["14", "15"], "rules_total": 44, "rules_enabled": 28, "rules_sha256": "4b80cb77fb38530b96972f66b663cbd6ff1860309fcacec525e422a5aac82255"}, "summary": {"status": "correlated", "android_version": "15", "package": "com.vscanner.targetapp", "inputs": {"reads": 25, "egress_connections": 5, "proxy_flows": 2, "requested_permissions": 8, "rules_evaluated": 22, "reads_path_sha256": "ba4b2e360a7212aa", "flows_path_sha256": "95ee1fa24a58faea"}, "findings_total": 10, "findings_by_conclusion_level": {"candidate": 6, "observed": 2, "correlated": 2}, "code_locs": {"findings_total": 10, "findings_with_code_loc": 4, "distinct_files": ["EgressSender.kt", "VhalReader.kt"], "findings_with_partial_loc": [], "gaps": [], "without_code_loc": [{"rule_id": "VSC-P001", "evidence_kind": "manifest_permission", "reason": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。"}, {"rule_id": "VSC-P002", "evidence_kind": "manifest_permission", "reason": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。"}, {"rule_id": "VSC-P003", "evidence_kind": "manifest_permission", "reason": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。"}, {"rule_id": "VSC-P004", "evidence_kind": "manifest_permission", "reason": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。"}, {"rule_id": "VSC-P005", "evidence_kind": "manifest_permission", "reason": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。"}, {"rule_id": "VSC-P006", "evidence_kind": "manifest_permission", "reason": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。"}]}, "clock_offset_ms": 530, "caveat": "结论上限由规则自身设定；时间相关性不构成外泄证明。policy_violation 需人工判定，本工具不产出该级别结论。"}, "verify": {"package": "com.vscanner.targetapp", "dex_index_available": true, "checks_total": 6, "by_status": {"VERIFIED": 6}, "all_verified": true, "caveat": "本核对证明的是「该行号存在于该方法的 dex 行号表中」，不证明该行号就是违规行为的语义所在——R8 内联会改变行号归属。结论仍需人工复核。", "details": [{"status": "VERIFIED", "overloads": 1, "matched": "(Landroid/car/hardware/property/CarPropertyManager;Lcom/vscanner/targetapp/VhalReader$PropSpec;)Lcom/vscanner/targetapp/ReadResult;", "detail": "com.vscanner.targetapp.VhalReader.readOne 的行号表含第 128 行，源文件 VhalReader.kt", "rule_id": "VSC-R003", "role": "read", "event_id": 5, "frame": "com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)"}, {"status": "VERIFIED", "overloads": 1, "matched": "(Landroid/car/hardware/property/CarPropertyManager;Lcom/vscanner/targetapp/VhalReader$PropSpec;)Lcom/vscanner/targetapp/ReadResult;", "detail": "com.vscanner.targetapp.VhalReader.readOne 的行号表含第 128 行，源文件 VhalReader.kt", "rule_id": "VSC-R004", "role": "read", "event_id": 6, "frame": "com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)"}, {"status": "VERIFIED", "overloads": 1, "matched": "(Landroid/car/hardware/property/CarPropertyManager;Lcom/vscanner/targetapp/VhalReader$PropSpec;)Lcom/vscanner/targetapp/ReadResult;", "detail": "com.vscanner.targetapp.VhalReader.readOne 的行号表含第 128 行，源文件 VhalReader.kt", "rule_id": "VSC-E003", "role": "read", "event_id": 5, "frame": "com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)"}, {"status": "VERIFIED", "overloads": 1, "matched": "(Ljava/lang/String;Ljava/util/List;)Ljava/lang/String;", "detail": "com.vscanner.targetapp.EgressSender.doSend 的行号表含第 46 行，源文件 EgressSender.kt", "rule_id": "VSC-E003", "role": "egress", "event_id": 3, "frame": "com.vscanner.targetapp.EgressSender.doSend(EgressSender.kt:46)"}, {"status": "VERIFIED", "overloads": 1, "matched": "(Landroid/car/hardware/property/CarPropertyManager;Lcom/vscanner/targetapp/VhalReader$PropSpec;)Lcom/vscanner/targetapp/ReadResult;", "detail": "com.vscanner.targetapp.VhalReader.readOne 的行号表含第 128 行，源文件 VhalReader.kt", "rule_id": "VSC-E004", "role": "read", "event_id": 6, "frame": "com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)"}, {"status": "VERIFIED", "overloads": 1, "matched": "(Ljava/lang/String;Ljava/util/List;)Ljava/lang/String;", "detail": "com.vscanner.targetapp.EgressSender.doSend 的行号表含第 46 行，源文件 EgressSender.kt", "rule_id": "VSC-E004", "role": "egress", "event_id": 3, "frame": "com.vscanner.targetapp.EgressSender.doSend(EgressSender.kt:46)"}]}, "findings": [{"code_loc_note": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。", "code_locs": [], "conclusion_level": "candidate", "event_ids": [], "evidence_kind": "manifest_permission", "note": "清单里请求了该权限。是否『必要』需要人工复核，本工具只指出需要复核。", "package": "com.vscanner.targetapp", "permission": "android.car.permission.CAR_IDENTIFICATION", "predicate": "manifest_permission_requires_necessity_review", "rule_enabled": true, "rule_id": "VSC-P001", "rule_revision": 1, "rule_type": "over_permission", "severity": "high"}, {"code_loc_note": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。", "code_locs": [], "conclusion_level": "candidate", "event_ids": [], "evidence_kind": "manifest_permission", "note": "清单里请求了该权限。是否『必要』需要人工复核，本工具只指出需要复核。", "package": "com.vscanner.targetapp", "permission": "android.car.permission.CAR_SPEED", "predicate": "manifest_permission_requires_necessity_review", "rule_enabled": true, "rule_id": "VSC-P002", "rule_revision": 1, "rule_type": "over_permission", "severity": "medium"}, {"code_loc_note": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。", "code_locs": [], "conclusion_level": "candidate", "event_ids": [], "evidence_kind": "manifest_permission", "note": "清单里请求了该权限。是否『必要』需要人工复核，本工具只指出需要复核。", "package": "com.vscanner.targetapp", "permission": "android.car.permission.CAR_POWERTRAIN", "predicate": "manifest_permission_requires_necessity_review", "rule_enabled": true, "rule_id": "VSC-P003", "rule_revision": 1, "rule_type": "over_permission", "severity": "medium"}, {"code_loc_note": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。", "code_locs": [], "conclusion_level": "candidate", "event_ids": [], "evidence_kind": "manifest_permission", "note": "清单里请求了该权限。是否『必要』需要人工复核，本工具只指出需要复核。", "package": "com.vscanner.targetapp", "permission": "android.car.permission.CAR_MILEAGE", "predicate": "manifest_permission_requires_necessity_review", "rule_enabled": true, "rule_id": "VSC-P004", "rule_revision": 1, "rule_type": "over_permission", "severity": "medium"}, {"code_loc_note": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。", "code_locs": [], "conclusion_level": "candidate", "event_ids": [], "evidence_kind": "manifest_permission", "note": "清单里请求了该权限。是否『必要』需要人工复核，本工具只指出需要复核。", "package": "com.vscanner.targetapp", "permission": "android.car.permission.CAR_ENGINE_DETAILED", "predicate": "manifest_permission_requires_necessity_review", "rule_enabled": true, "rule_id": "VSC-P005", "rule_revision": 1, "rule_type": "over_permission", "severity": "low"}, {"code_loc_note": "清单声明的权限无运行时栈可指；本条证据是 MANIFEST 本身。", "code_locs": [], "conclusion_level": "candidate", "event_ids": [], "evidence_kind": "manifest_permission", "note": "清单里请求了该权限。是否『必要』需要人工复核，本工具只指出需要复核。", "package": "com.vscanner.targetapp", "permission": "android.car.permission.CAR_ENERGY", "predicate": "manifest_permission_requires_necessity_review", "rule_enabled": true, "rule_id": "VSC-P006", "rule_revision": 1, "rule_type": "over_permission", "severity": "low"}, {"code_locs": [{"chain": ["com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)", "com.vscanner.targetapp.VhalReader.readAll(VhalReader.kt:105)", "com.vscanner.targetapp.MainActivity.doRead$lambda$9(MainActivity.kt:118)", "com.vscanner.targetapp.MainActivity.$r8$lambda$QaUb4dwx378mAQV5JYf1oDfmltE(Unknown Source:0)", "com.vscanner.targetapp.MainActivity$$ExternalSyntheticLambda6.invoke(D8$$SyntheticClass:0)"], "chain_with_lines": ["com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)", "com.vscanner.targetapp.VhalReader.readAll(VhalReader.kt:105)", "com.vscanner.targetapp.MainActivity.doRead$lambda$9(MainActivity.kt:118)"], "class": "com.vscanner.targetapp.VhalReader", "event_id": 5, "file": "VhalReader.kt", "frame": "com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)", "line": 128, "method": "readOne", "note": null, "role": "read", "source": "app_process_stack"}], "conclusion_level": "observed", "event_ids": [5], "evidence_kind": "read_event", "note": "读取成功（outcome=ok）。被拒绝的读取不计入本条——那是另一个信号。", "package": "com.vscanner.targetapp", "predicate": "successful_property_value_read", "property": "GEAR_SELECTION", "read_count": 1, "rule_enabled": true, "rule_id": "VSC-R003", "rule_revision": 1, "rule_type": "sensitive_read", "severity": "medium"}, {"code_locs": [{"chain": ["com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)", "com.vscanner.targetapp.VhalReader.readAll(VhalReader.kt:105)", "com.vscanner.targetapp.MainActivity.doRead$lambda$9(MainActivity.kt:118)", "com.vscanner.targetapp.MainActivity.$r8$lambda$QaUb4dwx378mAQV5JYf1oDfmltE(Unknown Source:0)", "com.vscanner.targetapp.MainActivity$$ExternalSyntheticLambda6.invoke(D8$$SyntheticClass:0)"], "chain_with_lines": ["com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)", "com.vscanner.targetapp.VhalReader.readAll(VhalReader.kt:105)", "com.vscanner.targetapp.MainActivity.doRead$lambda$9(MainActivity.kt:118)"], "class": "com.vscanner.targetapp.VhalReader", "event_id": 6, "file": "VhalReader.kt", "frame": "com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)", "line": 128, "method": "readOne", "note": null, "role": "read", "source": "app_process_stack"}], "conclusion_level": "observed", "event_ids": [6], "evidence_kind": "read_event", "note": "读取成功（outcome=ok）。被拒绝的读取不计入本条——那是另一个信号。", "package": "com.vscanner.targetapp", "predicate": "successful_property_value_read", "property": "CURRENT_GEAR", "read_count": 1, "rule_enabled": true, "rule_id": "VSC-R004", "rule_revision": 1, "rule_type": "sensitive_read", "severity": "medium"}, {"code_locs": [{"chain": ["com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)", "com.vscanner.targetapp.VhalReader.readAll(VhalReader.kt:105)", "com.vscanner.targetapp.MainActivity.doRead$lambda$9(MainActivity.kt:118)", "com.vscanner.targetapp.MainActivity.$r8$lambda$QaUb4dwx378mAQV5JYf1oDfmltE(Unknown Source:0)", "com.vscanner.targetapp.MainActivity$$ExternalSyntheticLambda6.invoke(D8$$SyntheticClass:0)"], "chain_with_lines": ["com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)", "com.vscanner.targetapp.VhalReader.readAll(VhalReader.kt:105)", "com.vscanner.targetapp.MainActivity.doRead$lambda$9(MainActivity.kt:118)"], "class": "com.vscanner.targetapp.VhalReader", "event_id": 5, "file": "VhalReader.kt", "frame": "com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)", "line": 128, "method": "readOne", "note": null, "role": "read", "source": "app_process_stack"}, {"chain": ["com.vscanner.targetapp.EgressSender.doSend(EgressSender.kt:46)", "com.vscanner.targetapp.EgressSender.send$lambda$0(EgressSender.kt:27)", "com.vscanner.targetapp.EgressSender$$ExternalSyntheticLambda0.invoke(D8$$SyntheticClass:0)"], "chain_with_lines": ["com.vscanner.targetapp.EgressSender.doSend(EgressSender.kt:46)", "com.vscanner.targetapp.EgressSender.send$lambda$0(EgressSender.kt:27)"], "class": "com.vscanner.targetapp.EgressSender", "event_id": 3, "file": "EgressSender.kt", "frame": "com.vscanner.targetapp.EgressSender.doSend(EgressSender.kt:46)", "line": 46, "method": "doSend", "note": null, "role": "egress", "source": "app_process_stack"}], "conclusion_level": "correlated", "content_match": true, "event_ids": [5], "evidence_kind": "read_then_egress", "note": "结论上限为 correlated。时间相邻本身不构成外泄证据；content_match 为真说明报文里确实出现了该属性，但这是否构成违规仍需人工判定。", "package": "com.vscanner.targetapp", "pair_count": 1, "pairs": [{"client_tls": false, "content_match": true, "delta_ms": 12570, "flow_event_id": 1, "flow_host": "127.0.0.1", "flow_method": "POST", "flow_path": "/collect", "read_event_id": 5}], "predicate": "read_before_egress_within_window", "property": "GEAR_SELECTION", "rule_enabled": false, "rule_id": "VSC-E003", "rule_revision": 1, "rule_type": "data_egress", "severity": "medium", "window_declared_ms": 3000, "window_ms": 30000, "window_overridden": true}, {"code_locs": [{"chain": ["com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)", "com.vscanner.targetapp.VhalReader.readAll(VhalReader.kt:105)", "com.vscanner.targetapp.MainActivity.doRead$lambda$9(MainActivity.kt:118)", "com.vscanner.targetapp.MainActivity.$r8$lambda$QaUb4dwx378mAQV5JYf1oDfmltE(Unknown Source:0)", "com.vscanner.targetapp.MainActivity$$ExternalSyntheticLambda6.invoke(D8$$SyntheticClass:0)"], "chain_with_lines": ["com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)", "com.vscanner.targetapp.VhalReader.readAll(VhalReader.kt:105)", "com.vscanner.targetapp.MainActivity.doRead$lambda$9(MainActivity.kt:118)"], "class": "com.vscanner.targetapp.VhalReader", "event_id": 6, "file": "VhalReader.kt", "frame": "com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)", "line": 128, "method": "readOne", "note": null, "role": "read", "source": "app_process_stack"}, {"chain": ["com.vscanner.targetapp.EgressSender.doSend(EgressSender.kt:46)", "com.vscanner.targetapp.EgressSender.send$lambda$0(EgressSender.kt:27)", "com.vscanner.targetapp.EgressSender$$ExternalSyntheticLambda0.invoke(D8$$SyntheticClass:0)"], "chain_with_lines": ["com.vscanner.targetapp.EgressSender.doSend(EgressSender.kt:46)", "com.vscanner.targetapp.EgressSender.send$lambda$0(EgressSender.kt:27)"], "class": "com.vscanner.targetapp.EgressSender", "event_id": 3, "file": "EgressSender.kt", "frame": "com.vscanner.targetapp.EgressSender.doSend(EgressSender.kt:46)", "line": 46, "method": "doSend", "note": null, "role": "egress", "source": "app_process_stack"}], "conclusion_level": "correlated", "content_match": true, "event_ids": [6], "evidence_kind": "read_then_egress", "note": "结论上限为 correlated。时间相邻本身不构成外泄证据；content_match 为真说明报文里确实出现了该属性，但这是否构成违规仍需人工判定。", "package": "com.vscanner.targetapp", "pair_count": 1, "pairs": [{"client_tls": false, "content_match": true, "delta_ms": 12544, "flow_event_id": 1, "flow_host": "127.0.0.1", "flow_method": "POST", "flow_path": "/collect", "read_event_id": 6}], "predicate": "read_before_egress_within_window", "property": "CURRENT_GEAR", "rule_enabled": false, "rule_id": "VSC-E004", "rule_revision": 1, "rule_type": "data_egress", "severity": "medium", "window_declared_ms": 3000, "window_ms": 30000, "window_overridden": true}]};
+</script>
+<script>
+// ============================================================================
+// 仅用于授权测试（自有设备与自有 APK）/ For authorized testing on owned devices and APKs only.
+// V-Scanner Phase 6 — 看板的常量表与 DOM 小工具。
+//
+// 从 render.js 拆出来是因为它贴着 300 行的单文件上限。这半边是**静态配置**
+// （等级/类型/严重度的中文标签、状态色映射）和**与数据无关的 DOM 工具**
+// （建元素、徽章、悬浮提示）；render.js 那半边是"每个区块画什么"。
+// 两块改动的理由不同：换文案不动渲染，改渲染不动文案。
+//
+// 通过 window.VSCAN_UI 共享：内嵌脚本用经典 IIFE，不用 ES module——
+// Chrome 禁止从 file:// 加载 module 文件，看板必须双击即开。
+// ============================================================================
+'use strict';
+(function () {
+  var LEVELS = {
+    correlated: { label: '已关联', icon: '●', status: 's-critical',
+                  sub: '读取与外发在时间窗内，且内容匹配' },
+    observed: { label: '已观测', icon: '▲', status: 's-serious',
+                sub: '读取事实成立' },
+    candidate: { label: '候选', icon: '⚠', status: 's-warning',
+                 sub: '需人工复核' },
+  };
+  var LEVEL_ORDER = ['correlated', 'observed', 'candidate'];
+  var TYPE_LABEL = { over_permission: '过度索权', sensitive_read: '敏感读取', data_egress: '数据外发' };
+  var SEV_LABEL = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息', unrated: '未评级' };
+  var SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4, unrated: 5 };
+  var LOC_ROLE = { read: '读取处', egress: '外发处' };
+  var DEX = {
+    VERIFIED: { label: 'dex 已核对', status: 's-good' },
+    LINE_NOT_IN_METHOD: { label: '行号不在该方法', status: 's-warning' },
+    METHOD_NOT_FOUND: { label: '方法不存在', status: 's-warning' },
+    CLASS_NOT_FOUND: { label: '类不存在', status: 's-warning' },
+    DEX_UNAVAILABLE: { label: '未核对', status: 's-muted' },
+  };
+
+  var state = { levels: new Set(LEVEL_ORDER) };
+
+  var tip = document.createElement('div');
+  tip.className = 'tooltip';
+  document.body.appendChild(tip);
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = String(text);
+    return n;
+  }
+  function badge(status, icon, label, extraCls) {
+    var b = el('span', 'badge ' + status + (extraCls ? ' ' + extraCls : ''));
+    if (icon) b.appendChild(el('span', null, icon));
+    b.appendChild(el('span', null, label));
+    return b;
+  }
+  function tipRow(name, value) {
+    var d = el('div');
+    d.appendChild(el('div', 'tt-val', value));
+    d.appendChild(el('div', 'tt-name', name));
+    return d;
+  }
+  function showTip(htmlNodes, x, y) {
+    tip.textContent = '';
+    htmlNodes.forEach(function (n) { tip.appendChild(n); });
+    tip.style.display = 'block';
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = Math.min(x + 14, window.innerWidth - w - 8) + 'px';
+    tip.style.top = Math.min(y + 14, window.innerHeight - h - 8) + 'px';
+  }
+  function hideTip() { tip.style.display = 'none'; }
+  function bindTip(node, nodesBuilder) {
+    node.addEventListener('pointermove', function (e) { showTip(nodesBuilder(), e.clientX, e.clientY); });
+    node.addEventListener('pointerleave', hideTip);
+    node.tabIndex = 0;
+    node.addEventListener('focus', function () {
+      var r = node.getBoundingClientRect();
+      showTip(nodesBuilder(), r.left, r.bottom);
+    });
+    node.addEventListener('blur', hideTip);
+  }
+
+  window.VSCAN_UI = {
+    LEVELS: LEVELS, LEVEL_ORDER: LEVEL_ORDER, TYPE_LABEL: TYPE_LABEL,
+    SEV_LABEL: SEV_LABEL, SEV_ORDER: SEV_ORDER, LOC_ROLE: LOC_ROLE, DEX: DEX,
+    state: state,
+    el: el, badge: badge, tipRow: tipRow, showTip: showTip, hideTip: hideTip,
+    bindTip: bindTip,
+  };
+})();
+
+// ============================================================================
+// 仅用于授权测试（自有设备与自有 APK）/ For authorized testing on owned devices and APKs only.
+// V-Scanner Phase 6 — 预警看板各区块的渲染。
+//
+// 数据全部经 textContent 写入 DOM（结论里的包名、权限名、文件路径都是**不可信数据**），
+// 本文件里没有任何 innerHTML 赋值。看板是静态页，不发起网络请求。
+// 常量表与 DOM 小工具在 ui.js（window.VSCAN_UI）。
+// ============================================================================
+'use strict';
+(function () {
+  var DATA = window.VSCAN_DATA;
+  var U = window.VSCAN_UI;
+  if (!DATA || !U) return;
+  var LEVELS = U.LEVELS, LEVEL_ORDER = U.LEVEL_ORDER, TYPE_LABEL = U.TYPE_LABEL,
+      SEV_LABEL = U.SEV_LABEL, SEV_ORDER = U.SEV_ORDER, LOC_ROLE = U.LOC_ROLE, DEX = U.DEX,
+      state = U.state, el = U.el, badge = U.badge, tipRow = U.tipRow, bindTip = U.bindTip;
+
+  function sortedFindings() {
+    return DATA.findings.slice().sort(function (a, b) {
+      var dl = LEVEL_ORDER.indexOf(a.conclusion_level) - LEVEL_ORDER.indexOf(b.conclusion_level);
+      if (dl !== 0) return dl;
+      var ds = SEV_ORDER[a.severity || 'unrated'] - SEV_ORDER[b.severity || 'unrated'];
+      if (ds !== 0) return ds;
+      return String(a.rule_id).localeCompare(String(b.rule_id));
+    });
+  }
+  function slice() {
+    return sortedFindings().filter(function (f) { return state.levels.has(f.conclusion_level); });
+  }
+
+  function renderMeta() {
+    var row = document.getElementById('meta-row');
+    row.textContent = '';
+    var chips = [
+      ['受检包名', DATA.meta.package],
+      ['系统版本', DATA.meta.android_version],
+      ['规则库版本', (DATA.meta.rule_versions || []).join(', ')],
+      ['规则库 SHA-256', (DATA.meta.rules_sha256 || '未提供').slice(0, 32) + '…'],
+      ['规则总数 / 已启用', DATA.meta.rules_total + ' / ' + DATA.meta.rules_enabled],
+      ['输入规模', '读取 ' + DATA.meta.inputs.reads + ' · 出站 ' + DATA.meta.inputs.egress_connections +
+                   ' · 流 ' + DATA.meta.inputs.proxy_flows +
+                   ' · 清单权限 ' + DATA.meta.inputs.requested_permissions],
+    ];
+    chips.forEach(function (pair) {
+      var c = el('span', 'meta-chip');
+      c.appendChild(el('b', null, pair[0] + ' '));
+      c.appendChild(document.createTextNode(pair[1]));
+      row.appendChild(c);
+    });
+  }
+
+  function renderFilters() {
+    var row = document.getElementById('filter-row');
+    row.textContent = '';
+    row.appendChild(el('span', 'filter-label', '结论等级'));
+    var counts = {};
+    DATA.findings.forEach(function (f) { counts[f.conclusion_level] = (counts[f.conclusion_level] || 0) + 1; });
+    LEVEL_ORDER.forEach(function (lv) {
+      var b = el('button', 'chip', LEVELS[lv].icon + ' ' + LEVELS[lv].label + ' ' + (counts[lv] || 0));
+      b.type = 'button';
+      b.classList.add(state.levels.has(lv) ? 'on' : 'off');
+      b.addEventListener('click', function () {
+        if (state.levels.has(lv)) { state.levels.delete(lv); } else { state.levels.add(lv); }
+        renderAll();
+      });
+      row.appendChild(b);
+    });
+  }
+
+  function renderKpi() {
+    var row = document.getElementById('kpi-row');
+    row.textContent = '';
+    var counts = {};
+    DATA.findings.forEach(function (f) { counts[f.conclusion_level] = (counts[f.conclusion_level] || 0) + 1; });
+    var tiles = [['结论总数', DATA.findings.length, DATA.meta.package + ' · ' + DATA.meta.rule_versions.join(', '), null]];
+    LEVEL_ORDER.forEach(function (lv) { tiles.push([LEVELS[lv].label, counts[lv] || 0, LEVELS[lv].sub, lv]); });
+    tiles.forEach(function (t) {
+      var tile = el('div', 'tile' + (t[3] && !state.levels.has(t[3]) ? ' ghosted' : ''));
+      tile.appendChild(el('div', 'label', t[0]));
+      tile.appendChild(el('div', 'value', t[1]));
+      tile.appendChild(el('div', 'sub', t[2]));
+      row.appendChild(tile);
+    });
+  }
+
+  function renderDist() {
+    var chart = document.getElementById('dist-chart');
+    var legend = document.getElementById('dist-legend');
+    chart.textContent = '';
+    legend.textContent = '';
+    var counts = {};
+    var total = 0;
+    DATA.findings.forEach(function (f) { counts[f.conclusion_level] = (counts[f.conclusion_level] || 0) + 1; total++; });
+    if (!total) { chart.appendChild(el('div', 'empty-note', '本轮无结论')); return; }
+    LEVEL_ORDER.forEach(function (lv) {
+      var n = counts[lv] || 0;
+      if (!n) return;
+      var seg = el('div', 'dist-seg' + (state.levels.size === 1 && !state.levels.has(lv) ? ' ghost' : ''));
+      seg.style.width = (n / total * 100) + '%';
+      seg.style.background = 'var(--status-' + LEVELS[lv].status.slice(2) + ')';
+      if (n / total * 100 >= 14) {
+        // 段内标签按填充亮度取白或黑（palette.md 的唯一例外条款）：
+        // critical 红上必须用白，serious/warning 浅色上用黑
+        var lb = el('span', 'in-label', n);
+        lb.style.color = (lv === 'correlated') ? '#ffffff' : '#0b0b0b';
+        seg.appendChild(lb);
+      }
+      seg.setAttribute('aria-label', LEVELS[lv].label + ' ' + n + ' 条');
+      bindTip(seg, function () { return [tipRow(LEVELS[lv].label + '（共 ' + total + ' 条）', String(n) + ' 条')]; });
+      chart.appendChild(seg);
+      var item = el('div', 'legend-item' + (state.levels.size === 1 && !state.levels.has(lv) ? ' ghost' : ''));
+      item.appendChild(el('span', 'swatch', null));
+      item.querySelector('.swatch').style.background = 'var(--status-' + LEVELS[lv].status.slice(2) + ')';
+      item.appendChild(el('span', null, LEVELS[lv].icon + ' ' + LEVELS[lv].label + ' ' + n + ' 条'));
+      legend.appendChild(item);
+    });
+  }
+
+  function renderChains() {
+    var card = document.getElementById('chain-card');
+    var list = document.getElementById('chain-list');
+    list.textContent = '';
+    var chains = slice().filter(function (f) { return f.rule_type === 'data_egress'; });
+    card.hidden = chains.length === 0;
+    chains.forEach(function (f) {
+      var item = el('div', 'chain-item');
+      var head = el('div', 'chain-head');
+      head.appendChild(el('b', null, f.rule_id));
+      head.appendChild(el('span', 'muted small', ' · ' + TYPE_LABEL[f.rule_type] +
+        ' · ' + (f.property || f.permission || '') +
+        ' · 严重度 ' + (SEV_LABEL[f.severity] || f.severity)));
+      if (!f.rule_enabled) head.appendChild(badge('s-muted', '⚪', '规则未启用（草案）', 'small'));
+      head.appendChild(document.createTextNode(' '));
+      head.appendChild(badge(LEVELS[f.conclusion_level].status, LEVELS[f.conclusion_level].icon,
+                             LEVELS[f.conclusion_level].label, 'small'));
+      item.appendChild(head);
+      (f.pairs || []).forEach(function (p) {
+        var row = el('div', 'pair-row');
+        var win = f.window_ms || 1;
+        var label = el('div', 'pair-label');
+        label.appendChild(el('span', null, '读取 #' + p.read_event_id + ' → 流 #' + p.flow_event_id));
+        label.appendChild(el('span', 'ok', (p.content_match ? '✓' : '✗') + ' 内容匹配 ' + (p.content_match ? '是' : '否')));
+        label.appendChild(el('span', null, 'TLS 拦截 ' + (p.client_tls ? '是' : '否')));
+        row.appendChild(label);
+        var meter = el('div', 'meter');
+        meter.setAttribute('role', 'img');
+        meter.setAttribute('aria-label', '外发间隔 ' + p.delta_ms + ' 毫秒，时间窗 ' + win + ' 毫秒');
+        var fill = el('div', 'fill');
+        fill.style.width = Math.min(p.delta_ms / win * 100, 100) + '%';
+        meter.appendChild(fill);
+        if (p.delta_ms / win * 100 >= 12) {
+          var tipEl = el('span', 'tip', p.delta_ms + ' ms');
+          tipEl.style.left = Math.min(p.delta_ms / win * 100, 100) + '%';
+          meter.appendChild(tipEl);
+        }
+        bindTip(meter, function () {
+          return [tipRow(p.delta_ms + ' ms', '读取 #' + p.read_event_id + ' → 流 #' + p.flow_event_id),
+                  tipRow(p.content_match ? '是' : '否', '内容匹配'),
+                  tipRow(p.client_tls ? '是' : '否', 'TLS 拦截'),
+                  tipRow(p.flow_method + ' ' + p.flow_host + p.flow_path, '目标')];
+        });
+        row.appendChild(meter);
+        var meta = el('div', 'pair-meta');
+        meta.textContent = '时间窗 ' + win + ' ms' +
+          (f.window_overridden ? '（规则声明 ' + f.window_declared_ms + ' ms，分析时用实测校准值覆盖）' : '');
+        row.appendChild(meta);
+        item.appendChild(row);
+      });
+      list.appendChild(item);
+    });
+  }
+
+  function dexBadgeFor(ruleId, role) {
+    if (!DATA.verify || !DATA.verify.details) return null;
+    var d = DATA.verify.details.find(function (x) { return x.rule_id === ruleId && x.role === role; });
+    if (!d) return null;
+    var spec = DEX[d.status] || { label: d.status, status: 's-muted' };
+    return badge(spec.status, d.status === 'VERIFIED' ? '✓' : '⚠', spec.label, 'small');
+  }
+
+  function renderFindings() {
+    var table = document.getElementById('findings-table');
+    table.textContent = '';
+    var list = slice();
+    if (!list.length) { table.appendChild(el('div', 'empty-note', '当前筛选下无结论')); return; }
+    var t = el('table', 'findings');
+    var thead = el('tr');
+    ['规则', '结论', '类型', '严重度', '权限 / 属性', '代码位置', '证据'].forEach(function (h) {
+      thead.appendChild(el('th', null, h));
+    });
+    t.appendChild(thead);
+    list.forEach(function (f) {
+      var tr = el('tr');
+      var ruleCell = el('td', 'rule-cell');
+      ruleCell.appendChild(el('span', 'rule-id', f.rule_id));
+      ruleCell.appendChild(el('span', 'rev', ' v' + f.rule_revision));
+      if (!f.rule_enabled) ruleCell.appendChild(el('div', 'small muted', '规则未启用'));
+      tr.appendChild(ruleCell);
+      var lv = LEVELS[f.conclusion_level] || { label: f.conclusion_level, icon: '', status: 's-muted' };
+      tr.appendChild(el('td', null)).appendChild(badge(lv.status, lv.icon, lv.label));
+      tr.appendChild(el('td', null, TYPE_LABEL[f.rule_type] || f.rule_type));
+      tr.appendChild(el('td', null, SEV_LABEL[f.severity] || f.severity));
+      tr.appendChild(el('td', null, f.permission || f.property || '—'));
+      var locCell = el('td');
+      var locs = (f.code_locs || []).filter(function (l) { return l.line; });
+      locs.forEach(function (loc) {
+        var line = el('div', 'loc-line');
+        line.appendChild(el('span', null, (LOC_ROLE[loc.role] || loc.role) + ' '));
+        line.appendChild(el('span', 'file', loc.file + ':' + loc.line));
+        line.appendChild(el('span', ' muted', ' ' + loc.class.split('.').pop() + '.' + loc.method));
+        var d = dexBadgeFor(f.rule_id, loc.role);
+        if (d) { line.appendChild(document.createTextNode(' ')); line.appendChild(d); }
+        locCell.appendChild(line);
+      });
+      (f.code_loc_gaps || []).forEach(function (g) {
+        locCell.appendChild(el('div', 'gap-line', '⚠ 定位缺口：' + g.reason));
+      });
+      if (!locs.length && f.code_loc_note && f.evidence_kind !== 'manifest_permission') {
+        locCell.appendChild(el('div', 'muted small', f.code_loc_note));
+      }
+      if (!locCell.childNodes.length) locCell.appendChild(el('span', 'muted', '—'));
+      tr.appendChild(locCell);
+      var evCell = el('td');
+      if (f.rule_type === 'data_egress') {
+        evCell.appendChild(el('div', null, '读取→外发 ' + (f.pair_count || 0) + ' 对'));
+      } else if ((f.event_ids || []).length) {
+        evCell.appendChild(el('div', null, '事件 #' + f.event_ids.join(', #')));
+      } else {
+        evCell.appendChild(el('span', 'muted', '清单权限'));
+      }
+      tr.appendChild(evCell);
+      t.appendChild(tr);
+    });
+    table.appendChild(t);
+  }
+
+  function renderBoundary() {
+    var list = document.getElementById('boundary-list');
+    list.textContent = '';
+    var bullets = [];
+    if (DATA.summary.caveat) bullets.push(DATA.summary.caveat);
+    if (DATA.verify && DATA.verify.caveat) bullets.push('代码位置核对：' + DATA.verify.caveat);
+    bullets = bullets.concat([
+      '时间相邻本身不构成外泄证据；只有 content_match 为真，才说明外发报文中确实出现了被读取的属性。',
+      '包名归因依赖时间配对（容差 2000ms）；多应用同时外发时可能配错——错误归因比没有归因更糟。',
+      '覆盖范围限于 Java 层；native TLS 与非 HTTP 协议（MQTT/gRPC/QUIC）只能按“主机+时序+属性值指纹”弱匹配。',
+      '代码位置 ≠ 违规判定：dex 核对只证明该行号属于该方法，不证明该行就是违规语义所在。',
+      '本看板不产出 policy_violation。是否构成违规是政策判定，需人工完成。',
+    ]);
+    bullets.forEach(function (b) { list.appendChild(el('div', null, '· ' + b)); });
+  }
+
+  function renderAll() {
+    renderFilters();
+    renderKpi();
+    renderDist();
+    renderChains();
+    renderFindings();
+  }
+
+  renderMeta();
+  renderAll();
+  renderBoundary();
+
+  var toggle = document.getElementById('theme-toggle');
+  function effDark() {
+    var root = document.documentElement;
+    return root.dataset.theme === 'dark' ||
+      (!root.dataset.theme && window.matchMedia &&
+       window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }
+  // 按钮显示的是**当前**深浅，点击切到另一套（显式 data-theme 压过系统偏好）
+  toggle.textContent = effDark() ? '浅色' : '深色';
+  toggle.addEventListener('click', function () {
+    var root = document.documentElement;
+    if (effDark()) { root.dataset.theme = 'light'; toggle.textContent = '深色'; }
+    else { root.dataset.theme = 'dark'; toggle.textContent = '浅色'; }
+  });
+})();
+
+</script>
+</body>
+</html>

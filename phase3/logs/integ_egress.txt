@@ -1,0 +1,11 @@
+[egress] START DEVICE_WRITE_DENIED
+[egress] ARMED DEVICE_WRITE_DENIED
+[egress] ARMED in com.vscanner.targetapp (2 overloads)
+attached pid 31724; collecting for 50s -> ..\phase4\logs\egress_events.jsonl
+[egress] EGRESS_CONNECT DEVICE_WRITE_DENIED
+[egress] EGRESS_CONNECT DEVICE_WRITE_DENIED
+
+collected 4 JSONL records
+      1  ARMED
+      2  EGRESS_CONNECT
+      1  START

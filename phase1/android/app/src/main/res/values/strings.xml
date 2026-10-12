@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">V-Scanner 规则库验证</string>
+    <string name="title">V-Scanner 规则库验证</string>
+    <string name="running">正在校验 assets/rules.db …</string>
+</resources>

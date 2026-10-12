@@ -1,0 +1,10 @@
+{
+  "package": "com.vscanner.targetapp",
+  "abi": "x86_64",
+  "port": 27044,
+  "gadget_sha256": "3b828b8fe5d97be4aeda0ae2e029fb2309343aea3db1a112459330e6b2e1a123",
+  "source": "E:\\vs_all\\\u5168\u5c40\\vscanner-phase1-seeds(1)\\phase3\\gadget-cache\\17.18.0-x86_64.so",
+  "build": "gradlew :app:assembleGadget",
+  "device_test": "passed",
+  "device_evidence": "output/gadget-20260924-174538/verification.json"
+}

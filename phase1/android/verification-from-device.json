@@ -1,0 +1,54 @@
+{
+  "state": "OK",
+  "stateLabel": "读取成功",
+  "reason": "预置规则库与基线一致（SHA-256 匹配，四表条数符合预期）",
+  "sha256": {
+    "actual": "4b80cb77fb38530b96972f66b663cbd6ff1860309fcacec525e422a5aac82255",
+    "expected": "4b80cb77fb38530b96972f66b663cbd6ff1860309fcacec525e422a5aac82255",
+    "match": true
+  },
+  "counts": {
+    "14": {
+      "permissions": 6,
+      "vhal_properties": 8,
+      "dangerous_apis": 3,
+      "risk_rules": 22,
+      "enabled_rules": 14,
+      "total": 39
+    },
+    "15": {
+      "permissions": 146,
+      "vhal_properties": 8,
+      "dangerous_apis": 3,
+      "risk_rules": 22,
+      "enabled_rules": 14,
+      "total": 179
+    }
+  },
+  "expected": {
+    "14": {
+      "permissions": 6,
+      "vhal_properties": 8,
+      "dangerous_apis": 3,
+      "risk_rules": 22,
+      "enabled_rules": 14,
+      "total": 39
+    },
+    "15": {
+      "permissions": 146,
+      "vhal_properties": 8,
+      "dangerous_apis": 3,
+      "risk_rules": 22,
+      "enabled_rules": 14,
+      "total": 179
+    }
+  },
+  "deviceApiLevel": 35,
+  "sourceTag": "14=AOSP android-14.0.0_r1 \/ 15=设备实测 API 35",
+  "elapsedMs": 3173,
+  "error": {
+    "class": null,
+    "message": null,
+    "causes": []
+  }
+}

@@ -1,0 +1,184 @@
+10:19:53.518  Activity 启动: package=com.vscanner.targetapp uid=1010250
+10:19:53.622  事件文件: /data/user/10/com.vscanner.targetapp/files/vscanner_events.log 与 getExternalFilesDir 同名文件
+10:32:26.111  用户按下按钮 2（读取 VHAL）
+10:32:26.220  == VHAL 读取开始（8 属性）==
+10:32:26.362  Car.createCar 返回: android.car.Car@6bb4577
+10:32:26.371  Car.isConnected = true
+10:32:26.492  getCarManager(Car.PROPERTY_SERVICE) = android.car.hardware.property.CarPropertyManager
+10:32:26.496  读取 INFO_VIN (id=286261504, STRING, 需 android.car.permission.CAR_IDENTIFICATION) …
+10:32:26.640    → DENIED INFO_VIN: SecurityException: Platform does not have permission to read value for property ID: INFO_VIN
+10:32:26.659  读取 PERF_VEHICLE_SPEED (id=291504647, FLOAT, 需 android.car.permission.CAR_SPEED) …
+10:32:26.757    → DENIED PERF_VEHICLE_SPEED: SecurityException: Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED
+10:32:26.759  读取 GEAR_SELECTION (id=289408000, INT32, 需 android.car.permission.CAR_POWERTRAIN) …
+10:32:26.927    → SUCCESS GEAR_SELECTION = 4 (status=0)
+10:32:26.929  读取 CURRENT_GEAR (id=289408001, INT32, 需 android.car.permission.CAR_POWERTRAIN) …
+10:32:26.969    → SUCCESS CURRENT_GEAR = 4 (status=0)
+10:32:26.972  读取 PERF_ODOMETER (id=291504644, FLOAT, 需 android.car.permission.CAR_MILEAGE) …
+10:32:27.000    → DENIED PERF_ODOMETER: SecurityException: Platform does not have permission to read value for property ID: PERF_ODOMETER
+10:32:27.001  读取 ENGINE_RPM (id=291504901, FLOAT, 需 android.car.permission.CAR_ENGINE_DETAILED) …
+10:32:27.008    → DENIED ENGINE_RPM: SecurityException: Platform does not have permission to read value for property ID: ENGINE_RPM
+10:32:27.012  读取 FUEL_LEVEL (id=291504903, FLOAT, 需 android.car.permission.CAR_ENERGY) …
+10:32:27.043    → DENIED FUEL_LEVEL: SecurityException: Platform does not have permission to read value for property ID: FUEL_LEVEL
+10:32:27.045  读取 EV_BATTERY_LEVEL (id=291504905, FLOAT, 需 android.car.permission.CAR_ENERGY) …
+10:32:27.053    → DENIED EV_BATTERY_LEVEL: SecurityException: Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL
+10:32:27.057  交叉读取 PERF_VEHICLE_SPEED via getFloatProperty …
+10:32:27.094    → getFloatProperty(PERF_VEHICLE_SPEED) DENIED: SecurityException: Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED
+10:32:27.096  交叉读取 PERF_ODOMETER via getFloatProperty …
+10:32:27.124    → getFloatProperty(PERF_ODOMETER) DENIED: SecurityException: Platform does not have permission to read value for property ID: PERF_ODOMETER
+10:32:27.125  交叉读取 ENGINE_RPM via getFloatProperty …
+10:32:27.140    → getFloatProperty(ENGINE_RPM) DENIED: SecurityException: Platform does not have permission to read value for property ID: ENGINE_RPM
+10:32:27.143  交叉读取 FUEL_LEVEL via getFloatProperty …
+10:32:27.187    → getFloatProperty(FUEL_LEVEL) DENIED: SecurityException: Platform does not have permission to read value for property ID: FUEL_LEVEL
+10:32:27.203  交叉读取 EV_BATTERY_LEVEL via getFloatProperty …
+10:32:27.249    → getFloatProperty(EV_BATTERY_LEVEL) DENIED: SecurityException: Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL
+10:32:27.302  Car.disconnect() 已调用
+10:32:27.304  == VHAL 读取结束：8 条结果 ==
+10:32:32.333  用户按下按钮 2（读取 VHAL）
+10:32:32.391  == VHAL 读取开始（8 属性）==
+10:32:32.473  Car.createCar 返回: android.car.Car@3defe0e
+10:32:32.476  Car.isConnected = true
+10:32:32.514  getCarManager(Car.PROPERTY_SERVICE) = android.car.hardware.property.CarPropertyManager
+10:32:32.516  读取 INFO_VIN (id=286261504, STRING, 需 android.car.permission.CAR_IDENTIFICATION) …
+10:32:32.535    → DENIED INFO_VIN: SecurityException: Platform does not have permission to read value for property ID: INFO_VIN
+10:32:32.538  读取 PERF_VEHICLE_SPEED (id=291504647, FLOAT, 需 android.car.permission.CAR_SPEED) …
+10:32:32.600    → DENIED PERF_VEHICLE_SPEED: SecurityException: Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED
+10:32:32.623  读取 GEAR_SELECTION (id=289408000, INT32, 需 android.car.permission.CAR_POWERTRAIN) …
+10:32:32.709    → SUCCESS GEAR_SELECTION = 4 (status=0)
+10:32:32.712  读取 CURRENT_GEAR (id=289408001, INT32, 需 android.car.permission.CAR_POWERTRAIN) …
+10:32:32.816    → SUCCESS CURRENT_GEAR = 4 (status=0)
+10:32:32.818  读取 PERF_ODOMETER (id=291504644, FLOAT, 需 android.car.permission.CAR_MILEAGE) …
+10:32:32.825    → DENIED PERF_ODOMETER: SecurityException: Platform does not have permission to read value for property ID: PERF_ODOMETER
+10:32:32.827  读取 ENGINE_RPM (id=291504901, FLOAT, 需 android.car.permission.CAR_ENGINE_DETAILED) …
+10:32:32.863    → DENIED ENGINE_RPM: SecurityException: Platform does not have permission to read value for property ID: ENGINE_RPM
+10:32:32.866  读取 FUEL_LEVEL (id=291504903, FLOAT, 需 android.car.permission.CAR_ENERGY) …
+10:32:32.944    → DENIED FUEL_LEVEL: SecurityException: Platform does not have permission to read value for property ID: FUEL_LEVEL
+10:32:32.950  读取 EV_BATTERY_LEVEL (id=291504905, FLOAT, 需 android.car.permission.CAR_ENERGY) …
+10:32:32.975    → DENIED EV_BATTERY_LEVEL: SecurityException: Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL
+10:32:32.983  交叉读取 PERF_VEHICLE_SPEED via getFloatProperty …
+10:32:33.062    → getFloatProperty(PERF_VEHICLE_SPEED) DENIED: SecurityException: Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED
+10:32:33.064  交叉读取 PERF_ODOMETER via getFloatProperty …
+10:32:33.101    → getFloatProperty(PERF_ODOMETER) DENIED: SecurityException: Platform does not have permission to read value for property ID: PERF_ODOMETER
+10:32:33.103  交叉读取 ENGINE_RPM via getFloatProperty …
+10:32:33.213    → getFloatProperty(ENGINE_RPM) DENIED: SecurityException: Platform does not have permission to read value for property ID: ENGINE_RPM
+10:32:33.216  交叉读取 FUEL_LEVEL via getFloatProperty …
+10:32:33.352    → getFloatProperty(FUEL_LEVEL) DENIED: SecurityException: Platform does not have permission to read value for property ID: FUEL_LEVEL
+10:32:33.354  交叉读取 EV_BATTERY_LEVEL via getFloatProperty …
+10:32:33.423    → getFloatProperty(EV_BATTERY_LEVEL) DENIED: SecurityException: Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL
+10:32:33.472  Car.disconnect() 已调用
+10:32:33.474  == VHAL 读取结束：8 条结果 ==
+11:41:54.541  用户按下外泄按钮，端点=http://10.0.2.2:8080/collect
+11:41:54.581  == 数据外泄开始: POST http://10.0.2.2:8080/collect（8 条读取结果）==
+11:41:54.698  外泄 payload: {"event":"vhal_reads_egress","package":"com.vscanner.targetapp","app":"VSCTarget test fixture","note":"authorized test on owned device and owned APK only","sentAtUtcMs":1789990914582,"reads":[{"property":"INFO_VIN","propertyId":286261504,"valueType":"STRING","requiredPermission":"android.car.permission.CAR_IDENTIFICATION","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: INFO_VIN","readAtUtcMs":1789986752516},{"property":"PERF_VEHICLE_SPEED","propertyId":291504647,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_SPEED","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED","readAtUtcMs":1789986752538},{"property":"GEAR_SELECTION","propertyId":289408000,"valueType":"INT32","requiredPermission":"android.car.permission.CAR_POWERTRAIN","result":"ok","value":"4","readAtUtcMs":1789986752623},{"property":"CURRENT_GEAR","propertyId":289408001,"valueType":"INT32","requiredPermission":"android.car.permission.CAR_POWERTRAIN","result":"ok","value":"4","readAtUtcMs":1789986752712},{"property":"PERF_ODOMETER","propertyId":291504644,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_MILEAGE","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: PERF_ODOMETER","readAtUtcMs":1789986752818},{"property":"ENGINE_RPM","propertyId":291504901,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENGINE_DETAILED","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: ENGINE_RPM","readAtUtcMs":1789986752827},{"property":"FUEL_LEVEL","propertyId":291504903,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENERGY","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: FUEL_LEVEL","readAtUtcMs":1789986752866},{"property":"EV_BATTERY_LEVEL","propertyId":291504905,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENERGY","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL","readAtUtcMs":1789986752950}]}
+11:42:00.776  用户按下外泄按钮，端点=https://10.0.2.2:8443/collect
+11:42:00.779  == 数据外泄开始: POST https://10.0.2.2:8443/collect（8 条读取结果）==
+11:42:00.787  外泄 payload: {"event":"vhal_reads_egress","package":"com.vscanner.targetapp","app":"VSCTarget test fixture","note":"authorized test on owned device and owned APK only","sentAtUtcMs":1789990920780,"reads":[{"property":"INFO_VIN","propertyId":286261504,"valueType":"STRING","requiredPermission":"android.car.permission.CAR_IDENTIFICATION","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: INFO_VIN","readAtUtcMs":1789986752516},{"property":"PERF_VEHICLE_SPEED","propertyId":291504647,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_SPEED","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED","readAtUtcMs":1789986752538},{"property":"GEAR_SELECTION","propertyId":289408000,"valueType":"INT32","requiredPermission":"android.car.permission.CAR_POWERTRAIN","result":"ok","value":"4","readAtUtcMs":1789986752623},{"property":"CURRENT_GEAR","propertyId":289408001,"valueType":"INT32","requiredPermission":"android.car.permission.CAR_POWERTRAIN","result":"ok","value":"4","readAtUtcMs":1789986752712},{"property":"PERF_ODOMETER","propertyId":291504644,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_MILEAGE","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: PERF_ODOMETER","readAtUtcMs":1789986752818},{"property":"ENGINE_RPM","propertyId":291504901,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENGINE_DETAILED","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: ENGINE_RPM","readAtUtcMs":1789986752827},{"property":"FUEL_LEVEL","propertyId":291504903,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENERGY","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: FUEL_LEVEL","readAtUtcMs":1789986752866},{"property":"EV_BATTERY_LEVEL","propertyId":291504905,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENERGY","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL","readAtUtcMs":1789986752950}]}
+11:42:05.756  外泄失败: java.net.SocketTimeoutException: timeout
+11:42:05.757  == 数据外泄结束 ==
+11:42:05.760  外泄摘要: java.net.SocketTimeoutException: timeout
+11:42:09.084  用户按下外泄按钮，端点=https://10.0.2.2:8443/collect
+11:42:09.088  == 数据外泄开始: POST https://10.0.2.2:8443/collect（8 条读取结果）==
+11:42:09.115  外泄 payload: {"event":"vhal_reads_egress","package":"com.vscanner.targetapp","app":"VSCTarget test fixture","note":"authorized test on owned device and owned APK only","sentAtUtcMs":1789990929100,"reads":[{"property":"INFO_VIN","propertyId":286261504,"valueType":"STRING","requiredPermission":"android.car.permission.CAR_IDENTIFICATION","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: INFO_VIN","readAtUtcMs":1789986752516},{"property":"PERF_VEHICLE_SPEED","propertyId":291504647,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_SPEED","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED","readAtUtcMs":1789986752538},{"property":"GEAR_SELECTION","propertyId":289408000,"valueType":"INT32","requiredPermission":"android.car.permission.CAR_POWERTRAIN","result":"ok","value":"4","readAtUtcMs":1789986752623},{"property":"CURRENT_GEAR","propertyId":289408001,"valueType":"INT32","requiredPermission":"android.car.permission.CAR_POWERTRAIN","result":"ok","value":"4","readAtUtcMs":1789986752712},{"property":"PERF_ODOMETER","propertyId":291504644,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_MILEAGE","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: PERF_ODOMETER","readAtUtcMs":1789986752818},{"property":"ENGINE_RPM","propertyId":291504901,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENGINE_DETAILED","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: ENGINE_RPM","readAtUtcMs":1789986752827},{"property":"FUEL_LEVEL","propertyId":291504903,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENERGY","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: FUEL_LEVEL","readAtUtcMs":1789986752866},{"property":"EV_BATTERY_LEVEL","propertyId":291504905,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENERGY","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL","readAtUtcMs":1789986752950}]}
+11:42:20.860  外泄失败: java.net.SocketTimeoutException: failed to connect to /10.0.2.2 (port 8443) from /10.0.2.15 (port 40418) after 10000ms
+11:42:20.861  == 数据外泄结束 ==
+11:42:20.863  外泄摘要: java.net.SocketTimeoutException: failed to connect to /10.0.2.2 (port 8443) from /10.0.2.15 (port 40418) after 10000ms
+11:42:29.253  外泄失败: java.net.SocketTimeoutException: failed to connect to /10.0.2.2 (port 8443) from /10.0.2.15 (port 46262) after 10000ms
+11:42:29.265  == 数据外泄结束 ==
+11:42:29.276  外泄摘要: java.net.SocketTimeoutException: failed to connect to /10.0.2.2 (port 8443) from /10.0.2.15 (port 46262) after 10000ms
+11:51:38.224  Activity 启动: package=com.vscanner.targetapp uid=1010250
+11:51:38.240  事件文件: /data/user/10/com.vscanner.targetapp/files/vscanner_events.log 与 getExternalFilesDir 同名文件
+11:51:55.749  用户按下外泄按钮，端点=http://10.0.2.2:8080/collect
+11:51:55.751  WARN: 读取缓存为空 —— 先按「2. 读取 VHAL」再外泄（两个行为保持可分）
+11:52:02.675  用户按下外泄按钮，端点=https://10.0.2.2:8443/collect
+11:52:02.676  WARN: 读取缓存为空 —— 先按「2. 读取 VHAL」再外泄（两个行为保持可分）
+11:52:11.824  用户按下外泄按钮，端点=https://10.0.2.2:8443/collect
+11:52:11.825  WARN: 读取缓存为空 —— 先按「2. 读取 VHAL」再外泄（两个行为保持可分）
+11:54:01.541  用户按下按钮 2（读取 VHAL）
+11:54:01.552  == VHAL 读取开始（8 属性）==
+11:54:01.567  Car.createCar 返回: android.car.Car@dc93cb5
+11:54:01.568  Car.isConnected = true
+11:54:01.582  getCarManager(Car.PROPERTY_SERVICE) = android.car.hardware.property.CarPropertyManager
+11:54:01.583  读取 INFO_VIN (id=286261504, STRING, 需 android.car.permission.CAR_IDENTIFICATION) …
+11:54:01.616    → DENIED INFO_VIN: SecurityException: Platform does not have permission to read value for property ID: INFO_VIN
+11:54:01.618  读取 PERF_VEHICLE_SPEED (id=291504647, FLOAT, 需 android.car.permission.CAR_SPEED) …
+11:54:01.627    → DENIED PERF_VEHICLE_SPEED: SecurityException: Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED
+11:54:01.642  读取 GEAR_SELECTION (id=289408000, INT32, 需 android.car.permission.CAR_POWERTRAIN) …
+11:54:01.666    → SUCCESS GEAR_SELECTION = 4 (status=0)
+11:54:01.668  读取 CURRENT_GEAR (id=289408001, INT32, 需 android.car.permission.CAR_POWERTRAIN) …
+11:54:01.678    → SUCCESS CURRENT_GEAR = 4 (status=0)
+11:54:01.679  读取 PERF_ODOMETER (id=291504644, FLOAT, 需 android.car.permission.CAR_MILEAGE) …
+11:54:01.679    → DENIED PERF_ODOMETER: SecurityException: Platform does not have permission to read value for property ID: PERF_ODOMETER
+11:54:01.680  读取 ENGINE_RPM (id=291504901, FLOAT, 需 android.car.permission.CAR_ENGINE_DETAILED) …
+11:54:01.681    → DENIED ENGINE_RPM: SecurityException: Platform does not have permission to read value for property ID: ENGINE_RPM
+11:54:01.682  读取 FUEL_LEVEL (id=291504903, FLOAT, 需 android.car.permission.CAR_ENERGY) …
+11:54:01.684    → DENIED FUEL_LEVEL: SecurityException: Platform does not have permission to read value for property ID: FUEL_LEVEL
+11:54:01.685  读取 EV_BATTERY_LEVEL (id=291504905, FLOAT, 需 android.car.permission.CAR_ENERGY) …
+11:54:01.686    → DENIED EV_BATTERY_LEVEL: SecurityException: Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL
+11:54:01.687  交叉读取 PERF_VEHICLE_SPEED via getFloatProperty …
+11:54:01.689    → getFloatProperty(PERF_VEHICLE_SPEED) DENIED: SecurityException: Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED
+11:54:01.690  交叉读取 PERF_ODOMETER via getFloatProperty …
+11:54:01.691    → getFloatProperty(PERF_ODOMETER) DENIED: SecurityException: Platform does not have permission to read value for property ID: PERF_ODOMETER
+11:54:01.694  交叉读取 ENGINE_RPM via getFloatProperty …
+11:54:01.695    → getFloatProperty(ENGINE_RPM) DENIED: SecurityException: Platform does not have permission to read value for property ID: ENGINE_RPM
+11:54:01.695  交叉读取 FUEL_LEVEL via getFloatProperty …
+11:54:01.696    → getFloatProperty(FUEL_LEVEL) DENIED: SecurityException: Platform does not have permission to read value for property ID: FUEL_LEVEL
+11:54:01.696  交叉读取 EV_BATTERY_LEVEL via getFloatProperty …
+11:54:01.698    → getFloatProperty(EV_BATTERY_LEVEL) DENIED: SecurityException: Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL
+11:54:01.701  Car.disconnect() 已调用
+11:54:01.702  == VHAL 读取结束：8 条结果 ==
+11:54:08.740  用户按下外泄按钮，端点=http://10.0.2.2:8080/collect
+11:54:08.742  == 数据外泄开始: POST http://10.0.2.2:8080/collect（8 条读取结果）==
+11:54:08.751  外泄 payload: {"event":"vhal_reads_egress","package":"com.vscanner.targetapp","app":"VSCTarget test fixture","note":"authorized test on owned device and owned APK only","sentAtUtcMs":1789991648745,"reads":[{"property":"INFO_VIN","propertyId":286261504,"valueType":"STRING","requiredPermission":"android.car.permission.CAR_IDENTIFICATION","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: INFO_VIN","readAtUtcMs":1789991641583},{"property":"PERF_VEHICLE_SPEED","propertyId":291504647,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_SPEED","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED","readAtUtcMs":1789991641618},{"property":"GEAR_SELECTION","propertyId":289408000,"valueType":"INT32","requiredPermission":"android.car.permission.CAR_POWERTRAIN","result":"ok","value":"4","readAtUtcMs":1789991641642},{"property":"CURRENT_GEAR","propertyId":289408001,"valueType":"INT32","requiredPermission":"android.car.permission.CAR_POWERTRAIN","result":"ok","value":"4","readAtUtcMs":1789991641668},{"property":"PERF_ODOMETER","propertyId":291504644,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_MILEAGE","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: PERF_ODOMETER","readAtUtcMs":1789991641679},{"property":"ENGINE_RPM","propertyId":291504901,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENGINE_DETAILED","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: ENGINE_RPM","readAtUtcMs":1789991641680},{"property":"FUEL_LEVEL","propertyId":291504903,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENERGY","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: FUEL_LEVEL","readAtUtcMs":1789991641682},{"property":"EV_BATTERY_LEVEL","propertyId":291504905,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENERGY","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL","readAtUtcMs":1789991641685}]}
+11:54:16.873  用户按下外泄按钮，端点=https://10.0.2.2:8443/collect
+11:54:16.875  == 数据外泄开始: POST https://10.0.2.2:8443/collect（8 条读取结果）==
+11:54:16.879  外泄 payload: {"event":"vhal_reads_egress","package":"com.vscanner.targetapp","app":"VSCTarget test fixture","note":"authorized test on owned device and owned APK only","sentAtUtcMs":1789991656877,"reads":[{"property":"INFO_VIN","propertyId":286261504,"valueType":"STRING","requiredPermission":"android.car.permission.CAR_IDENTIFICATION","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: INFO_VIN","readAtUtcMs":1789991641583},{"property":"PERF_VEHICLE_SPEED","propertyId":291504647,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_SPEED","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED","readAtUtcMs":1789991641618},{"property":"GEAR_SELECTION","propertyId":289408000,"valueType":"INT32","requiredPermission":"android.car.permission.CAR_POWERTRAIN","result":"ok","value":"4","readAtUtcMs":1789991641642},{"property":"CURRENT_GEAR","propertyId":289408001,"valueType":"INT32","requiredPermission":"android.car.permission.CAR_POWERTRAIN","result":"ok","value":"4","readAtUtcMs":1789991641668},{"property":"PERF_ODOMETER","propertyId":291504644,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_MILEAGE","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: PERF_ODOMETER","readAtUtcMs":1789991641679},{"property":"ENGINE_RPM","propertyId":291504901,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENGINE_DETAILED","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: ENGINE_RPM","readAtUtcMs":1789991641680},{"property":"FUEL_LEVEL","propertyId":291504903,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENERGY","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: FUEL_LEVEL","readAtUtcMs":1789991641682},{"property":"EV_BATTERY_LEVEL","propertyId":291504905,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENERGY","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL","readAtUtcMs":1789991641685}]}
+11:54:19.088  外泄失败: java.net.SocketTimeoutException: timeout
+11:54:19.090  == 数据外泄结束 ==
+11:54:19.090  外泄摘要: java.net.SocketTimeoutException: timeout
+11:54:29.202  外泄失败: java.net.ConnectException: Failed to connect to /10.0.2.2:8443
+11:54:29.206  == 数据外泄结束 ==
+11:54:29.207  外泄摘要: java.net.ConnectException: Failed to connect to /10.0.2.2:8443
+11:58:23.810  用户按下按钮 2（读取 VHAL）
+11:58:23.812  == VHAL 读取开始（8 属性）==
+11:58:23.819  Car.createCar 返回: android.car.Car@9ea0628
+11:58:23.821  Car.isConnected = true
+11:58:23.823  getCarManager(Car.PROPERTY_SERVICE) = android.car.hardware.property.CarPropertyManager
+11:58:23.823  读取 INFO_VIN (id=286261504, STRING, 需 android.car.permission.CAR_IDENTIFICATION) …
+11:58:23.826    → DENIED INFO_VIN: SecurityException: Platform does not have permission to read value for property ID: INFO_VIN
+11:58:23.827  读取 PERF_VEHICLE_SPEED (id=291504647, FLOAT, 需 android.car.permission.CAR_SPEED) …
+11:58:23.828    → DENIED PERF_VEHICLE_SPEED: SecurityException: Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED
+11:58:23.829  读取 GEAR_SELECTION (id=289408000, INT32, 需 android.car.permission.CAR_POWERTRAIN) …
+11:58:23.833    → SUCCESS GEAR_SELECTION = 4 (status=0)
+11:58:23.834  读取 CURRENT_GEAR (id=289408001, INT32, 需 android.car.permission.CAR_POWERTRAIN) …
+11:58:23.845    → SUCCESS CURRENT_GEAR = 4 (status=0)
+11:58:23.846  读取 PERF_ODOMETER (id=291504644, FLOAT, 需 android.car.permission.CAR_MILEAGE) …
+11:58:23.848    → DENIED PERF_ODOMETER: SecurityException: Platform does not have permission to read value for property ID: PERF_ODOMETER
+11:58:23.848  读取 ENGINE_RPM (id=291504901, FLOAT, 需 android.car.permission.CAR_ENGINE_DETAILED) …
+11:58:23.849    → DENIED ENGINE_RPM: SecurityException: Platform does not have permission to read value for property ID: ENGINE_RPM
+11:58:23.850  读取 FUEL_LEVEL (id=291504903, FLOAT, 需 android.car.permission.CAR_ENERGY) …
+11:58:23.854    → DENIED FUEL_LEVEL: SecurityException: Platform does not have permission to read value for property ID: FUEL_LEVEL
+11:58:23.858  读取 EV_BATTERY_LEVEL (id=291504905, FLOAT, 需 android.car.permission.CAR_ENERGY) …
+11:58:23.860    → DENIED EV_BATTERY_LEVEL: SecurityException: Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL
+11:58:23.861  交叉读取 PERF_VEHICLE_SPEED via getFloatProperty …
+11:58:23.870    → getFloatProperty(PERF_VEHICLE_SPEED) DENIED: SecurityException: Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED
+11:58:23.871  交叉读取 PERF_ODOMETER via getFloatProperty …
+11:58:23.873    → getFloatProperty(PERF_ODOMETER) DENIED: SecurityException: Platform does not have permission to read value for property ID: PERF_ODOMETER
+11:58:23.874  交叉读取 ENGINE_RPM via getFloatProperty …
+11:58:23.875    → getFloatProperty(ENGINE_RPM) DENIED: SecurityException: Platform does not have permission to read value for property ID: ENGINE_RPM
+11:58:23.876  交叉读取 FUEL_LEVEL via getFloatProperty …
+11:58:23.877    → getFloatProperty(FUEL_LEVEL) DENIED: SecurityException: Platform does not have permission to read value for property ID: FUEL_LEVEL
+11:58:23.878  交叉读取 EV_BATTERY_LEVEL via getFloatProperty …
+11:58:23.887    → getFloatProperty(EV_BATTERY_LEVEL) DENIED: SecurityException: Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL
+11:58:23.889  Car.disconnect() 已调用
+11:58:23.893  == VHAL 读取结束：8 条结果 ==
+11:58:31.995  用户按下外泄按钮，端点=http://10.0.2.2:8080/collect
+11:58:31.996  == 数据外泄开始: POST http://10.0.2.2:8080/collect（8 条读取结果）==
+11:58:31.999  外泄 payload: {"event":"vhal_reads_egress","package":"com.vscanner.targetapp","app":"VSCTarget test fixture","note":"authorized test on owned device and owned APK only","sentAtUtcMs":1789991911998,"reads":[{"property":"INFO_VIN","propertyId":286261504,"valueType":"STRING","requiredPermission":"android.car.permission.CAR_IDENTIFICATION","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: INFO_VIN","readAtUtcMs":1789991903823},{"property":"PERF_VEHICLE_SPEED","propertyId":291504647,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_SPEED","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED","readAtUtcMs":1789991903827},{"property":"GEAR_SELECTION","propertyId":289408000,"valueType":"INT32","requiredPermission":"android.car.permission.CAR_POWERTRAIN","result":"ok","value":"4","readAtUtcMs":1789991903829},{"property":"CURRENT_GEAR","propertyId":289408001,"valueType":"INT32","requiredPermission":"android.car.permission.CAR_POWERTRAIN","result":"ok","value":"4","readAtUtcMs":1789991903834},{"property":"PERF_ODOMETER","propertyId":291504644,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_MILEAGE","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: PERF_ODOMETER","readAtUtcMs":1789991903846},{"property":"ENGINE_RPM","propertyId":291504901,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENGINE_DETAILED","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: ENGINE_RPM","readAtUtcMs":1789991903848},{"property":"FUEL_LEVEL","propertyId":291504903,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENERGY","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: FUEL_LEVEL","readAtUtcMs":1789991903850},{"property":"EV_BATTERY_LEVEL","propertyId":291504905,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENERGY","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL","readAtUtcMs":1789991903858}]}
+11:58:42.165  用户按下外泄按钮，端点=https://10.0.2.2:8443/collect
+11:58:42.167  == 数据外泄开始: POST https://10.0.2.2:8443/collect（8 条读取结果）==
+11:58:42.171  外泄 payload: {"event":"vhal_reads_egress","package":"com.vscanner.targetapp","app":"VSCTarget test fixture","note":"authorized test on owned device and owned APK only","sentAtUtcMs":1789991922169,"reads":[{"property":"INFO_VIN","propertyId":286261504,"valueType":"STRING","requiredPermission":"android.car.permission.CAR_IDENTIFICATION","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: INFO_VIN","readAtUtcMs":1789991903823},{"property":"PERF_VEHICLE_SPEED","propertyId":291504647,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_SPEED","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: PERF_VEHICLE_SPEED","readAtUtcMs":1789991903827},{"property":"GEAR_SELECTION","propertyId":289408000,"valueType":"INT32","requiredPermission":"android.car.permission.CAR_POWERTRAIN","result":"ok","value":"4","readAtUtcMs":1789991903829},{"property":"CURRENT_GEAR","propertyId":289408001,"valueType":"INT32","requiredPermission":"android.car.permission.CAR_POWERTRAIN","result":"ok","value":"4","readAtUtcMs":1789991903834},{"property":"PERF_ODOMETER","propertyId":291504644,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_MILEAGE","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: PERF_ODOMETER","readAtUtcMs":1789991903846},{"property":"ENGINE_RPM","propertyId":291504901,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENGINE_DETAILED","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: ENGINE_RPM","readAtUtcMs":1789991903848},{"property":"FUEL_LEVEL","propertyId":291504903,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENERGY","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: FUEL_LEVEL","readAtUtcMs":1789991903850},{"property":"EV_BATTERY_LEVEL","propertyId":291504905,"valueType":"FLOAT","requiredPermission":"android.car.permission.CAR_ENERGY","result":"denied","errorClass":"java.lang.SecurityException","errorMessage":"Platform does not have permission to read value for property ID: EV_BATTERY_LEVEL","readAtUtcMs":1789991903858}]}
+11:58:42.417  外泄失败: java.net.SocketTimeoutException: timeout
+11:58:42.420  == 数据外泄结束 ==
+11:58:42.422  外泄摘要: java.net.SocketTimeoutException: timeout
+11:58:54.476  外泄失败: java.net.ConnectException: Failed to connect to /10.0.2.2:8443
+11:58:54.477  == 数据外泄结束 ==
+11:58:54.477  外泄摘要: java.net.ConnectException: Failed to connect to /10.0.2.2:8443

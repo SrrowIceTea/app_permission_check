@@ -1,0 +1,75 @@
+{
+  "_comment": "隐私政策必备条款清单。依据：《个人信息保护法》第 17 条（法定告知事项）与《App违法违规收集使用个人信息行为认定方法》一、二类。check_kind 区分「可离线确定性检查」与「需语义研判」——text_present 用正则在政策文本上确定性判定；ai 交给 LLM 研判并强制引用原文；manual 需人工。**不把语义判断伪装成确定性检查。**",
+  "android_version": "36",
+  "requirements": [
+    {"req_id": "PP-01", "title": "隐私政策存在且可独立访问", "check_kind": "manual", "severity": "high",
+     "requirement": "App 内有隐私政策，且进入主界面后不超过 4 次点击即可访问。",
+     "basis": [{"doc": "yrd-method-2019", "clause": "C1.1"}, {"doc": "yrd-method-2019", "clause": "C1.3"}],
+     "check_spec": {"note": "需要 UI 路径验证；本工具只检查「是否取得政策文本」，点击深度由人工或 UI 自动化确认。"}},
+
+    {"req_id": "PP-02", "title": "隐私政策非空且篇幅合理", "check_kind": "text_present", "severity": "medium",
+     "requirement": "政策正文存在且长度达到可承载法定告知事项的量级。",
+     "basis": [{"doc": "yrd-method-2019", "clause": "C1.1"}],
+     "check_spec": {"min_chars": 500, "note": "阈值是工程下限，不是法规要求；低于阈值标 not_met 并说明。"}},
+
+    {"req_id": "PP-03", "title": "提供简体中文版", "check_kind": "text_present", "severity": "medium",
+     "requirement": "隐私政策提供简体中文版本。",
+     "basis": [{"doc": "yrd-method-2019", "clause": "C1.4"}],
+     "check_spec": {"min_cjk_ratio": 0.15, "note": "以 CJK 字符占比近似；只作为线索，最终以人工确认为准。"}},
+
+    {"req_id": "PP-04", "title": "载明处理者名称与联系方式", "check_kind": "ai", "severity": "high",
+     "requirement": "明示个人信息处理者的名称（或姓名）和联系方式。",
+     "basis": [{"doc": "pipl-2021", "clause": "17.1"}]},
+
+    {"req_id": "PP-05", "title": "载明处理目的、方式、种类与保存期限", "check_kind": "ai", "severity": "high",
+     "requirement": "逐项列明个人信息的处理目的、处理方式、信息种类与保存期限。",
+     "basis": [{"doc": "pipl-2021", "clause": "17.2"}, {"doc": "pipl-2021", "clause": "19"}]},
+
+    {"req_id": "PP-06", "title": "逐一列出收集的个人信息类型", "check_kind": "ai", "severity": "high",
+     "requirement": "逐一列出 App 收集使用的个人信息类型（含委托的第三方或嵌入的第三方代码、插件）。",
+     "basis": [{"doc": "yrd-method-2019", "clause": "C2.1"}]},
+
+    {"req_id": "PP-07", "title": "明示第三方 SDK / 共享接收方", "check_kind": "ai", "severity": "high",
+     "requirement": "列明接入的第三方 SDK 或共享接收方的名称、处理目的与信息种类。",
+     "basis": [{"doc": "yrd-method-2019", "clause": "C2.1"}, {"doc": "yrd-method-2019", "clause": "C5.1"}]},
+
+    {"req_id": "PP-08", "title": "载明用户权利及行使方式", "check_kind": "ai", "severity": "high",
+     "requirement": "载明查阅、复制、更正、删除、撤回同意、注销账号等权利的行使方式与程序。",
+     "basis": [{"doc": "pipl-2021", "clause": "17.3"}, {"doc": "yrd-method-2019", "clause": "C6.1"}]},
+
+    {"req_id": "PP-09", "title": "提供投诉举报渠道", "check_kind": "ai", "severity": "medium",
+     "requirement": "建立并公布个人信息安全投诉、举报渠道。",
+     "basis": [{"doc": "yrd-method-2019", "clause": "C6.5"}]},
+
+    {"req_id": "PP-10", "title": "敏感个人信息单独告知与单独同意", "check_kind": "ai", "severity": "high",
+     "requirement": "对敏感个人信息（行踪轨迹、生物识别、通讯录等）单独告知目的并取得单独同意。",
+     "basis": [{"doc": "pipl-2021", "clause": "29"}, {"doc": "yrd-method-2019", "clause": "C2.3"}]},
+
+    {"req_id": "PP-11", "title": "载明安全保护措施", "check_kind": "ai", "severity": "medium",
+     "requirement": "说明采取的加密、去标识化等安全技术措施。",
+     "basis": [{"doc": "pipl-2021", "clause": "51"}]},
+
+    {"req_id": "PP-12", "title": "载明政策更新与通知方式", "check_kind": "ai", "severity": "medium",
+     "requirement": "说明隐私政策的更新机制，以及变更时通知用户的方式。",
+     "basis": [{"doc": "yrd-method-2019", "clause": "C2.2"}, {"doc": "pipl-2021", "clause": "17.2"}]},
+
+    {"req_id": "PP-13", "title": "定向推送与自动化决策说明", "check_kind": "ai", "severity": "medium",
+     "requirement": "如利用个人信息和算法定向推送信息，应提供非定向推送的选项并作出说明。",
+     "basis": [{"doc": "yrd-method-2019", "clause": "C3.6"}]},
+
+    {"req_id": "PP-14", "title": "未成年人个人信息保护规则", "check_kind": "ai", "severity": "medium",
+     "requirement": "涉及不满十四周岁未成年人个人信息的，应制定专门处理规则并取得监护人同意。",
+     "basis": [{"doc": "pipl-2021", "clause": "28"}]},
+
+    {"req_id": "PP-15", "title": "载明生效或更新日期", "check_kind": "text_present", "severity": "low",
+     "requirement": "政策标注生效日期或最近更新日期。",
+     "basis": [{"doc": "pipl-2021", "clause": "17.2"}],
+     "check_spec": {"regex": "(生效|更新|修订|版本)[^\\n]{0,12}(\\d{4}\\s*[年./-]\\s*\\d{1,2})|\\d{4}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日",
+                    "note": "正则只作线索；命中不等于合规。"}},
+
+    {"req_id": "PP-16", "title": "提供可用的联系方式", "check_kind": "text_present", "severity": "medium",
+     "requirement": "政策中给出可联系的邮箱或电话。",
+     "basis": [{"doc": "pipl-2021", "clause": "17.1"}],
+     "check_spec": {"regex": "[\\w.+-]+@[\\w-]+\\.[\\w.]+|(?:\\+?86[\\s-]?)?1[3-9]\\d{9}|0\\d{2,3}[\\s-]?\\d{7,8}"}}
+  ]
+}

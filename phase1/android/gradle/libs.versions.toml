@@ -1,0 +1,33 @@
+[versions]
+# Pinned deliberately. Every artifact below was resolved from the Aliyun mirrors.
+agp = "8.11.1"
+# Kotlin MUST stay 2.2.0: the KSP artifact id is "<kotlin>-<ksp>", and
+# room-compiler 2.8.5 depends on kotlin-stdlib 2.2.0.
+kotlin = "2.2.0"
+ksp = "2.2.0-2.0.2"
+room = "2.8.5"
+appcompat = "1.7.0"
+material = "1.12.0"
+constraintlayout = "2.2.1"
+coreKtx = "1.13.1"
+lifecycle = "2.8.7"
+junitExt = "1.2.1"
+testRunner = "1.6.2"
+testCore = "1.6.1"
+
+[libraries]
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+androidx-material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+androidx-test-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitExt" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "testRunner" }
+androidx-test-core = { group = "androidx.test", name = "core", version.ref = "testCore" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

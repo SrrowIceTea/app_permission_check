@@ -1,0 +1,504 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "ec46fb9a31769e47ba60574d2f6775a8",
+    "entities": [
+      {
+        "tableName": "permissions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_name` TEXT NOT NULL, `android_version` TEXT NOT NULL, `protection_level_raw` TEXT, `protection_level_value` INTEGER, `permission_group` TEXT, `description` TEXT, `definition_status` TEXT NOT NULL DEFAULT 'pending', `source_refs_json` TEXT NOT NULL DEFAULT '[]', `device_calibration_json` TEXT NOT NULL DEFAULT '[]', `notes` TEXT, PRIMARY KEY(`permission_name`, `android_version`))",
+        "fields": [
+          {
+            "fieldPath": "permissionName",
+            "columnName": "permission_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "androidVersion",
+            "columnName": "android_version",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "protectionLevelRaw",
+            "columnName": "protection_level_raw",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "protectionLevelValue",
+            "columnName": "protection_level_value",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "permissionGroup",
+            "columnName": "permission_group",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "definitionStatus",
+            "columnName": "definition_status",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'pending'"
+          },
+          {
+            "fieldPath": "sourceRefsJson",
+            "columnName": "source_refs_json",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "deviceCalibrationJson",
+            "columnName": "device_calibration_json",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "permission_name",
+            "android_version"
+          ]
+        }
+      },
+      {
+        "tableName": "vhal_properties",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`property_key` TEXT NOT NULL, `android_version` TEXT NOT NULL, `property_name` TEXT, `property_id` INTEGER, `value_type` TEXT, `access_mode` TEXT, `change_mode` TEXT, `area_type` TEXT, `unit` TEXT, `data_category` TEXT, `read_permission_expr_json` TEXT, `write_permission_expr_json` TEXT, `definition_status` TEXT NOT NULL DEFAULT 'pending', `source_refs_json` TEXT NOT NULL DEFAULT '[]', `device_calibration_json` TEXT NOT NULL DEFAULT '[]', `notes` TEXT, PRIMARY KEY(`property_key`, `android_version`))",
+        "fields": [
+          {
+            "fieldPath": "propertyKey",
+            "columnName": "property_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "androidVersion",
+            "columnName": "android_version",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "propertyName",
+            "columnName": "property_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "propertyId",
+            "columnName": "property_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "valueType",
+            "columnName": "value_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "accessMode",
+            "columnName": "access_mode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "changeMode",
+            "columnName": "change_mode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "areaType",
+            "columnName": "area_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "unit",
+            "columnName": "unit",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "dataCategory",
+            "columnName": "data_category",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "readPermissionExprJson",
+            "columnName": "read_permission_expr_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "writePermissionExprJson",
+            "columnName": "write_permission_expr_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "definitionStatus",
+            "columnName": "definition_status",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'pending'"
+          },
+          {
+            "fieldPath": "sourceRefsJson",
+            "columnName": "source_refs_json",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "deviceCalibrationJson",
+            "columnName": "device_calibration_json",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "property_key",
+            "android_version"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_vhal_properties_property_id_android_version",
+            "unique": true,
+            "columnNames": [
+              "property_id",
+              "android_version"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_vhal_properties_property_id_android_version` ON `${TABLE_NAME}` (`property_id`, `android_version`)"
+          }
+        ]
+      },
+      {
+        "tableName": "dangerous_apis",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`api_key` TEXT NOT NULL, `android_version` TEXT NOT NULL, `class_name` TEXT, `method_name` TEXT, `jvm_descriptor` TEXT, `api_role` TEXT NOT NULL DEFAULT 'unknown', `property_arg_index` INTEGER, `observation_spec_json` TEXT, `permission_expr_json` TEXT, `definition_status` TEXT NOT NULL DEFAULT 'pending', `source_refs_json` TEXT NOT NULL DEFAULT '[]', `device_calibration_json` TEXT NOT NULL DEFAULT '[]', `notes` TEXT, PRIMARY KEY(`api_key`, `android_version`))",
+        "fields": [
+          {
+            "fieldPath": "apiKey",
+            "columnName": "api_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "androidVersion",
+            "columnName": "android_version",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "className",
+            "columnName": "class_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "methodName",
+            "columnName": "method_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "jvmDescriptor",
+            "columnName": "jvm_descriptor",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "apiRole",
+            "columnName": "api_role",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'unknown'"
+          },
+          {
+            "fieldPath": "propertyArgIndex",
+            "columnName": "property_arg_index",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "observationSpecJson",
+            "columnName": "observation_spec_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "permissionExprJson",
+            "columnName": "permission_expr_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "definitionStatus",
+            "columnName": "definition_status",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'pending'"
+          },
+          {
+            "fieldPath": "sourceRefsJson",
+            "columnName": "source_refs_json",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "deviceCalibrationJson",
+            "columnName": "device_calibration_json",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "api_key",
+            "android_version"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_dangerous_apis_signature",
+            "unique": true,
+            "columnNames": [
+              "class_name",
+              "method_name",
+              "jvm_descriptor",
+              "android_version"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_dangerous_apis_signature` ON `${TABLE_NAME}` (`class_name`, `method_name`, `jvm_descriptor`, `android_version`)"
+          }
+        ]
+      },
+      {
+        "tableName": "risk_rules",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`rule_id` TEXT NOT NULL, `android_version` TEXT NOT NULL, `rule_revision` INTEGER NOT NULL DEFAULT 1, `title` TEXT NOT NULL, `rule_type` TEXT NOT NULL, `severity` TEXT NOT NULL DEFAULT 'unrated', `permission_name` TEXT, `property_key` TEXT, `api_key` TEXT, `evaluator_version` INTEGER NOT NULL DEFAULT 1, `condition_json` TEXT, `evidence_requirements_json` TEXT, `window_ms` INTEGER, `conclusion_level` TEXT NOT NULL DEFAULT 'candidate', `source_refs_json` TEXT NOT NULL DEFAULT '[]', `basis_refs_json` TEXT NOT NULL DEFAULT '[]', `enabled` INTEGER NOT NULL DEFAULT 0, `notes` TEXT, PRIMARY KEY(`rule_id`, `android_version`), FOREIGN KEY(`permission_name`, `android_version`) REFERENCES `permissions`(`permission_name`, `android_version`) ON UPDATE NO ACTION ON DELETE NO ACTION , FOREIGN KEY(`property_key`, `android_version`) REFERENCES `vhal_properties`(`property_key`, `android_version`) ON UPDATE NO ACTION ON DELETE NO ACTION , FOREIGN KEY(`api_key`, `android_version`) REFERENCES `dangerous_apis`(`api_key`, `android_version`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "fields": [
+          {
+            "fieldPath": "ruleId",
+            "columnName": "rule_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "androidVersion",
+            "columnName": "android_version",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ruleRevision",
+            "columnName": "rule_revision",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ruleType",
+            "columnName": "rule_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "severity",
+            "columnName": "severity",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'unrated'"
+          },
+          {
+            "fieldPath": "permissionName",
+            "columnName": "permission_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "propertyKey",
+            "columnName": "property_key",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "apiKey",
+            "columnName": "api_key",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "evaluatorVersion",
+            "columnName": "evaluator_version",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "conditionJson",
+            "columnName": "condition_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "evidenceRequirementsJson",
+            "columnName": "evidence_requirements_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "windowMs",
+            "columnName": "window_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "conclusionLevel",
+            "columnName": "conclusion_level",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'candidate'"
+          },
+          {
+            "fieldPath": "sourceRefsJson",
+            "columnName": "source_refs_json",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "basisRefsJson",
+            "columnName": "basis_refs_json",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "rule_id",
+            "android_version"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_risk_rules_android_version_enabled_rule_type",
+            "unique": false,
+            "columnNames": [
+              "android_version",
+              "enabled",
+              "rule_type"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_risk_rules_android_version_enabled_rule_type` ON `${TABLE_NAME}` (`android_version`, `enabled`, `rule_type`)"
+          },
+          {
+            "name": "index_risk_rules_api_key_android_version",
+            "unique": false,
+            "columnNames": [
+              "api_key",
+              "android_version"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_risk_rules_api_key_android_version` ON `${TABLE_NAME}` (`api_key`, `android_version`)"
+          },
+          {
+            "name": "index_risk_rules_permission_name_android_version",
+            "unique": false,
+            "columnNames": [
+              "permission_name",
+              "android_version"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_risk_rules_permission_name_android_version` ON `${TABLE_NAME}` (`permission_name`, `android_version`)"
+          },
+          {
+            "name": "index_risk_rules_property_key_android_version",
+            "unique": false,
+            "columnNames": [
+              "property_key",
+              "android_version"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_risk_rules_property_key_android_version` ON `${TABLE_NAME}` (`property_key`, `android_version`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "permissions",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "permission_name",
+              "android_version"
+            ],
+            "referencedColumns": [
+              "permission_name",
+              "android_version"
+            ]
+          },
+          {
+            "table": "vhal_properties",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "property_key",
+              "android_version"
+            ],
+            "referencedColumns": [
+              "property_key",
+              "android_version"
+            ]
+          },
+          {
+            "table": "dangerous_apis",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "api_key",
+              "android_version"
+            ],
+            "referencedColumns": [
+              "api_key",
+              "android_version"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ec46fb9a31769e47ba60574d2f6775a8')"
+    ]
+  }
+}

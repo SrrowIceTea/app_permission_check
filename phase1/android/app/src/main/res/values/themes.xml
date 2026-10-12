@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AppCompat theme on purpose: it needs no Material attribute set. -->
+    <style name="Theme.VScanner" parent="Theme.AppCompat.DayNight.NoActionBar" />
+</resources>

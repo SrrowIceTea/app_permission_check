@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V-Scanner · APK 静态分析工作台</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<button class="theme-toggle" id="theme-toggle" type="button">切换主题</button>
+<div class="wrap">
+  <h1>APK 静态分析工作台</h1>
+  <div class="sub">
+    仅用于授权测试（自有设备与自有 APK）。静态结论来自 dex 里的**引用**，
+    等级封顶 <b>candidate</b>——代码里出现某个属性 ID <b>不证明</b>运行时读过它，
+    也不证明具体值被外发。违规判定仍需人工。
+  </div>
+
+  <div class="card">
+    <div id="drop">
+      <div style="font-size:15px">把 APK 拖到这里，或 <label for="file">选择文件</label></div>
+      <div class="hint" id="drop-hint">只读取与反编译，不重打包、不签名、不注入、不修改 APK</div>
+      <input type="file" id="file" accept=".apk,application/vnd.android.package-archive">
+    </div>
+    <div id="tools" class="hint" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card" id="progress-card" hidden>
+    <div class="row">
+      <div class="grow">
+        <div id="stage" style="margin-bottom:6px"></div>
+        <div class="bar"><i id="bar"></i></div>
+        <div class="hint" id="progress-text"></div>
+      </div>
+      <button type="button" id="cancel">取消</button>
+    </div>
+  </div>
+
+  <div id="gaps"></div>
+
+  <div class="row" id="results" hidden>
+    <div class="grow" style="flex:1 1 46%">
+      <h2>静态结论 <span class="hint" id="static-meta"></span></h2>
+      <div class="kpi" id="kpi"></div>
+      <div id="static-note"></div>
+      <table id="findings-table">
+        <thead><tr><th>规则</th><th>类型</th><th>强度</th><th>等级</th>
+          <th>静态信号</th><th>依据</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="grow" style="flex:1 1 46%">
+      <h2>源码 <span class="hint" id="source-meta"></span></h2>
+      <div class="row">
+        <div class="grow" style="flex:0 1 300px">
+          <input type="search" id="filter" placeholder="按路径过滤，例如 VhalReader"
+                 style="width:100%;padding:5px 8px;margin-bottom:6px">
+          <div class="tree" id="tree"></div>
+        </div>
+        <div class="grow"><pre class="code" id="code"><code></code></pre></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="crosscheck"></div>
+
+  <div class="sub" style="margin-top:26px">
+    反编译由 jadx 完成（Apache-2.0）。静态匹配使用本项目 <code>rules.db</code> 的
+    权限 / VHAL 属性 / 危险 API 三张表。**部分反编译失败会显式列出**，
+    不把"没解出来"当成"不存在"。
+  </div>
+</div>
+<script src="/static/highlight.js"></script>
+<script src="/static/viewer.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "vscanner-mobile-hooks",
+  "version": "1.0.0",
+  "private": true,
+  "description": "V-Scanner Mobile 隐私钩子。Frida 17 起 Java bridge 不再随 agent 运行时提供，任何钩子脚本都必须先用 frida-java-bridge 打包才能跑；未打包的裸脚本会死在 ReferenceError: 'Java' is not defined。",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "frida-java-bridge": "^7.0.13"
+  },
+  "devDependencies": {
+    "frida-compile": "^19.0.5"
+  }
+}

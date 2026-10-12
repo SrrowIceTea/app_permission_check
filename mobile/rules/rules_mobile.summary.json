@@ -1,0 +1,34 @@
+{
+  "status": "mobile_privacy_library",
+  "android_version": "36",
+  "counts": {
+    "permissions": 37,
+    "data_types": 24,
+    "apis": 47,
+    "app_categories": 39,
+    "policy_requirements": 16,
+    "rules": 193,
+    "rules_by_type": {
+      "data_egress": 23,
+      "no_consent_read": 22,
+      "over_collection": 24,
+      "over_permission": 37,
+      "plaintext_transmission": 17,
+      "policy_mismatch": 23,
+      "sensitive_read": 24,
+      "third_party_share": 23
+    }
+  },
+  "window_ms": 30000,
+  "window_calibrated": false,
+  "window_note": "30000ms 为声明值，尚未由移动夹具校准；不是法律阈值，也不是通用参数。",
+  "api_source": "android.jar (SDK platform 36) via javap -s",
+  "permission_source": "seed（protection_level 未断言，待设备实测）",
+  "regulation_docs": [
+    "gbt35273_2020.json",
+    "necessary_info_2021.json",
+    "pipl_2021.json",
+    "yrd_method_2019.json"
+  ],
+  "database_sha256": "0a6fb107d5d5a89dc852e2279be3d485d5fd633aaac6676b0197fc62f4113e3e"
+}

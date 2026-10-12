@@ -1,0 +1,9 @@
+ evt  attributed                 self-reported                delta  verdict
+--------------------------------------------------------------------------------------------
+   1  com.vscanner.targetapp     com.vscanner.targetapp          24  MATCH
+   2  com.vscanner.targetapp2    com.vscanner.targetapp2         15  MATCH
+--------------------------------------------------------------------------------------------
+流记录 2 条；出站事件 4 条；归因到 2 个包 ['com.vscanner.targetapp', 'com.vscanner.targetapp2']
+判定分布：MATCH=2
+
+全部 MATCH —— 并发场景下未发生串包。

@@ -1,0 +1,8 @@
+android.car.permission.CAR_ENERGY
+android.car.permission.CAR_ENGINE_DETAILED
+android.car.permission.CAR_IDENTIFICATION
+android.car.permission.CAR_MILEAGE
+android.car.permission.CAR_POWERTRAIN
+android.car.permission.CAR_SPEED
+android.permission.ACCESS_NETWORK_STATE
+android.permission.INTERNET

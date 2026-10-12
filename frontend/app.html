@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V-Scanner · 工作台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <a href="index.html" class="logo-link">
+        <div class="logo-icon">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+            <path d="M16 2L4 8v16l12 6 12-6V8L16 2z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+            <path d="M16 8l-6 3v6l6 3 6-3v-6l-6-3z" fill="currentColor" opacity="0.3"/>
+            <circle cx="16" cy="16" r="2" fill="currentColor"/>
+          </svg>
+        </div>
+        <span class="logo-text">V-Scanner</span>
+      </a>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-page="source">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm2 2h4v2H8V6zm0 4h4v2H8v-2z"/>
+        </svg>
+        <span>源码查看</span>
+      </a>
+      <a href="#" class="nav-item" data-page="static">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 2h10v10H5V5zm2 2v2h2V7H7zm4 0v2h2V7h-2zm-4 4v2h2v-2H7zm4 0v2h2v-2h-2z"/>
+        </svg>
+        <span>静态审计</span>
+      </a>
+      <a href="#" class="nav-item" data-page="dynamic">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 2a6 6 0 110 12 6 6 0 010-12zm-1 2v5l4 2 1-1.5-3-1.5V6H9z"/>
+        </svg>
+        <span>动态审计</span>
+      </a>
+      <a href="#" class="nav-item" data-page="ai-report">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M10 2a2 2 0 00-2 2v1H6a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2V4a2 2 0 00-2-2zm0 2h0zm-4 5h8v8H6V9zm2 2v2h4v-2H8z"/>
+        </svg>
+        <span>AI 报告</span>
+      </a>
+      <a href="#" class="nav-item" data-page="pdf-report">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V8l-6-6H6zm0 2h7v5h5v9H6V4zm2 2v2h4V6H8zm0 4v2h4v-2H8zm0 4v2h4v-2H8z"/>
+        </svg>
+        <span>PDF 报告</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="footer-info">仅用于授权测试</div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <div class="page-header-content">
+        <div class="current-apk" id="current-apk-info">
+          <span class="current-apk-label">当前 APK</span>
+          <span class="current-apk-name" id="current-apk-name">尚未上传</span>
+        </div>
+        <div class="upload-zone" id="upload-zone">
+          <div class="upload-icon">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="currentColor">
+              <path d="M16 4l-8 8h5v8h6v-8h5l-8-8z"/>
+              <path d="M6 24h20v2H6v-2z"/>
+            </svg>
+          </div>
+          <div class="upload-text">
+            <span class="upload-title">上传 APK 开始审计</span>
+            <span class="upload-hint">拖拽文件至此或点击选择</span>
+          </div>
+          <input type="file" id="apk-input" accept=".apk" hidden>
+        </div>
+      </div>
+      <div class="progress-bar" id="progress-bar" style="display:none">
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="progress-text" id="progress-text"></div>
+        <button class="progress-cancel" id="progress-cancel" type="button">取消</button>
+      </div>
+    </div>
+
+    <div class="page-container">
+      <section class="page active" id="page-source">
+        <div class="page-title-bar">
+          <h2>源码查看</h2>
+          <div class="source-filter">
+            <input type="search" id="source-filter" placeholder="按路径过滤，例如 VhalReader" />
+          </div>
+        </div>
+        <div class="source-viewer">
+          <div class="file-tree" id="file-tree">
+            <div class="empty-state">
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="currentColor" opacity="0.3">
+                <path d="M8 8h32v32H8V8zm4 4v24h24V12H12zm4 4h16v2H16v-2zm0 6h16v2H16v-2zm0 6h10v2H16v-2z"/>
+              </svg>
+              <p>上传 APK 后查看反编译源码</p>
+            </div>
+          </div>
+          <div class="code-view" id="code-view">
+            <div class="empty-state">
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="currentColor" opacity="0.3">
+                <path d="M12 8l-8 16 8 16 4-2-7-14 7-14-4-2zm24 0l-4 2 7 14-7 14 4 2 8-16-8-16z"/>
+              </svg>
+              <p>选择文件查看代码</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-static">
+        <div class="page-title-bar">
+          <h2>静态审计结果</h2>
+        </div>
+        <div class="results-container" id="static-results">
+          <div class="empty-state large">
+            <svg width="64" height="64" viewBox="0 0 64 64" fill="currentColor" opacity="0.3">
+              <path d="M12 8h40v48H12V8zm4 4v40h32V12H16zm6 6h20v4H22v-4zm0 8h20v4H22v-4zm0 8h14v4H22v-4z"/>
+            </svg>
+            <p>上传 APK 后查看静态审计结果</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-dynamic">
+        <div class="page-title-bar">
+          <h2>动态审计（静动交叉核对）</h2>
+        </div>
+        <div class="results-container" id="dynamic-results">
+          <div class="empty-state large">
+            <svg width="64" height="64" viewBox="0 0 64 64" fill="currentColor" opacity="0.3">
+              <path d="M32 8a24 24 0 100 48 24 24 0 000-48zm0 4a20 20 0 110 40 20 20 0 010-40zm-2 8v14l12 7 2-3-10-6V20h-4z"/>
+            </svg>
+            <p>上传 APK 后查看静动交叉核对结果</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-ai-report">
+        <div class="page-title-bar">
+          <h2>AI 审计报告</h2>
+        </div>
+        <div class="report-viewer" id="ai-report">
+          <div class="empty-state large">
+            <svg width="64" height="64" viewBox="0 0 64 64" fill="currentColor" opacity="0.3">
+              <path d="M16 8h32v48H16V8zm4 4v40h24V12H20zm4 6h16v4H24v-4zm0 8h16v4H24v-4zm0 8h10v4H24v-4z"/>
+            </svg>
+            <p>上传 APK 后查看综合审计报告</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-pdf-report">
+        <div class="page-title-bar">
+          <h2>PDF 审计报告</h2>
+          <div class="pdf-selector">
+            <select id="pdf-select">
+              <option value="">选择报告...</option>
+              <option value="pdfs/car-audit-report.pdf">车载 APK 审计报告</option>
+              <option value="pdfs/mobile-device-latest.pdf">移动端设备审计（最新）</option>
+              <option value="pdfs/mobile-regression-latest.pdf">移动端回归测试（最新）</option>
+              <option value="pdfs/thirdparty-latest.pdf">第三方 APK 审计（最新）</option>
+            </select>
+          </div>
+        </div>
+        <div class="pdf-viewer-container" id="pdf-viewer-container">
+          <div class="empty-state large">
+            <svg width="64" height="64" viewBox="0 0 64 64" fill="currentColor" opacity="0.3">
+              <path d="M16 8h24l8 8v40H16V8zm4 4v40h24V18h-6v-6H20zm4 6h12v4H24v-4zm0 8h16v4H24v-4zm0 8h16v4H24v-4zm0 8h10v4H24v-4z"/>
+            </svg>
+            <p>选择 PDF 报告查看</p>
+          </div>
+        </div>
+        <div class="pdf-open-external" id="pdf-open-external" style="display:none">
+          <a href="#" target="_blank" rel="noopener">在新窗口打开 PDF</a>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script src="highlight.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

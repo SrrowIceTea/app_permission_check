@@ -1,0 +1,3 @@
+com.vscanner.targetapp is not running. Start it first, e.g.
+  adb shell am start -n com.vscanner.targetapp/.MainActivity
+Frida spawn is unreliable on this emulator (times out while the app launches normally), so this driver attaches instead.

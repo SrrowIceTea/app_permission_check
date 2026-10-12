@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 移动隐私演示夹具文案 —— 仅用于授权测试（自有设备与自有 APK）。 -->
+<resources>
+    <string name="app_name">隐私演示</string>
+    <string name="header">V-Scanner Mobile 靶子 App（自有 APK，仅授权测试）\n按钮顺序建议：先「请求权限」再读数据；「读取设备标识」在授权前点一次可复现「同意前收集」。</string>
+    <string name="endpoint_hint">外发地址（默认指向宿主机接收端）</string>
+    <string name="endpoint_default">http://10.0.2.2:8888/collect</string>
+
+    <string name="btn_perm">1 请求运行时权限</string>
+    <string name="btn_device_id">2 读取设备标识（IMEI / 本机号码）</string>
+    <string name="btn_location">3 读取位置</string>
+    <string name="btn_contacts">4 读取通讯录</string>
+    <string name="btn_apps">5 读取应用列表</string>
+    <string name="btn_clipboard">6 读取剪贴板</string>
+    <string name="btn_sms">7 读取短信（未申请权限）</string>
+    <string name="btn_http">8 明文 HTTP 外发</string>
+    <string name="btn_https">9 HTTPS 外发</string>
+    <string name="btn_policy">10 展示隐私政策</string>
+</resources>

@@ -1,0 +1,26 @@
+{
+  "parsed_blocks": 1495,
+  "selected": 146,
+  "prefix": "android.car.",
+  "without_protection_level": [],
+  "conflicts": [],
+  "provenance": {
+    "source": "adb shell pm list permissions -f -g",
+    "source_file_sha256": "5a3f5c011ffeeee5e82254d42913c05436df9c7ef77fbdf29a955165eaf4ccc1",
+    "extraction": "device_observation",
+    "device": {
+      "ro.build.fingerprint": "google/sdk_gcar_x86_64/emulator_car64_x86_64:15/AAI5.260516.001.A1/15446886:userdebug/test-keys",
+      "ro.build.id": "AAI5.260516.001.A1",
+      "ro.build.version.sdk": "35",
+      "ro.build.version.release": "15",
+      "ro.build.version.security_patch": "2025-12-05",
+      "ro.build.type": "userdebug",
+      "ro.build.tags": "test-keys",
+      "ro.product.name": "sdk_gcar_x86_64",
+      "ro.product.model": "Car on x86_64 emulator",
+      "ro.product.manufacturer": "Google",
+      "ro.build.characteristics": "automotive",
+      "ro.car.permission.version": null
+    }
+  }
+}

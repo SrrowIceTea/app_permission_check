@@ -1,0 +1,19 @@
+// Merge into the future app/build.gradle (Groovy); not a standalone Android project.
+// Root project must already declare a KSP2 version compatible with its Kotlin plugin.
+// Room 2.8.5 requires minSdk >= 23 and Kotlin language version >= 2.0.
+plugins {
+    id 'com.google.devtools.ksp'
+}
+
+android {
+    useLibrary 'android.car'
+}
+
+dependencies {
+    implementation 'androidx.room:room-runtime:2.8.5'
+    ksp 'androidx.room:room-compiler:2.8.5'
+}
+
+ksp {
+    arg('room.schemaLocation', "$projectDir/schemas")
+}

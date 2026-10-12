@@ -1,0 +1,72 @@
+{
+  "package": "com.vscanner.targetapp",
+  "dex_index_available": true,
+  "checks_total": 6,
+  "by_status": {
+    "VERIFIED": 6
+  },
+  "all_verified": true,
+  "caveat": "本核对证明的是「该行号存在于该方法的 dex 行号表中」，不证明该行号就是违规行为的语义所在——R8 内联会改变行号归属。结论仍需人工复核。",
+  "details": [
+    {
+      "status": "VERIFIED",
+      "overloads": 1,
+      "matched": "(Landroid/car/hardware/property/CarPropertyManager;Lcom/vscanner/targetapp/VhalReader$PropSpec;)Lcom/vscanner/targetapp/ReadResult;",
+      "detail": "com.vscanner.targetapp.VhalReader.readOne 的行号表含第 128 行，源文件 VhalReader.kt",
+      "rule_id": "VSC-R003",
+      "role": "read",
+      "event_id": 5,
+      "frame": "com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)"
+    },
+    {
+      "status": "VERIFIED",
+      "overloads": 1,
+      "matched": "(Landroid/car/hardware/property/CarPropertyManager;Lcom/vscanner/targetapp/VhalReader$PropSpec;)Lcom/vscanner/targetapp/ReadResult;",
+      "detail": "com.vscanner.targetapp.VhalReader.readOne 的行号表含第 128 行，源文件 VhalReader.kt",
+      "rule_id": "VSC-R004",
+      "role": "read",
+      "event_id": 6,
+      "frame": "com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)"
+    },
+    {
+      "status": "VERIFIED",
+      "overloads": 1,
+      "matched": "(Landroid/car/hardware/property/CarPropertyManager;Lcom/vscanner/targetapp/VhalReader$PropSpec;)Lcom/vscanner/targetapp/ReadResult;",
+      "detail": "com.vscanner.targetapp.VhalReader.readOne 的行号表含第 128 行，源文件 VhalReader.kt",
+      "rule_id": "VSC-E003",
+      "role": "read",
+      "event_id": 5,
+      "frame": "com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)"
+    },
+    {
+      "status": "VERIFIED",
+      "overloads": 1,
+      "matched": "(Ljava/lang/String;Ljava/util/List;)Ljava/lang/String;",
+      "detail": "com.vscanner.targetapp.EgressSender.doSend 的行号表含第 46 行，源文件 EgressSender.kt",
+      "rule_id": "VSC-E003",
+      "role": "egress",
+      "event_id": 3,
+      "frame": "com.vscanner.targetapp.EgressSender.doSend(EgressSender.kt:46)"
+    },
+    {
+      "status": "VERIFIED",
+      "overloads": 1,
+      "matched": "(Landroid/car/hardware/property/CarPropertyManager;Lcom/vscanner/targetapp/VhalReader$PropSpec;)Lcom/vscanner/targetapp/ReadResult;",
+      "detail": "com.vscanner.targetapp.VhalReader.readOne 的行号表含第 128 行，源文件 VhalReader.kt",
+      "rule_id": "VSC-E004",
+      "role": "read",
+      "event_id": 6,
+      "frame": "com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)"
+    },
+    {
+      "status": "VERIFIED",
+      "overloads": 1,
+      "matched": "(Ljava/lang/String;Ljava/util/List;)Ljava/lang/String;",
+      "detail": "com.vscanner.targetapp.EgressSender.doSend 的行号表含第 46 行，源文件 EgressSender.kt",
+      "rule_id": "VSC-E004",
+      "role": "egress",
+      "event_id": 3,
+      "frame": "com.vscanner.targetapp.EgressSender.doSend(EgressSender.kt:46)"
+    }
+  ]
+}

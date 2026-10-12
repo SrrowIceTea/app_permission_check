@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 仅用于授权测试（自有设备与自有 APK）。三个按钮 = 三种可独立触发的行为。 -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scrollContent" android:layout_width="match_parent"
+    android:layout_height="match_parent" android:fillViewport="true">
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="V-Scanner 靶子 App（授权测试夹具）"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:text="三个行为彼此独立，逐个按钮触发，便于与 logcat / 抓包逐条对齐。&#10;预期部分读取会被平台以 SecurityException 拒绝 —— 那是有效结果，不是缺陷。" />
+
+    <Button
+        android:id="@+id/btnPerm"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="1. 索权演示（静态清单 + 运行时申请）" />
+
+    <Button
+        android:id="@+id/btnRead"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="2. 读取 VHAL（8 个属性）" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="外泄端点（默认指向宿主环回 10.0.2.2，Phase 4 的 Mitmproxy）"
+        android:textSize="12sp" />
+
+    <EditText
+        android:id="@+id/etHttpEndpoint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="textUri"
+        android:text="@string/default_http_endpoint" />
+
+    <Button
+        android:id="@+id/btnEgressHttp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="3a. 外泄 JSON（HTTP 明文）" />
+
+    <EditText
+        android:id="@+id/etHttpsEndpoint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="textUri"
+        android:text="@string/default_https_endpoint" />
+
+    <Button
+        android:id="@+id/btnEgressHttps"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="3b. 外泄 JSON（HTTPS）" />
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <Button android:id="@+id/btnOkHttp" android:layout_width="0dp"
+            android:layout_weight="1" android:layout_height="wrap_content" android:text="3c. OkHttp 固定证书" />
+        <Button android:id="@+id/btnSubscribe" android:layout_width="0dp"
+            android:layout_weight="1" android:layout_height="wrap_content" android:text="2b. 订阅 10 秒" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="自绘加密端点（AES/GCM 密文经原始 Socket 外发，抓包只能看到密文）"
+        android:textSize="12sp" />
+
+    <EditText
+        android:id="@+id/etCipherEndpoint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="textUri"
+        android:text="@string/default_cipher_endpoint" />
+
+    <Button
+        android:id="@+id/btnCipher"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="4. 自绘加密外泄（AES/GCM 密文）" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="事件日志（同步写 logcat 标签 VSCTarget 与文件）"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <ScrollView
+        android:id="@+id/scrollLog"
+        android:layout_width="match_parent"
+        android:layout_height="180dp"
+        android:background="#F0F0F0">
+
+        <TextView
+            android:id="@+id/tvLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:padding="4dp"
+            android:textSize="10sp" />
+    </ScrollView>
+
+</LinearLayout>
+</ScrollView>

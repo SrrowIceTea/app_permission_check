@@ -1,0 +1,15 @@
+{
+  "name": "vscanner-phase3-hooks",
+  "version": "1.0.0",
+  "private": true,
+  "description": "V-Scanner Phase 3 Frida hooks. Frida 17 removed the Java bridge from the agent runtime, so every hook script must be bundled with frida-java-bridge before it can run. See README.md.",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "frida-java-bridge": "^7.0.13"
+  },
+  "devDependencies": {
+    "frida-compile": "^19.0.5"
+  }
+}

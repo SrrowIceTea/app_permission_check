@@ -1,0 +1,142 @@
+Activity Resolver Table:
+  Non-Data Actions:
+      android.intent.action.MAIN:
+        723089d com.vscanner.targetapp/.MainActivity filter cf8b112
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+
+Domain verification status:
+
+Key Set Manager:
+  [com.vscanner.targetapp]
+      Signing KeySets: 32
+
+Packages:
+  Package [com.vscanner.targetapp] (d9b91cd):
+    appId=10250
+    pkg=Package{6c199b1 com.vscanner.targetapp}
+    codePath=/data/app/~~98g1Xg8g4sggZc7Vbs0t8Q==/com.vscanner.targetapp-SxbpuwMeP4blM63fh4pVfA==
+    resourcePath=/data/app/~~98g1Xg8g4sggZc7Vbs0t8Q==/com.vscanner.targetapp-SxbpuwMeP4blM63fh4pVfA==
+    legacyNativeLibraryDir=/data/app/~~98g1Xg8g4sggZc7Vbs0t8Q==/com.vscanner.targetapp-SxbpuwMeP4blM63fh4pVfA==/lib
+    extractNativeLibs=false
+    primaryCpuAbi=null
+    secondaryCpuAbi=null
+    cpuAbiOverride=null
+    versionCode=1 minSdk=29 targetSdk=35
+    minExtensionVersions=[]
+    versionName=1.0
+    hiddenApiEnforcementPolicy=2
+    usesNonSdkApi=false
+    splits=[base]
+    apkSigningVersion=2
+    flags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ]
+    privateFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION ALLOW_AUDIO_PLAYBACK_CAPTURE PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    forceQueryable=false
+    scannedAsStoppedSystemApp=false
+    supportsScreens=[small, medium, large, xlarge, resizeable, anyDensity]
+    timeStamp=2026-09-21 12:13:36
+    lastUpdateTime=2026-09-21 12:13:36
+    installerPackageName=null
+    installerPackageUid=-1
+    initiatingPackageName=com.android.shell
+    originatingPackageName=null
+    packageSource=1
+    appMetadataFilePath=null
+    appMetadataSource=0
+    signatures=PackageSignatures{41a753a version:2, signatures:[d789d2f0], past signatures:[]}
+    installPermissionsFixed=false
+    pkgFlags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ]
+    privatePkgFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION ALLOW_AUDIO_PLAYBACK_CAPTURE PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    apexModuleName=null
+    requested permissions:
+      android.car.permission.CAR_MILEAGE
+      android.permission.INTERNET
+      android.car.permission.CAR_SPEED
+      android.car.permission.CAR_ENERGY
+      android.car.permission.CAR_IDENTIFICATION
+      android.car.permission.CAR_POWERTRAIN
+      android.permission.ACCESS_NETWORK_STATE
+      android.car.permission.CAR_ENGINE_DETAILED
+    install permissions:
+      android.permission.INTERNET: granted=true
+      android.car.permission.CAR_POWERTRAIN: granted=true
+      android.permission.ACCESS_NETWORK_STATE: granted=true
+    User 0: ceDataInode=557315 deDataInode=401968 installed=true hidden=false suspended=false distractionFlags=0 stopped=true notLaunched=true enabled=0 instant=false virtual=false quarantined=false
+      installReason=0
+      dataDir=/data/user/0/com.vscanner.targetapp
+      firstInstallTime=2026-09-21 08:49:36
+      uninstallReason=0
+      gids=[3003]
+      runtime permissions:
+    User 10: ceDataInode=499730 deDataInode=401974 installed=true hidden=false suspended=false distractionFlags=0 stopped=false notLaunched=false enabled=0 instant=false virtual=false quarantined=false
+      installReason=0
+      dataDir=/data/user/10/com.vscanner.targetapp
+      firstInstallTime=2026-09-21 08:49:36
+      uninstallReason=0
+      gids=[3003]
+      runtime permissions:
+
+Queries:
+  system apps queryable: false
+  queries via forceQueryable:
+  queries via package name:
+  queries via component:
+    com.android.settings.intelligence:
+      com.vscanner.targetapp
+    com.google.android.carassistant:
+      com.vscanner.targetapp
+  queryable via interaction:
+    User 0:
+    User 10:
+      [android,com.android.server.telecom,com.android.car.settings,com.android.localtransport,com.android.providers.settings,com.android.location.fused,com.android.car,com.android.car.developeroptions,com.android.inputdevices,com.android.car.cluster.osdouble,com.android.emulator.multidisplay,com.android.keychain]:
+        com.vscanner.targetapp
+      com.google.android.apps.automotive.inputmethod:
+        com.vscanner.targetapp
+  queryable via uses-library:
+
+Dexopt state:
+  [com.vscanner.targetapp]
+    path: /data/app/~~98g1Xg8g4sggZc7Vbs0t8Q==/com.vscanner.targetapp-SxbpuwMeP4blM63fh4pVfA==/base.apk
+      x86_64: [status=run-from-apk] [reason=unknown] [primary-abi]
+        [location is error]
+    known secondary dex files:
+      /data/user/10/com.vscanner.targetapp/cache/frida1760971316306936560.dex (removed)
+        x86_64: [status=unknown] [reason=unknown] [primary-abi]
+          [location is error]
+        class loader context: PCL[];PCL[/data/app/~~98g1Xg8g4sggZc7Vbs0t8Q==/com.vscanner.targetapp-SxbpuwMeP4blM63fh4pVfA==/base.apk]
+      /data/user/10/com.vscanner.targetapp/cache/frida1993700445327318341.dex (removed)
+        x86_64: [status=error] [reason=error] [primary-abi]
+          [location is Failed to create OatFileAssistant: Failed to load class loader context files for '/data/user/10/com.vscanner.targetapp/cache/frida1993700445327318341.dex' with context 'PCL[];PCL[/data/app/~~1hLxUn_piEam2OsaUcUu2Q==/com.vscanner.targetapp-m-YKIKmPgz4h6S0l1fHcww==/base.apk]']
+        class loader context: PCL[];PCL[/data/app/~~1hLxUn_piEam2OsaUcUu2Q==/com.vscanner.targetapp-m-YKIKmPgz4h6S0l1fHcww==/base.apk]
+      /data/user/10/com.vscanner.targetapp/cache/frida2162327463155712460.dex (removed)
+        x86_64: [status=unknown] [reason=unknown] [primary-abi]
+          [location is error]
+        class loader context: PCL[];PCL[/data/app/~~98g1Xg8g4sggZc7Vbs0t8Q==/com.vscanner.targetapp-SxbpuwMeP4blM63fh4pVfA==/base.apk]
+      /data/user/10/com.vscanner.targetapp/cache/frida32216990560440415.dex (removed)
+        x86_64: [status=error] [reason=error] [primary-abi]
+          [location is Failed to create OatFileAssistant: Failed to load class loader context files for '/data/user/10/com.vscanner.targetapp/cache/frida32216990560440415.dex' with context 'PCL[];PCL[/data/app/~~1hLxUn_piEam2OsaUcUu2Q==/com.vscanner.targetapp-m-YKIKmPgz4h6S0l1fHcww==/base.apk]']
+        class loader context: PCL[];PCL[/data/app/~~1hLxUn_piEam2OsaUcUu2Q==/com.vscanner.targetapp-m-YKIKmPgz4h6S0l1fHcww==/base.apk]
+      /data/user/10/com.vscanner.targetapp/cache/frida368189553272535595.dex (removed)
+        x86_64: [status=unknown] [reason=unknown] [primary-abi]
+          [location is error]
+        class loader context: PCL[];PCL[/data/app/~~98g1Xg8g4sggZc7Vbs0t8Q==/com.vscanner.targetapp-SxbpuwMeP4blM63fh4pVfA==/base.apk]
+      /data/user/10/com.vscanner.targetapp/cache/frida3846833666099091593.dex (removed)
+        x86_64: [status=error] [reason=error] [primary-abi]
+          [location is Failed to create OatFileAssistant: Failed to load class loader context files for '/data/user/10/com.vscanner.targetapp/cache/frida3846833666099091593.dex' with context 'PCL[];PCL[/data/app/~~1hLxUn_piEam2OsaUcUu2Q==/com.vscanner.targetapp-m-YKIKmPgz4h6S0l1fHcww==/base.apk]']
+        class loader context: PCL[];PCL[/data/app/~~1hLxUn_piEam2OsaUcUu2Q==/com.vscanner.targetapp-m-YKIKmPgz4h6S0l1fHcww==/base.apk]
+      /data/user/10/com.vscanner.targetapp/cache/frida6467271589915674389.dex (removed)
+        x86_64: [status=unknown] [reason=unknown] [primary-abi]
+          [location is error]
+        class loader context: PCL[];PCL[/data/app/~~98g1Xg8g4sggZc7Vbs0t8Q==/com.vscanner.targetapp-SxbpuwMeP4blM63fh4pVfA==/base.apk]
+      /data/user/10/com.vscanner.targetapp/cache/frida7584768377674438926.dex (removed)
+        x86_64: [status=error] [reason=error] [primary-abi]
+          [location is Failed to create OatFileAssistant: Failed to load class loader context files for '/data/user/10/com.vscanner.targetapp/cache/frida7584768377674438926.dex' with context 'PCL[];PCL[/data/app/~~1hLxUn_piEam2OsaUcUu2Q==/com.vscanner.targetapp-m-YKIKmPgz4h6S0l1fHcww==/base.apk]']
+        class loader context: PCL[];PCL[/data/app/~~1hLxUn_piEam2OsaUcUu2Q==/com.vscanner.targetapp-m-YKIKmPgz4h6S0l1fHcww==/base.apk]
+      /data/user/10/com.vscanner.targetapp/cache/frida8996945785370060498.dex (removed)
+        x86_64: [status=unknown] [reason=unknown] [primary-abi]
+          [location is error]
+        class loader context: PCL[];PCL[/data/app/~~98g1Xg8g4sggZc7Vbs0t8Q==/com.vscanner.targetapp-SxbpuwMeP4blM63fh4pVfA==/base.apk]
+
+Compiler stats:
+  [com.vscanner.targetapp]
+    (No recorded stats)

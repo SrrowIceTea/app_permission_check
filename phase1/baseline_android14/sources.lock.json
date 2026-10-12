@@ -1,0 +1,103 @@
+{
+  "tag": "android-14.0.0_r1",
+  "android_version": "14",
+  "repositories": {
+    "car": {
+      "repository": "platform/packages/services/Car",
+      "commit": "f9a252f4a3b621daabd330531fce555300a1d4c0"
+    },
+    "interfaces": {
+      "repository": "platform/hardware/interfaces",
+      "commit": "40e9f1537e308ed49e3b561ce333e3f2bb64f31e"
+    }
+  },
+  "files": [
+    {
+      "id": "car_manifest",
+      "repository_key": "car",
+      "path": "car-lib/AndroidManifest.xml",
+      "commit": "f9a252f4a3b621daabd330531fce555300a1d4c0",
+      "url": "https://android.googlesource.com/platform/packages/services/Car/+/f9a252f4a3b621daabd330531fce555300a1d4c0/car-lib/AndroidManifest.xml",
+      "transport_url": "https://api.github.com/repos/LineageOS/android_packages_services_Car/contents/car-lib/AndroidManifest.xml?ref=f9a252f4a3b621daabd330531fce555300a1d4c0",
+      "sha256": "fb487197685e54efad82cf1c5e1f85d08c2b839816cd1cad6038302de46d9768",
+      "git_blob_sha1": "48955acedbfa4e2df10621f584571a61cb57ebb1"
+    },
+    {
+      "id": "manifest",
+      "repository_key": "car",
+      "path": "service/AndroidManifest.xml",
+      "commit": "f9a252f4a3b621daabd330531fce555300a1d4c0",
+      "url": "https://android.googlesource.com/platform/packages/services/Car/+/f9a252f4a3b621daabd330531fce555300a1d4c0/service/AndroidManifest.xml",
+      "transport_url": "https://api.github.com/repos/LineageOS/android_packages_services_Car/contents/service/AndroidManifest.xml?ref=f9a252f4a3b621daabd330531fce555300a1d4c0",
+      "sha256": "7397ac5ba00e57ab0dac969da510f54d2b59b6504a91709d4bc56bf0e435ac93",
+      "git_blob_sha1": "05aa7daa7400bcb7b85c8f4d6e8af937edfe4ec7"
+    },
+    {
+      "id": "ids",
+      "repository_key": "car",
+      "path": "car-lib/src/android/car/VehiclePropertyIds.java",
+      "commit": "f9a252f4a3b621daabd330531fce555300a1d4c0",
+      "url": "https://android.googlesource.com/platform/packages/services/Car/+/f9a252f4a3b621daabd330531fce555300a1d4c0/car-lib/src/android/car/VehiclePropertyIds.java",
+      "transport_url": "https://api.github.com/repos/LineageOS/android_packages_services_Car/contents/car-lib/src/android/car/VehiclePropertyIds.java?ref=f9a252f4a3b621daabd330531fce555300a1d4c0",
+      "sha256": "8d1bc67dd2d316fc498098b18b1a4156e7d5b415bfd07c5f5b910f328d5f6f50",
+      "git_blob_sha1": "5ff24962d4d8deef0a1de1e1e5666fd77b1c0073"
+    },
+    {
+      "id": "cpm",
+      "repository_key": "car",
+      "path": "car-lib/src/android/car/hardware/property/CarPropertyManager.java",
+      "commit": "f9a252f4a3b621daabd330531fce555300a1d4c0",
+      "url": "https://android.googlesource.com/platform/packages/services/Car/+/f9a252f4a3b621daabd330531fce555300a1d4c0/car-lib/src/android/car/hardware/property/CarPropertyManager.java",
+      "transport_url": "https://api.github.com/repos/LineageOS/android_packages_services_Car/contents/car-lib/src/android/car/hardware/property/CarPropertyManager.java?ref=f9a252f4a3b621daabd330531fce555300a1d4c0",
+      "sha256": "cee995392d6a91ca044df163f9b68a0ac88550bab4113ea17a86c87f0f098e8d",
+      "git_blob_sha1": "6a160cf6cbd4c00fa753c01b1942b9daddb9e265"
+    },
+    {
+      "id": "car",
+      "repository_key": "car",
+      "path": "car-lib/src/android/car/Car.java",
+      "commit": "f9a252f4a3b621daabd330531fce555300a1d4c0",
+      "url": "https://android.googlesource.com/platform/packages/services/Car/+/f9a252f4a3b621daabd330531fce555300a1d4c0/car-lib/src/android/car/Car.java",
+      "transport_url": "https://api.github.com/repos/LineageOS/android_packages_services_Car/contents/car-lib/src/android/car/Car.java?ref=f9a252f4a3b621daabd330531fce555300a1d4c0",
+      "sha256": "0e4eb4443c3322618af9b45835f12dcbb710411469879a4d63cf7a8376e4eef3",
+      "git_blob_sha1": "43cb67074c0d8a73ecd13fb3d0fbfb80a4606b00"
+    },
+    {
+      "id": "aidl",
+      "repository_key": "interfaces",
+      "path": "automotive/vehicle/aidl_property/android/hardware/automotive/vehicle/VehicleProperty.aidl",
+      "commit": "40e9f1537e308ed49e3b561ce333e3f2bb64f31e",
+      "url": "https://android.googlesource.com/platform/hardware/interfaces/+/40e9f1537e308ed49e3b561ce333e3f2bb64f31e/automotive/vehicle/aidl_property/android/hardware/automotive/vehicle/VehicleProperty.aidl",
+      "transport_url": "https://api.github.com/repos/aosp-mirror-neo/platform_hardware_interfaces/contents/automotive/vehicle/aidl_property/android/hardware/automotive/vehicle/VehicleProperty.aidl?ref=40e9f1537e308ed49e3b561ce333e3f2bb64f31e",
+      "sha256": "4eadc6a18207b7b6b0e37efc66e9ba920ca4ed1ca43ab8006ae9ab8d254122c1",
+      "git_blob_sha1": "d9c6de7ef925ab7bac19ca2daca5f4d07315400a"
+    },
+    {
+      "id": "hidl",
+      "repository_key": "interfaces",
+      "path": "automotive/vehicle/2.0/types.hal",
+      "commit": "40e9f1537e308ed49e3b561ce333e3f2bb64f31e",
+      "url": "https://android.googlesource.com/platform/hardware/interfaces/+/40e9f1537e308ed49e3b561ce333e3f2bb64f31e/automotive/vehicle/2.0/types.hal",
+      "transport_url": "https://api.github.com/repos/aosp-mirror-neo/platform_hardware_interfaces/contents/automotive/vehicle/2.0/types.hal?ref=40e9f1537e308ed49e3b561ce333e3f2bb64f31e",
+      "sha256": "06983ffe6d75e90a22503a6d9fd14417f983a36bb060a80ad5915240d69b8a40",
+      "git_blob_sha1": "5b0a5055c12c5abdb866e7312eee37add7353544"
+    },
+    {
+      "id": "mapping",
+      "repository_key": "car",
+      "path": "service/src/com/android/car/hal/PropertyHalServiceIds.java",
+      "commit": "f9a252f4a3b621daabd330531fce555300a1d4c0",
+      "url": "https://android.googlesource.com/platform/packages/services/Car/+/f9a252f4a3b621daabd330531fce555300a1d4c0/service/src/com/android/car/hal/PropertyHalServiceIds.java",
+      "transport_url": "https://api.github.com/repos/LineageOS/android_packages_services_Car/contents/service/src/com/android/car/hal/PropertyHalServiceIds.java?ref=f9a252f4a3b621daabd330531fce555300a1d4c0",
+      "sha256": "bebd719c6c975f2695dc2afa3c54811fe9e9bce60fb2b01b113358fa49f480ac",
+      "git_blob_sha1": "fd0b90271649e6d2abc59c7b9305a9575f83d5ee"
+    }
+  ],
+  "purpose": "Reference baseline only. Device Android version is not established.",
+  "transport_note": "Mirrors carry fixed AOSP commits; mirror branch names are never used as a baseline.",
+  "artifacts": {
+    "seed_facts.jsonl": "79e70d641ba8f40afa6604e2b02d09ac2b927530e0ba934e50ee2ae628251d17",
+    "seed_evidence.jsonl": "525207c7d2c634d7a9eb18612693c4e359a1ee60bebb1e8eb7ed353a1da06977",
+    "POLICY.md": "a22525819b9134d20a0e22cf40bd6f699f8d20c554f7c4fe5fd8e9a85bc5b51d"
+  }
+}
