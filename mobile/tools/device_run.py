@@ -143,8 +143,8 @@ def check_proxy_clean(log: Path) -> bool:
 
 
 def start_collector(log: Path, port: int) -> subprocess.Popen:
-    """复用 phase4 的接收端（POST /collect → 200），无需新写。"""
-    proc = subprocess.Popen([PY, str(ROOT / "phase4" / "collector_server.py"),
+    """复用 core 的接收端（POST /collect → 200），无需新写。"""
+    proc = subprocess.Popen([PY, str(ROOT / "core" / "collector" / "collector_server.py"),
                              "--port", str(port)],
                             stdout=open(log, "w", encoding="utf-8"), stderr=subprocess.STDOUT)
     time.sleep(1.5)
