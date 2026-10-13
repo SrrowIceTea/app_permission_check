@@ -70,3 +70,7 @@ desktop.ini
 # ── Frida 打包产物（可由 core/frida_host/build.py 重新生成）──────
 dist/*.bundle.js
 **/dist/*.bundle.js
+
+# ── Agent 工作日志（仅留本机，不进公开仓库）─────────────────────
+# 2026-10-13 起不再跟踪：日志含主机路径与会话内部记录，已从 Gitee 移除。
+.workbuddy/memory/
