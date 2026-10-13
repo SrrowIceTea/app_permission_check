@@ -5,12 +5,8 @@
 
 ## 当前内容
 
-移动端报告快照（原混在车载前端 `frontend/pdfs/` 下，2026-10-11 手工拷贝、无脚本引用，
-2026-10-12 拆分时移出，让车载前端只服务车载）：
+- `research/RELATED_WORK.md` — 研究阶段的工作记录（`vehicle/rules/research/` 下，零代码依赖）。
 
-- `mobile-device-latest.pdf` — 移动端设备审计报告快照。正规产物：
-  `output/mobile-device-*/out/mobile-report.pdf`（指针 `output/latest-mobile-device.txt`）。
-- `mobile-regression-latest.pdf` — 移动端回归报告快照。正规产物：
-  `output/mobile-regression-*/e2e/report.pdf`（指针 `output/latest-mobile.txt`）。
-- `thirdparty-latest.pdf` — 第三方 APK 审计报告快照。正规产物：
-  `output/thirdparty-*/<包名>/out/mobile-report.pdf`（指针 `output/latest-thirdparty-batch.txt`）。
+> 三份移动端报告 PDF（`mobile-device-latest` / `mobile-regression-latest` / `thirdparty-latest`）
+> 曾于 2026-10-12 归档到这里，**2026-10-13 已撤回并移回 `frontend/pdfs/`**（原因与正规产物
+> 位置见 `MANIFEST.md` 第 2 条）。归档目录刻意不留副本，避免同一份报告出现两个版本。

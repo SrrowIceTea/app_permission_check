@@ -99,7 +99,14 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
 - ✅ `core/frida_host/`（Frida 驱动 + 共享 bundle，斩断 mobile 对 vehicle/hooks 的引用）
 - ✅ `core/static/`（静态分析内核，斩断 mobile 对 vehicle/workbench 的引用）
 - ✅ `phase1–7` → `vehicle/*` 语义化改名（rules/targets/hooks/traffic/analyze/dashboard/workbench）
-- ✅ `frontend/` 明确车载专用：清除移动端 PDF 污染，`--android-version` 从 manifest 读
+- ✅ `frontend/` 的 `--android-version` 从 manifest 读（不再写死 14/15）
+  - 注：同时做过的「清除移动端 PDF 污染」（把三份移动端报告移出 `frontend/pdfs/`）
+    **已于 2026-10-13 撤回**——前端才是日常查看报告的入口，只列车载不够用；
+    三份已移回，见 `archive/MANIFEST.md` 第 2 条
+- ✅ 修 `core/static/` 的 Windows MAX_PATH（拆分把 `phase7/` 改名为 `vehicle/workbench/`
+  后，jadx 源码树最深路径由 ~253 涨到 262，越过 260 → 拖入 APK 直接分析失败）：
+  新增 `core/static/winpath.py`（`\\?\` 扩展长度路径，覆盖 stat/read/rmtree 四个边界）
+  + 离线回归 `test_jobs.LongPathTest`
 - ✅ `apk/` 按平台分目录：`apk/mobile/`（手机样本）与 `apk/vehicle/`（车载样本），
   移动端取样本的默认目录跟着改；见 `apk/README.md`
 - ✅ 修 `tools/device_acceptance.py` 的钩子路径（拆分漏改）：`hook_egress`/`ssl_pinning_bypass`

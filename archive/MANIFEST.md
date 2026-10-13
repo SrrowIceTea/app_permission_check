@@ -13,16 +13,20 @@
 - **原引用方**：`vehicle/rules/CLAUDE.md:17`（已改为指向 `archive/research/RELATED_WORK.md`）。
 - **找回方式**：需要时 `git mv archive/research/RELATED_WORK.md vehicle/rules/research/`。
 
-### 2. `mobile-device-latest.pdf` / `mobile-regression-latest.pdf` / `thirdparty-latest.pdf`
+### 2. ~~`mobile-device-latest.pdf` / `mobile-regression-latest.pdf` / `thirdparty-latest.pdf`~~（**已撤回**）
 
+- **状态**：**2026-10-13 撤回归档，三份已移回 `frontend/pdfs/`**，`frontend/app.html`
+  的 PDF 下拉同步加回三个选项。当初按「前端只服务车载」移出，但前端才是日常查看报告的
+  入口，只列车载不够用，故恢复。
 - **原路径**：`frontend/pdfs/`（车载工作台前端，2026-10-11 手工拷贝，无脚本引用）。
-- **归档理由**：`frontend/` 是车载专用前端，不该混入移动端报告。三个 PDF 是某次运行结果
-  的**手工快照**，正规产物在 `output/` 下、可随时重新生成。
-- **正规产物位置**：
+- **当初的归档理由**：`frontend/` 是车载专用前端，不该混入移动端报告。三个 PDF 是某次
+  运行结果的**手工快照**，正规产物在 `output/` 下、可随时重新生成。
+- **正规产物位置**（仍是更新快照的正规来源，`pdfs/` 下的是快照、要手工替换）：
   - 设备审计 → `output/mobile-device-*/out/mobile-report.pdf`（指针 `output/latest-mobile-device.txt`）
   - 回归 → `output/mobile-regression-*/e2e/report.pdf`（指针 `output/latest-mobile.txt`）
   - 第三方 → `output/thirdparty-*/<包名>/out/mobile-report.pdf`（指针 `output/latest-thirdparty-batch.txt`）
-- **找回方式**：从上面指针目录直接取最新一份，或重跑 `mobile/tools/device_run.py` / `run_mobile_checks.py` / `batch_thirdparty.py`。
+- **找回方式**：从上面指针目录直接取最新一份，或重跑 `mobile/tools/device_run.py` / `run_mobile_checks.py` / `batch_thirdparty.py`；
+  本次撤回是用 `git checkout 4122025^ -- frontend/pdfs/<名字>.pdf` 从历史恢复的。
 
 ## 尚未归档（留待确认）
 

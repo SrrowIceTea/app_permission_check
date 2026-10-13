@@ -14,7 +14,7 @@ frontend/
 ├── app.css         # 工作台样式
 ├── app.js          # 工作台逻辑（对接 vehicle/workbench 后端）
 ├── highlight.js    # 零依赖 Java/Kotlin 词法高亮器（自写，不引 CDN）
-└── pdfs/           # 车载审计报告 PDF（移动端报告在 output/mobile-*/ 下，不在此前端）
+└── pdfs/           # 审计报告 PDF 快照：车载 + 移动端（设备/回归/第三方）各一份
 ```
 
 ## 功能页面
@@ -30,7 +30,7 @@ frontend/
 2. **静态审计** - 静态规则命中表（规则/类型/强度/等级/信号/依据）
 3. **动态审计** - 静动交叉核对四象限（both / static_only / dynamic_only / none）
 4. **AI 报告** - 综合审计报告（概览/权限/风险分布/缺口/建议）
-5. **PDF 报告** - 车载审计报告 PDF 查看（iframe 原生查看器）
+5. **PDF 报告** - 审计报告 PDF 查看（车载 + 移动端快照，iframe 原生查看器）
 
 ## 使用方式
 
@@ -78,8 +78,12 @@ python -m http.server 8080
 
 ## 关键约定
 
-- **本前端只服务车载（AAOS）**：移动端报告的 PDF 生成在 `output/mobile-*/` 下，
-  通过文件系统直接查看，不经过此前端；此处 PDF 页只列车载报告。
+- **PDF 页列的是手工快照，不是实时产物**：`pdfs/` 下四份 PDF 都没有脚本引用，
+  要更新得重新拷。移动端报告的**正规产物**在 `output/mobile-*/`、`output/thirdparty-*/` 下
+  （指针 `output/latest-mobile-device.txt` / `latest-mobile.txt` / `latest-thirdparty-batch.txt`），
+  按需替换这里的快照。
+  > 历史：2026-10-12 拆分时曾把移动端三份移出 `archive/`，以让前端「只服务车载」；
+  > 2026-10-13 按用户要求恢复回下拉（前端是日常查看报告的入口，只列车载不够用）。
 - **静态结论等级封顶 `candidate`**：代码里出现引用不证明运行时行为，违规仍需人工判定。
 - **动态侧数据来自 `/crosscheck`**：需要后端启动时带 `--session`/`--findings`；
   缺失时前端如实显示"无法对照"，不硬凑数据。
