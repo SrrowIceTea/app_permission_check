@@ -15,9 +15,23 @@
 // ============================================================================
 'use strict';
 
-function sha256hex16(s) {
+// ---- 事件期缓存（批次 4 · A1 假设 H1，见 DEV_FIX_REPORT §5.1）----
+// 假设：崩点在被替换的 ArtMethod 内做 Java.use()。MessageDigest 的 Java.use
+// 收敛到 ARMED 阶段解析一次（armValueCache）；缓存缺失时 value_hash 退化为
+// null（下游本来就允许 null，见 correlate 对 value_hash 的处理），事件照发。
+var MD_CLS = null;
+
+export function armValueCache() {
   try {
-    var md = Java.use('java.security.MessageDigest').getInstance('SHA-256');
+    MD_CLS = Java.use('java.security.MessageDigest');
+    return MD_CLS !== null;
+  } catch (e) { MD_CLS = null; return false; }
+}
+
+function sha256hex16(s) {
+  if (MD_CLS === null) return null;
+  try {
+    var md = MD_CLS.getInstance('SHA-256');
     var bytes = new java.lang.String(s).getBytes('UTF-8');
     md.update(bytes);
     var digest = md.digest();

@@ -1,7 +1,9 @@
 # 工程缺陷修复记录（2026-10-14）
 
 > 任务书：[`mobile/RESEARCH_OUTLOOK.md` §八](RESEARCH_OUTLOOK.md)「工程缺陷与修复清单」。
-> 执行方式：按 §8.5 的分批计划 1 → 2 → 3 → 4；**每批改完跑两条离线回归**；批次 4 **只写方案，未动一行代码**。
+> 执行方式：按 §8.5 的分批计划 1 → 2 → 3 → 4；**每批改完跑两条离线回归**。
+> 批次 4 的第一轮**只写方案、未动一行代码**；第二轮（2026-10-14 晚）落地了其中**纯离线可写**的三项
+> （A1 的分档/缓存预备、A3 的夹具阳性对照、B-2 的钩子一致性守卫），**A1 本体仍未修**——见 §5。
 > 遵守 §8.6 六条红线；`core` 未出现任何 `import vehicle` / `import mobile`。
 
 ---
@@ -11,11 +13,11 @@
 | 项 | 结果 |
 |---|---|
 | 改动文件 | **46 个**（其中新建 6 个：`core/io_utils.py`、`core/sdk_paths.py`、`.github/workflows/ci.yml`、`ruff.toml`、`.pre-commit-config.yaml`、`mobile/ai/config.example.json`）+ 本报告 |
-| 分批 | 批次 1（配置与文档）→ 批次 2（小范围代码）→ 批次 3（语义级）→ 批次 4（**只写方案**） |
-| 移动侧回归 | `mobile/tools/run_mobile_checks.py` → **21/21 passed，failed=[]**（终态） |
-| 根回归 | `tools/run_regressions.py` → **11 组全 0 失败**（终态） |
-| 回归次数 | 基线 1 次 + 批次 1/2/3 各 1 次 + 批次 3 收尾 2 次，**中间出现过一次回归失败并已修**（见 §3.4） |
-| 未执行条目 | 6 条（A1、A3、A4、A5、B-2 钩子共享化/超 300 行拆分、B-3 `extended_rglob`），全部属于批次 4，见 §5 |
+| 分批 | 批次 1（配置与文档）→ 批次 2（小范围代码）→ 批次 3（语义级）→ 批次 4-A（**只写方案**）→ 批次 4-B（**离线可写部分落地**，2026-10-14 晚） |
+| 移动侧回归 | `mobile/tools/run_mobile_checks.py` → **22/22 passed，failed=[]**（批次 4-B 终态） |
+| 根回归 | `tools/run_regressions.py` → **12 组全 0 失败**（批次 4-B 终态） |
+| 回归次数 | 基线 1 次 + 批次 1/2/3 各 1 次 + 批次 3 收尾 2 次 + 批次 4-B 2 次，**中间出现过一次回归失败并已修**（见 §3.4） |
+| 未执行条目 | **A1 本体**、A4、A5、B-2 的中期共享化 / 超 300 行拆分、B-3 `extended_rglob`，见 §5 |
 
 两条回归命令（纯离线、不需要设备）：
 
@@ -138,6 +140,51 @@ NameError: name 'json' is not defined.
 
 已恢复该 import，重跑转绿。**记录在这里是因为它正好说明两条回归确实在盯字段契约**——也提醒后来者：`grep -n json | head -5` 会漏看，删 import 前要全文件确认。
 
+### 3.5 批次 4（离线部分）之后
+
+**结论：两条回归都全绿；但换一个解释器就会冒出 6 处假红，必须先看解释器再看红。**
+
+```
+# 用「裸 python」（本机落到 WorkBuddy 托管解释器，没装 requirements.txt）——6 处红
+$ python mobile/tools/run_mobile_checks.py
+{ "status": "failed", "checks": 22, "failed": ["report", "e2e_report", "report_nonempty"] }
+      # → No module named 'reportlab'（mobile/report/report_mobile.py:33）
+
+$ python tools/run_regressions.py
+completion 1        # → No module named 'PIL'（vehicle/analyze/report_extras.py）
+collector 1         # → No module named 'mitmproxy'（core/collector/addon.py）
+hook-bundles 1      # → No module named 'cryptography'（tools/test_proxy_cert.py）
+（其余 9 组 0）
+
+# 按 requirements.txt 装完依赖后重跑——两条全绿
+$ <venv>/python mobile/tools/run_mobile_checks.py
+{ "status": "passed", "checks": 22, "failed": [] }
+
+$ <venv>/python tools/run_regressions.py
+completion 0   rules-contract 0   codeloc 0   correlate 0   collector 0
+tagging-vehicle 0   dashboard 0   runtime 0   parity 0   workbench 0
+hook-bundles 0   frida-bundle-config 0
+```
+
+四个要点：
+
+1. **那 6 处红是解释器问题，不是代码问题，也不是"批次 3 的记录是假的"**。实测四个解释器：
+   | 解释器 | reportlab / PIL / mitmproxy / cryptography | maxminddb |
+   |---|---|---|
+   | `C:\Users\毛宇淇\AppData\Local\Programs\Python\Python313`（用户自己的） | 全有 | **缺** |
+   | `D:\MSYS2\mingw64\bin\python.exe` | 全缺 | 缺 |
+   | WorkBuddy 托管 `…\versions\3.13.12\python.exe` | 全缺 | 缺 |
+   | 隔离 venv `…\envs\default\`（本轮装的） | 全有 | **有** |
+   §3.3 那张全 0 的表是用**用户自己的 Python 3.13** 跑的，所以是真的；本轮第一次跑落到托管解释器上，才出现那 6 处红。
+2. **`requirements.txt` 里"reportlab 声明 5.0.1 而本机 5.0.0"的漂移已经不存在**：本轮 `pip install -r requirements.txt` 装到的是 **5.0.1**，与声明一致，那条注解可以删。
+3. **`maxminddb` 只有 venv 装了**——说明 `requirements.txt` 声明了它，但现有的回归/检查一条都不 import 它。这既是"声明了没验证"，也是换机时最容易漏的一个。
+4. **新增/改动的离线套件**：`run_regressions.py` 从 11 组到 **12 组**（新增 `frida-bundle-config` = `core/frida_host/test_bundle_config.py`，6 例）；`run_mobile_checks.py` 从 21 项到 **22 项**（新增 `hooks_parity` = `mobile/tools/test_hooks_parity.py`）。
+
+> ⚠️ **踩坑记录**：跑这两条回归**先确认解释器**。本轮用隔离 venv（已按 `requirements.txt` 装齐）跑通；
+> 直接敲裸 `python` 会落到托管解释器上，然后看到 6 处红——**那 6 处红会掩盖真正的回归失败**。
+> 另外注意 bash 里不要用 `~` 指代用户目录（本机 `HOME=/d/HZNU/GitHome`），要用绝对路径。
+> 这条正是 §8.2 B-5「全项目无 CI」的实际代价：同一个仓库、同一个命令，换台机器/换个解释器结果就不一样。
+
 ---
 
 ## 4. 行为变化清单（需要用户知晓）
@@ -161,10 +208,34 @@ NameError: name 'json' is not defined.
 8. **字体候选表合并后顺序是 SimHei → DengXian → 雅黑**（原来是两处各取一半）。换机可用 `VSCAN_CJK_FONT=<ttf 路径>` 覆盖而不改代码。
 9. **`sdk_paths` 会读 `VSCAN_SDK`/`VSCAN_JDK`**。换机时设这两个环境变量即可，不必再改 19 处代码。
 10. **pre-commit 的 300 行守卫会拦下现有 7 个超限文件**（`vehicle/workbench/server.py` 316、`mobile/tools/device_run.py` 457、`mobile/tools/thirdparty_env.py` 459、`mobile/tools/device_run_thirdparty.py` 411、`mobile/tools/fetch_apk.py` 382、`core/collector/addon.py` 355、`mobile/ai/evidence_bundle.py` 355）。这几个**改动前就已超限**，本轮未做拆分（属批次 4）；它们只在被提交时才会触发守卫，日常工作不受影响。
+11. **`core/frida_host/run.py` 多两个分档开关（A1 定位用，默认不启用）**。
+    `--watch-limit <n>`（同 `VSCAN_WATCH_LIMIT`）：只挂前 n 条监视项，`0` = 全不挂（attach 对照组），不给 = 全量 58。
+    `--no-stack`（同 `VSCAN_NO_STACK=1`）：事件里不带 `thread_name`/`stack` 字段值。
+    **不给这两个参数时行为与以前完全一致**（占位符原样保留在 bundle 里，`configure()` 只替换显式传入的）；一旦启用，`START`/`ARMED` 事件会多出 `watch_limit`/`watch_limit_raw`/`runtime_cache`/`value_cache` 字段，档位可事后从证据里复核。
+12. **第三方批次多了一道前置门（A3）**：跑批前自动跑一次夹具阳性对照，**失败就拒绝出批**。
+    - 直接后果：**没接设备 / 设备没起来时，以前会产出一批"零运行时事件"的样本结论，现在批次会直接失败退出**（退出码 1，stdout 给 `status: fixture_selftest_failed` + `reason` + `hint`）。这是期望行为，不是回归。
+    - A1 未修期间确实会挡住正常工作，所以留了显式逃生口 `--skip-fixture-selftest`；**跳过时批次摘要里会留痕**（`selftest.passed = null` + 跳过原因 + "结论可信度下降"提示），事后可查——不许把它当成透明的开关用。
+    - 批次产物多一个 `_fixture-selftest/` 目录（求值现场 + `result.json`）与一份 `fixture-selftest.log`；`batch-summary.json` 多一个 `selftest` 字段。
+13. **新增钩子一致性守卫（B-2）：改 `mobile/hooks/*.js` 或 `vehicle/hooks/*.js` 后被它拦下是正常的**。
+    `mobile/tools/test_hooks_parity.py` 会比对 7 对共享钩子脚本；两侧不一致就失败。若差异是**有意**的，必须往 `mobile/tools/hooks_parity_whitelist.json` 加一条带 `id`/`reason`/`date` 的规则，否则守卫会一直红。**反过来，白名单里的规则一旦不再命中也会报错**——两侧代码演进后要记得清理。
 
 ---
 
-## 5. 批次 4 方案（**未动一行代码**）
+## 5. 批次 4：方案与执行（A1 本体仍未修）
+
+> 本轮（2026-10-14 第二批）只做**纯离线可写**的三件事：A1 的分档/缓存预备（§5.1）、
+> A3 的夹具阳性对照（§5.2）、B-2 的钩子一致性守卫（§5.4）。**A1 本体没修**——
+> 按 §8.6 第 6 条与 §5.1 的验收判据，A1 必须设备上跑夹具出真实事件才算修好。
+
+### 5.0 执行摘要
+
+| 条目 | 本轮状态 | 落地物 | 离线证据 | 缺什么才能算完 |
+|---|---|---|---|---|
+| **5.1 A1 分档定位** | **离线预备已落地，A1 本体未修** | `--watch-limit`/`VSCAN_WATCH_LIMIT`（H2 分档）、`--no-stack`/`VSCAN_NO_STACK`（H1 开关）、事件期缓存化 `armRuntimeCache()`/`armValueCache()` | `core/frida_host/test_bundle_config.py` 6 例全过；真实 bundle 上 3 个占位符各存活 1 次，替换后长度头自洽、模块拼接过 `node --check` | 设备上按档位跑夹具，`reads.jsonl` 出现 ≥1 条非 START/ARMED 事件且进程存活 |
+| **5.2 A3 夹具自检** | **已落地，待设备验收** | 新增 `mobile/tools/fixture_selftest.py`（209 行）；`batch_thirdparty.py` 前置门 + `--skip-fixture-selftest`；结果写进 `batch-summary.json` 的 `selftest` | 无设备跑 → `passed:false` + `reason`/`hint`；`--skip` → `passed:null` 且跳过事实落进批次摘要；门判 `False` 时批次拒绝出批 | 设备上跑批，夹具自检真出 PRIVACY_READ |
+| **5.4 B-2 一致性守卫** | **已落地并验证** | 新增 `mobile/tools/test_hooks_parity.py` + `hooks_parity_whitelist.json`（**7 对**、13 条规则） | 通过 exit 0；注入 4 种真实漂移均 exit 1 并给出行级 A/B 差异；白名单陈旧也 exit 1 | —（纯离线，已完） |
+| **5.5 超 300 行拆分** | 未做 | 只做"不新增超限文件"：从 `batch_thirdparty.py` 抽出 `apk_meta.py`（80 行），使前者维持 261 行 | — | 按 §5.5 拆分既有 7 个超限文件 |
+| **5.3 / 5.6 / 5.7** | 未做（仍为方案） | — | — | 见各自小节 |
 
 ### 5.1 A1 · 插桩把应用打死（P0，最高优先级）
 
@@ -183,8 +254,9 @@ NameError: name 'json' is not defined.
 #### 落地步骤建议（顺序）
 
 1. **先把 A2 的强制判据用起来**（本轮已做）：任何一轮跑完先看 `verification.json` 的 `runtime_events_captured`，它现在是 A1 的探针。
-2. **分档脚本**：给 `hook_privacy.js` 加一个 `VSCAN_WATCH_LIMIT=<n>`（或 `--watch-limit` 由 `gen_targets.py` 生成子集），按 H2 的档位跑；每档把 `app-death.json` 与 `reads.jsonl` 落盘归档，形成可对照的表格。
-3. **H1 的缓存化改造**：把 `runtime.js` 的 `Java.use` 收敛成 `tryUse` 的模块级缓存；`stackStr()` 做成可关开关。**这两处是纯离线可写、但必须设备验证的改动**——按 §8.6 第 6 条，未验证前不得声称 A1 已修。
+2. **分档脚本**（**本轮已落地**）：`core/frida_host/run.py` 新增 `--watch-limit <n>`，`hook_privacy.js` 里 `for (var i = 0; i < limit; i++) armOne(WATCH[i])`；`0` 是合法档位（等价全不挂，当 attach 对照组），未给 = 全量 58。同名的 `VSCAN_WATCH_LIMIT` 环境变量可兜底。`START`/`ARMED` 事件里都带 `watch_limit`/`watch_limit_raw`，档位可事后从证据里复核。按 H2 的档位跑；每档把 `app-death.json` 与 `reads.jsonl` 落盘归档，形成可对照的表格。
+3. **H1 的缓存化改造**（**本轮已落地**）：`runtime.js` 新增 `armRuntimeCache()` 把 `Java.use('java.lang.Thread')` 提到 ARMED 阶段缓存（`threadName()`/`stackStr()` 事件期不再 `Java.use`）；`values.js` 新增 `armValueCache()` 缓存 `MessageDigest`。`stackStr()` 另有总开关 `VSCAN_NO_STACK=1` / `--no-stack`，打开后事件不带线程/栈字段。`START` 里记 `runtime_cache`/`value_cache` 两个布尔，能立刻看出缓存是否生效。**这些仍是纯离线可写、必须设备验证的改动**——按 §8.6 第 6 条，未验证前不得声称 A1 已修。
+   - 坑（已踩并记录）：`frida-compile` 的压缩器会把**直接的字面量比较**（`"__VSCAN_NO_STACK__" === "1"`）常量折叠成 `false`，占位符必须走 `parseInt("__VSCAN_NO_STACK__", 10)` 消费。判断方式是构建后 `grep` bundle，确认占位符字符串还在。
 4. 每档/每次都要记：`alive_at_end`（三态）、`/data/tombstones/` 文本、crash 缓冲行数、`reads.jsonl` 真实事件数。
 5. **验收判据**（照 §8.1 A1）：夹具跑一次，`reads.jsonl` 出现 ≥1 条非 START/ARMED 的真实事件，且进程在窗口内存活。
 
@@ -196,11 +268,23 @@ NameError: name 'json' is not defined.
 
 ### 5.2 A3 · 夹具阳性对照内建进 `batch_thirdparty.py`
 
-- 批次开始前先跑一次**夹具最小自检**：装 `com.vscanner.privacydemo` → 挂钩 → 点 1 个按钮（如 `btnDeviceId`）→ 断言 `reads.jsonl` 有 ≥1 条真实事件。
-- 自检失败 → **拒绝出批**，给出明确原因并指向 A1 的分档脚本。
-- 建议实现形态：新增 `mobile/tools/fixture_selftest.py`（≤300 行）返回结构化结果；`batch_thirdparty.py` 在遍历样本前调用一次，结果写进批次级 `verification.json`。
-- 验收：故意 `--no-hooks` 或把钩子脚本改坏，批次必须在自检阶段失败退出。
-- 依赖：A1 未修时自检**必然失败**，这会让批次永远出不了——所以**先做 A1 的分档定位**，或把自检做成"可跳过但必须显式 `--skip-fixture-selftest` 并在报告里留痕"。
+**状态：已实现（离线可验部分全过，设备侧待验收）。**
+
+- 批次开始前自动跑一次**夹具最小自检**：装 `com.vscanner.privacydemo` → 挂钩 → 点 1 个按钮（`btnDeviceId`）→ 断言 `reads.jsonl` 有 ≥1 条真实事件。
+- 落地物：新增 `mobile/tools/fixture_selftest.py`（209 行，独立入口，可单独跑）；`batch_thirdparty.py` 在**遍历样本前**调用一次，拿到 `passed is False` 就写 `status="fixture_selftest_failed"`、`samples=0` 的批次摘要并 `return 1`。
+- **结果落在哪**：不是 `verification.json`——那是**单样本**级产物，批次本来就没有；改为写进**批次级** `batch-summary.json` 的 `selftest` 字段，自检自己的 `result.json` 另存 `<批次>/_fixture-selftest/`。
+- 自检失败 → **拒绝出批**，`reason`/`hint` 直接回显 stdout；`hint` 指向 A1 的分档脚本。
+- **依赖（原判断成立）**：A1 未修时自检必然失败，会让批次永远出不了。所以做成"**可跳过但必须显式 `--skip-fixture-selftest`**"：跳过时写 `passed: null` + `skipped` 原因 + 一句"本轮无法区分『采不到』与『没收集』、结论可信度下降"，跳过事实留在批次摘要里，事后可查。
+- 附带说明：`batch_thirdparty.py` **没有** `--no-hooks`（那是单样本 runner 的对照开关），所以批次侧的自检**永远用真实钩子链跑**——这正是阳性对照要的语义。
+
+**验收（对应 §8.1 A3 判据）**
+
+| 分支 | 手段 | 结果 |
+|---|---|---|
+| 自检不过 → 拒绝出批 | 无设备离线跑 | ✅ `{"status":"fixture_selftest_failed","reason":"设备未在超时内启动完成",...}`，退出码 1；`batch-summary.json` 里 `samples=0`、`selftest.passed=false`（证据：`output/_batch_gate_refuse/`） |
+| `--skip` → 留痕但放行 | 显式跳过 | ✅ `selftest: {"passed": null, "skipped": "explicit --skip-fixture-selftest", "hint": ...}` 写进批次摘要（证据：`output/_batch_gate_test/`） |
+| 自检脚本崩掉 → 不产出 `result.json` | 代码分支 | ⚠️ 只做了代码走查：缺文件一律判 `passed=false` 并把原因指向 `fixture-selftest.log`，未做实际注入 |
+| **把钩子脚本改坏** → 自检因零 PRIVACY_READ 失败 | 需设备 | ⏳ 未验。它走的是同一条 `passed is False` 拒绝路径，但现场尚未跑过 |
 
 ### 5.3 A4 · 崩溃自愈 + 分段采集
 
@@ -211,7 +295,11 @@ NameError: name 'json' is not defined.
 
 ### 5.4 B-2 · 钩子 JS 共享化 或 一致性守卫
 
-- **短期（推荐先做）**：新增 `mobile/tools/test_hooks_parity.py`——把 `mobile/hooks/{hook_cipher,hook_native_ssl,stack_capture,ssl_pinning_tp,tls_bypasses_tp}.js` 与 `vehicle/hooks/` 同名文件**去注释后 diff**，差异非空即失败（允许一份"已知差异白名单"，每条带理由与日期）。并入 `run_mobile_checks.py`。
+- **短期：已落地并验证**。新增 `mobile/tools/test_hooks_parity.py`，已并入 `mobile/tools/run_mobile_checks.py`。
+  - ⚠️ **规格漏了 2 对**：原文只列 5 对（3 同名 + 2 改名）。把 `mobile/hooks/*.js` 与 `vehicle/hooks/*.js` 两两做相似度矩阵后，实际是 **7 对**——多出 `scope.js`↔`scope.js`（0.857）与 `runtime.js`↔`vehicle/hooks/vscan_runtime.js`（0.769，改名）。其余组合相似度 ≤0.33，据此排除"还有漏配"。
+  - 白名单 `mobile/tools/hooks_parity_whitelist.json`：13 条规则、4 类动作——`sub`（两侧同点替换，用于标识符改名）、`block`（整块豁免）、`exempt_functions`（只豁免函数体，签名仍比对）、`drop`（两侧同删）。每条强制带 `id`/`reason`/`date`，并限定生效的 `pair` 与 `side`。
+  - **陈旧白名单必须报错**（规则零命中即 exit 1）：否则两侧代码演进后白名单会悄悄失效、退化成"永久豁免"，守卫就没价值了。这条是它有没有长期意义的成败点。
+  - 已验证：通过路径 exit 0（7 对全绿）；4 种真实漂移全部 exit 1 并给出行级 A/B 差异——`hook_cipher` 的 `maxPlainBytes`、`hook_native_ssl` 的 `maxPlainBytes`、`scope.js` 的 `JSON.parse`、`runtime.js` 的 `rec.tid`→`rec.rid`；另单独验过"白名单里留一条陈旧规则"会报出来（且只报这一条，不做级联噪音）。
   - 纯离线、不需要设备、收益立即可见：车载侧修的 bug（如 D312 的 doFinal 重载语义）不会再静默漏到移动侧。
 - **中期**：JS 共享源码放 `core/hooks_shared/`，两侧 `frida-compile` 时按平台注入不同 runtime import 与日志路径（`addon_mobile.py` 的 `VSCAN_TAGGING` 模式已是同一思路的成功先例）。
   - 风险：产物 bundle 路径与 `.gitignore:72`（`**/dist/*.bundle.js` 不入库）耦合；共享化后必须同步更新 `tools/test_hook_bundles.py` 的清单，否则"离线全绿、真跑才炸"。
@@ -242,12 +330,15 @@ NameError: name 'json' is not defined.
 
 ## 6. 遗留问题与建议下一步
 
-1. **A1 未修，是全部运行时结论为空的根因**。建议下一步就按 §5.1 的 H1 → H2 顺序做分档实验，把"崩溃率 × 钩子档位"做成一张表——这张表本身就是论文里"方法可靠性"一节可用的材料。
+1. **A1 未修，是全部运行时结论为空的根因——但工具已就位，下一步就是接设备跑。**
+   `--watch-limit` / `--no-stack` 两个开关（§5.1 第 2、3 步）已经能用，夹具阳性对照（§5.2）会自动告诉你哪一档活着。
+   建议就直接按 §5.1 的 H1 → H2 顺序做分档实验，把"崩溃率 × 钩子档位"做成一张表——这张表本身就是论文里"方法可靠性"一节可用的材料。
 2. **`config.local.json` 里的真实 key 仍需你本人去吊销轮换**（DeepSeek 控制台）。该文件已被 `.gitignore` 覆盖，但**历史提交里是否曾入库未核查**（需要 `git log --all -- mobile/ai/config.local.json` 与必要时 scrub 历史）。
-3. **CI / pre-commit 未在本机实际执行过**。yaml 与 pre-commit 配置只做了人工核对；要真正生效需要：① 有远端仓库与 Actions 权限；② 本机 `pip install pre-commit && pre-commit install`。本轮按你的要求**没有推送、没有创建远端仓库**。
+3. **CI / pre-commit 仍未在本机实际执行过**。仓库已推到 Gitee（`git@gitee.com:mao-yuqi-12/mobile-app-permission-check.git`，main），`.github/workflows/ci.yml` 已入库；要真正生效还需要两步：① Gitee 侧开 Actions（或改推 GitHub）并配 runner；② 本机 `pip install pre-commit && pre-commit install`。
+   - ⚠️ **本机直接开 pre-commit 会炸**：`.pre-commit-config.yaml` 里挂了 `ruff-format`，而全仓有 **293 条** `ruff check` 存量问题、且代码风格（单引号等）与 `ruff-format` 的默认不一致。一旦 `pre-commit install`，git 钩子会把改动文件重新格式化，产生与存量风格断层的大 diff。**要开之前先决定**：要么先做一轮"冻结 + 全仓 format"再启用，要么把 `ruff-format` 从钩子里摘掉只留 `ruff`（本轮采取的是后者：只保证改动文件过 `ruff check`，不动格式）。
 4. **新增的 300 行守卫会拦下 7 个既有超限文件**（见 §4.10）。要不要在下一轮按 §5.5 拆，取决于你是否接受这批文件的改动量。
 5. **`mobile/report/report_common.py:19` 还有第三份字体候选表**（规格只列了两处）。移动侧不 import 车载侧（项目约定），所以要么复制合并后的顺序过去，要么把候选表下沉到 `core`（更彻底，但会让 `core` 承担"报告字体"这种表现层职责，需要你定夺）。
 6. **`sqlite` 只读连接的 URI 编码只改了 `core/rules_contract.py` 一处**。`vehicle/dashboard/dashboard.py`、`vehicle/workbench/static_rules.py`、`mobile/analyze/correlate_mobile.py:56`、`mobile/ai/evidence_bundle.py` 里还有同类 `f"file:{p}?mode=ro"` 写法，属同一风险。本轮按"小而准"只改了规格点名的那处（顺带 `rules_db_meta` 合并让 `report.py` 间接受益）。
 7. **`uid_sampler.py` 的改动没有离线用例覆盖**（该模块是独立脚本、无人 import，两条回归都不碰它）。改动后只在编译层面验证，建议补一组"adb 返回非 0 → `ok=False`"的纯函数用例，或直接依赖设备回归。
-8. **文档漂移还有一处未改**：根 `CLAUDE.md:103` 也写着"10 组回归"（与 `AGENTS.md` 同一个漂移）。规格只点名 `AGENTS.md`，本轮未动。
-9. **仓库卫生**：450 个跟踪文件混入产物/证据、46 个文件改动未提交（规格 B-5 低优先级，属批次外的独立整理），建议单独一轮处理，不要和代码修复混在一起提交。
+8. ~~**文档漂移还有一处未改**：根 `CLAUDE.md:103` 也写着"10 组回归"~~ —— **批次 4-B 已一并修正**：`CLAUDE.md` 的"10 组 / 16 项"、`AGENTS.md` 的"11 组 / 21 项"、`mobile/CLAUDE.md` 的"21 项（路径写成 `tools/`）"全部改成当前实际的 **12 组 / 22 项**，并在 `AGENTS.md` 补了一句"看到红先确认解释器依赖"。
+9. **仓库卫生**：450 个跟踪文件混入产物/证据（规格 B-5 低优先级，属批次外的独立整理），建议单独一轮处理，不要和代码修复混在一起提交。

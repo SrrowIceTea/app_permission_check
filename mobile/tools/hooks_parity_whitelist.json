@@ -1,0 +1,221 @@
+{
+  "note": "钩子一致性守卫（mobile/tools/test_hooks_parity.py）的已知差异白名单。每条必须有 reason 与 date；条目一旦匹配不上，守卫会报 stale 并要求重新核对。新增条目 = 声明「这处差异是故意的、已经人审」——不要用它掩盖还没来得及同步的 bug。",
+  "rules": [
+    {
+      "id": "runtime-import",
+      "pair": "*",
+      "kind": "sub",
+      "mobile": "./runtime.js",
+      "vehicle": "./vscan_runtime.js",
+      "reason": "平台运行时模块名不同：移动侧 runtime.js（含 threadName/stackStr），车载侧 vscan_runtime.js（见 mobile/hooks/runtime.js 头注释）",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "log-path",
+      "pair": "*",
+      "kind": "sub",
+      "mobile": "/data/local/tmp/vscan-mobile.log",
+      "vehicle": "/data/local/tmp/vscan.log",
+      "reason": "日志路径按平台传入：移动侧 vscan-mobile.log，车载侧 vscan.log（runtime.js 头注释第 2 条）",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "ssl-script-name",
+      "pair": "ssl_pinning",
+      "kind": "sub",
+      "mobile": "ssl_pinning_tp.js",
+      "vehicle": "ssl_pinning_bypass.js",
+      "reason": "同名文件在移动侧改名为 ssl_pinning_tp（第三方专用裁剪版）；脚本自报名字串随文件名",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "bypasses-import",
+      "pair": "ssl_pinning",
+      "kind": "sub",
+      "mobile": "./tls_bypasses_tp.js",
+      "vehicle": "./pinning_bypasses.js",
+      "reason": "依赖文件在移动侧改名为 tls_bypasses_tp.js（对应 vehicle 的 pinning_bypasses.js）",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "scope-note",
+      "pair": "ssl_pinning",
+      "kind": "sub",
+      "mobile": "'process-local only; relaxes TLS trust verification for audit traffic capture'",
+      "vehicle": "'process-local only; bypasses trust verification for audit traffic capture'",
+      "reason": "scope_note 历史措辞差异（relax vs bypass），语义相同",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "pinning-armed-scope",
+      "pair": "ssl_pinning",
+      "kind": "block",
+      "mobile_lines": [
+        "vlog('PINNING_ARMED', { hooks: bypasses.arm(), candidates: bypasses.candidates, covered: 'conscrypt TrustManagerImpl (incl. NSC pin-set path), SSLContext custom TMs, okhttp CertificatePinner', reduced: 'HttpsURLConnection default/instance HostnameVerifier was REMOVED for this sample: it aborted ART on the Glide source thread (see tls_bypasses_tp.js header) and buys nothing because this sample\\'s HTTP client ignores the system proxy', not_covered: 'native TLS (BoringSSL/libssl), hand-written fingerprint checks, WebView/Chromium-native checks, non-whitelisted processes' });"
+      ],
+      "vehicle_lines": [
+        "vlog('PINNING_ARMED', { hooks: bypasses.arm(), candidates: bypasses.candidates, covered: 'conscrypt TrustManagerImpl (incl. NSC pin-set path), SSLContext custom TMs, okhttp CertificatePinner, HttpsURLConnection HostnameVerifier', not_covered: 'native TLS (BoringSSL/libssl), hand-written fingerprint checks, WebView/Chromium-native checks, non-whitelisted processes' });"
+      ],
+      "reason": "移动侧按 ART abort 证据裁掉了 HttpsURLConnection 主机名钩子，covered/reduced 文本如实反映裁剪范围（见 mobile/hooks/tls_bypasses_tp.js 头部证据）",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "tls-tm-note",
+      "pair": "tls_bypasses",
+      "kind": "block",
+      "mobile_lines": [
+        "vlog('METHOD_NOT_EXPOSED', { where: 'conscrypt.' + mName, note: 'declared on the class but not exposed by the bridge' });"
+      ],
+      "vehicle_lines": [
+        "vlog('METHOD_NOT_EXPOSED', { where: 'conscrypt.' + mName, note: 'declared on the class but not exposed by the Frida bridge; not hooked' });"
+      ],
+      "reason": "日志措辞差异（车载侧写明 not hooked），语义相同、属历史措辞",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "tls-overload-note",
+      "pair": "tls_bypasses",
+      "kind": "block",
+      "mobile_lines": [
+        "vlog('METHOD_NOT_EXPOSED', { where: 'conscrypt.' + mName, note: 'exposed with no usable overloads', reflected_types: typesArr });"
+      ],
+      "vehicle_lines": [
+        "vlog('METHOD_NOT_EXPOSED', { where: 'conscrypt.' + mName, note: 'exposed with no usable overloads; not hooked', reflected_types: typesArr });"
+      ],
+      "reason": "同上：日志措辞差异",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "tls-sslctx-detail",
+      "pair": "tls_bypasses",
+      "kind": "block",
+      "mobile_lines": [
+        "logCapped('sslctx:' + mn, { target: 'SSLContext.init custom TrustManager', detail: mn + ' relaxed' });"
+      ],
+      "vehicle_lines": [
+        "logCapped('sslctx:' + mn, { target: 'SSLContext.init custom TrustManager', detail: String(o.returnType ? o.returnType.className : '?') + ' check relaxed' });"
+      ],
+      "reason": "detail 文本差异（车载侧带方法返回类型），仅影响日志可读性",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "tls-okhttp-note",
+      "pair": "tls_bypasses",
+      "kind": "block",
+      "mobile_lines": [
+        "vlog('NOT_PRESENT', { target: 'okhttp3.CertificatePinner', note: 'okhttp 不在本进程类路径' });"
+      ],
+      "vehicle_lines": [
+        "vlog('NOT_PRESENT', { target: 'okhttp3.CertificatePinner', note: 'okhttp 不在本进程类路径（本夹具不用 okhttp）' });"
+      ],
+      "reason": "注释性措辞差异（车载侧补充夹具说明）",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "tls-okhttp-refactor",
+      "pair": "tls_bypasses",
+      "kind": "block",
+      "mobile_lines": [
+        "var target = typesArr.join(',');",
+        "var ov = cls[mName].overloads.find( function (o) { return o.argumentTypes.map(function (t) { return t.className; }).join(',') === target; });"
+      ],
+      "vehicle_lines": [
+        "var ov = cls[mName].overloads.find(o => o.argumentTypes.map(t => t.className).join(\",\") === typesArr.join(\",\"));"
+      ],
+      "reason": "等价重构：车载侧用箭头函数并内联 typesArr.join，语义相同（已人工核对比较式两侧逐项一致）",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "tls-okhttp-push",
+      "pair": "tls_bypasses",
+      "kind": "block",
+      "mobile_lines": [
+        "hooked.push('okhttp3.CertificatePinner.' + mName + '(' + target + ')');"
+      ],
+      "vehicle_lines": [
+        "hooked.push('okhttp3.CertificatePinner.' + mName + '(' + typesArr.join(',') + ')');"
+      ],
+      "reason": "同上重构的伴随行：等价写法（target 即 typesArr.join(',')）",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "scope-fallback",
+      "pair": "scope",
+      "kind": "sub",
+      "mobile": "['com.vscanner.privacydemo']",
+      "vehicle": "['com.vscanner.targetapp', 'com.vscanner.targetapp2']",
+      "reason": "占位符未注入时的兜底包名按平台给定：移动侧夹具 com.vscanner.privacydemo；车载侧 targetapp/targetapp2。正常路径必被宿主的 __VSCAN_SESSION_PACKAGES__ 替换覆盖，兜底仅防御性",
+      "date": "2026-10-14"
+    }
+  ],
+  "exempt_functions": [
+    {
+      "id": "hv-exempt",
+      "pair": "tls_bypasses",
+      "side": "vehicle",
+      "name": "hookHostnameVerifier",
+      "reason": "移动侧按 ART abort 证据裁掉了 HttpsURLConnection 主机名钩子（mobile/hooks/tls_bypasses_tp.js 头部有现场证据）；车载侧保留。若移动侧未来重新引入同名函数，守卫会以差异形式暴露，需重新评估",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "rt-threadName",
+      "pair": "runtime",
+      "side": "mobile",
+      "name": "threadName",
+      "reason": "移动侧 runtime.js 新增：同意链与隐私读取事件需要线程名做时序归因（见该文件头注释第 1 条）；车载侧无此需求",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "rt-stackStr",
+      "pair": "runtime",
+      "side": "mobile",
+      "name": "stackStr",
+      "reason": "同上：移动侧用调用栈区分「应用主动读取」与「系统回调」（见该文件头注释第 1 条）；车载侧无此需求",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "rt-arm-cache",
+      "pair": "runtime",
+      "side": "mobile",
+      "name": "armRuntimeCache",
+      "reason": "批次 4 · A1/H1：移动侧把 Thread 的 Java.use 收敛到 ARMED 阶段解析一次（事件期不再 Java.use，见 runtime.js 注释）；车载侧无事件期 threadName/stackStr，无此问题",
+      "date": "2026-10-14"
+    }
+  ],
+  "drop": [
+    {
+      "id": "hv-callsite",
+      "pair": "tls_bypasses",
+      "side": "vehicle",
+      "lines": [
+        "hooked = hooked.concat(hookHostnameVerifier());"
+      ],
+      "reason": "同上：被豁免函数在 arm() 里的调用点",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "rt-strict",
+      "pair": "runtime",
+      "side": "mobile",
+      "lines": ["'use strict';"],
+      "reason": "移动侧运行时顶部的 use strict（ES 模块本就严格模式，此行是装饰性的）；车载版本无此行，无语义差异",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "rt-stack-consts",
+      "pair": "runtime",
+      "side": "mobile",
+      "lines": ["var STACK_MAX_FRAMES = 30;", "var STACK_MAX_LEN = 1200;"],
+      "reason": "threadName/stackStr 专用的栈裁剪常量，随移动侧新增函数一起（豁免函数被删后成为孤立行，故一并 drop）",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "rt-cache-vars",
+      "pair": "runtime",
+      "side": "mobile",
+      "lines": ["var THREAD_CLS = null;", "var NO_STACK = parseInt(\"__VSCAN_NO_STACK__\", 10) === 1;"],
+      "reason": "批次 4 · A1：事件期缓存变量与栈开关变量。__VSCAN_NO_STACK__ 与 hook_privacy.js 的 __VSCAN_WATCH_LIMIT__ 同为宿主注入前替换的占位符（core/frida_host/bundle_config.py），车载侧无",
+      "date": "2026-10-14"
+    }
+  ]
+}

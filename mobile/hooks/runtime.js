@@ -45,6 +45,12 @@ export function makeLogger(src, logPath) {
   };
 }
 
+// 与车载侧同序：tryUse 紧跟在 makeLogger 之后（纯声明次序，无语义差异；
+// 对齐后 hooks 一致性守卫（mobile/tools/test_hooks_parity.py）只为真正单侧的内容建白名单）。
+export function tryUse(name) {
+  try { return Java.use(name); } catch (e) { return null; }
+}
+
 export function procName() {
   try {
     var app = Java.use('android.app.ActivityThread').currentApplication();
@@ -61,13 +67,29 @@ export function procName() {
   } catch (e) { return 'unknown'; }
 }
 
-export function tryUse(name) {
-  try { return Java.use(name); } catch (e) { return null; }
+// ---- 事件期缓存与栈开关（批次 4 · A1 假设 H1，见 DEV_FIX_REPORT §5.1）----
+// 假设：崩点在被替换的 ArtMethod 内做 Java.use()。故把 Thread 的 Java.use 收敛到
+// ARMED 阶段解析一次（armRuntimeCache），事件路径只做调用；解析失败时字段退化为
+// 'unknown'/''，事件照发——观测失败绝不改变被测行为。
+// `__VSCAN_NO_STACK__` 由宿主在注入前替换为 '1'/'0'（与 __VSCAN_WATCH_LIMIT__
+// 同一机制）；未替换时 parseInt 得到 NaN → 开关为关（保持旧行为）。
+// **注意写法**：必须走 parseInt 消费——frida-compile 的压缩器会把直接的字面量
+// 比较（`"__VSCAN_NO_STACK__" === "1"`）常量折叠成 false，占位符还没来得及被
+// 宿主替换就没了（2026-10-14 实测 477KB bundle 里被折叠为 `var NO_STACK = false`）。
+var THREAD_CLS = null;
+var NO_STACK = parseInt("__VSCAN_NO_STACK__", 10) === 1;
+
+export function armRuntimeCache() {
+  try {
+    THREAD_CLS = Java.use('java.lang.Thread');
+    return THREAD_CLS !== null;
+  } catch (e) { THREAD_CLS = null; return false; }
 }
 
 export function threadName() {
+  if (NO_STACK || THREAD_CLS === null) return 'unknown';
   try {
-    return String(Java.use('java.lang.Thread').currentThread().getName());
+    return String(THREAD_CLS.currentThread().getName());
   } catch (e) { return 'unknown'; }
 }
 
@@ -75,8 +97,9 @@ var STACK_MAX_FRAMES = 30;
 var STACK_MAX_LEN = 1200;
 
 export function stackStr() {
+  if (NO_STACK || THREAD_CLS === null) return '';
   try {
-    var frames = Java.use('java.lang.Thread').currentThread().getStackTrace();
+    var frames = THREAD_CLS.currentThread().getStackTrace();
     var parts = [];
     for (var i = 0; i < frames.length && parts.length < STACK_MAX_FRAMES; i++) {
       var s = String(frames[i].toString());

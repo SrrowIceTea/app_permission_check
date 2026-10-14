@@ -13,13 +13,17 @@
 'use strict';
 
 import { packages } from './scope.js';
-import { makeLogger, procName, threadName, stackStr } from './runtime.js';
+import { makeLogger, procName, threadName, stackStr, armRuntimeCache } from './runtime.js';
 import { WATCH, DATA_TYPES, META } from './targets.generated.js';
-import { describe } from './values.js';
+import { describe, armValueCache } from './values.js';
 import { matchBySpec, isDeniedClassName, discriminator, unmappedKey, preview } from './dispatch.js';
 
 var vlog = makeLogger('privacy', '/data/local/tmp/vscan-mobile.log');
 var CFG = { whitelist: packages() };
+// 分档定位（批次 4 · A1 假设 H2，见 DEV_FIX_REPORT §5.1）：宿主在注入前把字面量替换为
+// 档位数字（`VSCAN_WATCH_LIMIT=8` → run.py → bundle_config.configure）。未替换时
+// parseInt 得到 NaN → 全量挂载，保持旧行为；0 = 一条也不挂（attach 对照组）。
+var RAW_WATCH_LIMIT = "__VSCAN_WATCH_LIMIT__";
 var STATE = { pkg: null, uid: -1, failed: [] };
 var ARMED = [];
 var unmappedSeen = {};
@@ -111,8 +115,15 @@ function main() {
   try {
     STATE.pkg = procName();
     STATE.uid = Java.use('android.os.Process').myUid();
+    // A1：事件期不再 Java.use——缓存与分档都在 ARMED 阶段一次定妥。
+    var cacheOk = armRuntimeCache();
+    var valueCacheOk = armValueCache();
+    var limit = parseInt(RAW_WATCH_LIMIT, 10);
+    if (!isFinite(limit) || limit < 0 || limit > WATCH.length) limit = WATCH.length;
     vlog('START', { script: 'hook_privacy', pkg: STATE.pkg, uid: STATE.uid,
                     whitelist: CFG.whitelist, watch_apis: WATCH.length,
+                    watch_limit_raw: RAW_WATCH_LIMIT, watch_limit: limit,
+                    runtime_cache: cacheOk, value_cache: valueCacheOk,
                     data_types: Object.keys(DATA_TYPES).length,
                     rules_sha256: META.rules_sha256, frida: Frida.version });
     if (CFG.whitelist.indexOf(STATE.pkg) < 0) {
@@ -120,10 +131,11 @@ function main() {
                            note: '不在白名单：不挂任何钩子。' });
       return;
     }
-    for (var i = 0; i < WATCH.length; i++) armOne(WATCH[i]);
+    for (var i = 0; i < limit; i++) armOne(WATCH[i]);
     vlog('ARMED', { hooks: ARMED.length, failed: STATE.failed.length,
+                    watch_limit: limit,
                     failed_apis: STATE.failed, apis: ARMED });
-    console.log('[privacy] armed ' + ARMED.length + '/' + WATCH.length +
+    console.log('[privacy] armed ' + ARMED.length + '/' + limit +
                 ' apis; failed=' + STATE.failed.length);
   } catch (e) {
     vlog('ERROR', { where: 'main', msg: String((e && e.stack) || e) });

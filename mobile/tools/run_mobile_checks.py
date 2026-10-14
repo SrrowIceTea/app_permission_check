@@ -43,6 +43,8 @@ def main() -> int:
     unit = [
         ("rules", MOBILE / "rules", [PY, "-m", "unittest", "test_rules"]),
         ("hooks_dispatch", MOBILE / "hooks", ["node", "test_dispatch.mjs"]),
+        # 两侧同源钩子 JS 的漂移守卫（跨 mobile ↔ vehicle，纯离线；RESEARCH_OUTLOOK §5.4）。
+        ("hooks_parity", MOBILE, [PY, str(MOBILE / "tools" / "test_hooks_parity.py")]),
         ("traffic", MOBILE / "traffic",
          [PY, "-m", "unittest", "test_tagging_mobile", "test_transparent"]),
         ("policy", MOBILE / "policy", [PY, "-m", "unittest", "test_policy"]),
@@ -101,8 +103,10 @@ def main() -> int:
     assertions = [
         ("findings_nonempty", (e2e / "findings.jsonl").exists()
          and (e2e / "findings.jsonl").read_text(encoding="utf-8").strip() != ""),
-        ("bundle_has_policy", json.loads((aiout / "bundle.json").read_text(encoding="utf-8"))
-         .get("policy", {}).get("available") is True if (aiout / "bundle.json").exists() else False),
+        ("bundle_has_policy",
+         (aiout / "bundle.json").exists()
+         and json.loads((aiout / "bundle.json").read_text(encoding="utf-8"))
+         .get("policy", {}).get("available") is True),
         ("report_nonempty", (e2e / "report.pdf").exists()
          and (e2e / "report.pdf").stat().st_size > 20_000),
         ("rule_coverage_artifacts", (out / "rule-coverage" / "rules_coverage.md").exists()

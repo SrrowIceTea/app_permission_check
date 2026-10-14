@@ -26,6 +26,7 @@ build.py - an unbundled script cannot run on Frida 17.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import threading
 import uuid
@@ -91,7 +92,24 @@ def main() -> int:
     parser.add_argument("--event-db", type=Path)
     parser.add_argument("--session", default=None)
     parser.add_argument("--label", default="", help="free-form tag stored on every record")
+    # 分档定位开关（DEV_FIX_REPORT §5.1 A1/H1+H2）。环境变量是主通道：mobile 的
+    # device_run*.py 经 thirdparty_env.start_hook 透传 os.environ 给本进程，
+    # `VSCAN_WATCH_LIMIT=8 python mobile/tools/device_run_thirdparty.py ...` 即可分档。
+    parser.add_argument("--watch-limit", type=int, default=None,
+                        help="只挂前 N 条监视项（0=全不挂；未给=全量）。同 VSCAN_WATCH_LIMIT")
+    parser.add_argument("--no-stack", action="store_true",
+                        help="事件不带 thread_name/stack 字段值。同 VSCAN_NO_STACK=1")
     args = parser.parse_args()
+    if args.watch_limit is None:
+        env_limit = os.environ.get("VSCAN_WATCH_LIMIT", "").strip()
+        if env_limit:
+            try:
+                args.watch_limit = int(env_limit)
+            except ValueError:
+                parser.error(f"VSCAN_WATCH_LIMIT 不是整数：{env_limit!r}")
+    if args.watch_limit is not None and args.watch_limit < 0:
+        parser.error("--watch-limit 不能为负（0=全不挂）")
+    no_stack = args.no_stack or os.environ.get("VSCAN_NO_STACK", "").strip() == "1"
     global FRIDA_PORT
     FRIDA_PORT = args.port or (27044 if args.gadget else 27043)
     # 白名单**没有默认值**（§8.2 B-1）：内核不再默认放行车载夹具包名，
@@ -138,7 +156,10 @@ def main() -> int:
     session = device.attach(pid)
     session.on("detached", lambda *info: failed.append("detached: " + str(info)))
     store = EventStore(args.event_db or args.out.with_suffix(".sqlite"))
-    script = session.create_script(configure(body, allowed))
+    script = session.create_script(
+        configure(body, allowed, watch_limit=args.watch_limit, no_stack=no_stack))
+    if args.watch_limit is not None or no_stack:
+        print(f"分档模式：watch_limit={args.watch_limit} no_stack={no_stack}", flush=True)
 
     counts: dict[str, int] = {}
     records = 0

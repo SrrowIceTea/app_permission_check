@@ -29,6 +29,10 @@ CHECKS = [
     # **离线全绿、真跑才炸**（2026-10-12 实测：device_acceptance 漏改两个路径）。
     # 这条不需要设备，纯粹查"脚本点名 -> 文件在不在"。
     ('hook-bundles', 'tools', [sys.executable, '-m', 'unittest', 'test_hook_bundles']),
+    # bundle 占位符替换（A1 分档新增 watch-limit / no-stack）必须保持长度头自洽——
+    # 替换错了不会报错，只会让设备拒绝加载，症状与"钩子没挂上"一样。纯离线。
+    ('frida-bundle-config', 'core/frida_host',
+     [sys.executable, '-m', 'unittest', 'test_bundle_config']),
 ]
 
 

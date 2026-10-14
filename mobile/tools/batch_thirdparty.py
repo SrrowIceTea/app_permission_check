@@ -21,12 +21,15 @@
     python batch_thirdparty.py --apk-dir D:/samples  # 换目录
     python batch_thirdparty.py --static-only         # 只做静态（不需要设备）
     python batch_thirdparty.py --skip-ai             # 不跑 AI 阶段
+
+出批前会先跑一次夹具阳性对照自检（fixture_selftest.py，A3）：自检失败 =
+采集链路故障，**拒绝出批**。A1 未修期间可 `--skip-fixture-selftest` 显式跳过，
+跳过事实写进 batch-summary.json。
 """
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 import time
@@ -38,69 +41,7 @@ PY = sys.executable
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT))
 from core import sdk_paths  # noqa: E402   SDK 路径统一解析（§8.2 B-4）
-
-
-def badging(apk: Path, build_tools: str) -> dict:
-    """包名 / 版本 / 启动 Activity / 标签——设备检测的必需输入，全部从样本本身解。
-
-    注意 aapt2 要的是**可执行文件路径**，不是 build-tools 目录：
-    传目录时 Windows 报的是 `WinError 5 拒绝访问`（"执行一个目录"），
-    与权限问题长得一模一样，会让人往错的方向查。
-    """
-    import fetch_apk
-    aapt2 = str(Path(build_tools) / "aapt2.exe")
-    return fetch_apk.apk_identity(apk, aapt2)
-
-
-def short_slug(package: str, limit: int = 18) -> str:
-    """包名 → 短目录名。
-
-    **为什么非要短**：Windows 的 MAX_PATH 是 260。本工程根路径已经 67 字符
-    （用户名非 ASCII + 多层目录），而 jadx 解出的源码树是
-    `sources/com/ximalaya/ting/android/car/sdk/ai_extension/tasks/tts/Xxx$1.java`
-    这种深路径。实测：用完整包名做目录名时，`DefaultPlayTTSTask$addTTSFragment
-    $$inlined$launch$1.java` 恰好越界，core/static/jadx.py 的 `path.stat()` 抛
-    `FileNotFoundError: [WinError 3]`——**jadx 能写、Python 读不了**，
-    报错还看不出是路径长度问题。
-    """
-    segs = [s for s in package.split(".") if s]
-    while segs and segs[0] in ("com", "org", "net", "cn", "io", "de", "fr", "uk"):
-        segs.pop(0)
-    slug = "-".join(segs[-2:]) if len(segs) >= 2 else (segs[0] if segs else "app")
-    slug = re.sub(r"[^A-Za-z0-9._-]", "", slug)
-    return slug[:limit] or "app"
-
-
-def launchable_activity(apk: Path, build_tools: str) -> tuple[str | None, str]:
-    """启动 Activity（含 **activity-alias 回退**）。→ (activity, 依据)
-
-    为什么需要回退：有些应用（实测 Fossify 系列）把 launcher 声明成
-    `<activity-alias>`（多套图标配色，用户选一个启用），而 aapt2 的
-    `launchable-activity` **不上报别名**——于是 badging 里什么都没有，
-    看起来像"这个 APK 没有启动入口"。这类误判会让设备检测整段跳过。
-    """
-    # 入口一律在这里从 build-tools 目录拼 aapt2.exe 全路径：
-    # 传目录进来会得到 `WinError 5 拒绝访问`（Windows 把"执行目录"报成权限问题），
-    # 与真正的权限故障无法区分——这个坑我已经踩过一次。
-    aapt2 = str(Path(build_tools) / "aapt2.exe")
-    import subprocess
-    ident = __import__("fetch_apk").apk_identity(apk, aapt2)
-    direct = ident.get("launchable_activity")
-    if direct:
-        return direct, "aapt2 launchable-activity"
-
-    out = subprocess.run([aapt2, "dump", "xmltree", "--file", "AndroidManifest.xml", str(apk)],
-                         capture_output=True, text=True, encoding="utf-8",
-                         errors="replace", timeout=180).stdout
-    # 别名：targetActivity 指向真正的 Activity
-    m = re.search(r"activity-alias[\s\S]{0,900}?android:targetActivity\(0x01010202\)=\"([^\"]+)\"", out)
-    if m:
-        return m.group(1), "AndroidManifest activity-alias.targetActivity"
-    # 兜底：第一个 activity 节点
-    m = re.search(r"E: activity \(line=\d+\)\s*\n\s*A: [^\n]*android:name\(0x01010003\)=\"([^\"]+)\"", out)
-    if m:
-        return m.group(1), "AndroidManifest 首个 activity（无 alias 时的兜底）"
-    return None, "未找到启动入口"
+from apk_meta import badging, launchable_activity, short_slug  # noqa: E402
 
 
 def run(cmd: list[str], log: Path, timeout: int) -> int:
@@ -130,6 +71,8 @@ def main() -> int:
     ap.add_argument("--build-tools",
                     default=str(sdk_paths.sdk_dir("build-tools", "36.1.0")))
     ap.add_argument("--only", nargs="*", default=None, help="只跑这些包名")
+    ap.add_argument("--skip-fixture-selftest", action="store_true",
+                    help="显式跳过批前夹具自检（A1 未修期间）。跳过事实会写进 batch-summary.json")
     args = ap.parse_args()
 
     cat_map = {}
@@ -176,6 +119,30 @@ def main() -> int:
                        capture_output=True, text=True, encoding="utf-8",
                        errors="replace", timeout=60)
     print(f"[batch] {len(apks)} 个样本 -> {batch}")
+
+    # A3 批前阳性对照（§5.2）：夹具自检不过 = 采集链路故障，拒绝出批——否则
+    # "采不到"会被写成一堆"该应用未收集"。A1 未修期间允许显式 --skip，留痕到摘要。
+    selftest = None
+    if not args.static_only:
+        st_dir = batch / "_fixture-selftest"
+        st_cmd = [PY, str(HERE / "fixture_selftest.py"), "--out", str(st_dir),
+                  "--seconds", str(args.seconds)]
+        if args.skip_fixture_selftest:
+            st_cmd += ["--skip"]
+        run(st_cmd, batch / "fixture-selftest.log", timeout=1800)
+        st_file = st_dir / "result.json"
+        selftest = (json.loads(st_file.read_text(encoding="utf-8")) if st_file.exists() else
+                    {"passed": False, "reason": "自检脚本未产出 result.json（看 "
+                                                "fixture-selftest.log）"})
+        if selftest.get("passed") is False:
+            failed = {"status": "fixture_selftest_failed", "batch_dir": str(batch),
+                      "samples": 0, "succeeded": 0, "results": [], "selftest": selftest}
+            (batch / "batch-summary.json").write_text(
+                json.dumps(failed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            print(json.dumps({"status": "fixture_selftest_failed",
+                              "reason": selftest.get("reason"),
+                              "hint": selftest.get("hint")}, ensure_ascii=False, indent=2))
+            return 1
 
     results: list[dict] = []
     for idx, apk in enumerate(apks, 1):
@@ -277,7 +244,7 @@ def main() -> int:
     (batch / "batch-summary.json").write_text(json.dumps(
         {"status": "ok" if len(ok) == len(results) else "partial",
          "batch_dir": str(batch), "samples": len(results), "succeeded": len(ok),
-         "results": results,
+         "results": results, "selftest": selftest,
          "note": "每个样本的判据在 <批次>/<包名>/verification.json；"
                  "本文件只是汇总，不能替代逐样本判据。"},
         ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

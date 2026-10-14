@@ -16,6 +16,13 @@ cryptography==48.0.0
 # 只列本文件声明项及其直接伴生包，完整的 freeze 随环境变化太大不适合入库。
 #   cryptography==48.0.0      frida==17.18.0        frida-tools==14.10.4
 #   mitmproxy==12.2.3         mitmproxy-windows==0.12.11  mitmproxy_rs==0.12.11
-#   pillow==12.1.0            pypdf==6.19.0         reportlab==5.0.0
-# 注意：本机实测 reportlab 是 5.0.0，与上面声明的 5.0.1 不一致（本轮未改这一项，
-# 属既有漂移，留给使用者决定是否对齐）。
+#   pillow==12.1.0            pypdf==6.19.0         reportlab==5.0.1
+# 注：2026-10-14 晚在隔离 venv 里按本文件重装，reportlab 装到 **5.0.1**，与上面声明一致
+# （此前记录的"本机是 5.0.0"的漂移已消失），故删掉那条告警。
+#
+# ⚠️ 装了本文件才能跑两条离线回归（tools/run_regressions.py 与
+# mobile/tools/run_mobile_checks.py）：缺 reportlab/Pillow/mitmproxy/cryptography 会冒出
+# 6 处 ModuleNotFoundError 的**假红**，把真正的回归失败盖住。换解释器后先自检：
+#     python -c "import reportlab, PIL, mitmproxy, cryptography, frida, pypdf"
+# 另注：maxminddb 本文件声明了，但现有回归/检查**没有任何一处 import 它**——
+# 属于"声明了但没被验证"，换机时最容易漏（本机 Python 3.13 就没装）。

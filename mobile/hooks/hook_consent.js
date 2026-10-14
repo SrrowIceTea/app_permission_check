@@ -20,7 +20,7 @@
 'use strict';
 
 import { packages } from './scope.js';
-import { makeLogger, procName, threadName, stackStr } from './runtime.js';
+import { makeLogger, procName, threadName, stackStr, armRuntimeCache } from './runtime.js';
 import { CONSENT_WATCH } from './targets.generated.js';
 import { looksLikePolicy, preview, toJsArray, shortName, splitGrantResults } from './dispatch.js';
 
@@ -123,8 +123,10 @@ function main() {
   try {
     STATE.pkg = procName();
     STATE.uid = Java.use('android.os.Process').myUid();
+    var cacheOk = armRuntimeCache();   // A1：事件期不再 Java.use（见 runtime.js 注释）
     vlog('START', { script: 'hook_consent', pkg: STATE.pkg, uid: STATE.uid,
                    whitelist: CFG.whitelist, consent_apis: CONSENT_WATCH.length,
+                   runtime_cache: cacheOk,
                    frida: Frida.version,
                    boundary: '权限结果与政策页打开是同意状态的代理信号，不是同意的直接证明。' });
     if (CFG.whitelist.indexOf(STATE.pkg) < 0) {
