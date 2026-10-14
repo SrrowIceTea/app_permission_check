@@ -22,10 +22,12 @@
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core.io_utils import load_jsonl_counting  # noqa: E402  JSONL 唯一实现（§8.2 B-2）
 
 # 载荷自报的包名。target-app 的 JSON 把 "package" 放在靠前的位置，
 # 因此能落在 400 字符的 preview 之内。
@@ -33,18 +35,11 @@ SELF_REPORTED = re.compile(r'"package"\s*:\s*"([^"]+)"')
 
 
 def load_jsonl(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    out = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return out
+    """统一走 core/io_utils（§8.2 B-2）：坏行**计数并告警**，不再静默丢弃。"""
+    rows, skipped = load_jsonl_counting(path)
+    if skipped:
+        print(f"[warn] {path}: 跳过 {skipped} 行无法解析的 JSONL", file=sys.stderr)
+    return rows
 
 
 def self_reported(flow: dict) -> str | None:

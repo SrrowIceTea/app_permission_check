@@ -38,7 +38,11 @@ ROOT = HERE.parent.parent
 sys.path.insert(0, str(ROOT / "mobile" / "traffic"))
 import transparent as tp  # noqa: E402
 
-EMULATOR = "D:/Anroid/SDK/emulator/emulator.exe"
+# SDK 路径解析统一走 core/sdk_paths（§8.2 B-4）：不再写死本机绝对路径。
+sys.path.insert(0, str(ROOT))
+from core import sdk_paths  # noqa: E402
+
+EMULATOR = sdk_paths.sdk_tool("emulator", "emulator.exe")
 ADB = tp.ADB
 BASE_ARGS = ["-no-boot-anim", "-gpu", "auto"]
 
@@ -122,11 +126,24 @@ def main() -> int:
             tp.adb("shell", "settings", "put", "global", "http_proxy", ":0", timeout=30)
             print(f"[proxy] 已清理设备全局代理（原值 {cur!r}）——强制代理已覆盖它")
 
+    # 抑制 ranchu 镜像的 UWB HAL 崩溃循环（best-effort）：uwb-service 找不到 /dev/uwb0，
+    # 每 5~10 秒 abort 一次，会把 crash 缓冲当传送带——后果有二：
+    #   ① 样本自己的 native tombstone 会被快速挤掉，死亡取证只剩一行 Fatal signal；
+    #   ② UWB 的崩溃行与样本日志同毫秒时会被误缝进样本记录（app-death 解析已加防御，
+    #      但源头掐掉更干净）。
+    # stop 幂等；真机没有这条服务，报错也无害。验证按"进程是否消失"来，不猜返回码。
+    tp.adb("shell", "stop", "vendor.uwb_hal", timeout=30)
+    time.sleep(2)
+    ps = tp.adb("shell", "ps", "-A", timeout=30).stdout
+    uwb_ok = "android.hardware.uwb" not in ps
+    print(f"[uwb] UWB HAL 崩溃循环{'已抑制（进程已停）' if uwb_ok else '未抑制（保持监控）'}")
+
     print(json.dumps({
         "status": "ready",
         "emulator_pid": proc.pid,
         "抓包": "SLIRP 层强制走代理，应用绕不过",
         "CA": "已装系统信任库" if ca.get("installed") else "未装（HTTPS 会断）",
+        "UWB_HAL": "已停止（减少 crash 缓冲噪声）" if uwb_ok else "未能停止",
         "下一步": "直接跑 mobile/tools/batch_thirdparty.py；mitmproxy 仍是常规代理模式，无需改参数",
     }, ensure_ascii=False, indent=2))
     return 0

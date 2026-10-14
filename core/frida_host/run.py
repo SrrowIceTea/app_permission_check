@@ -94,7 +94,12 @@ def main() -> int:
     args = parser.parse_args()
     global FRIDA_PORT
     FRIDA_PORT = args.port or (27044 if args.gadget else 27043)
-    allowed = args.allow_package or ["com.vscanner.targetapp", "com.vscanner.targetapp2"]
+    # 白名单**没有默认值**（§8.2 B-1）：内核不再默认放行车载夹具包名，
+    # 授权测试的包名必须由调用方显式给出。
+    allowed = args.allow_package or []
+    if not allowed:
+        parser.error("未给 --allow-package：白名单为空（内核不再默认假定 "
+                     "com.vscanner.targetapp{,2}）。授权测试请显式列出受监控包名。")
     if any(not re.fullmatch(r"[A-Za-z]\w*(?:\.\w+)+", pkg) for pkg in allowed):
         parser.error("无效白名单包名")
     if args.package and args.package not in allowed:

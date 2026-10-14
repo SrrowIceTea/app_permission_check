@@ -27,21 +27,24 @@ ROOT = HERE.parent.parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT))
 from core.evidence import codeloc  # noqa: E402  复用（车载/移动共用一套行号提取）
+from core.io_utils import load_jsonl_counting  # noqa: E402  JSONL 唯一实现（§8.2 B-2）
 import evaluation_mobile as ev  # noqa: E402
 
 
-def read_jsonl(path: Path | None) -> list[dict]:
-    if not path or not path.exists():
-        return []
-    out = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if line:
-            try:
-                out.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-    return out
+def read_jsonl(path: Path | None, gaps: list[str] | None = None) -> list[dict]:
+    """统一走 core/io_utils（§8.2 B-2）。
+
+    坏行**不再静默 `continue`**：给了 `gaps` 就写进 gaps，否则打到 stderr。
+    "少了几条证据"必须看得见，否则会被读成"没发生"。
+    """
+    rows, skipped = load_jsonl_counting(path)
+    if skipped:
+        note = f"{Path(path).name if path else '?'} 有 {skipped} 行无法解析的 JSONL，已跳过（证据不完整）"
+        if gaps is not None:
+            gaps.append("[jsonl] " + note)
+        else:
+            print(f"[warn] {note}", file=sys.stderr)
+    return rows
 
 
 def sha16(path: Path | None) -> str | None:
@@ -139,10 +142,10 @@ def main() -> int:
 
     rules = load_rules(Path(args.rules), args.version)
     dt_zh, dt_hints, _ = load_data_types(Path(args.rules), args.version)
-    reads, flows, egress = read_jsonl(reads_p), read_jsonl(flows_p), read_jsonl(egress_p)
-    consent_raw = read_jsonl(consent_p)
-
     gaps: list[str] = []
+    reads, flows, egress = (read_jsonl(reads_p, gaps), read_jsonl(flows_p, gaps),
+                            read_jsonl(egress_p, gaps))
+    consent_raw = read_jsonl(consent_p, gaps)
     if not reads:
         gaps.append("reads.jsonl 缺失或为空：无读取证据（不等于没有读取，可能钩子未挂上）")
     if not consent_raw:

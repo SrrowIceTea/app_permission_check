@@ -33,13 +33,14 @@ HERE = Path(__file__).resolve().parent
 SEED = HERE / "seed" / "api_targets.json"
 BUILD = HERE / "build"
 
-# 本机默认值（旧开发机路径已失效，见根 CLAUDE.md 环境表与记忆）
-DEFAULT_JAR_CANDIDATES = [
-    Path("D:/Anroid/SDK/platforms/android-36/android.jar"),
-]
-DEFAULT_JAVAP_CANDIDATES = [
-    Path("D:/Anroid/JDK/bin/javap.exe"),
-]
+# 本机默认值（旧开发机路径已失效，见根 CLAUDE.md 环境表与记忆）。
+# 路径解析统一走 core/sdk_paths：VSCAN_SDK/VSCAN_JDK → ANDROID_SDK_ROOT/JAVA_HOME →
+# PATH 探测 → 历史候选表。不再在这里写死绝对路径（§8.2 B-4）。
+sys.path.insert(0, str(HERE.parent.parent))
+from core import sdk_paths  # noqa: E402
+
+DEFAULT_JAR_CANDIDATES = [sdk_paths.sdk_dir("platforms", "android-36", "android.jar")]
+DEFAULT_JAVAP_CANDIDATES = [Path(sdk_paths.jdk_tool("bin", "javap.exe"))]
 
 DECL_RE = re.compile(r"^\s+(?:public|protected)\s.*;\s*$")
 DESC_RE = re.compile(r"^\s+descriptor:\s*(\S+)\s*$")

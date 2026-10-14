@@ -2,9 +2,14 @@
 
 Uses the downloaded SDK system image directly; old avdmanager 12 cannot parse its multi-tag metadata.
 """
+import sys
 from pathlib import Path
 
-root = Path(__file__).resolve().parents[1] / '.tools/avd'
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from core import sdk_paths  # noqa: E402
+
+root = ROOT / '.tools/avd'
 avd = root / 'VScanner_AAOS_35.avd'
 avd.mkdir(parents=True, exist_ok=False)
 config = {
@@ -15,7 +20,10 @@ config = {
     'hw.gpu.enabled': 'yes', 'hw.gpu.mode': 'swiftshader_indirect',
     'hw.audioInput': 'no', 'hw.audioOutput': 'no', 'hw.camera.back': 'none',
     'hw.camera.front': 'none', 'disk.dataPartition.size': '4G',
-    'image.sysdir.1': 'D:/Anroid/SDK/system-images/android-35-ext15/android-automotive/x86_64/',
+    # SDK 路径解析统一走 core/sdk_paths（§8.2 B-4）：不再写死本机绝对路径。
+    # sysdir 必须以分隔符结尾，avdmanager 才认。
+    'image.sysdir.1': str(sdk_paths.sdk_dir('system-images', 'android-35-ext15',
+                                            'android-automotive', 'x86_64')) + '/',
     'tag.id': 'android-automotive', 'tag.display': 'Automotive',
     'fastboot.forceColdBoot': 'yes', 'showDeviceFrame': 'no',
 }

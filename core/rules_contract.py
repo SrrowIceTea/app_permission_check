@@ -20,8 +20,10 @@ window_ms, conclusion_level, enabled`。
 """
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from pathlib import Path
+from urllib.parse import quote
 
 # 平台 → 该平台独有、可选的扩展表。公共表（risk_rules/dangerous_apis/permissions）不列。
 EXTENSION_TABLES: dict[str, tuple[str, ...]] = {
@@ -37,8 +39,34 @@ REQUIRED_RULE_COLUMNS = ("rule_id", "rule_revision", "rule_type", "severity",
 
 
 def _readonly(db: Path) -> sqlite3.Connection:
-    """只读打开——与 vehicle/dashboard/dashboard.py:43、vehicle/workbench/static_rules.py 同一套 idiom。"""
-    return sqlite3.connect(f"file:{db.resolve().as_posix()}?mode=ro", uri=True)
+    """只读打开——与 vehicle/dashboard/dashboard.py:43、vehicle/workbench/static_rules.py 同一套 idiom。
+
+    路径段要 `quote`：sqlite 的 URI 文件名里 `?` 开始查询串、`#` 开始片段，未编码会把
+    路径**截断**（§8.2 B-4）。实测：含 `#` 的目录上裸拼的 URI 直接报
+    "no such table"，编码后正常。`safe=":/"` 保留盘符冒号与分隔符，日志里仍可读。
+    """
+    return sqlite3.connect(f"file:{quote(db.resolve().as_posix(), safe=':/')}?mode=ro", uri=True)
+
+
+def rules_db_meta(db: Path) -> dict:
+    """规则库元信息：版本 / 全文 SHA-256 / 总数 / 启用数。
+
+    `vehicle/analyze/report.py::rule_db_meta()` 与
+    `vehicle/dashboard/dashboard.py::rules_meta()` 曾**逐字重复**（§8.2 B-2），
+    而且键名不一致（前者 `sha256`、后者 `rules_sha256`）——两处各自改一次就会漂移。
+    统一放这里；两个键都给，调用方各取所需（键名不统一是历史包袱，一并按旧名保留）。
+    """
+    conn = _readonly(db)
+    try:
+        versions = [r[0] for r in conn.execute(
+            "SELECT DISTINCT android_version FROM risk_rules ORDER BY android_version")]
+        total = conn.execute("SELECT COUNT(*) FROM risk_rules").fetchone()[0]
+        enabled = conn.execute("SELECT COUNT(*) FROM risk_rules WHERE enabled = 1").fetchone()[0]
+    finally:
+        conn.close()
+    digest = hashlib.sha256(db.read_bytes()).hexdigest()
+    return {"path": db.name, "sha256": digest, "rules_sha256": digest,
+            "rule_versions": versions, "rules_total": total, "rules_enabled": enabled}
 
 
 def detect_platform(conn: sqlite3.Connection) -> str | None:

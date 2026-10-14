@@ -1,0 +1,29 @@
+# pre-commit —— 对应 mobile/RESEARCH_OUTLOOK.md §8.2 B-6。
+# 两个钩子：ruff（静态护栏） + 单文件行数守卫（把 AGENTS.md 第 8 条铁律变成机器检查）。
+#
+# 本机启用：
+#     pip install pre-commit && pre-commit install
+# 只跑一次全部文件：
+#     pre-commit run --all-files
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: max-file-lines
+        name: 单文件 ≤300 行守卫（AGENTS.md 第 8 条）
+        description: >-
+          拒绝提交超过 300 行的 .py 文件。超限按职责拆分，拆完必须跑两条离线回归。
+        language: python
+        files: \.py$
+        entry: >-
+          python -c "import sys,pathlib;
+          bad=[(p,len(pathlib.Path(p).read_text(encoding='utf-8',errors='replace').splitlines()))
+          for p in sys.argv[1:]];
+          bad=[x for x in bad if x[1]>300];
+          [print(p,n,'行 > 300（AGENTS.md 第 8 条）') for p,n in bad];
+          sys.exit(1 if bad else 0)"

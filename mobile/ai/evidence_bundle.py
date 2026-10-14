@@ -32,24 +32,29 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 sys.path.insert(0, str(HERE.parent / "policy"))
+sys.path.insert(0, str(HERE.parent / "tools"))
+sys.path.insert(0, str(ROOT))
+from core.io_utils import load_jsonl_counting  # noqa: E402  JSONL 唯一实现（§8.2 B-2）
 import policy_lint  # noqa: E402
+import apk_packer_probe  # noqa: E402  加固特征探测：命中即把「结论受限」写进 gaps
 
 BUNDLE_VERSION = "1"
 
 
-def read_jsonl(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    out = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return out
+def read_jsonl(path: Path, gaps: list[str] | None = None) -> list[dict]:
+    """统一走 core/io_utils（§8.2 B-2）。
+
+    坏行**不再静默 `continue`**：给了 `gaps` 就写进 gaps（证据包本来就有这个清单），
+    否则打到 stderr。"少了几条证据"必须看得见。
+    """
+    rows, skipped = load_jsonl_counting(path)
+    if skipped:
+        note = f"{path.name} 有 {skipped} 行无法解析的 JSONL，已跳过（证据不完整）"
+        if gaps is not None:
+            gaps.append("[jsonl] " + note)
+        else:
+            print(f"[warn] {note}", file=sys.stderr)
+    return rows
 
 
 def sha256_file(path: Path) -> str | None:
@@ -115,7 +120,7 @@ def load_category(db: Path, version: str, key: str | None) -> dict:
 
 
 def build_reads(session: Path, gaps: list[str]) -> list[dict]:
-    events = read_jsonl(session / "reads.jsonl")
+    events = read_jsonl(session / "reads.jsonl", gaps)
     if not events:
         gaps.append("reads.jsonl 缺失或为空：无动态读取证据（不等于没有读取，"
                     "可能只是钩子没挂上或应用没运行）")
@@ -147,7 +152,7 @@ def build_reads(session: Path, gaps: list[str]) -> list[dict]:
 
 
 def build_consent(session: Path, gaps: list[str]) -> list[dict]:
-    events = read_jsonl(session / "consent.jsonl")
+    events = read_jsonl(session / "consent.jsonl", gaps)
     if not events:
         gaps.append("consent.jsonl 缺失或为空：**无法判定「同意前收集」**——"
                     "没有同意时序就没有「之前」这个基准")
@@ -169,7 +174,7 @@ def build_consent(session: Path, gaps: list[str]) -> list[dict]:
 
 
 def build_flows(session: Path, gaps: list[str], *, include_previews: bool) -> tuple[list, list]:
-    flows = read_jsonl(session / "flows.jsonl")
+    flows = read_jsonl(session / "flows.jsonl", gaps)
     if not flows:
         gaps.append("flows.jsonl 缺失或为空：无网络流证据（不等于没有外发）")
     out, plaintext = [], []
@@ -200,7 +205,7 @@ def build_flows(session: Path, gaps: list[str], *, include_previews: bool) -> tu
 
 def build(session: Path, rules_db: Path, *, version: str, policy_store: Path | None,
           findings_path: Path | None, app: dict, include_previews: bool,
-          notes: list[str] | None = None) -> dict:
+          notes: list[str] | None = None, apk_path: Path | None = None) -> dict:
     gaps: list[str] = []
     # 编排层显式提供的缺口说明。它们**不替代**下面自动发现的缺口，只做补充：
     # 有些限制是样本/环境特有的（例如"该样本的 HTTP 客户端不读系统代理，抓包结构性为空"），
@@ -208,18 +213,34 @@ def build(session: Path, rules_db: Path, *, version: str, policy_store: Path | N
     for note in (notes or []):
         if note and note.strip():
             gaps.append("[orch] " + note.strip())
+
+    # 加固壳检测：命中即如实标注"结论受限"。不提供 APK 时跳过（不制造噪音），
+    # 但那就意味着报告无法提示"样本可能是壳"——所以能传就传。
+    packer = None
+    if apk_path and apk_path.is_file():
+        try:
+            packer = apk_packer_probe.probe(apk_path)
+            packer_note = apk_packer_probe.gap_note(packer)
+            if packer_note:
+                gaps.append(packer_note)
+        except Exception as e:  # noqa: BLE001 —— 探测失败不得拖垮证据包，但必须留痕
+            gaps.append(f"[probe] APK 加固特征探测失败（{e.__class__.__name__}: {e}）："
+                        "本轮无法判断样本是否加壳，结论按未加壳呈现时需留意。")
+    elif apk_path:
+        gaps.append(f"[probe] 指定的 APK 不存在: {apk_path}；未做加固特征探测。")
+
     reads = build_reads(session, gaps)
     consent = build_consent(session, gaps)
     flows, plaintext = build_flows(session, gaps, include_previews=include_previews)
 
-    findings = read_jsonl(findings_path) if findings_path else []
+    findings = read_jsonl(findings_path, gaps) if findings_path else []
     if not findings:
         gaps.append("findings.jsonl 缺失或为空：无规则结论（correlate 阶段未跑或没有命中）")
 
     health = {}
     for src, fname in (("privacy", "reads.jsonl"), ("consent", "consent.jsonl"),
                        ("egress", "egress.jsonl")):
-        events = read_jsonl(session / fname)
+        events = read_jsonl(session / fname, gaps)
         armed = next((e for e in events if e.get("ev") == "ARMED"), None)
         start = next((e for e in events if e.get("ev") == "START"), None)
         if start:
@@ -277,6 +298,8 @@ def build(session: Path, rules_db: Path, *, version: str, policy_store: Path | N
                                    if not include_previews else
                                    "**本轮带入了报文预览原文**（--include-previews）",
                     "request_previews_included": include_previews},
+        "packer_probe": packer if packer is not None else {"probed": False,
+                                                           "note": "未提供 APK，未做加固特征探测"},
         "gaps": gaps,
         "counts": {"reads": len(reads), "consent_events": len(consent),
                    "flows": len(flows), "findings": len(findings)},
@@ -293,6 +316,8 @@ def main() -> int:
     ap.add_argument("--package", required=True)
     ap.add_argument("--app-category", default=None, help="39 类中的 category_key（未声明则留空）")
     ap.add_argument("--apk-sha256", default=None)
+    ap.add_argument("--apk", default=None,
+                    help="样本 APK 路径；提供则做加固特征探测，命中时写入 gaps（结论受限）")
     ap.add_argument("--device", default=None)
     ap.add_argument("--include-previews", action="store_true",
                     help="把报文预览原文一并写入（默认关闭：预览可能含个人信息原文）")
@@ -310,7 +335,8 @@ def main() -> int:
     bundle = build(session, Path(args.rules), version=args.version,
                    policy_store=Path(args.policy_store) if args.policy_store else None,
                    findings_path=Path(args.findings) if args.findings else None,
-                   app=app, include_previews=args.include_previews, notes=args.note)
+                   app=app, include_previews=args.include_previews, notes=args.note,
+                   apk_path=Path(args.apk) if args.apk else None)
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

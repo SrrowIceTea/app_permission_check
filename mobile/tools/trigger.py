@@ -23,7 +23,11 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-ADB = "D:/Anroid/SDK/platform-tools/adb.exe"
+# SDK 路径解析统一走 core/sdk_paths（§8.2 B-4）：不再写死本机绝对路径。
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core import sdk_paths  # noqa: E402
+
+ADB = sdk_paths.sdk_tool("platform-tools", "adb.exe")
 REMOTE_XML = "/data/local/tmp/vscan_privacy_ui.xml"
 
 # 按钮名 → logcat 标记（必须与 EventLog.Markers 逐字一致）

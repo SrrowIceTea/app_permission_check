@@ -133,12 +133,14 @@ function installLibcoreConnect(cls, sig, hooked) {
 
 function hookLibcoreConnect() {
   var hooked = [];
+  // A6（§8.1）：`libcore.io.Posix` 在 API 37 上不存在（`ClassNotFoundException`，
+  // 每轮都记一条 HOOK_MISS，看起来像"钩子坏了"其实是**死目标**）。已移除；
+  // BlockGuardOs / Linux 是本镜像上实测挂得上的汇聚点，保留。
   var combos = [
     ['libcore.io.BlockGuardOs', ['java.io.FileDescriptor', 'java.net.SocketAddress']],
     ['libcore.io.BlockGuardOs', ['java.io.FileDescriptor', 'java.net.InetAddress', 'int']],
     ['libcore.io.Linux', ['java.io.FileDescriptor', 'java.net.SocketAddress']],
-    ['libcore.io.Linux', ['java.io.FileDescriptor', 'java.net.InetAddress', 'int']],
-    ['libcore.io.Posix', ['java.io.FileDescriptor', 'java.net.SocketAddress']]
+    ['libcore.io.Linux', ['java.io.FileDescriptor', 'java.net.InetAddress', 'int']]
   ];
   for (var i = 0; i < combos.length; i++) {
     installLibcoreConnect(combos[i][0], combos[i][1], hooked);

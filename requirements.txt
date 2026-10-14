@@ -3,6 +3,19 @@ frida==17.18.0
 frida-tools==14.10.4
 mitmproxy==12.2.3
 reportlab==5.0.1
-Pillow>=11,<13
+# Pillow 原为 >=11,<13。钉死：PDF 报告的图像/字体渲染对版本敏感，范围锁定会让
+# "换机重装"静默换掉渲染行为（对应 §8.2 B-6「不可复现安装」）。
+Pillow==12.1.0
 pypdf==6.19.0
 maxminddb==3.2.0
+# tools/test_proxy_cert.py 直接 `from cryptography import x509`，此前未声明 →
+# 按本文件装依赖会 ImportError，CI 上线后该组必挂（§8.2 B-5）。
+cryptography==48.0.0
+
+# ── pip freeze 快照（2026-10-14 实测，取自本机 Python 3.13）─────────────────
+# 只列本文件声明项及其直接伴生包，完整的 freeze 随环境变化太大不适合入库。
+#   cryptography==48.0.0      frida==17.18.0        frida-tools==14.10.4
+#   mitmproxy==12.2.3         mitmproxy-windows==0.12.11  mitmproxy_rs==0.12.11
+#   pillow==12.1.0            pypdf==6.19.0         reportlab==5.0.0
+# 注意：本机实测 reportlab 是 5.0.0，与上面声明的 5.0.1 不一致（本轮未改这一项，
+# 属既有漂移，留给使用者决定是否对齐）。

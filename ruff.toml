@@ -1,0 +1,21 @@
+# ruff 配置 —— 对应 mobile/RESEARCH_OUTLOOK.md §8.2 B-6「无 lint/format 配置」。
+#
+# 定位：只当护栏，不当重构任务。默认规则集（E=pycodestyle 错误、F=pyflakes 未定义/未使用）
+# 足够抓住"拆分/合并文件后引用没跟着改"这类静默漂移，不引入需要大规模改代码的风格规则。
+# 代码里已有的 `# noqa: BLE001` 说明曾经按更宽的规则集整理过；BLE/B 等规则本轮**不开**，
+# 避免为了过 lint 而动与修复清单无关的代码。
+line-length = 100
+target-version = "py313"
+
+[lint]
+select = ["E", "F"]
+
+[lint.per-file-ignores]
+# 测试里允许未使用的 import（unittest 用例常被单独挑出来跑）。
+"test_*.py" = ["F401"]
+# 设备端编排脚本靠 sys.path 把 core/ 挂进来，导入顺序无法静态满足 E402。
+"mobile/tools/*.py" = ["E402"]
+"tools/*.py" = ["E402"]
+
+[lint.isort]
+known-first-party = ["core"]

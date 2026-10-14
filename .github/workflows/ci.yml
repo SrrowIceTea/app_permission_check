@@ -1,0 +1,57 @@
+# 离线回归 CI —— 两条入口均纯离线、不需要设备、不需要 AI key。
+#
+# 对应 mobile/RESEARCH_OUTLOOK.md §8.2 B-5「全项目无任何 CI」（最高优先级项）：
+# 改完忘记跑回归 = 静默劣化，而这两条入口本来就不用设备，直接挂到 push/PR 即可。
+#
+# runner 选 windows-latest 的原因：仓库是 Windows 单机工程（SDK 路径、winpath 的 \\?\ 扩展
+# 长度路径、test_jobs.LongPathTest 都只在 Windows 上成立），换 Linux 会假绿。
+name: offline-regressions
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regressions:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      # 与本机一致的强制项：Windows 上不设会出现 GBK 解码崩 Reader 线程（DECISIONS M026）。
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # hooks_dispatch / runtime 两组是 node 测试（test_dispatch.mjs / test_runtime.mjs）。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 安装 Python 依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 根回归（11 组）
+        run: python tools/run_regressions.py
+
+      - name: 移动侧回归（21 项）
+        run: python mobile/tools/run_mobile_checks.py
+
+      - name: 回归判据落盘（失败运行同样保留）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-output
+          path: output/
+          if-no-files-found: warn

@@ -75,8 +75,11 @@ Phase 5=`vehicle/analyze/`，Phase 6=`vehicle/dashboard/`，Phase 7=`vehicle/wor
 
 ```bash
 PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
-"$PY" tools/run_regressions.py        # 10 组：completion/rules-contract/codeloc/correlate/
-                                      #       collector/tagging-vehicle/dashboard/runtime/parity/workbench
+"$PY" tools/run_regressions.py        # 11 组：completion/rules-contract/codeloc/correlate/
+                                      #       collector/tagging-vehicle/dashboard/runtime/parity/
+                                      #       workbench/hook-bundles
+
+"$PY" mobile/tools/run_mobile_checks.py   # 移动侧 21 项（另一条入口，改 mobile 后必须跑）
 ```
 
 ## 当前交付与拆分进度（2026-10-12）

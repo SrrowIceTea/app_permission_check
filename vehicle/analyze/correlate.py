@@ -45,6 +45,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.evidence import codeloc  # noqa: E402  # 违规代码行号：从运行时栈取应用自己的帧（见 codeloc.py）
+from core.io_utils import load_jsonl  # noqa: E402  # JSONL 唯一实现（§8.2 B-2）
 
 # 默认同用主机时间。旧日志只能显式提供校准偏移；不猜固定偏移。
 DEFAULT_CLOCK_OFFSET_MS = None
@@ -68,19 +69,8 @@ def body_scan_totals(flows: list[dict]) -> dict:
     return {"bodies_truncated": truncated, "bodies_undecodable": undecodable}
 
 
-def load_jsonl(path: Path | None) -> list[dict]:
-    if path is None:
-        return []
-    out = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"无效 JSONL: {path}: {exc}") from exc
-    return out
+# JSONL 读取统一走 core/io_utils（§8.2 B-2）：坏行策略显式化，不再每个模块各写一份
+# 且语义相反（车载抛、移动静默跳过）。这里保持原有的"坏行即失败"语义。
 
 
 def load_rules(db_path: Path, version: str) -> list[dict]:

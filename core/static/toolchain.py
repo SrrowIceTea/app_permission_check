@@ -14,22 +14,22 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from pathlib import Path
 
-# 本机实测位置（2026-09-28）。只是候选之一，不是唯一来源。
-JADX_CANDIDATES = (
-    r"D:/Anroid/Jadx/jadx-gui-1.5.3-with-jre-win",
-    r"D:/Anroid/Jadx",
-)
-SDK_CANDIDATES = (r"D:/Anroid/SDK", r"E:/Android/android-sdk")
+# 同目录/同内核模块：仓库根入 sys.path，兼容 `core.static.toolchain` 与顶层 `import toolchain`。
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core import sdk_paths  # noqa: E402
+
+# 本机实测位置（2026-09-28）现在只存在于 core/sdk_paths.py 的历史候选表里——
+# 硬编码路径全仓曾有 19 处，改一处漏一处（§8.2 B-4）。这里只做**引用**。
+JADX_CANDIDATES = sdk_paths.LEGACY_JADX_CANDIDATES
+SDK_CANDIDATES = sdk_paths.LEGACY_SDK_CANDIDATES
 
 
 def _sdk_root() -> Path | None:
-    for env in ("ANDROID_SDK_ROOT", "ANDROID_HOME"):
-        value = os.environ.get(env)
-        if value and Path(value).is_dir():
-            return Path(value)
-    return next((Path(p) for p in SDK_CANDIDATES if Path(p).is_dir()), None)
+    """SDK 根：统一走 core/sdk_paths（多了 VSCAN_SDK 与 PATH 探测两级）。"""
+    return sdk_paths.sdk_root()
 
 
 def _newest_in(pattern: str, root_glob: str) -> str | None:

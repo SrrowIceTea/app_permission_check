@@ -82,7 +82,7 @@ def build_one(script: Path, out_dir: Path, compiler: str) -> Path:
         entry.write_text(PRELUDE + body, encoding="utf-8")
         result = subprocess.run(
             (["node", compiler] if compiler.endswith(".js") else [compiler]) + [str(entry), "-o", str(target)],
-            capture_output=True, text=True, timeout=600,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600,
         )
     finally:
         entry.unlink(missing_ok=True)
@@ -107,7 +107,10 @@ def main() -> int:
 
     compiler = find_frida_compile()
     names = args.only or list(DEFAULT_SCRIPTS)
-    shared_out = HERE.parent.parent / "frida_host" / "dist"   # core/frida_host/dist
+    # HERE.parent.parent 是**仓库根**，不是 core/（旧写法拼出 <root>/frida_host/dist，
+    # 与 §1 注释、run.py 与 .gitignore 里点名的 core/frida_host/dist 三处都不一致，
+    # 于是共享 bundle 会被写到仓库根下一个无人读取的目录）。
+    shared_out = HERE.parent.parent / "core" / "frida_host" / "dist"
     for name in names:
         out_dir = shared_out if name in SHARED_SCRIPTS else args.out_dir
         build_one(HERE / name, out_dir, compiler)

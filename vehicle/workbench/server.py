@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -38,6 +39,14 @@ REGISTRY: jobs.Registry | None = None
 CONFIG: dict = {}
 MIME = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
         ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml"}
+
+# 回环来源白名单：服务只绑 127.0.0.1，跨域只对**本机**页面放行（§8.2 B-4 的 localhost CSRF）。
+# 浏览器跨域 POST 一定带 Origin；curl / python 之类不带，此时退而校验 Host。
+_LOCAL_ORIGIN = re.compile(r"https?://(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?")
+_LOCAL_HOST = re.compile(r"(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?")
+# APK 缓存键：jobs.Cache.dir_for() 直接 `root / digest`，不加校验时 `/api/apk/../tree`
+# 会让缓存根解析到父目录。sha256 只可能是 64 位小写十六进制。
+_DIGEST = re.compile(r"[0-9a-f]{64}")
 
 
 def _manifest_versions(rules: Path) -> list[str]:
@@ -80,10 +89,22 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------- 响应助手 ----------
     def _cors(self) -> None:
-        """放行跨域：`frontend/` 通过 `python -m http.server` 独立访问时，
-        Origin 是 127.0.0.1:<port> 而非本服务的 8770。服务仍只绑 127.0.0.1，
-        不监听公网网卡，因此放开 Origin 不扩大暴露面。"""
-        self.send_header("Access-Control-Allow-Origin", "*")
+        """只对**本机的**页面回显 Origin（原来是 `*`，见 §8.2 B-4）。
+
+        服务仍只绑 127.0.0.1，不监听公网网卡；但 `*` 意味着本机任意网页都能跨域
+        上传 APK 触发反编译（localhost CSRF）。不匹配的来源一律不回 ACAO 头，
+        浏览器自己会拒绝——这比"放行后再鉴权"更难写错。
+        `frontend/` 经 `python -m http.server` 独立访问时 Origin 是
+        `http://127.0.0.1:<port>` 或 `http://localhost:<port>`，两者都在白名单内。
+        """
+        origin = self.headers.get("Origin")
+        if origin is not None:
+            if _LOCAL_ORIGIN.fullmatch(origin):
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
+        elif _LOCAL_HOST.fullmatch(self.headers.get("Host") or ""):
+            # 非浏览器请求不带 Origin（curl / python），对它们 CORS 本就无意义。
+            pass
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
@@ -169,6 +190,9 @@ class Handler(BaseHTTPRequestHandler):
         # 段数是 5：['', 'api', 'apk', <digest>, <action>]。早先写成 [:4]，
         # 于是 digest 绑成了字面量 'apk'、action 绑成了真正的 digest，一律 404。
         _, _, _, digest, action = (path.split("/") + ["", ""])[:5]
+        # digest 直接进 CACHE.dir_for() 拼路径，必须是 sha256 形态（§8.2 B-4）。
+        if not _DIGEST.fullmatch(digest or ""):
+            return self._json({"error": "digest 必须是 64 位小写十六进制 sha256"}, 400)
         root = CACHE.dir_for(digest)
         if not root.is_dir():
             return self._json({"error": "没有这个 APK 的缓存"}, 404)

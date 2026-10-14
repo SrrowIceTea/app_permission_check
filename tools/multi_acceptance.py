@@ -29,6 +29,8 @@ def main():
     out.mkdir(parents=True)
     (ROOT / 'output/latest-multi.txt').write_text(str(out), encoding='utf-8')
     env = dict(os.environ, PYTHONUTF8='1', VSCAN_SESSION=session,
+        # 白名单已无默认值（§8.2 B-1）：本轮授权监控的就是这两个自有夹具。
+        VSCAN_PACKAGES=','.join(PACKAGES),
         VSCAN_FLOW_LOG=str(out / 'flows.jsonl'), VSCAN_EVENT_DB=str(out / 'events.sqlite'),
         VSCAN_ATTRIB_SOURCES=os.pathsep.join(str(out / f'egress-{i}.jsonl') for i in range(2)),
         VSCAN_TAGGING=str(ROOT / 'vehicle/traffic/tagging.py'),
@@ -64,6 +66,8 @@ def main():
                 # hook_egress 是共享成品（已抽到 core/frida_host/dist），hook_vhal 是车载专用（留 vehicle/hooks/dist）
                 script_dir = ROOT / 'core/frida_host/dist' if script == 'hook_egress' else ROOT / 'vehicle/hooks/dist'
                 launch([sys.executable, str(ROOT / 'core/frida_host/run.py'), '--package', package,
+                    # --allow-package 已无默认值（§8.2 B-1），必须显式授权。
+                    *sum([['--allow-package', p] for p in PACKAGES], []),
                     '--script', str(script_dir / (script + '.bundle.js')), '--seconds', '120',
                     '--session', session, '--event-db', str(out / 'events.sqlite'),
                     '--out', str(out / f'{name}-{i}.jsonl')], f'{name}-{i}')

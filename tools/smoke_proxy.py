@@ -36,6 +36,8 @@ def main():
     port = free_port()
     env = dict(os.environ, VSCAN_FLOW_LOG=str(flows), VSCAN_ATTRIB_SOURCES=str(events),
                VSCAN_TAGGING=str(ROOT / 'vehicle/traffic/tagging.py'),
+               # 白名单已无默认值（§8.2 B-1）：合成事件用的就是这两个包名。
+               VSCAN_PACKAGES='com.vscanner.targetapp,com.vscanner.targetapp2',
                VSCAN_SESSION='host-smoke-synthetic-events', PYTHONUTF8='1')
     with (out / 'mitm.log').open('w', encoding='utf-8') as log:
         proc = subprocess.Popen([sys.executable, '-c',

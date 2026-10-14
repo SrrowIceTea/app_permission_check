@@ -1,11 +1,36 @@
 """归属信息、规则覆盖与载荷证据截图。仅用于授权测试。"""
 import hashlib
 import json
+import os
 from pathlib import Path
 from xml.sax.saxutils import escape
 
 from PIL import Image as Raster, ImageDraw, ImageFont
 from reportlab.platypus import Image, PageBreak, Paragraph, Spacer
+
+# 中文字体候选表（**全项目车载侧唯一一份**，report.py 从这里 import）。
+# 早先 report.py 只有 SimHei/DengXian、这里只有 雅黑/SimHei，两处各写一份且不一致——
+# 换机时改一处漏一处（§8.2 B-2）。合并后顺序即优先级：SimHei → DengXian → 雅黑。
+# 换机不想改代码时用 VSCAN_CJK_FONT=<ttf/ttc 路径> 覆盖，它排在最前。
+FONT_CANDIDATES = [
+    ("SimHei", r"C:\Windows\Fonts\simhei.ttf"),
+    ("DengXian", r"C:\Windows\Fonts\Deng.ttf"),
+    ("MicrosoftYaHei", r"C:\Windows\Fonts\msyh.ttc"),
+]
+if os.environ.get("VSCAN_CJK_FONT"):
+    FONT_CANDIDATES.insert(0, ("CustomCJK", os.environ["VSCAN_CJK_FONT"]))
+
+_RASTER_FONTS: dict = {}
+
+
+def raster_font(size: int):
+    """模块级字体缓存：原来每个 flow × 方向都重新 `ImageFont.truetype`（§8.2 B-3），
+    一轮几十条流 × 2 个方向就是上百次字体解析。"""
+    if size not in _RASTER_FONTS:
+        path = next((p for _, p in FONT_CANDIDATES if Path(p).exists()), None)
+        _RASTER_FONTS[size] = (ImageFont.truetype(str(path), size) if path
+                               else ImageFont.load_default(size=size))
+    return _RASTER_FONTS[size]
 
 
 def footer(canvas, doc):
@@ -37,10 +62,8 @@ def payload_images(flow, direction, folder):
         pass
     # 控制字符不交给字体引擎；可打印内容不做删改。
     text = ''.join(c if c in '\n\t' or ord(c) >= 32 else f'\\x{ord(c):02x}' for c in text)
-    font_path = next((p for p in [Path('C:/Windows/Fonts/msyh.ttc'),
-                                 Path('C:/Windows/Fonts/simhei.ttf')] if p.exists()), None)
-    font = ImageFont.truetype(str(font_path), 19) if font_path else ImageFont.load_default(size=19)
-    small = ImageFont.truetype(str(font_path), 15) if font_path else ImageFont.load_default(size=15)
+    font = raster_font(19)
+    small = raster_font(15)
     lines = []
     for line in text.expandtabs(4).splitlines():
         current = ''

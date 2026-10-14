@@ -29,7 +29,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 MOBILE = ROOT / "mobile"
 PY = sys.executable
-ADB = "D:/Anroid/SDK/platform-tools/adb.exe"
+# SDK 路径解析统一走 core/sdk_paths（§8.2 B-4）：不再写死本机绝对路径。
+sys.path.insert(0, str(ROOT))
+from core import sdk_paths  # noqa: E402
+
+ADB = sdk_paths.sdk_tool("platform-tools", "adb.exe")
 PKG = "com.vscanner.privacydemo"
 APK = MOBILE / "fixture-app" / "app" / "build" / "outputs" / "apk" / "debug" / "app-debug.apk"
 MITM_PORT = 8888
@@ -410,6 +414,7 @@ def main() -> int:
                          "--package", PKG, "--app-category", args.app_category,
                          "--policy-store", str(policy_store),
                          "--apk-sha256", __import__("hashlib").sha256(APK.read_bytes()).hexdigest(),
+                         "--apk", str(APK),
                          "--device", adb("shell", "getprop", "ro.build.fingerprint",
                                          timeout=30).stdout.strip(),
                          "--out", str(o / "bundle.json")], out / "bundle.log"))

@@ -36,6 +36,8 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 PY = sys.executable
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(ROOT))
+from core import sdk_paths  # noqa: E402   SDK 路径统一解析（§8.2 B-4）
 
 
 def badging(apk: Path, build_tools: str) -> dict:
@@ -125,7 +127,8 @@ def main() -> int:
     ap.add_argument("--static-only", action="store_true")
     ap.add_argument("--skip-ai", action="store_true")
     ap.add_argument("--seconds", type=int, default=150)
-    ap.add_argument("--build-tools", default="D:/Anroid/SDK/build-tools/36.1.0")
+    ap.add_argument("--build-tools",
+                    default=str(sdk_paths.sdk_dir("build-tools", "36.1.0")))
     ap.add_argument("--only", nargs="*", default=None, help="只跑这些包名")
     args = ap.parse_args()
 
@@ -135,6 +138,13 @@ def main() -> int:
             sys.exit(f"--category 需要 PKG=KEY 形式，收到: {item!r}")
         k, v = item.split("=", 1)
         cat_map[k.strip()] = v.strip()
+
+    # 多设备未指定 ANDROID_SERIAL → 立刻停：裸 adb 命令会全部报错且失败形态是
+    # 静默空结果。理由详见 thirdparty_env.device_guard 的注释。
+    import thirdparty_env
+    guard = thirdparty_env.device_guard()
+    if guard:
+        sys.exit("[fatal] " + guard)
 
     apk_dir = Path(args.apk_dir)
     if not apk_dir.is_dir():
@@ -157,9 +167,14 @@ def main() -> int:
     batch.mkdir(parents=True, exist_ok=True)
     link = ROOT / "output" / f"tp-{stamp}"
     if not args.out and not link.exists():
-        # mklink /J 是目录联接，不需要管理员权限；失败也不影响本批次
+        # mklink /J 是目录联接，不需要管理员权限；失败也不影响本批次。
+        # **必须显式声明 utf-8 + errors="replace"**：cmd.exe 的输出是 GBK，
+        # 而本机 PYTHONUTF8=1 让 Python 处于 UTF-8 模式（子进程管道默认 UTF-8 解码）——
+        # 缺了这行，Reader 线程会被 UnicodeDecodeError 打死、result.stderr 变成 None，
+        # 实测崩过一次（2026-10-13 跑 Fossify Camera 时这条 mklink 就是崩溃点）。
         subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(batch)],
-                       capture_output=True, text=True, timeout=60)
+                       capture_output=True, text=True, encoding="utf-8",
+                       errors="replace", timeout=60)
     print(f"[batch] {len(apks)} 个样本 -> {batch}")
 
     results: list[dict] = []

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -34,8 +35,22 @@ import threading
 import time
 from pathlib import Path
 
-DEVICE_LOG = "/data/local/tmp/vscan_conn.log"
-DEVICE_SCRIPT = "/data/local/tmp/vscan_rec.sh"
+
+class AdbError(RuntimeError):
+    """adb 调用失败——与"命令跑通了但输出为空"严格区分（§8.6 铁律 3）。"""
+
+
+def device_log_path() -> str:
+    """设备端日志路径带 pid 后缀。
+
+    固定路径 `/data/local/tmp/vscan_conn.log` 时，两个采集实例并发会互相 `rm -f`
+    对方正在写的文件（§8.2 B-4）。脚本文件同理（后启动者会覆写前一个的记录器）。
+    """
+    return f"/data/local/tmp/vscan_conn.{os.getpid()}.log"
+
+
+def device_script_path() -> str:
+    return f"/data/local/tmp/vscan_rec.{os.getpid()}.sh"
 ROW = re.compile(
     r"^(\d+)\s+\d+:\s+([0-9A-Fa-f]{8}):([0-9A-Fa-f]{4})\s+([0-9A-Fa-f]{8}):([0-9A-Fa-f]{4})\s+"
     r"([0-9A-Fa-f]{2})\s+\S+\s+\S+\s+\S+\s+(\d+)"
@@ -45,28 +60,47 @@ PKG_TTL = 600.0
 CLOCK_SAMPLES = 5
 
 
-def adb(*args: str, timeout: float = 30.0) -> str:
+def adb(*args: str, timeout: float = 30.0) -> tuple[bool, str]:
+    """返回 `(ok, text)`。**调用方必须显式处理** `ok=False`。
+
+    早先失败（超时 / OSError）时返回空串，于是"命令跑通但无输出"与"adb 压根没跑起来"
+    长得一模一样——包名静默记成 null、时钟标定静默取 0（§8.2 B-3）。
+    退出码非 0 也算失败：多设备时裸 `adb` 一律报错返回空串（M027），正是这里要挡的形态。
+    """
+    # 显式 utf-8 + errors="replace"：本机 PYTHONUTF8=1 时子进程管道默认 UTF-8 解码，
+    # 而 adb.exe / 设备回显可能混入 GBK（中文系统），缺 errors 会让 Reader 线程崩、
+    # .stdout 变 None（下游再访问就是 TypeError）。等价约束见 mobile/tools/batch_thirdparty.py。
     try:
-        return subprocess.run(["adb", *args], capture_output=True, text=True,
-                              timeout=timeout).stdout
-    except (subprocess.TimeoutExpired, OSError):
-        return ""
+        proc = subprocess.run(["adb", *args], capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=timeout)
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    return proc.returncode == 0, proc.stdout
 
 
 def measure_clock_offset_ms() -> int:
-    """设备时间戳 - 主机时间戳，正数表示设备走在前。"""
+    """设备时间戳 - 主机时间戳，正数表示设备走在前。
+
+    一次都没标定成功时**抛 `AdbError`**，绝不回退到 0：0 会被下游当成"时钟已标定"，
+    静默污染整个归因时间窗（§8.2 B-3）。
+    """
     offsets = []
+    errors = []
     for _ in range(CLOCK_SAMPLES):
         h1 = time.time_ns()
-        out = adb("shell", "date +%s%N").strip()
+        ok, out = adb("shell", "date +%s%N")
         h2 = time.time_ns()
+        if not ok:
+            errors.append(out.strip()[:120] or "adb 调用失败")
+            continue
         try:
-            device = int(out)
+            device = int(out.strip())
         except ValueError:
+            errors.append(f"date 输出无法解析: {out.strip()[:60]!r}")
             continue
         offsets.append(device - (h1 + h2) // 2)
     if not offsets:
-        return 0
+        raise AdbError("设备时钟标定失败（" + "；".join(errors[:3]) + "）；不回退到 0 偏移")
     offsets.sort()
     return offsets[len(offsets) // 2] // 1_000_000   # 取中位数，单位 ms
 
@@ -76,12 +110,19 @@ class PackageMap:
         self._cache: dict[int, tuple[float, str | None]] = {}
 
     def package_for(self, uid: int) -> str | None:
+        """adb 失败时抛 `AdbError` 且**不写缓存**，让"没查到"与"这个 uid 没有包名"可分。
+
+        早先两者都返回 None，记录里一律 `package: null`（§8.2 B-3）。
+        """
         now = time.time()
         cached = self._cache.get(uid)
         if cached and now - cached[0] < PKG_TTL:
             return cached[1]
+        ok, out = adb("shell", f"pm list packages --uid {uid}")
+        if not ok:
+            raise AdbError(f"pm list packages --uid {uid} 失败：{out.strip()[:120]}")
         package = None
-        for line in adb("shell", f"pm list packages --uid {uid}").splitlines():
+        for line in out.splitlines():
             if line.startswith("package:"):
                 package = line.split(":", 1)[1].strip()
                 break
@@ -99,10 +140,16 @@ def main() -> int:
     args = parser.parse_args()
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    offset_ms = measure_clock_offset_ms()
+    try:
+        offset_ms = measure_clock_offset_ms()
+    except AdbError as exc:
+        print(f"[uid_sampler] !! {exc}", file=sys.stderr, flush=True)
+        return 2
     print(f"[uid_sampler] device-host clock offset = {offset_ms} ms", flush=True)
 
     port_hex = f"{args.proxy_port:04X}".upper()
+    device_log = device_log_path()
+    device_script = device_script_path()
     # 脚本先落到设备文件再执行。把循环直接塞进 `adb shell "..."` 会被多层引号吃掉，
     # 实测结果是记录器静默不启动、日志文件根本不出现——这类失败不会报错，只会给空结果。
     recorder_script = (
@@ -113,10 +160,11 @@ def main() -> int:
         f"  sleep {args.interval}\n"
         "done\n"
     )
-    adb("shell", f"rm -f {DEVICE_LOG} {DEVICE_SCRIPT}")
-    subprocess.run(["adb", "shell", f"cat > {DEVICE_SCRIPT}"],
-                   input=recorder_script, text=True, timeout=30)
-    adb("shell", f"chmod 755 {DEVICE_SCRIPT}")
+    adb("shell", f"rm -f {device_log} {device_script}")
+    subprocess.run(["adb", "shell", f"cat > {device_script}"],
+                   input=recorder_script, text=True,
+                   encoding="utf-8", errors="replace", timeout=30)
+    adb("shell", f"chmod 755 {device_script}")
     # 前台跑、把 stdout 接到主机。`nohup ... &` 经 adb shell 起后台进程会被连带杀掉，
     # 表现是日志文件建了却是空的——又一次静默失败。脚本文件则避开了多层引号。
     # 必须 `-t -t`（两个）。不加 pty 时 stdout 是管道，设备上的 grep/sed 会块缓冲，
@@ -124,8 +172,9 @@ def main() -> int:
     # 而**单个 -t 在这里无效**：adb 只在本地 stdin 是终端时才分配远程 pty，
     # 从脚本里跑时 stdin 不是终端，它会打印 "Remote PTY will not be allocated"
     # 然后照旧走管道。两个 -t 才是强制分配。实测：-t -t 收到 232 行/5s，单个 -t 收到 0 行。
-    proc = subprocess.Popen(["adb", "shell", "-t", "-t", f"sh {DEVICE_SCRIPT}"],
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    proc = subprocess.Popen(["adb", "shell", "-t", "-t", f"sh {device_script}"],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                            encoding="utf-8", errors="replace")
     # 看门狗：主循环阻塞在 readline 上时，到点也必须能退出。
     # 否则 --seconds 形同虚设（实测挂住过一次，把整条测试命令拖到超时）。
     def watchdog() -> None:
@@ -165,7 +214,13 @@ def main() -> int:
             if key in seen:
                 continue
             seen.add(key)
-            package = packages.package_for(uid)
+            lookup_error = None
+            try:
+                package = packages.package_for(uid)
+            except AdbError as exc:
+                # 不再静默变成 null：控制台响亮报错，记录里也留一条可追溯的标记。
+                print(f"[uid_sampler] !! {exc}", file=sys.stderr, flush=True)
+                package, lookup_error = None, str(exc)
             record = {
                 "v": "1", "src": "uid_sampler", "ev": "PROXY_CONN",
                 "ts": ts_ms, "uid": uid, "package": package,
@@ -173,6 +228,8 @@ def main() -> int:
                 "proxy_port": args.proxy_port,
                 "clock_offset_ms": offset_ms,
             }
+            if lookup_error:
+                record["package_lookup_error"] = lookup_error
             with args.out.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
             written += 1

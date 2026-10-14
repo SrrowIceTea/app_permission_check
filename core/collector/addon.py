@@ -85,15 +85,31 @@ FLOW_LOG = Path(os.environ.get("VSCAN_FLOW_LOG") or (HERE / "logs" / "flows.json
 UNANSWERED_LOG = Path(os.environ.get("VSCAN_UNANSWERED_LOG")
                       or FLOW_LOG.with_name(FLOW_LOG.stem + "-unanswered.jsonl"))
 
-WHITELIST = {p.strip() for p in os.environ.get("VSCAN_PACKAGES", "").split(",") if p.strip()} or {
-    "com.vscanner.targetapp",
-    "com.vscanner.targetapp2",
-}
+# 白名单**没有默认值**（§8.2 B-1）。平台无关内核曾把车载夹具包名
+# `com.vscanner.targetapp{,2}` 当默认，于是移动端会话漏设 VSCAN_PACKAGES 时
+# **静默零流量**——所有流都因包名不在白名单而被丢掉，而日志一切如常。
+# 现在宁可响亮失败（照 core/evidence/event_lookup.py 的写法），也不给一个"大概对"的默认值。
+WHITELIST = {p.strip() for p in os.environ.get("VSCAN_PACKAGES", "").split(",") if p.strip()}
+if not WHITELIST:
+    raise SystemExit(
+        "VSCAN_PACKAGES 未设置：addon 的白名单为空，本轮所有流量都会被丢弃（静默零流量）。\n"
+        "运行前显式导出受监控的包名，例如 "
+        "VSCAN_PACKAGES=com.vscanner.targetapp,com.vscanner.targetapp2 。")
 
 GRACE_MS = 3000
 
+# 目标校验开关：**默认关**。reverse 模式（车载、移动自有夹具）下所有 App 都寻址同一
+# 代理端口，目标校验会把整场归因静默变成 unresolved；只有常规代理模式（移动端第三方
+# 样本，`emulator -http-proxy`）看得见真实目标 host:port，此时由 thirdparty_env 显式置 1。
+TARGET_CHECK = os.environ.get("VSCAN_ATTRIB_TARGET_CHECK") == "1"
 
-ATTRIB = TimeAttribution(ATTRIB_SOURCES)
+# 保守弃权开关：**默认关**（见 core/collector/DECISIONS D415）。开启后，容差窗口内只要
+# 存在另一个包的竞争候选就标 ambiguous——宁可错杀，不可静默串包。代价是 D407 的双应用
+# 并发 MATCH 全退化成 ambiguous。车载场景要"绝不静默出错"时显式置 1。
+CONSERVATIVE = os.environ.get("VSCAN_ATTRIB_CONSERVATIVE") == "1"
+
+
+ATTRIB = TimeAttribution(ATTRIB_SOURCES, target_check=TARGET_CHECK, conservative=CONSERVATIVE)
 PENDING: list[dict] = []
 FLOW_SEQ = 0
 STORE = None
@@ -102,6 +118,20 @@ SESSION = os.environ.get("VSCAN_SESSION", FLOW_LOG.stem)
 _LOCK = threading.Lock()
 _STOP = threading.Event()
 TICK_S = 0.5
+
+
+def _flow_target(flow) -> dict:
+    """从一条流里取目标地址，供目标校验用。
+
+    常规代理模式下 `flow.request.host` 是应用写的真实 host（域名或 IP），
+    `flow.server_conn.peername` 是代理实际连接的对端 IP。两者都与 hook 侧
+    getHostString()/getAddress() 口径一致（见 attribution.target_match）。
+    """
+    ip = None
+    peer = getattr(flow, "server_conn", None)
+    if peer is not None and getattr(peer, "peername", None):
+        ip = peer.peername[0]
+    return {"host": getattr(flow.request, "host", None), "ip": ip}
 
 
 def _emit(entry: dict) -> None:
@@ -152,13 +182,16 @@ def _flush(force: bool = False) -> None:
             if not force and now - entry['ts'] < GRACE_MS:
                 keep.append(entry)
                 continue
-            found = ATTRIB.resolve(entry["ts"])
+            found = ATTRIB.resolve(entry["ts"],
+                                   {"host": entry.get("target_host"),
+                                    "ip": entry.get("server_ip")})
             if found.resolved:
                 entry.update(package=found.package, attribution=found.label,
                              attribution_source=found.source,
                              attribution_delta_ms=found.delta_ms,
                              attribution_ambiguous=found.ambiguous,
-                             attribution_runner_up=found.runner_up)
+                             attribution_runner_up=found.runner_up,
+                             attribution_candidates=list(found.candidates))
                 if entry["package"] in WHITELIST:
                     _emit(entry)
             elif force or now - entry["ts"] > GRACE_MS:
@@ -194,7 +227,7 @@ def request(flow: http.HTTPFlow) -> None:
     _flush()
     ts_ms = int(time.time() * 1000)
     flow.metadata["vscan_ts_ms"] = ts_ms
-    found = ATTRIB.resolve(ts_ms)
+    found = ATTRIB.resolve(ts_ms, _flow_target(flow))
     flow.metadata["vscan_found"] = found
     if found.package not in WHITELIST:
         return
@@ -212,7 +245,7 @@ def response(flow: http.HTTPFlow) -> None:
     ts_ms = flow.metadata.get("vscan_ts_ms", int(time.time() * 1000))
     found = flow.metadata.get("vscan_found")
     if found is None or not found.resolved:
-        found = ATTRIB.resolve(ts_ms)
+        found = ATTRIB.resolve(ts_ms, _flow_target(flow))
 
     req, resp = flow.request, flow.response
     request_tags = flow.metadata.get("vscan_request_tags")
@@ -272,7 +305,7 @@ def error(flow: http.HTTPFlow) -> None:
     ts_ms = flow.metadata.get("vscan_ts_ms", int(time.time() * 1000))
     found = flow.metadata.get("vscan_found")
     if found is None or not found.resolved:
-        found = ATTRIB.resolve(ts_ms)
+        found = ATTRIB.resolve(ts_ms, _flow_target(flow))
     if found.package not in WHITELIST:
         return   # 白名单外的失败记下来只会淹没真正要看的（D403 的边界）
 
@@ -293,6 +326,10 @@ def load(loader) -> None:
     ctx.log.info(f"[vscan] 无响应请求 -> {UNANSWERED_LOG}")
     ctx.log.info("[vscan] attribution is time-based (SLIRP rewrites source ports; "
                  "run uid_sampler.py alongside)")
+    ctx.log.info(f"[vscan] target-check={TARGET_CHECK} "
+                 f"{'(目标不匹配→unresolved)' if TARGET_CHECK else '(仅时间就近，reverse 模式)'}")
+    ctx.log.info(f"[vscan] conservative={CONSERVATIVE} "
+                 f"{'(存在竞争候选即弃权→ambiguous)' if CONSERVATIVE else '(保留并发确定性)'}")
     for path in ATTRIB_SOURCES:
         if path.exists():
             ctx.log.info(f"[vscan]   源 {path} 存在 大小={path.stat().st_size}B")

@@ -38,9 +38,14 @@ from __future__ import annotations
 
 import hashlib
 import subprocess
+import sys
 from pathlib import Path
 
-ADB = "D:/Anroid/SDK/platform-tools/adb.exe"
+# SDK 路径解析统一走 core/sdk_paths（§8.2 B-4）：不再写死本机绝对路径。
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core import sdk_paths  # noqa: E402
+
+ADB = sdk_paths.sdk_tool("platform-tools", "adb.exe")
 CA_PEM = Path.home() / ".mitmproxy" / "mitmproxy-ca-cert.pem"
 SYSTEM_CA_DIR = "/system/etc/security/cacerts"
 MITM_PORT = 8888

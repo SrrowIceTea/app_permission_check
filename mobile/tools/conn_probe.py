@@ -53,7 +53,11 @@ import threading
 import time
 from pathlib import Path
 
-ADB = "D:/Anroid/SDK/platform-tools/adb.exe"
+# SDK 路径解析统一走 core/sdk_paths（§8.2 B-4）：不再写死本机绝对路径。
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core import sdk_paths  # noqa: E402
+
+ADB = sdk_paths.sdk_tool("platform-tools", "adb.exe")
 DEVICE_LOG = "/data/local/tmp/vscan_conn_all.log"
 DEVICE_SCRIPT = "/data/local/tmp/vscan_conn_all.sh"
 # --package 模式下多少轮重解一次 pid。取 25：20ms 一轮时约 0.5s 一次 `pidof`，
@@ -168,7 +172,10 @@ def main() -> int:
         "done\n"
     )
     adb("shell", f"rm -f {DEVICE_LOG} {DEVICE_SCRIPT}")
-    subprocess.run([ADB, "shell", f"cat > {DEVICE_SCRIPT}"], input=recorder,
+    # 命令拆成列表项而不是拼一整条字符串：`DEVICE_SCRIPT` 现在是常量，但拼字符串的
+    # 写法一旦让它带上用户输入，`>` 前面就多了一整个 shell 注入面（§8.2 B-4）。
+    # 真正的内容仍走 `input=`，不经过命令行。
+    subprocess.run([ADB, "shell", "cat", ">", DEVICE_SCRIPT], input=recorder,
                    text=True, encoding="utf-8", errors="replace", timeout=30)
     adb("shell", f"chmod 755 {DEVICE_SCRIPT}")
     # 必须 `-t -t`（两个）：不加 pty 时设备上的 grep/sed 会块缓冲，输出攒着不吐；

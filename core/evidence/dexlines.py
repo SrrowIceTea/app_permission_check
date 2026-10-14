@@ -39,8 +39,12 @@ import zipfile
 from pathlib import Path
 
 # 本机的 build-tools 好几个版本都带 dexdump，取版本号最大的那个。
-# 默认值只在本机（2026-09-28 校正）没设 ANDROID_SDK_ROOT 时兜底；build_delivery.py 会显式传入。
-SDK_BUILD_TOOLS = Path(os.environ.get("ANDROID_SDK_ROOT", "D:/Anroid/SDK")) / "build-tools"
+# 路径解析统一走 core/sdk_paths（VSCAN_SDK → ANDROID_SDK_ROOT/ANDROID_HOME → PATH →
+# 历史候选），不再在这里写死本机绝对路径（§8.2 B-4）。build_delivery.py 会显式传入。
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core import sdk_paths  # noqa: E402
+
+SDK_BUILD_TOOLS = sdk_paths.sdk_dir("build-tools")
 
 CLASS_RE = re.compile(r"^  Class descriptor  : '(?P<desc>L[^;]+;)'")
 SECTION_RE = re.compile(r"^  (?P<name>Static fields|Instance fields|Direct methods|Virtual methods)")
@@ -194,10 +198,15 @@ def main() -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--apk", type=Path)
     parser.add_argument("--verify", type=Path, required=True, help="带 code_locs 的结论文件")
-    parser.add_argument("--package", default="com.vscanner.targetapp")
+    parser.add_argument("--package", default=None,
+                        help="受检包名（必填：不再默认填车载夹具包名，见 §8.2 B-1）")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--cache", type=Path, help="dex 索引缓存（dexdump 较慢，建议给）")
     args = parser.parse_args()
+
+    if not args.package:
+        parser.error("--package 必填：dex 核对应按包名定位 dex 里的类，"
+                     "内核不再默认假定 com.vscanner.targetapp。")
 
     if args.out.exists():
         print(json.dumps({"status": "failed", "message": f"拒绝覆盖 {args.out}"}),

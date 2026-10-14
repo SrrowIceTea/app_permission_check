@@ -20,13 +20,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from report_extras import extra_story, footer
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core.io_utils import load_jsonl  # noqa: E402  JSONL 唯一实现（§8.2 B-2）
+from core.rules_contract import rules_db_meta  # noqa: E402  规则库元信息（§8.2 B-2）
+
+from report_extras import FONT_CANDIDATES, extra_story, footer
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
@@ -41,10 +44,8 @@ from reportlab.platypus import (KeepTogether, PageBreak, Paragraph, SimpleDocTem
 # 中文字体：优先用系统 TTF（会被嵌入 PDF，任何阅读器都能显示）。
 # 找不到就退回 reportlab 内置的 CID 字体——它不嵌入字形，依赖阅读器自带字体，
 # 但至少不会让整份报告生成失败。
-FONT_CANDIDATES = [
-    ("SimHei", r"C:\Windows\Fonts\simhei.ttf"),
-    ("DengXian", r"C:\Windows\Fonts\Deng.ttf"),
-]
+# 候选表只有一份（在 report_extras 里，上面已 import）：早先这里与那里各写一份
+# 且内容不一致，换机改一处漏一处（§8.2 B-2）。
 FONT = "Helvetica"
 
 LEVEL_LABEL = {
@@ -72,23 +73,6 @@ def register_font() -> str:
         return "STSong-Light"
     except Exception:  # noqa: BLE001
         return "Helvetica"
-
-
-def rule_db_meta(db_path: Path) -> dict:
-    conn = sqlite3.connect(f"file:{db_path.resolve().as_posix()}?mode=ro", uri=True)
-    try:
-        versions = [r[0] for r in conn.execute(
-            "SELECT DISTINCT android_version FROM risk_rules ORDER BY android_version")]
-        total = conn.execute("SELECT COUNT(*) FROM risk_rules").fetchone()[0]
-        enabled = conn.execute("SELECT COUNT(*) FROM risk_rules WHERE enabled = 1").fetchone()[0]
-    finally:
-        conn.close()
-    import hashlib
-    return {
-        "path": db_path.name,
-        "sha256": hashlib.sha256(db_path.read_bytes()).hexdigest(),
-        "rule_versions": versions, "rules_total": total, "rules_enabled": enabled,
-    }
 
 
 def build_story(findings: list[dict], summary: dict, rules_meta: dict, font: str,
@@ -145,8 +129,10 @@ def build_story(findings: list[dict], summary: dict, rules_meta: dict, font: str
         SEVERITY_ORDER.get(f.get("severity", "unrated"), 9),
         -{"correlated": 3, "observed": 2, "candidate": 1}.get(f.get("conclusion_level"), 0),
         f.get("rule_id", "")))
+    group_starts = []
     for finding in ordered:
         group_start = len(story)
+        group_starts.append(group_start)
         story.append(Paragraph(
             f"<b>{finding['rule_id']}</b> v{finding['rule_revision']} · "
             f"{finding['rule_type']} · 严重度 {finding['severity']} · "
@@ -199,7 +185,14 @@ def build_story(findings: list[dict], summary: dict, rules_meta: dict, font: str
                 f"{'是' if pair['content_match'] else '否'}", cell_small))
         story.append(Paragraph("&nbsp;&nbsp;" + escape(finding.get('note', '')), small))
         story.append(Spacer(1, 5))
-        story[group_start:] = [KeepTogether(story[group_start:])]
+    # 原来每结论都做一次 `story[group_start:] = [KeepTogether(tail)]`，每次重建整条
+    # 尾部列表 → O(结论数²)（§8.2 B-3）。改为先记下标、最后一次性重建。
+    if group_starts:
+        rebuilt = story[:group_starts[0]]
+        for i, start in enumerate(group_starts):
+            end = group_starts[i + 1] if i + 1 < len(group_starts) else len(story)
+            rebuilt.append(KeepTogether(story[start:end]))
+        story[:] = rebuilt
 
     story.append(PageBreak())
     story.append(Paragraph("三、方法与可追溯性", h2))
@@ -254,10 +247,9 @@ def main() -> int:
                   file=sys.stderr)
             return 1
 
-    findings = [json.loads(l) for l in args.findings.read_text(encoding="utf-8").splitlines()
-                if l.strip()]
+    findings = load_jsonl(args.findings)
     summary = json.loads(args.summary.read_text(encoding="utf-8"))
-    meta = rule_db_meta(args.rules)
+    meta = rules_db_meta(args.rules)
     if summary.get('rules_sha256') and summary['rules_sha256'] != meta['sha256']:
         raise ValueError('报告规则库与关联时摘要不一致')
     flows = [json.loads(l) for l in args.flows.read_text(encoding="utf-8").splitlines() if l.strip()] if args.flows else []

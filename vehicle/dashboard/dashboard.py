@@ -23,35 +23,16 @@ file:// 下 fetch() 被浏览器禁止（数据必须内嵌，不能外置 JSON�
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
-
-def load_jsonl(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
-            if line.strip()]
-
-
-def rules_meta(db_path: Path) -> dict:
-    """规则库元信息（与 report.py 同口径）：版本、全文 SHA-256、总数/启用数。"""
-    conn = sqlite3.connect(f"file:{db_path.resolve().as_posix()}?mode=ro", uri=True)
-    try:
-        versions = [r[0] for r in conn.execute(
-            "SELECT DISTINCT android_version FROM risk_rules ORDER BY android_version")]
-        total = conn.execute("SELECT COUNT(*) FROM risk_rules").fetchone()[0]
-        enabled = conn.execute("SELECT COUNT(*) FROM risk_rules WHERE enabled = 1").fetchone()[0]
-    finally:
-        conn.close()
-    return {
-        "rule_versions": versions, "rules_total": total, "rules_enabled": enabled,
-        "rules_sha256": hashlib.sha256(db_path.read_bytes()).hexdigest(),
-    }
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core.io_utils import load_jsonl  # noqa: E402  JSONL 唯一实现（§8.2 B-2）
+from core.rules_contract import rules_db_meta  # noqa: E402  规则库元信息（§8.2 B-2）
 
 
 def embed_json(obj) -> str:
@@ -72,7 +53,7 @@ def build(args) -> str:
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
     }
     if args.rules:
-        meta.update(rules_meta(args.rules))
+        meta.update(rules_db_meta(args.rules))
     else:
         meta.update({"rule_versions": [], "rules_total": "-", "rules_enabled": "-",
                      "rules_sha256": ""})

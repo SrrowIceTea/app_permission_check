@@ -67,7 +67,13 @@ def load_dynamic(findings_path: Path | None) -> dict:
     """
     if not findings_path or not findings_path.exists():
         return {}
-    from static_rules import LEVEL_ORDER
+    # 包内相对导入优先（§8.2 B-1）：旧的裸 `from static_rules import` 依赖调用方
+    # 预先把 core/static 塞进 sys.path，一旦有人按 `core.static.crosscheck` 导入就炸。
+    # 离线回归仍以顶层 `import crosscheck` 跑（无父包），所以保留显式回退 shim。
+    try:
+        from .static_rules import LEVEL_ORDER
+    except ImportError:  # 顶层模块形态：没有父包可做相对导入
+        from static_rules import LEVEL_ORDER
     best: dict[str, dict] = {}
     for line in findings_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()

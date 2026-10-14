@@ -30,6 +30,8 @@ ROOT = HERE.parent.parent
 sys.path.insert(0, str(HERE))
 import thirdparty_env as env      # noqa: E402
 import thirdparty_ui_flow as flow  # noqa: E402  UI 探索（dump 驱动，不写死坐标）
+sys.path.insert(0, str(ROOT))
+from core import sdk_paths  # noqa: E402   SDK 路径统一解析（§8.2 B-4）
 
 MOBILE = ROOT / "mobile"
 PY = sys.executable
@@ -74,11 +76,22 @@ def main() -> int:
     ap.add_argument("--max-rounds", type=int, default=16)
     ap.add_argument("--frida-server", default=str(ROOT / "output" / "_frida" / "frida-server"))
     ap.add_argument("--geo", default="116.397,39.909", help="模拟器坐标注入 lon,lat；空串关闭")
-    ap.add_argument("--build-tools", default="D:/Anroid/SDK/build-tools/36.1.0")
+    ap.add_argument("--build-tools",
+                    default=str(sdk_paths.sdk_dir("build-tools", "36.1.0")))
     ap.add_argument("--provenance", default=None, help="样本溯源 JSON，拷入交付目录")
     ap.add_argument("--static-dir", default=None, help="静态分析产物目录，拷入交付目录 static/")
     ap.add_argument("--skip-ai", action="store_true")
+    ap.add_argument("--no-hooks", action="store_true",
+                    help="对照实验：不挂任何 Frida 钩子。用于回答「应用在窗口内死亡是不是"
+                         "插桩引起的」——同一 App、同一流程，只少钩子这一项（2026-10-13 "
+                         "待办的控制实验，见 mobile/DECISIONS.md）。")
     args = ap.parse_args()
+
+    # 多设备且未指定 ANDROID_SERIAL → 启动前就停。理由见 thirdparty_env.device_guard：
+    # 裸 adb 命令在多设备下全部报错，且失败形态是静默空结果（假"已恢复"、假"原因未记录"）。
+    guard = env.device_guard()
+    if guard:
+        sys.exit("[fatal] " + guard)
 
     apk = Path(args.apk).resolve()
     out = Path(args.out).resolve()
@@ -139,6 +152,17 @@ def main() -> int:
         check("geo_injected", 0 if "OK" in r.stdout else 1, optional=True,
               note=f"geo fix {lon},{lat} (模拟器专用；真机无此路径)")
 
+    # 启动 Activity 以**设备解析**为准，badging 只做回退：
+    # aapt2 的 launchable-activity 给的是"第一个 LAUNCHER"，而第一个未必能启动——
+    # 实测 F-Droid 的 panic.CalculatorActivity 在 manifest 里挂着 LAUNCHER，但类的 dex
+    # 已被 R8 裁掉，`am start` 报 "Activity class does not exist"，整段设备检测死在
+    # app_started。设备解析是系统对"点桌面图标"的权威回答（含 activity-alias）。
+    resolved_activity = env.device_main_activity(args.package)
+    main_activity = resolved_activity or args.main_activity
+    (out / "main-activity.log").write_text(json.dumps(
+        {"from_batch": args.main_activity, "from_device": resolved_activity,
+         "used": main_activity}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
     env.adb("shell", "logcat", "-c", timeout=30)
 
     # 设备侧连接采样：不经过任何被挂钩的 Java 层，直接看内核有没有外发。
@@ -156,10 +180,12 @@ def main() -> int:
 
     # 冷启动竞争：先 am start，等到 pid 再挂钩子（钩子是 attach 模式）
     env.adb("shell", "am", "start", "-W", "-n",
-            f"{args.package}/{args.main_activity}", timeout=150)
+            f"{args.package}/{main_activity}", timeout=150)
     pid = env.wait_for_app(args.package)
     check("app_started", 0 if pid else 1,
-          note=f"pid={pid}" if pid else "应用未在超时内出现（冷启动竞争或启动崩溃）")
+          note=(f"pid={pid}" if pid else "应用未在超时内出现（冷启动竞争或启动崩溃）")
+               + f"；activity={main_activity}"
+               + ("" if resolved_activity else "（回退值：设备解析为空）"))
     if not pid:
         env.kill_tree(collector, out / "kill-conn.log")   # 早退也不能留孤儿
         (out / "verification.json").write_text(json.dumps(
@@ -175,28 +201,35 @@ def main() -> int:
     check("proxy_set_for_capture", 0 if str(env.MITM_PORT) in proxy_now else 1,
           note=f"http_proxy={proxy_now!r} (原值 {prev_proxy!r})")
 
-    hooks = [
-        env.start_hook(MOBILE / "hooks" / "dist" / "hook_privacy.bundle.js", session,
-                       "reads.jsonl", out / "hook-privacy.log", args.seconds, args.package),
-        env.start_hook(MOBILE / "hooks" / "dist" / "hook_consent.bundle.js", session,
-                       "consent.jsonl", out / "hook-consent.log", args.seconds, args.package),
-        # egress / TLS 绕过直接复用 core/frida_host 成品：Socket.connect 与证书校验与"车载"无关
-        env.start_hook(ROOT / "core" / "frida_host" / "dist" / "hook_egress.bundle.js", session,
-                       "egress.jsonl", out / "hook-egress.log", args.seconds, args.package),
-        # **第三方专用**出站钩子：vehicle/hooks 版只挂 `java.net.Socket.connect`，而真实样本的
-        # HTTPS 走 Apache HttpClient，connect() 在 conscrypt 子类里被重写，钩子一条抓不到。
-        # 这一版挂到 libcore 汇聚点 + URI/URL 构造，见 mobile/hooks/hook_egress_tp.js。
-        env.start_hook(MOBILE / "hooks" / "dist" / "hook_egress_tp.bundle.js", session,
-                       "egress_tp.jsonl", out / "hook-egress-tp.log", args.seconds, args.package),
-        # **第三方专用** TLS 绕过：裁掉了 vehicle/hooks 版里会触发 ART abort 的
-        # HttpsURLConnection 主机名钩子（证据见 mobile/hooks/tls_bypasses_tp.js 头部）。
-        env.start_hook(MOBILE / "hooks" / "dist" / "ssl_pinning_tp.bundle.js", session,
-                       "tls.jsonl", out / "hook-tls.log", args.seconds, args.package),
-    ]
-    time.sleep(9)   # 等钩子挂上：钩子掉线与"应用没动作"长得一样（D309）
+    if args.no_hooks:
+        # 对照实验：同一 App、同一流程，只少"挂钩子"这一项。用于判定应用死亡
+        # （SIGABRT/SIGSEGV）是否由插桩引起——挂钩与不挂钩各跑一轮比对。
+        hooks = []
+        check("hooks_armed", 0, optional=True,
+              note="对照实验：--no-hooks，本轮不挂任何钩子（其余流程不变）")
+    else:
+        hooks = [
+            env.start_hook(MOBILE / "hooks" / "dist" / "hook_privacy.bundle.js", session,
+                           "reads.jsonl", out / "hook-privacy.log", args.seconds, args.package),
+            env.start_hook(MOBILE / "hooks" / "dist" / "hook_consent.bundle.js", session,
+                           "consent.jsonl", out / "hook-consent.log", args.seconds, args.package),
+            # egress / TLS 绕过直接复用 core/frida_host 成品：Socket.connect 与证书校验与"车载"无关
+            env.start_hook(ROOT / "core" / "frida_host" / "dist" / "hook_egress.bundle.js", session,
+                           "egress.jsonl", out / "hook-egress.log", args.seconds, args.package),
+            # **第三方专用**出站钩子：vehicle/hooks 版只挂 `java.net.Socket.connect`，而真实样本的
+            # HTTPS 走 Apache HttpClient，connect() 在 conscrypt 子类里被重写，钩子一条抓不到。
+            # 这一版挂到 libcore 汇聚点 + URI/URL 构造，见 mobile/hooks/hook_egress_tp.js。
+            env.start_hook(MOBILE / "hooks" / "dist" / "hook_egress_tp.bundle.js", session,
+                           "egress_tp.jsonl", out / "hook-egress-tp.log", args.seconds, args.package),
+            # **第三方专用** TLS 绕过：裁掉了 vehicle/hooks 版里会触发 ART abort 的
+            # HttpsURLConnection 主机名钩子（证据见 mobile/hooks/tls_bypasses_tp.js 头部）。
+            env.start_hook(MOBILE / "hooks" / "dist" / "ssl_pinning_tp.bundle.js", session,
+                           "tls.jsonl", out / "hook-tls.log", args.seconds, args.package),
+        ]
+        time.sleep(9)   # 等钩子挂上：钩子掉线与"应用没动作"长得一样（D309）
 
     actions = flow.explore(out / "ui", args.seconds, args.max_rounds, args.package,
-                           args.main_activity)
+                           main_activity)
     (out / "ui-actions.json").write_text(json.dumps(
         {"actions": actions, "note": "每次点击的点击前/后 XML 见 ui/ 目录，可回溯"},
         ensure_ascii=False, indent=2), encoding="utf-8")
@@ -216,12 +249,32 @@ def main() -> int:
     death = env.app_death_reason(args.package)
     (out / "app-death.json").write_text(json.dumps(death, ensure_ascii=False, indent=2) + "\n",
                                         encoding="utf-8")
+    # alive_at_end 有三态：True / False / None（adb 报错，无法判定）。None 时不能
+    # 写成"窗口内死亡"——那是把"查不到"说成结论。
+    if death["alive_at_end"] is None:
+        death_note = "无法判定：" + str(death.get("error") or "adb 报错")
+    elif death["alive_at_end"]:
+        death_note = "应用在窗口结束时仍存活"
+    else:
+        death_note = "应用在窗口内死亡：" + str(
+            death.get("cause") or (death["fatal_lines"] or ["原因未记录"])[0])
     check("app_alive_at_window_end", 0 if death["alive_at_end"] else 1, optional=True,
-          note="应用在窗口结束时仍存活" if death["alive_at_end"] else
-          "应用在窗口内死亡：" + str(death.get("cause") or (death["fatal_lines"] or ["原因未记录"])[0]))
+          note=death_note)
+
+    # 收尾：把样本强制停掉。**必须放在死亡取证之后**（在跑就杀会让 alive 永远为 false，
+    # 那是自己制造假结论）；不停掉的话，样本会带着残留状态活到下一样本的窗口里——
+    # 实测：一轮 camera 跑完后它的 MainActivity 一直留在前台，下一轮开跑时机器人
+    # 先从别人家的界面上做 overlay 清理。停止样本只影响我们安装的测试副本。
+    env.adb("shell", "am", "force-stop", args.package, timeout=60)
 
     # 钩子必须自证挂载（M016）：没有 ARMED 就是没挂上，不是"应用没动作"
+    hook_events: dict[str, list[dict]] = {}
     for name, fname in (("privacy", "reads.jsonl"), ("consent", "consent.jsonl")):
+        if args.no_hooks:
+            # 对照实验：本来就没挂钩子，"没 ARMED"是设计使然，不是失败
+            check(f"hook_{name}_armed", 0, optional=True,
+                  note="对照实验：--no-hooks，本项按设计不适用")
+            continue
         events = []
         p = session / fname
         if p.exists():
@@ -231,11 +284,30 @@ def main() -> int:
                         events.append(json.loads(line))
                     except json.JSONDecodeError:
                         pass
+        hook_events[fname] = events
         armed = any(e.get("ev") == "ARMED" for e in events)
         script_error = any(e.get("ev") in ("SCRIPT_ERROR", "ERROR") for e in events)
         check(f"hook_{name}_armed", 0 if armed else 1,
               note=None if armed else ("钩子脚本抛错，未挂载" if script_error
                                        else "没有 ARMED 事件：钩子没跑起来"))
+
+    # ---- A2（§8.1）：`armed` 之外必须有**真实事件**，且这是**强制**判据 ----
+    # `armed` 只证明钩子挂上了，不证明捕得到：夹具与 5 个第三方样本实测都是
+    # "58/58 armed; failed=0" 而 reads.jsonl 只有 START/ARMED 两行。
+    # 零事件时这里必须判失败并写进 gaps——不许为了让判据变绿而把它改回 optional（§8.6 第 1 条）。
+    real_reads = []
+    if args.no_hooks:
+        check("runtime_events_captured", 0, optional=True,
+              note="对照实验：--no-hooks，本项按设计不适用")
+    else:
+        real_reads = [e for e in hook_events.get("reads.jsonl", [])
+                      if e.get("ev") not in ("START", "ARMED")]
+        check("runtime_events_captured", 0 if real_reads else 1,
+              note=(f"reads.jsonl 有 {len(real_reads)} 条 START/ARMED 之外的真实事件"
+                    if real_reads else
+                    "reads.jsonl 只有 START/ARMED：钩子挂上了，但一条运行时事件都没捕到。"
+                    "armed ≠ 能捕到（§8.1 A2）——据此**不得**写「该应用未收集」；"
+                    "先按 A1 排查插桩是否把应用打死，或本轮 UI 未触碰被监视 API"))
 
     # ---- 关联 / 证据包 / 报告 ----
     perms = apk_permissions(apk, args.build_tools)
@@ -262,12 +334,19 @@ def main() -> int:
                   "--session", str(session), "--findings", str(o / "findings.jsonl"),
                   "--package", args.package, "--app-category", args.app_category,
                   "--policy-store", str(policy_store), "--apk-sha256", sha,
+                  "--apk", str(apk),
                   "--device", env.adb("shell", "getprop", "ro.build.fingerprint",
                                       timeout=45).stdout.strip(),
                   "--out", str(o / "bundle.json")]
     # 编排层知道、而工具无法从数据里推出来的缺口，逐条写进 bundle.gaps（前缀 [orch]）。
     for note in env.orchestrator_notes(death):
         bundle_cmd += ["--note", note]
+    if not args.no_hooks and not real_reads:
+        # 零运行时事件是**采集链路的事实**，必须以 [orch] 缺口进证据包与报告，
+        # 而不是让报告看起来"本轮没有发现"。
+        bundle_cmd += ["--note", "本轮 reads.jsonl 只有 START/ARMED，零运行时事件："
+                                 "钩子已挂载但不能据此判定「应用未收集」（§8.1 A1/A2）"]
+    check("bundle", env.run(bundle_cmd, out / "bundle.log"))
     check("bundle", env.run(bundle_cmd, out / "bundle.log"))
 
     # 旁路证据索引：egress_tp / tls / conns / ui-actions 不进 bundle、不参与规则求值，
@@ -310,7 +389,13 @@ def main() -> int:
          "optional_failed": optional_failed, "session": session.name,
          "package": args.package, "apk_sha256": sha,
          "app_category": {"value": args.app_category, "source": "declared"},
-         "device": {"serial": env.adb("get-state", timeout=30).stdout.strip(),
+         # serial 用 get-serialno（返回 `emulator-5554` 这种真序列号）。
+         # 原先用的 get-state 只会返回字面量 "device"（不是序列号），且**同时接了多台设备时
+         # 直接报错、字段落空**——2026-10-13 跑 Fossify Camera 时宿主机上第二次出现了
+         # 另一台模拟器，"serial" 就写成了空串，事后无法看出检测跑在哪台设备上。
+         # 多设备时裸 adb 命令一律报 "more than one device/emulator"，
+         # 跑批次前须在环境里指定 ANDROID_SERIAL=<serial>（adb 会全局遵守它）。
+         "device": {"serial": env.adb("get-serialno", timeout=30).stdout.strip(),
                     "fingerprint": env.adb("shell", "getprop", "ro.build.fingerprint",
                                            timeout=45).stdout.strip(),
                     "build_type": env.adb("shell", "getprop", "ro.build.type",

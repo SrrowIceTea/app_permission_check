@@ -125,6 +125,8 @@ class EmitRoutingTest(unittest.TestCase):
         # addon 在导入期就按 VSCAN_TAGGING 加载平台打标表（不给即启动失败，不猜平台）。
         # 本用例只验失败流落盘与 _emit 分流，不碰打标表，指向车载表即可。
         os.environ.setdefault("VSCAN_TAGGING", "vehicle/traffic/tagging.py")
+        # addon 导入时就要求白名单非空（白名单已无默认值，见 §8.2 B-1）；本用例不碰白名单。
+        os.environ.setdefault("VSCAN_PACKAGES", "com.vscanner.targetapp")
         import addon
 
         with tempfile.TemporaryDirectory() as tmp:

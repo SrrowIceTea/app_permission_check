@@ -23,7 +23,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 MOBILE = ROOT / "mobile"
 PY = sys.executable
-ADB = "D:/Anroid/SDK/platform-tools/adb.exe"
+# SDK 路径解析统一走 core/sdk_paths（§8.2 B-4）：不再写死本机绝对路径。
+sys.path.insert(0, str(ROOT))
+from core import sdk_paths  # noqa: E402
+
+ADB = sdk_paths.sdk_tool("platform-tools", "adb.exe")
 FRIDA_PORT = 27043
 MITM_PORT = 8888
 GUEST_HOST = "10.0.2.2"          # 模拟器里指向宿主机
@@ -33,8 +37,34 @@ import ui_trigger as ui  # noqa: E402
 
 
 def adb(*args: str, timeout: int = 60) -> subprocess.CompletedProcess:
+    # 显式 utf-8 + errors="replace"：本机 PYTHONUTF8=1 时子进程管道默认 UTF-8 解码，
+    # 而 adb.exe 可能混入 GBK 字节（中文系统）——缺 errors 会让 Reader 线程崩、
+    # .stdout 变 None。同一约束见 mobile/tools/batch_thirdparty.py 的 mklink 注释。
     return subprocess.run([ADB, *args], capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=timeout)
+
+
+def device_guard() -> str | None:
+    """多设备且未指定 ANDROID_SERIAL 时，**在启动前明确失败**。
+
+    为什么必须挡：本工具链所有 adb 调用都是裸命令（不带 -s）。挂上第二台设备后，
+    它们一律报 `error: more than one device/emulator`——而失败形态是**静默空结果**：
+    pidof 空 → app-death.json 写成"原因未记录"（真身可能是 crash 缓冲里一条
+    SIGABRT）；proxy 恢复读回空串 → 看起来"已恢复"。实测 2026-10-13 跑 Fossify
+    Camera 时宿主机上多出一台模拟器（Android Studio 启动的 Medium_Phone），
+    收尾分钟内的取证就全部失真。宁可响亮失败，不要安静地写错。
+    返回错误文案；环境正常（单设备，或已显式指定 ANDROID_SERIAL）返回 None。
+    """
+    if (os.environ.get("ANDROID_SERIAL") or "").strip():
+        return None
+    out = adb("devices").stdout or ""
+    serials = [ln.split("\t", 1)[0].strip() for ln in out.splitlines()[1:]
+               if "\tdevice" in ln]
+    if len(serials) > 1:
+        return (f"检测到多台设备 {serials} 且未设置 ANDROID_SERIAL；"
+                "裸 adb 命令会全部报错，收尾取证会静默写空结果。"
+                f"请显式指定目标设备后重跑，例如：ANDROID_SERIAL={serials[0]}")
+    return None
 
 
 def run(cmd: list[str], log: Path, timeout: int = 900, env: dict | None = None) -> int:
@@ -216,7 +246,19 @@ def start_mitm(session: Path, log: Path, package: str) -> subprocess.Popen:
             str(session / "egress.jsonl"), str(session / "egress_tp.jsonl")]),
         "VSCAN_PACKAGES": package,
         "VSCAN_SESSION": session.name,
+        # 常规代理模式看得见真实目标 host:port，开目标校验把"别的 App 的流误认领给
+        # 被审计包"这条静默错误路径关掉（见 core/collector/DECISIONS D413）。
+        # **只在常规代理模式开**：reverse 模式所有 App 寻址同一代理端口，开了会把
+        # 整场归因静默变 unresolved——reverse 路径（device_run.py）不设此变量。
+        "VSCAN_ATTRIB_TARGET_CHECK": "1",
     })
+    # **必须关掉子进程的 stdout 块缓冲**：管道/文件重定向下 Python 默认 8KB 块缓冲，
+    # 而收尾一律 `taskkill /T /F`（见 kill_tree）——缓冲里没落盘的内容直接蒸发。
+    # 实测：breezy 那一轮的 mitm.log 最终 0 字节（连启动横幅都没有），事后无法诊断
+    # "代理到底起没起、见到了什么连接"。数据本身在 sqlite 里没丢，但人读的日志没了，
+    # 违反"失败可诊断"。PYTHONUNBUFFERED 会被 mitmdump 的 console launcher 透传给
+    # 真正干活的 python 子进程。
+    env["PYTHONUNBUFFERED"] = "1"
     # stdin=DEVNULL：不让子进程继承标准句柄，否则下游攥住句柄会让编排层 subprocess.run 阻塞。
     proc = subprocess.Popen(
         ["mitmdump", "-s", str(MOBILE / "traffic" / "addon_mobile.py"),
@@ -231,6 +273,7 @@ def start_hook(script: Path, session: Path, out_name: str, log: Path,
                seconds: int, package: str) -> subprocess.Popen:
     env = dict(os.environ)
     env["VSCAN_SESSION"] = session.name
+    env["PYTHONUNBUFFERED"] = "1"   # 见 start_mitm 的注释：杀掉子进程时缓冲内容会丢
     proc = subprocess.Popen(
         [PY, str(ROOT / "core" / "frida_host" / "run.py"), "--package", package,
          "--script", str(script), "--seconds", str(seconds),
@@ -271,30 +314,146 @@ def start_conn_probe(session: Path, log: Path, package: str,
     cmd = [PY, str(Path(__file__).resolve().parent / "conn_probe.py"),
            "--package", package, "--seconds", str(seconds),
            "--out", str(session / "conns.jsonl")]
+    child_env = dict(os.environ)
+    child_env["PYTHONUNBUFFERED"] = "1"   # 见 start_mitm 的注释：杀掉子进程时缓冲内容会丢
     proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL,
                             stdout=open(log, "w", encoding="utf-8"),
-                            stderr=subprocess.STDOUT)
+                            stderr=subprocess.STDOUT, env=child_env)
     return proc
+
+
+def _process_name_variants(package: str) -> set[str]:
+    """日志里进程名的可能写法。
+
+    实测 bionic 的 comm 只保留 15 字符且**保留尾部**：
+      org.breezyweather → g.breezyweather；com.kunzisoft.keepass.libre → t.keepass.libre；
+      org.fossify.camera → .fossify.camera。
+    首 15 字符变体也一并算上（native 守护进程用的是头截断：android.hardware.uwb-service
+    → android.hardwar），免得日志形态随实现变化时认不出自己。
+    """
+    names = {package}
+    if len(package) > 15:
+        names.add(package[:15])
+        names.add(package[-15:])
+    return names
+
+
+def parse_app_death(raw: str, package: str) -> dict:
+    """从 logcat 原文里抽「死于什么」。纯函数，便于用**真实崩溃原文**做单测。
+
+    归属两条准则（都是实测教训，不要放松）：
+
+    ① **崩溃标记行必须自己点名我们**——`Fatal signal` 行里的 `(进程名)`、
+       `FATAL EXCEPTION` 场景的 `Process: <包名>`、tombstone 的 `Cmdline: <包名>`。
+       不能"先按时间前缀/包名圈块、再看块里有什么"（曾这么写，被真实数据打脸）：
+       合并日志里**同一毫秒会缝进别的进程的行**——模拟器的 UWB HAL 每 5~10 秒崩一次，
+       `15:10:52.349` 这一毫秒里同时有 breezy 的 PackageConfigPersister 和 UWB 的
+       panic+abort 四行，按块归属会把 UWB 的 abort message（"failed to open the
+       serial device"）写成 org.breezyweather 的死因。
+
+    ② **Abort message 只从点名我们的 tombstone 里取**：以 `Cmdline: <包名>` 为锚点，
+       向前找 `*** *** ***` 头；找不到头（缓冲被截断）就从锚点本身起、**只向后**扫——
+       向前扩窗会把紧邻的别人的记录吃进来。
+    """
+    lines = raw.splitlines()
+    names = _process_name_variants(package)
+
+    fatal: list[str] = []
+    cause: str | None = None
+
+    # ① native 崩溃：Fatal signal 行点名我们
+    for ln in lines:
+        if "Fatal signal" in ln and any(f"({n}" in ln for n in names):
+            s = ln.strip()
+            if s not in fatal:
+                fatal.append(s)
+
+    # ② tombstone：Cmdline 锚定，Abort message 取自该墓碑
+    for i, ln in enumerate(lines):
+        if f"Cmdline: {package}" not in ln:
+            continue
+        start = i
+        for j in range(i, max(-1, i - 400), -1):
+            if "*** *** ***" in lines[j]:
+                start = j
+                break
+        # 只向后扫：tombstone 里 Abort message 在 Cmdline 之后；若向前扩窗会把
+        # 紧邻的**别人的**记录吃进来（无头可锚时尤为危险）。
+        for l in lines[start:i + 300]:
+            if "Abort message:" in l:
+                cause = cause or l.split("Abort message:", 1)[1].strip().strip("'")
+                break
+
+    # ③ Java 崩溃：FATAL EXCEPTION 块（其下方数行内带 Process: <包名>）
+    for i, ln in enumerate(lines):
+        if "FATAL EXCEPTION" not in ln:
+            continue
+        ctx = lines[i:i + 6]
+        if not any(package in c for c in ctx):
+            continue
+        s = ln.strip()
+        if s not in fatal:
+            fatal.append(s)
+        if cause is None:
+            for c in ctx[1:]:
+                if "Exception" in c or "Error" in c:
+                    cause = c.strip()
+                    break
+
+    return {"fatal_lines": fatal[:3], "cause": cause}
 
 
 def app_death_reason(package: str) -> dict:
     """应用在窗口内是否死亡、死于什么。
 
     必须留下："窗口后半段没有事件"既可能是应用没做该动作，也可能是应用已经死了，
-    只看事件文件分不出来。只读 logcat，不改任何东西。"""
-    out = adb("shell", "pidof", package, timeout=30).stdout.strip()
-    alive = bool(out)
-    log = adb("logcat", "-d", "-v", "time", timeout=120).stdout
-    lines = [ln for ln in log.splitlines() if package.split(".")[-1][:12] in ln]
-    fatal, cause = [], None
-    for i, ln in enumerate(lines):
-        if "FATAL EXCEPTION" in ln or "Fatal signal" in ln:
-            fatal.append(ln.strip())
-            for nxt in lines[i + 1:i + 6]:
-                if "RemoteServiceException" in nxt or "Exception:" in nxt:
-                    cause = nxt.strip()
-                    break
-            if cause:
-                break
-    return {"alive_at_end": alive, "pid": out or None,
-            "fatal_lines": fatal[:3], "cause": cause}
+    只看事件文件分不出来。只读 logcat，不改任何东西。
+
+    三个取证要点（都是实测教训）：
+      ① `-b crash` 必须显式带上：native 崩溃（SIGABRT 等）的 tombstone 只在
+         crash 缓冲里，而 crash 缓冲会被**其它进程的崩溃**（模拟器的 UWB HAL
+         崩溃循环）快速挤占——所以要在窗口一结束就取证，晚了就真没了。
+      ② 解析走 parse_app_death（见其注释）。
+      ③ adb 报错 ≠ 应用死亡：多设备未指定 ANDROID_SERIAL 时 pidof 会报错，
+         旧实现把它当 alive=False，会把"查不到"写成"死了"。
+    """
+    pid_res = adb("shell", "pidof", package, timeout=30)
+    err = (pid_res.stderr or "").strip()
+    if "error:" in err:
+        return {"alive_at_end": None, "pid": None, "fatal_lines": [], "cause": None,
+                "error": err.splitlines()[0], "package": package}
+    pid = (pid_res.stdout or "").strip()
+    log = adb("logcat", "-d", "-b", "main", "-b", "system", "-b", "crash",
+              "-v", "time", timeout=120).stdout or ""
+    return {"alive_at_end": bool(pid), "pid": pid or None,
+            **parse_app_death(log, package)}
+
+
+def parse_resolved_activity(stdout: str, package: str) -> str | None:
+    """从 `cmd package resolve-activity --brief` 的输出里抽 activity 部分。纯函数。
+
+    输出形如：
+        priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=false
+        org.fdroid.fdroid/.views.main.MainActivity
+    取组件行里 `/` 之后的部分（保守起见只认 package 段完全匹配的行）。
+    """
+    for ln in reversed((stdout or "").splitlines()):
+        ln = ln.strip()
+        if "/" in ln and ln.split("/", 1)[0] == package:
+            return ln.split("/", 1)[1]
+    return None
+
+
+def device_main_activity(package: str) -> str | None:
+    """设备侧解析默认 LAUNCHER Activity（可直接拼 `pkg/act` 交给 am start）。
+
+    为什么以设备为准：aapt2 badging 的 `launchable-activity` 只给**第一个** LAUNCHER，
+    而第一个不一定是能启动的那个——实测 F-Droid 的 `panic.CalculatorActivity` 挂在
+    manifest 的 LAUNCHER 里，但类的 dex 已被 R8 裁掉，`am start` 直接报
+    "Activity class does not exist"（Error type 3），整段设备检测死在 app_started。
+    设备解析是系统对"点桌面图标"的权威回答（activity-alias 也解析到位，实测
+    Fossify 系列会给出 .SplashActivity.Green 这种别名形态）。
+    """
+    r = adb("shell", "cmd", "package", "resolve-activity", "--brief",
+            "-c", "android.intent.category.LAUNCHER", package, timeout=60)
+    return parse_resolved_activity(r.stdout or "", package)

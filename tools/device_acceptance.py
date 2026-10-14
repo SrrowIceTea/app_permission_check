@@ -24,8 +24,9 @@ from test_proxy_cert import create
 # 旧版本把 'E:/Android/android-sdk/.../adb.exe' 写死，工程换机器后设备验收在第一次
 # 调用就 FileNotFoundError（2026-09-28 迁机实测）。这里不再依赖单一绝对路径。
 # 这个常量被 gadget_acceptance / multi_acceptance 导入，改这里三处一起生效。
+from core import sdk_paths
 ADB = (os.environ.get('VSCAN_ADB') or shutil.which('adb')
-       or 'D:/Anroid/SDK/platform-tools/adb.exe')
+       or sdk_paths.sdk_tool('platform-tools', 'adb.exe'))
 if not Path(ADB).exists():
     raise SystemExit(f'找不到 adb：{ADB}（设 VSCAN_ADB，或把 platform-tools 加进 PATH）')
 PACKAGE = 'com.vscanner.targetapp'
@@ -134,6 +135,8 @@ def main():
     out.mkdir(parents=True)
     (ROOT / 'output/latest-device.txt').write_text(str(out), encoding='utf-8')
     env = dict(os.environ, PYTHONUTF8='1', VSCAN_SESSION=session,
+               # 白名单已无默认值（§8.2 B-1）：本轮授权监控的就是这两个自有夹具。
+               VSCAN_PACKAGES=','.join([PACKAGE, 'com.vscanner.targetapp2']),
                VSCAN_FLOW_LOG=str(out / 'flows.jsonl'),
                VSCAN_EVENT_DB=str(out / 'events.sqlite'),
                VSCAN_ATTRIB_SOURCES=str(out / 'egress.jsonl'),
@@ -187,6 +190,8 @@ def main():
         wait_for(app_pid, 30)
         for name, script in [('reads', 'hook_vhal'), ('egress', 'hook_egress'), ('tls', 'ssl_pinning_bypass')]:
             launch([sys.executable, str(ROOT / 'core/frida_host/run.py'), '--package', PACKAGE,
+                    # --allow-package 已无默认值（§8.2 B-1），必须显式授权。
+                    '--allow-package', PACKAGE, '--allow-package', 'com.vscanner.targetapp2',
                     '--script', str(hook_bundle(script)),
                     '--seconds', '150', '--out', str(out / (name + '.jsonl')),
                     '--session', session, '--event-db', str(out / 'events.sqlite')], name)

@@ -83,10 +83,16 @@ def read_bytes(path) -> bytes:
 
 
 def _is_dir_raw(path: str) -> bool:
-    """按 lstat 判断（不跟随符号链接）：链向目录的符号链接会被当成待 unlink 的项。"""
+    """按 lstat 判断（不跟随符号链接）：链向目录的符号链接会被当成待 unlink 的项。
+
+    **只吞 `FileNotFoundError`**（路径不存在 ⇒ 不是目录，这是正常结果，遍历时也会被
+    "文件在 scandir 之后被删掉"的竞态触发）。其余 `OSError`（权限、共享冲突…）一律
+    向上传播：早先无条件吞掉，于是 `rmtree(ignore_errors=False)` 对无权限路径
+    **静默成功**——"删完了"其实是"压根没查到"，违反失败可诊断铁律（§8.6 第 3 条）。
+    """
     try:
         return stat.S_ISDIR(os.lstat(path).st_mode)
-    except OSError:
+    except FileNotFoundError:
         return False
 
 
@@ -103,17 +109,29 @@ def rmtree(path, *, ignore_errors: bool = True) -> None:
     stack = [root]
     while stack:
         current = stack.pop()
-        if not _is_dir_raw(current):
+        # `_is_dir_raw` 现在会抛"路径不存在以外"的 OSError；ignore_errors=True 的语义
+        # 仍是"忽略"，所以这里显式接住再决定。
+        try:
+            kind = _is_dir_raw(current)
+        except OSError:
+            if not ignore_errors:
+                raise
+            continue
+        if not kind:
             continue
         dirs.append(current)
         try:
             with os.scandir(current) as entries:
                 for entry in entries:
                     child = current + "\\" + entry.name
-                    if _is_dir_raw(child):
-                        stack.append(child)
-                    else:
-                        files.append(child)
+                    try:
+                        if _is_dir_raw(child):
+                            stack.append(child)
+                        else:
+                            files.append(child)
+                    except OSError:
+                        if not ignore_errors:
+                            raise
         except OSError:
             if not ignore_errors:
                 raise

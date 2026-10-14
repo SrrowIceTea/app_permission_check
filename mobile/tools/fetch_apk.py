@@ -42,7 +42,11 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 # 下**车载**样本时显式 --out apk/vehicle，否则会被移动端批处理当成手机 App 跑，
 # 症状是设备检测卡在 app_started，看起来像冷启动问题。
 DEFAULT_OUT = ROOT / "apk" / "mobile"
-AAPT2 = "D:/Anroid/SDK/build-tools/36.1.0/aapt2.exe"
+# SDK 路径解析统一走 core/sdk_paths（§8.2 B-4）：不再写死本机绝对路径。
+sys.path.insert(0, str(ROOT))
+from core import sdk_paths  # noqa: E402
+
+AAPT2 = sdk_paths.sdk_tool("build-tools", "36.1.0", "aapt2.exe")
 # **必须用移动端 UA**：同一个详情页，桌面 UA 只给「应用宝 PC 版」的下载链接，
 # 移动端 UA 才给出目标 App 自己的 APK 直链。实测：换 UA 前 10 个包全部 not_found，
 # 且页面看起来正常（标题都对），只有直链悄悄变成了应用宝自己——

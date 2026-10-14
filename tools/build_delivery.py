@@ -9,10 +9,12 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from core import sdk_paths  # noqa: E402
 
-# adb 定位：VSCAN_ADB 覆盖 > PATH 上的 adb > 本机 SDK 默认位置（理由同 device_acceptance.py）。
+# adb 定位：VSCAN_ADB 覆盖 > PATH 上的 adb > core/sdk_paths 解析（理由同 device_acceptance.py）。
 ADB = (os.environ.get('VSCAN_ADB') or shutil.which('adb')
-       or 'D:/Anroid/SDK/platform-tools/adb.exe')
+       or sdk_paths.sdk_tool('platform-tools', 'adb.exe'))
 if not Path(ADB).exists():
     raise SystemExit(f'找不到 adb：{ADB}（设 VSCAN_ADB，或把 platform-tools 加进 PATH）')
 # SDK 根由 adb 位置反推（.../platform-tools/adb.exe）。旧版本把 'E:/Android/android-sdk'
