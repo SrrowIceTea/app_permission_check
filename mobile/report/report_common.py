@@ -3,11 +3,14 @@
 
 仅用于授权测试（已获授权的样本与设备）。
 
-字体策略沿用 vehicle/analyze/report.py：优先嵌入选定的中文字体（可移植），
-否则退到 reportlab 的 STSong-Light（不嵌入，依赖阅读器），再退 Helvetica。
-**退到哪个必须写进报告**——否则中文在别的机器上显示成方块，而生成方毫不知情。
+字体策略与车载侧（`vehicle/analyze/report_extras.py`）保持同一份候选表与优先级：
+优先嵌入选定的中文字体（可移植），否则退到 reportlab 的 STSong-Light（不嵌入，依赖阅读器），
+再退 Helvetica。**退到哪个必须写进报告**——否则中文在别的机器上显示成方块，而生成方毫不知情。
+换机不想改代码时设 `VSCAN_CJK_FONT`。
 """
 from __future__ import annotations
+
+import os
 
 from reportlab.lib import colors
 from reportlab.lib.styles import ParagraphStyle
@@ -16,11 +19,16 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase.ttfonts import TTFont
 
+# 与 `vehicle/analyze/report_extras.py` 的那份**同序同项**（§6.5）：两侧各写一份且不一致时，
+# 换机只改一处就会让另一侧的报告印成方块，而生成方毫不知情。
 FONT_CANDIDATES = [
     ("SimHei", r"C:\Windows\Fonts\simhei.ttf"),
     ("DengXian", r"C:\Windows\Fonts\Deng.ttf"),
     ("MicrosoftYaHei", r"C:\Windows\Fonts\msyh.ttc"),
 ]
+# 换机不想改代码时的逃生口，与车载侧同一个变量名，排在最前（优先级最高）。
+if os.environ.get("VSCAN_CJK_FONT"):
+    FONT_CANDIDATES.insert(0, ("CustomCJK", os.environ["VSCAN_CJK_FONT"]))
 
 SEVERITY_COLORS = {
     "critical": colors.HexColor("#b3261e"), "high": colors.HexColor("#d03b3b"),

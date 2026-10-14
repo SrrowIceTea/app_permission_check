@@ -75,11 +75,11 @@ Phase 5=`vehicle/analyze/`，Phase 6=`vehicle/dashboard/`，Phase 7=`vehicle/wor
 
 ```bash
 PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
-"$PY" tools/run_regressions.py        # 12 组：completion/rules-contract/codeloc/correlate/
-                                      #       collector/tagging-vehicle/dashboard/runtime/parity/
-                                      #       workbench/hook-bundles/frida-bundle-config
+"$PY" tools/run_regressions.py        # 13 组：completion/rules-contract/event-store/codeloc/
+                                      #       correlate/collector/tagging-vehicle/dashboard/
+                                      #       runtime/parity/workbench/hook-bundles/frida-bundle-config
 
-"$PY" mobile/tools/run_mobile_checks.py   # 移动侧 22 项（另一条入口，改 mobile 后必须跑）
+"$PY" mobile/tools/run_mobile_checks.py   # 移动侧 23 项（另一条入口，改 mobile 后必须跑）
 ```
 
 > **先确认解释器再判红**：这两条都依赖 `requirements.txt`（`reportlab`/`Pillow`/`mitmproxy`/

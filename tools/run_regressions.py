@@ -9,6 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 CHECKS = [
     ('completion', '.', [sys.executable, '-m', 'unittest', 'test_completion']),
     ('rules-contract', 'core', [sys.executable, '-m', 'unittest', 'test_rules_contract']),
+    # event_store 的存储不变量此前错位在仓库根的 test_completion.py 里（§8.2 B-5）——
+    # 拆到被测模块旁边，并单独成组，改 core 的人跑得到。
+    ('event-store', 'core', [sys.executable, '-m', 'unittest', 'test_event_store']),
     ('codeloc', 'core/evidence', [sys.executable, '-m', 'unittest', 'test_codeloc',
                            'test_event_lookup']),
     ('correlate', 'vehicle/analyze', [sys.executable, '-m', 'unittest', 'test_experiment']),
@@ -16,7 +19,8 @@ CHECKS = [
     # 车载 VHAL 指纹表留在 vehicle/traffic。
     ('collector', 'core/collector', [sys.executable, '-m', 'unittest', 'test_body',
                                      'test_attribution', 'test_unanswered',
-                                     'test_experiment', 'test_montecarlo']),
+                                     'test_experiment', 'test_montecarlo',
+                                     'test_uid_sampler']),
     ('tagging-vehicle', 'vehicle/traffic', [sys.executable, '-m', 'unittest', 'test_tagging']),
     ('dashboard', 'vehicle/dashboard', [sys.executable, '-m', 'unittest', 'test_dashboard']),
     ('runtime', 'vehicle/hooks', ['node', 'test_runtime.mjs']),

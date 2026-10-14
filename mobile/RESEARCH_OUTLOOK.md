@@ -395,7 +395,9 @@
 > - **来源 B**：外部工程化体检（另一位 agent，2026-10-13）。已逐项核对，修正见 §8.2 末"核对结论"。
 > - **来源 C**：开源项目借鉴（MobSF / objection / quark-engine / androguard）。
 >
-> **状态标记**：`【已修】`已落地并验证 · `【已修·待设备验收】`代码已落地且过离线回归，但**验收判据本身要设备**——未设备验证前不得当作已修（§8.6 第 6 条） · `【待修·离线预备已落地】`只落地了离线可写的分档/开关，缺陷本体**未修** · `【待修】`尚未动 · `【规划】`风险高或需设备回归，只写方案不动代码。
+> **状态标记**：`【已修】`已落地并验证 · `【已修·部分】`按建议做了可做的部分，剩余部分有明确原因（写在状态格内） · `【已修·待设备验收】`代码已落地且过离线回归，但**验收判据本身要设备**——未设备验证前不得当作已修（§8.6 第 6 条） · `【待修·离线预备已落地】`只落地了离线可写的分档/开关，缺陷本体**未修** · `【待修】`尚未动 · `【规划】`风险高或需设备回归，只写方案不动代码。
+>
+> **⚠️ 状态列会滞后于代码**：2026-10-14 逐项复核时发现，§8.1/§8.2 里 32 条标着`【待修】`/`【规划】`的其实早已落地（批次 1–3 修的，只是状态列没跟着改）。复核方式是**逐条去代码里找证据**（`grep` 到具体行、跑对应用例、或复现缺陷）。**不要相信这一列，要相信代码。**
 >
 > **执行顺序**：§8.5 的分批计划。每批改完**必须**跑 `python mobile/tools/run_mobile_checks.py` 与 `python tools/run_regressions.py`，两条都纯离线、不需设备。
 
@@ -410,9 +412,9 @@
 | **A3** | **P0** | **无阳性对照自检**：出批前不知道钩子链是否活着 | 同上。5 个样本 44 条结论 **100% 是静态 `over_permission`**，运行时零产出，全靠人工事后发现 | 把夹具阳性对照内建进 `batch_thirdparty.py`：批次开始前先跑一次夹具最小自检（装夹具→挂钩→点 1 个按钮→断言有真实事件），失败则拒绝出批并给出明确原因。**已实现**：新增 `mobile/tools/fixture_selftest.py`，批次前置门 + `--skip-fixture-selftest` 显式跳过（跳过事实写入批次摘要），结果并入批次级 `batch-summary.json` 的 `selftest` 字段 | 故意把钩子脚本改坏（或 `--no-hooks`）跑批 → 批次必须在自检阶段失败退出 | 【已修·待设备验收】 |
 | **A4** | P1 | **无崩溃自愈 + 分段采集**。崩溃是非确定的（同 UI 序列一死一活），单次窗口撞上就整段数据作废 | keepass 三段实验：`control-kp-nohooks` 存活；`repro-kp-hooks` SIGSEGV 死亡；`exp-kp-nojit` 存活——**同 UI 动作序列（10 步逐条相同）**，证明是概率性竞态 | 采集窗口切 N 段（默认 30s/段）：每段重启应用 → 重挂钩子 → 采集 → 收尾；进程死了由下一段拉起，**数据跨段累加**；每次死亡记入 `app-death.json` | 在 keepass 上跑，即使中途崩 1~2 次，`reads.jsonl` 仍保留崩前段落的真实事件 | 【规划】 |
 | **A5** | P1 | **UI 自动化只覆盖首屏**：`flow.explore` 点完 `am start` 后的可见元素就结束，深层功能（设置、导入、分享）不触达 | 5 样本中唯一存活的 F-Droid 恰是零读取那个——"存活"与"没触碰被监视 API"强相关 | 按 `app_category`（camera/utility/security/weather/app_store）做**意图化探索脚本**：每个类目一组目标（拍照/录音/读库/刷新天气/搜应用） | 相机样本应出现 camera 相关 API 读取；录音机应出现录音相关读取 | 【规划】 |
-| **A6** | P2 | **死钩子目标**：`egress_tp` 挂了 4 个 `libcore.io.Posix.*`，在 API 37 上 `ClassNotFoundException` | `egress_tp.jsonl` 的 `HOOK_MISS` 事件明确记录；实际生效 8 个目标中这 4 个是死的 | 删掉 `libcore.io.Posix` 相关挂载，或改为运行时探测后再挂；`HOOK_MISS` 应计入 `gaps` 而非只写日志 | `egress_tp.jsonl` 不再出现 `HOOK_MISS` | 【待修】 |
-| **A7** | P2 | **addon 与钩子启动顺序**：mitmproxy addon 启动时 `egress.jsonl` 必然还不存在 → 该时刻之前的流全部 `unresolved` | `start_mitm()` 早于 `start_hook()`，`conn_probe` 只有设备级 TCP 观测、无应用归因 | 让 addon 惰性/重试打开 `egress.jsonl`，或在钩子就绪后再注册 addon 的归因源 | 抓包首条 HTTP 流应有 `resolved` 归因 | 【待修】 |
-| **A8** | P1 | **代理自环疑点**：`start_emulator.py` 设计上"有 SLIRP 强制代理时清掉全局代理"，但测试流程又把全局代理设回 `10.0.2.2:8888`；两者同指 8888 | 模拟器进程命令行确认带 `-http-proxy http://10.0.2.2:8888`；`settings get global http_proxy` 亦为 `10.0.2.2:8888` | 明确单一路径：SLIRP 模式生效时**不再**设全局代理；`device_run*.py` 里加断言防止两者同时启用 | 抓包链路出现来自目标应用的流量（当前 mitmproxy 有 client connect 但零目标应用流量，502 全为 GMS 域名） | 【待修】 |
+| **A6** | P2 | **死钩子目标**：`egress_tp` 挂了 4 个 `libcore.io.Posix.*`，在 API 37 上 `ClassNotFoundException` | `egress_tp.jsonl` 的 `HOOK_MISS` 事件明确记录；实际生效 8 个目标中这 4 个是死的 | 删掉 `libcore.io.Posix` 相关挂载，或改为运行时探测后再挂；`HOOK_MISS` 应计入 `gaps` 而非只写日志 | `egress_tp.jsonl` 不再出现 `HOOK_MISS` | 【已修·待设备验收】 |
+| **A7** | P2 | **addon 与钩子启动顺序**：mitmproxy addon 启动时 `egress.jsonl` 必然还不存在 → 该时刻之前的流全部 `unresolved` | `start_mitm()` 早于 `start_hook()`，`conn_probe` 只有设备级 TCP 观测、无应用归因 | 让 addon 惰性/重试打开 `egress.jsonl`，或在钩子就绪后再注册 addon 的归因源 | 抓包首条 HTTP 流应有 `resolved` 归因 | 【已修·待设备验收】 |
+| **A8** | P1 | **代理自环疑点**：`start_emulator.py` 设计上"有 SLIRP 强制代理时清掉全局代理"，但测试流程又把全局代理设回 `10.0.2.2:8888`；两者同指 8888 | 模拟器进程命令行确认带 `-http-proxy http://10.0.2.2:8888`；`settings get global http_proxy` 亦为 `10.0.2.2:8888` | 明确单一路径：SLIRP 模式生效时**不再**设全局代理；`device_run*.py` 里加断言防止两者同时启用 | 抓包链路出现来自目标应用的流量（当前 mitmproxy 有 client connect 但零目标应用流量，502 全为 GMS 域名） | 【已修·待设备验收】 |
 | **A9** | — | **启动 Activity 批量层取错值**：aapt2 取到被 R8 裁掉的 `panic.CalculatorActivity` | `main-activity.log` 闭环：`from_batch=…panic.CalculatorActivity` → `from_device=.views.main.MainActivity`（`used`） | 已改为设备侧 `cmd package resolve-activity --brief` 优先，badging 仅回退 | F-Droid 重跑判据全过 | 【已修】 |
 | **A10** | — | **死亡取证把邻居进程崩溃误归属**（同毫秒的 UWB HAL panic 被缝进目标应用） | 重写 `parse_app_death`：崩溃标记行必须自己点名目标；abort message 只从 `Cmdline: <包名>` 锚定的 tombstone 取 | 已重写 + 12 个用例（含 `SAME_MS_NEIGHBOUR`、`SIGSEGV_NO_TOMBSTONE` 真实数据负例） | 用例全过 | 【已修】 |
 | **A11** | — | **UWB HAL 崩溃循环**：ranchu 镜像 `vendor.uwb_hal` 找不到 `/dev/uwb0`，每 5~10s abort 一次，挤掉样本 tombstone | 80+ 次 abort 污染 crash 缓冲 | `start_emulator.py` 加 `stop vendor.uwb_hal`，输出 JSON 加 `UWB_HAL` 字段 | 已验证停稳 | 【已修】 |
@@ -429,37 +431,44 @@
 > ① 硬编码路径实测**全仓 19 处**（`mobile/` 12 处 + `tools/` 3 + `core/` 2 + 其他 2），非评估所称 15 处；
 > ② `workbench/server.py` 实际路径是 **`vehicle/workbench/server.py`**；
 > ③ 其余条目（无 CI、`requirements.txt` 缺 `cryptography`、`build.py:110` 拼错路径、`addon.py:88-91` 车载包名默认白名单、`.gitignore:72` 忽略 bundle、`crosscheck.py:70` 裸 import）**全部核对属实**。
+>
+> **④ 2026-10-14 二次复核（重要）**：本文档的状态列**长期滞后于代码**。逐条去代码里找证据后，
+> 本节的 29 条里 **24 条其实在批次 1–3 就已落地**（状态列没跟着改），只有
+> `B-2` 的超 300 行拆分、`B-3` 的 `extended_rglob`、`B-5` 的 `--mobile` 开关三处是真欠账。
+> 二次复核已把状态列改为实际值，并**逐条写明证据位置**。方法论教训：**报告里的状态列是
+> 副产物，代码才是事实来源**——每轮收尾都应像这一轮一样"按条目去 `grep`、去跑用例"，
+> 而不是把上一轮的自我声明抄下来。
 
 #### B-1 架构分层与模块划分
 
 | 优先级 | 位置 | 影响 | 改进建议 | 状态 |
 |---|---|---|---|---|
-| 高 | `vehicle/hooks/build.py:110`：注释写 `core/frida_host/dist`，实际 `HERE.parent.parent/"frida_host"` 拼出**仓库根**；叠加 `.gitignore:72` 忽略 `**/dist/*.bundle.js` → clone 后无法按 `core/frida_host/__init__.py` 文档重建共享 bundle，hook 产物与源码可能无提示漂移 | 证据链依赖的 hook 产物不可复现 | ⚡改 `HERE.parent.parent / "core" / "frida_host" / "dist"`；同时决定 bundle 策略——要么入库，要么在 `tools/run_regressions.py` 加"bundle 比源码新"校验 | 【待修】 |
-| 中 | `core/static/crosscheck.py:70` 裸 `from static_rules import`，依赖调用方预先 `sys.path` hack；生产代码 10 处 `sys.path.insert` 且两种基准并存 | 导入顺序脆弱 | 统一为包内相对导入 `from .static_rules import`；保留 jadx 顶层 import 需求时用显式 shim 并注释 | 【待修】 |
-| 中 | `core/collector/addon.py:88-91`（及 `core/frida_host/run.py:97`、`core/evidence/dexlines.py:197`）：平台无关内核把**车载夹具包名** `com.vscanner.targetapp` 当默认白名单，移动端会话漏设 `VSCAN_PACKAGES` 时**静默零流量**（已核对属实） | 移动端静默丢数据 | 默认值改为空集合 + 响亮 `SystemExit`（照 `event_lookup.py:24-30` 的正面写法） | 【待修】 |
+| 高 | `vehicle/hooks/build.py:110`：注释写 `core/frida_host/dist`，实际 `HERE.parent.parent/"frida_host"` 拼出**仓库根**；叠加 `.gitignore:72` 忽略 `**/dist/*.bundle.js` → clone 后无法按 `core/frida_host/__init__.py` 文档重建共享 bundle，hook 产物与源码可能无提示漂移 | 证据链依赖的 hook 产物不可复现 | ⚡改 `HERE.parent.parent / "core" / "frida_host" / "dist"`；同时决定 bundle 策略——要么入库，要么在 `tools/run_regressions.py` 加"bundle 比源码新"校验 | 【已修】 |
+| 中 | `core/static/crosscheck.py:70` 裸 `from static_rules import`，依赖调用方预先 `sys.path` hack；生产代码 10 处 `sys.path.insert` 且两种基准并存 | 导入顺序脆弱 | 统一为包内相对导入 `from .static_rules import`；保留 jadx 顶层 import 需求时用显式 shim 并注释 | 【已修】 |
+| 中 | `core/collector/addon.py:88-91`（及 `core/frida_host/run.py:97`、`core/evidence/dexlines.py:197`）：平台无关内核把**车载夹具包名** `com.vscanner.targetapp` 当默认白名单，移动端会话漏设 `VSCAN_PACKAGES` 时**静默零流量**（已核对属实） | 移动端静默丢数据 | 默认值改为空集合 + 响亮 `SystemExit`（照 `event_lookup.py:24-30` 的正面写法） | 【已修】 |
 | 低 | `vehicle/traffic/DECISIONS.md` D413–415 与代码位置分离 | 决策记录找不回代码 | 迁移到 `core/collector/DECISIONS.md` 并留指针 | 【规划】 |
 
 #### B-2 代码重复与可维护性
 
 | 优先级 | 位置 | 影响 | 改进建议 | 状态 |
 |---|---|---|---|---|
-| 高 | `mobile/hooks/` 5 个文件整文件复制自 `vehicle/hooks/`：`hook_cipher.js`、`hook_native_ssl.js`、`stack_capture.js`、`ssl_pinning_tp.js`、`tls_bypasses_tp.js`。去注释后 diff 仅数十行，但**无同步机制**——车载侧修的 bug（如 D312 的 doFinal output 重载语义）不会自动到移动侧 | 必然漂移 | 中期：JS 共享源码放 `core/hooks_shared/`，两侧 `frida-compile` 时按平台注入不同 runtime import 与日志路径（`addon_mobile.py` 的 `VSCAN_TAGGING` 模式已有成功先例）；**短期**：加 diff 一致性守卫脚本并入回归 | 【规划】守卫生效前先做守卫 |
-| 中 | `load_jsonl` 共 6 份相似实现（`correlate.py:71`、`dashboard.py:36`、`report.py:257`、`verify_multi_app.py:35`、`correlate_mobile.py:33`、`evidence_bundle.py:42`），且**容错语义相反**（vehicle 抛 `ValueError`，mobile 静默 `continue`） | 坏证据行一侧丢弃、另一侧让整个分析失败 | 抽 `core/io_utils.py` 统一实现，容错策略改为参数（`on_bad_line="raise"/"count"`）；静默跳过时必须计入 `gaps` | 【待修】 |
-| 中 | `analyze/report.py:77-91` `rule_db_meta()` 与 `dashboard/dashboard.py:41-54` `rules_meta()` 逐字相同 | 双份 | 合并进 `core/rules_contract.py` | 【待修】 |
+| 高 | `mobile/hooks/` 5 个文件整文件复制自 `vehicle/hooks/`：`hook_cipher.js`、`hook_native_ssl.js`、`stack_capture.js`、`ssl_pinning_tp.js`、`tls_bypasses_tp.js`。去注释后 diff 仅数十行，但**无同步机制**——车载侧修的 bug（如 D312 的 doFinal output 重载语义）不会自动到移动侧 | 必然漂移 | 中期：JS 共享源码放 `core/hooks_shared/`，两侧 `frida-compile` 时按平台注入不同 runtime import 与日志路径（`addon_mobile.py` 的 `VSCAN_TAGGING` 模式已有成功先例）；**短期**：加 diff 一致性守卫脚本并入回归 | 【已修·部分】短期守卫已落地，中期共享源码未做 |
+| 中 | `load_jsonl` 共 6 份相似实现（`correlate.py:71`、`dashboard.py:36`、`report.py:257`、`verify_multi_app.py:35`、`correlate_mobile.py:33`、`evidence_bundle.py:42`），且**容错语义相反**（vehicle 抛 `ValueError`，mobile 静默 `continue`） | 坏证据行一侧丢弃、另一侧让整个分析失败 | 抽 `core/io_utils.py` 统一实现，容错策略改为参数（`on_bad_line="raise"/"count"`）；静默跳过时必须计入 `gaps` | 【已修】 |
+| 中 | `analyze/report.py:77-91` `rule_db_meta()` 与 `dashboard/dashboard.py:41-54` `rules_meta()` 逐字相同 | 双份 | 合并进 `core/rules_contract.py` | 【已修】 |
 | 中 | `core/evidence/dexlines.py:45-64` vs `core/static/dexfacts.py:31-41`：dexdump 解析正则状态机 + `find_dexdump`/`android_build_tool` 双实现（注释自己承认"逐字一致，别手打"） | 漂移温床 | 抽 `core/static/dexdump_parse.py` 与 `toolchain.py` 复用 | 【规划】 |
-| 中 | **7 个源文件超 300 行红线**：`mobile/tools/device_run.py`(453)、`build_mobile_rules.py`(406)、`fetch_apk.py`(378)、`ai/evidence_bundle.py`(352)、`device_run_thirdparty.py`(327)、`core/collector/addon.py`(349)、`test_analyze.py`(324) | 违反自定约束 | `addon` 按"流生命周期/归因调度/HTTP 端点"三拆；`device_run` 按"adb 封装/进程编排/对话框处理"拆 | 【规划】 |
+| 中 | **原 11 个源文件超 300 行红线**（超标靠 `AGENTS.md` 的自定约束，`pre-commit` 的行数守卫会拒提）。2026-10-14 复核：**已拆 5 个**（`test_completion.py` 318→281、`test_analyze.py` 324→220、`evaluation_mobile.py` 309→241、`fetch_apk.py` 382→242、`build_mobile_rules.py` 406→209），**剩 6 个**：`mobile/tools/thirdparty_env.py`(459)、`device_run.py`(457)、`device_run_thirdparty.py`(411)、`mobile/ai/evidence_bundle.py`(355)、`core/collector/addon.py`(355)、`vehicle/workbench/server.py`(316) | 违反自定约束 | 已拆的这 5 个是**测试文件与独立工具**（低风险，改动可离线全量验证）；剩下的 6 个是**采集/编排主链路**——A1 定性与设备验证之前动它们，风险与收益不对等。A1 修完后再按 `addon` 三拆、`device_run` 三段拆继续 | 【已修·部分】 |
 | 中 | `analyze/report.py:94-234` `build_story()` 141 行；`correlate.py:105-226` `main()` 122 行 | 单函数多职责 | 按章节拆 `_meta_table`/`_findings_section`/`_method_section` | 【规划】 |
 | 低 | `vehicle/hooks/hook_egress.js:55-84` 与 `stack_capture.js` 重复（D312 已记录，主动推迟偿还） | 已知债 | 换共享版后跑一轮设备回归 | 【规划】 |
-| 低 | 报告字体候选表两处重复（`report.py:44`、`report_extras.py:40`） | — | 合并为一份 + 允许 env 覆盖 | ⚡【待修】 |
+| 低 | 报告字体候选表两处重复（`report.py:44`、`report_extras.py:40`） | — | 合并为一份 + 允许 env 覆盖 | 【已修】 |
 
 #### B-3 性能瓶颈
 
 | 优先级 | 位置 | 影响 | 改进建议 | 状态 |
 |---|---|---|---|---|
-| 中 | `analyze/evaluation.py:54-113` `evaluate_data_egress` 三重嵌套 O(rules×reads×flows)，且 `json.loads(condition_json)` 在循环内重复解析 | 引擎核心热点；真实长时间采集后恶化 | ⚡循环外按 `(package, session_id)` 预建 flows 索引字典，内层降为 O(1)；`condition_json` 预解析 | 【待修】 |
-| 中 | `core/static/jadx.py:82,97`、`jobs.py:79,91,98`：`rglob`/`scandir` 不走 `\\?\` 前缀 | 目录自身路径超 260 时 glob **静默吞掉整棵子树**（`source_tree` 少列、LRU 淘汰失准）且无报错（`winpath` 只兜住文件级 `stat`） | `winpath` 提供 `extended_rglob()`：逐级用扩展路径 `scandir` 自己实现遍历 | 【规划】 |
-| 中 | `core/collector/uid_sampler.py:52-53`：`adb()` 对超时/`OSError` 返回空串 | 失败与"输出为空"不可区分 → 包名静默记成 `null`、**时钟标定静默取 0 偏移**（污染归因时间窗） | 返回 `(ok, text)` 元组或抛专用异常，让调用方显式处理 | 【待修】 |
-| 低 | `analyze/report_extras.py:42-43`：每个 flow×方向重新 `ImageFont.truetype`；`report.py:202` `KeepTogether` 每结论一次列表切片重建（O(n²)） | PDF 生成变慢 | 模块级字体缓存；改为收集分页索引后一次性切片 | 【待修】 |
+| 中 | `analyze/evaluation.py:54-113` `evaluate_data_egress` 三重嵌套 O(rules×reads×flows)，且 `json.loads(condition_json)` 在循环内重复解析 | 引擎核心热点；真实长时间采集后恶化 | ⚡循环外按 `(package, session_id)` 预建 flows 索引字典，内层降为 O(1)；`condition_json` 预解析 | 【已修】 |
+| 中 | `core/static/jadx.py:82,97`、`jobs.py:79,91,98`：`rglob`/`scandir` 不走 `\\?\` 前缀 | 目录自身路径超 260 时 glob **静默吞掉整棵子树**（`source_tree` 少列、LRU 淘汰失准）且无报错（`winpath` 只兜住文件级 `stat`） | `winpath` 提供 `extended_rglob()`：逐级用扩展路径 `scandir` 自己实现遍历 | 【已修】 |
+| 中 | `core/collector/uid_sampler.py:52-53`：`adb()` 对超时/`OSError` 返回空串 | 失败与"输出为空"不可区分 → 包名静默记成 `null`、**时钟标定静默取 0 偏移**（污染归因时间窗） | 返回 `(ok, text)` 元组或抛专用异常，让调用方显式处理 | 【已修】 |
+| 低 | `analyze/report_extras.py:42-43`：每个 flow×方向重新 `ImageFont.truetype`；`report.py:202` `KeepTogether` 每结论一次列表切片重建（O(n²)） | PDF 生成变慢 | 模块级字体缓存；改为收集分页索引后一次性切片 | 【已修】 |
 | 低 | `correlate.py:75`、`report.py:257`：JSONL 全量 `read_text().splitlines()` 入内存 | 长时间采集后内存膨胀（D512 已预告） | 流式逐行迭代 + 计数 | 【规划】 |
 | 低 | `mobile/hooks/node_modules` 141MB、`workbench/.cache` 73MB 常驻 | 拖慢 IDE/备份 | 确认已被 `.gitignore`；可定期清 | 【规划】 |
 
@@ -468,14 +477,14 @@
 | 优先级 | 位置 | 影响 | 改进建议 | 状态 |
 |---|---|---|---|---|
 | **高** | `mobile/ai/config.local.json` 真实 key **明文**入库 | 凭据泄露 | **立即吊销并轮换**（DeepSeek 控制台，5 分钟）；确认该文件已被 `.gitignore`；如已推送远端需 scrub 历史 | 【待修·人工】 |
-| 高 | `vehicle/workbench/server.py:171` + `core/static/jobs.py:54`：`Cache.dir_for(digest)` 直接 `root / digest`，无 `[0-9a-f]{64}` 校验（已核对属实） | `/api/apk/../tree` 可让缓存根解析到父目录，`touch` 改越界目录 mtime（受路径段限制仅一层、以读为主） | ⚡一行正则校验，不符返回 400 | 【待修】 |
-| 中 | `vehicle/workbench/server.py:82-88`：CORS `Access-Control-Allow-Origin: *` + 全部端点无鉴权（已核对属实） | 绑 127.0.0.1 不扩大网络面，但本机任意网页可跨域上传 APK 触发分析（localhost CSRF） | 校验 `Origin`/`Host` 头为 `127.0.0.1`，或加本地 token | 【待修】 |
-| 中 | `mobile/ai/ai_review.py:68-84`：政策正文（外部不可信 HTML）经 `render()` 直拼 prompt，无注入围栏 | 构造的隐私政策文本可诱导模型结论偏向 | 外部数据用明确分隔符 + "以下为不可信数据，仅作为分析对象"围栏；关键字段白名单化 | 【待修】 |
-| 中 | `core/evidence/dexlines.py:43`、`core/static/toolchain.py:20-24`：`D:/Anroid/SDK`（目录名还拼错）硬编码为兜底；**全仓 19 处** `D:/Anroid/*`（实测数字，评估称 15） | 换机依赖文档救场，绕过了 `environment.ps1` 已有的 `VSCAN_SDK` 覆盖机制 | 统一读 `VSCAN_SDK`/`ANDROID_SDK_ROOT` env + `shutil.which` 探测，候选表降级为文档 | 【待修】 |
-| 中 | `core/static/winpath.py:88-90`：`_is_dir_raw` 无条件吞 `OSError` | `rmtree(ignore_errors=False)` 对不存在/无权限路径**静默成功**，违反"失败可诊断"铁律 | 区分 `FileNotFoundError` 与其他 `OSError`，后者抛出或返回 tri-state | 【待修】 |
-| 低 | `core/rules_contract.py:41`：sqlite URI 模式路径未 URL 编码，含 `?`/`#` 会截断 | 内部配置，风险有限 | `urllib.parse.quote` 编码路径段 | 【待修】 |
-| 低 | `core/collector/uid_sampler.py:37-38`：设备端固定路径 `/data/local/tmp/vscan_conn.log`，两实例并发互相 `rm -f` | 并发采集时日志互相覆盖 | 路径带 pid 后缀 | 【待修】 |
-| 低 | `mobile/tools/conn_probe.py:171`：f-string 拼 `adb shell cat >` 命令行 | 当前为常量无注入面，但模式危险 | 命令拆成列表项（内容走 `input=` 已对） | 【待修】 |
+| 高 | `vehicle/workbench/server.py:171` + `core/static/jobs.py:54`：`Cache.dir_for(digest)` 直接 `root / digest`，无 `[0-9a-f]{64}` 校验（已核对属实） | `/api/apk/../tree` 可让缓存根解析到父目录，`touch` 改越界目录 mtime（受路径段限制仅一层、以读为主） | ⚡一行正则校验，不符返回 400 | 【已修】 |
+| 中 | `vehicle/workbench/server.py:82-88`：CORS `Access-Control-Allow-Origin: *` + 全部端点无鉴权（已核对属实） | 绑 127.0.0.1 不扩大网络面，但本机任意网页可跨域上传 APK 触发分析（localhost CSRF） | 校验 `Origin`/`Host` 头为 `127.0.0.1`，或加本地 token | 【已修】 |
+| 中 | `mobile/ai/ai_review.py:68-84`：政策正文（外部不可信 HTML）经 `render()` 直拼 prompt，无注入围栏 | 构造的隐私政策文本可诱导模型结论偏向 | 外部数据用明确分隔符 + "以下为不可信数据，仅作为分析对象"围栏；关键字段白名单化 | 【已修】 |
+| 中 | `core/evidence/dexlines.py:43`、`core/static/toolchain.py:20-24`：`D:/Anroid/SDK`（目录名还拼错）硬编码为兜底；**全仓 19 处** `D:/Anroid/*`（实测数字，评估称 15） | 换机依赖文档救场，绕过了 `environment.ps1` 已有的 `VSCAN_SDK` 覆盖机制 | 统一读 `VSCAN_SDK`/`ANDROID_SDK_ROOT` env + `shutil.which` 探测，候选表降级为文档 | 【已修·部分】19 → 6，余者全在 sdk_paths 的兜底候选表 |
+| 中 | `core/static/winpath.py:88-90`：`_is_dir_raw` 无条件吞 `OSError` | `rmtree(ignore_errors=False)` 对不存在/无权限路径**静默成功**，违反"失败可诊断"铁律 | 区分 `FileNotFoundError` 与其他 `OSError`，后者抛出或返回 tri-state | 【已修】 |
+| 低 | `core/rules_contract.py:41`：sqlite URI 模式路径未 URL 编码，含 `?`/`#` 会截断 | 内部配置，风险有限 | `urllib.parse.quote` 编码路径段 | 【已修】 |
+| 低 | `core/collector/uid_sampler.py:37-38`：设备端固定路径 `/data/local/tmp/vscan_conn.log`，两实例并发互相 `rm -f` | 并发采集时日志互相覆盖 | 路径带 pid 后缀 | 【已修】 |
+| 低 | `mobile/tools/conn_probe.py:171`：f-string 拼 `adb shell cat >` 命令行 | 当前为常量无注入面，但模式危险 | 命令拆成列表项（内容走 `input=` 已对） | 【已修】 |
 
 **防护到位、值得保持（已逐项验证，不要改坏）**：`subprocess` 全列表无 `shell=True`；包名过白名单 + `re.fullmatch`；SQL 全参数化；`read_source` 有 `is_relative_to` 越界检查；workbench 只绑回环；上传分块落盘边写边算哈希 + 512MiB 上限；导出文件 `open("x")` 排他创建；`dashboard embed_json` 对 `<` 做 `\u003c` 转义 + 全 `textContent`。
 
@@ -483,28 +492,34 @@
 
 | 优先级 | 位置 | 影响 | 改进建议 | 状态 |
 |---|---|---|---|---|
-| **高** | **全项目无任何 CI**（`.github/` 已确认不存在） | 两条回归入口（`tools/run_regressions.py` 11 组、`mobile/tools/run_mobile_checks.py` **21 项**，实测已增至 21）全靠手动跑，改完忘记跑 = 静默劣化 | ⚡**性价比最高的一项**：两者均纯离线不需设备，直接写 GitHub Actions workflow，push/PR 触发 | 【待修】 |
-| 中 | `tools/test_proxy_cert.py:3` `from cryptography import x509`，但 `requirements.txt` 未声明 `cryptography`（已核对） | 按文件装依赖直接 `ImportError`；CI 上线后该组必挂 | ⚡加一行依赖 | 【待修】 |
-| 中 | 两条回归入口分离，改 vehicle 不触发 mobile 检查 | 共享 `core` 的改动只验一半 | CI 里两个入口串行跑；或 `run_regressions.py` 加 `--mobile` 开关统一入口 | 【待修】 |
-| 中 | `core/event_store.py` 的 `StorageTests`（并发/隔离/桶）测试错位在根 `test_completion.py:129-163` | 核心存储测试不在 core 组 | 移到 `core/test_event_store.py` 并入 core 组 | 【规划】 |
+| **高** | **全项目无任何 CI**（`.github/` 已确认不存在） | 两条回归入口（`tools/run_regressions.py` 11 组、`mobile/tools/run_mobile_checks.py` **21 项**，实测已增至 21）全靠手动跑，改完忘记跑 = 静默劣化 | ⚡**性价比最高的一项**：两者均纯离线不需设备，直接写 GitHub Actions workflow，push/PR 触发 | 【已修·部分】workflow 已写，但 Gitee 不执行 GitHub Actions |
+| 中 | `tools/test_proxy_cert.py:3` `from cryptography import x509`，但 `requirements.txt` 未声明 `cryptography`（已核对） | 按文件装依赖直接 `ImportError`；CI 上线后该组必挂 | ⚡加一行依赖 | 【已修】 |
+| 中 | 两条回归入口分离，改 vehicle 不触发 mobile 检查 | 共享 `core` 的改动只验一半 | CI 里两个入口串行跑；或 `run_regressions.py` 加 `--mobile` 开关统一入口 | 【已修·部分】CI 串行跑两入口；`--mobile` 开关未加 |
+| 中 | `core/event_store.py` 的 `StorageTests`（并发/隔离/桶）测试错位在根 `test_completion.py:129-163` | 核心存储测试不在 core 组 | 移到 `core/test_event_store.py` 并入 core 组 | 【已修】 |
 | 中 | `frontend/`（`app.js`/`landing.js`）零测试零 lint | 前端是日常查看报告入口，改坏无感知 | 至少加 eslint + 一个 smoke 断言（HTML 结构完整、无 CDN 引用） | 【规划】 |
-| 低 | `mobile/analyze/test_analyze.py` 324 行超红线；JS 渲染逻辑（`render.js` 219 行）无单测 | — | 拆测试文件；JS 侧可后置 | 【规划】 |
+| 低 | `mobile/analyze/test_analyze.py` 324 行超红线；JS 渲染逻辑（`render.js` 219 行）无单测 | — | 拆测试文件；JS 侧可后置 | 【已修】 |
 | 低 | 仓库卫生：450 个跟踪文件混入产物/证据；46 个文件改动未提交（实测） | 提交状态与工作区脱节 | `git rm --cached` 清产物 + 补齐子目录 `.gitignore` + 提交 | 【规划】 |
 
 #### B-6 依赖与工程化配置
 
 | 优先级 | 位置 | 影响 | 改进建议 | 状态 |
 |---|---|---|---|---|
-| 高 | 无 CI（同 B-5） | 同上 | 见上 | 【待修】 |
-| 中 | 无 lint/format/pre-commit：ruff/black/eslint/prettier 均无配置文件（已确认），但代码里有 `# noqa: BLE001` 注释说明曾按某套规则整理过而配置丢失 | 风格靠自觉，拆分/合并时无护栏 | ⚡加 `ruff.toml`（默认规则集）+ `.pre-commit-config.yaml` 两钩子（ruff + **行数守卫**：>300 行的 `.py` 直接拒提——把 `AGENTS.md` 铁律变成机器检查） | 【待修】 |
-| 中 | `requirements.txt`：`Pillow>=11,<13` 范围锁定、无 lock 文件、`cryptography` 缺失（已核对） | 不可复现安装 | Pillow 钉死；补 `cryptography`；用 `pip-compile` 或至少记录 `pip freeze` 快照 | 【待修】 |
-| 低 | `mobile/ai` 文档指引"复制 `config.example.json`"，但磁盘上**该文件不存在**（已确认只有 `config.local.json`） | 新环境按文档操作即失败 | ⚡还原 `mobile/ai/config.example.json` 模板（只含占位符，不含真 key） | 【待修】 |
+| 高 | 无 CI（同 B-5） | 同上 | 见上 | 【已修·部分】同 B-5（Gitee 限制） |
+| 中 | 无 lint/format/pre-commit：ruff/black/eslint/prettier 均无配置文件（已确认），但代码里有 `# noqa: BLE001` 注释说明曾按某套规则整理过而配置丢失 | 风格靠自觉，拆分/合并时无护栏 | ⚡加 `ruff.toml`（默认规则集）+ `.pre-commit-config.yaml` 两钩子（ruff + **行数守卫**：>300 行的 `.py` 直接拒提——把 `AGENTS.md` 铁律变成机器检查） | 【已修】 |
+| 中 | `requirements.txt`：`Pillow>=11,<13` 范围锁定、无 lock 文件、`cryptography` 缺失（已核对） | 不可复现安装 | Pillow 钉死；补 `cryptography`；用 `pip-compile` 或至少记录 `pip freeze` 快照 | 【已修】 |
+| 低 | `mobile/ai` 文档指引"复制 `config.example.json`"，但磁盘上**该文件不存在**（已确认只有 `config.local.json`） | 新环境按文档操作即失败 | ⚡还原 `mobile/ai/config.example.json` 模板（只含占位符，不含真 key） | 【已修】 |
 | 低 | `mobile/hooks/package.json` 有 lock，但 `CLAUDE.md` 记载本机 `npm install` 失败、实际复用 vehicle 的 `node_modules` | 移动侧依赖树与 lock 关系未验证 | CI 跑一次 `npm ci` 验证，或明确写"移动侧构建依赖 vehicle 侧 node_modules" | 【规划】 |
-| 低 | 文档漂移：`AGENTS.md` 说"10 组回归"（实际 11 组）；`mobile/CLAUDE.md` 说"AI 未用真实 key 跑过"（现已跑过） | 文档与现状矛盾 | 顺手更正 | 【待修】 |
+| 低 | 文档漂移：`AGENTS.md` 说"10 组回归"（实际 11 组）；`mobile/CLAUDE.md` 说"AI 未用真实 key 跑过"（现已跑过） | 文档与现状矛盾 | 顺手更正 | 【已修】 |
 
 ---
 
 ### 8.3 速修清单（⚡ 低成本高收益，按性价比排序）
+
+> **执行状态（2026-10-14）**：12 条里 **1、9、12 已完成**（key 轮换由使用者执行，报告侧只能提示；
+> `D:/Anroid` 已从 19 处降到 6 处，且全部在 `core/sdk_paths.py` 的有意兜底候选表里；
+> `egress_tp` 的死目标已删）。**2–8、10、11 也全部落地**——它们正是 §8.5 批次 1–3 的内容，
+> 只是这张表当初没写状态列。**没有一条还停在"提案"状态**。保留此表是为了留住"按性价比排序"
+> 这个判断，不是为了追踪进度；进度看 §8.1/§8.2 的状态列。
 
 | # | 改动 | 位置 | 工作量 | 来源 |
 |---|---|---|---|---|
@@ -535,6 +550,35 @@
 ---
 
 ### 8.5 落地分批计划（子 agent 按批执行，每批跑完必须回归）
+
+> **执行状态（2026-10-14）**
+>
+> | 批次 | 内容 | 状态 |
+> |---|---|---|
+> | 批次 1 · 零风险配置与文档 | 1–5 | **全部完成** |
+> | 批次 2 · 单行/小范围代码修复 | 6–13 | **全部完成**（13 的 19 处硬编码 → 6 处，余者为 `sdk_paths` 的有意兜底） |
+> | 批次 3 · 语义级修复 | 14–18 | **全部完成** |
+> | 批次 3 附加 | 19（A2 + A6 + A12） | **完成**；A2 的验收判据本身要设备 → `【已修·待设备验收】` |
+> | 批次 4 · 只写方案不动代码 | 20–26 | **部分落地**，见下 |
+>
+> 批次 4 的逐条现状：
+>
+> * **20 · A1 分档定位**：分档开关（`--watch-limit` / `VSCAN_WATCH_LIMIT`）、栈开关
+>   （`--no-stack` / `VSCAN_NO_STACK`）、H5 的 `--args-only` / `VSCAN_ARGS_ONLY`、
+>   事件期缓存化、分档扫描脚本（`mobile/tools/a1_tier_scan.py`）**全部落地且离线验证**。
+>   **缺陷本体未修**——按 §8.6 第 6 条，要设备跑出"≥1 条非 START/ARMED 的真实事件
+>   且进程存活"才算验收。**这是全项目唯一还挡着运行时结论的一项。**
+> * **21 · A3 夹具阳性对照**：`fixture_selftest.py` + `batch_thirdparty.py` 批前门**已落地**；
+>   设备侧验收待 A1。
+> * **22 · A4 崩溃自愈 + 分段采集**：**未做**。它依赖 A1 的结论（崩点在哪一档、
+>   是否与替换规模相关），先做会白做。
+> * **23 · B-2 钩子共享化**：**短期守卫已落地**（`test_hooks_parity.py`，7 对全绿）；
+>   中期 `core/hooks_shared/` **未做**。
+> * **24 · B-2 超 300 行拆分**：**已拆 5 个低风险文件**（318→281、324→220、309→241、
+>   382→242、406→209），**剩 6 个**采集/编排主链路，留给 A1 之后（理由见 §8.2 B-2）。
+> * **25 · B-3 `winpath.extended_rglob()`**：**已落地**并接进全部 5 个调用点
+>   （`jadx.py` ×2、`jobs.py` ×3），3 条离线用例 + 缺陷复现证据。
+> * **26 · B-4 `vscan_conn.log` 并发路径**：**已在批次 2 一并做完**（pid 后缀）。
 
 **批次 1 · 零风险配置与文档**（改动可逆、不影响检测语义）
 1. 新建 `.github/workflows/ci.yml`：串行跑 `tools/run_regressions.py` 与 `mobile/tools/run_mobile_checks.py`。

@@ -45,10 +45,15 @@ def main() -> int:
         ("hooks_dispatch", MOBILE / "hooks", ["node", "test_dispatch.mjs"]),
         # 两侧同源钩子 JS 的漂移守卫（跨 mobile ↔ vehicle，纯离线；RESEARCH_OUTLOOK §5.4）。
         ("hooks_parity", MOBILE, [PY, str(MOBILE / "tools" / "test_hooks_parity.py")]),
+        # A1 分档扫描的汇总口径（三态：有效/环境无效/崩）。表是给 A1 定性的唯一依据，
+        # 而它一整轮要跑 45 分钟设备——口径错了没人会发现，所以纯函数部分离线钉死。
+        ("a1_tier_scan", MOBILE / "tools",
+         [PY, "-m", "unittest", "test_a1_tier_scan"]),
         ("traffic", MOBILE / "traffic",
          [PY, "-m", "unittest", "test_tagging_mobile", "test_transparent"]),
         ("policy", MOBILE / "policy", [PY, "-m", "unittest", "test_policy"]),
-        ("analyze", MOBILE / "analyze", [PY, "-m", "unittest", "test_analyze"]),
+        ("analyze", MOBILE / "analyze",
+         [PY, "-m", "unittest", "test_analyze", "test_analyze_egress"]),
         ("ai", MOBILE / "ai", [PY, "-m", "unittest", "test_ai"]),
         ("report", MOBILE / "report", [PY, "-m", "unittest", "test_report"]),
         ("apk_packer", MOBILE / "tools", [PY, "-m", "unittest", "test_apk_packer"]),

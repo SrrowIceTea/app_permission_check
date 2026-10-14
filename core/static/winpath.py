@@ -37,11 +37,19 @@ r"""Windows 长路径（MAX_PATH = 260）兼容层。
 """
 from __future__ import annotations
 
+import fnmatch
 import os
 import stat
+from pathlib import Path
 
 _EXT_PREFIX = "\\\\?\\"
 _UNC_PREFIX = "\\\\?\\UNC\\"
+
+# 拼子路径用的分隔符。**不能用 `os.sep`**：MSYS2 的 mingw64 Python 是 `os.name == 'nt'`
+# 却 `os.sep == '/'` 的怪胎，`os.sep` 拼出来是正斜杠，和 `\\?\` 前缀混成 `\\?\D:\a/b`
+# → WinError 123（模块头第 2 条坑）。判据与 `extended()` 保持一致：只要 `os.name == 'nt'`，
+# 我们给出的就是带前缀的扩展形式，必须用反斜杠。
+_SEP = "\\" if os.name == "nt" else "/"
 
 
 def extended(path) -> str:
@@ -80,6 +88,57 @@ def is_file(path) -> bool:
 def read_bytes(path) -> bytes:
     with open(extended(path), "rb") as handle:
         return handle.read()
+
+
+def extended_rglob(root, pattern: str = "*") -> list[Path]:
+    r"""递归列出 `root` 下匹配 `pattern` 的项，**每一级都走扩展长度路径**。
+
+    **为什么不能直接用 `Path.rglob`**：它内部同样是 `os.scandir`，但遇到**目录自身**
+    超过 260 的目录时 `scandir` 直接失败，而 `pathlib` 的递归通配会把 `OSError`
+    **静默吞掉**——整棵子树从结果里消失，既不报错也不留痕（`source_tree` 少列、
+    `Cache.usage()` 与 LRU 淘汰失准）。这与模块头记的"文件自身超限"是**两个症状**：
+    文件超限时列目录用的还是父目录，`rglob` 照样能列到，只有 `stat`/`open` 会抛
+    WinError 3；目录超限才会整块丢。
+
+    语义对齐 `Path.rglob(pattern)` 的常用形态：
+
+    * 不含分隔符的 `pattern` 按**文件名**匹配（`fnmatch`，Windows 上大小写不敏感）；
+    * 目录**符号链接不递归**（与 Python 3.13 `rglob` 默认 `recurse_symlinks=False`
+      一致），但它本身仍是一个可匹配的项；
+    * **不含 `root` 自身**；返回顺序不保证（要稳定顺序请自行 `sorted()`）；
+    * 返回值是普通 `pathlib.Path`，`\\?\` 不外泄（与 `extended()` 同一条纪律）。
+
+    含分隔符的 `pattern`（如 `"a/*.java"`）**显式报错**：`pathlib` 那套多段通配
+    （`**`、尾段锚定、隐式 `**/` 前缀）语义无法在这条手写遍历里精确复刻，
+    与其悄悄给出偏差结果，不如让调用方换写法。
+
+    路径不存在、以及遍历中途被删（`FileNotFoundError`）按"没有这一项"处理——
+    与 `_is_dir_raw` 同一条口径；其余 `OSError`（权限、共享冲突…）**一律向上传播**，
+    不复刻 `rglob` 静默吞树的老毛病（§8.6 第 3 条）。
+    """
+    # 两种分隔符都拦：写 `a/b.java` 的人以为在匹配相对路径，写 `a\b.java` 的人在
+    # Windows 上更可能只是想匹配文件名——不管哪种，这里都给不出他们预期的语义。
+    if any(sep in pattern for sep in ("/", "\\")):
+        raise ValueError(
+            f"extended_rglob 只支持按文件名匹配的单段模式，收到 {pattern!r}；"
+            "多段通配（含 `**`）请改用 rglob，或自行按目录逐级调用。")
+    base = Path(root)
+    found: list[Path] = []
+    stack: list[tuple[str, tuple[str, ...]]] = [(extended(base), ())]
+    while stack:
+        current, parts = stack.pop()
+        try:
+            with os.scandir(current) as entries:
+                items = list(entries)
+        except FileNotFoundError:
+            continue
+        for entry in items:
+            child_parts = parts + (entry.name,)
+            if fnmatch.fnmatch(entry.name, pattern):
+                found.append(base.joinpath(*child_parts))
+            if entry.is_dir(follow_symlinks=False):
+                stack.append((current + _SEP + entry.name, child_parts))
+    return found
 
 
 def _is_dir_raw(path: str) -> bool:

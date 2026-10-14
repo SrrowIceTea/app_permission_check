@@ -150,6 +150,84 @@ def make_deep_file(root: Path, content: bytes = b"", minimum: int = 262) -> Path
     return deep
 
 
+def make_over_limit_dir(root: Path, minimum: int = 262) -> Path:
+    """造一条**目录自身**就超过 260 的路径（`make_deep_file` 造的是"只有文件超"）。
+
+    两者症状不同，别混用：
+
+    * **文件**超限——列目录用的还是父目录，`Path.rglob` 照样列得到，只有 `stat`/`open`
+      抛 WinError 3（`make_deep_file` + `LongPathTest` 测的是这一路）；
+    * **目录**超限——`os.scandir` 自己就失败，而 `pathlib` 会把 `OSError` **静默吞掉**，
+      整棵子树从结果里消失且不报错（`extended_rglob` 测的是这一路）。
+
+    同样每一级都必须用扩展长度形式创建（普通 `mkdir` 先撞 WinError 206）。
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    parts: list[str] = []
+    while len(winpath.extended(root.joinpath(*parts))) <= minimum:
+        parts.append(f"{len(parts):02d}".ljust(67, "x"))
+    current = root
+    for segment in parts:
+        current = current / segment
+        try:
+            os.mkdir(winpath.extended(current))
+        except FileExistsError:
+            pass
+    return current
+
+
+class ExtendedRglobTest(unittest.TestCase):
+    """`extended_rglob` 的语义，以及"目录自身超限"那一路回归。"""
+
+    def test_finds_subtrees_whose_own_dir_path_exceeds_max_path(self) -> None:
+        root = Path(tempfile.mkdtemp(prefix="vscan-rglext-"))
+        self.addCleanup(winpath.rmtree, root)
+        sources = root / "sources"
+        deep_dir = make_over_limit_dir(sources / "com")
+        self.assertGreater(len(winpath.extended(deep_dir)), 260,
+                           "夹具必须让**目录自身**超限，否则测的是另一路症状")
+        with open(winpath.extended(deep_dir / "Deep.java"), "w", encoding="utf-8") as handle:
+            handle.write("class Deep {}")
+        relative = (deep_dir / "Deep.java").relative_to(sources).as_posix()
+
+        found = winpath.extended_rglob(sources, "*.java")
+        self.assertEqual([relative], [p.relative_to(sources).as_posix() for p in found],
+                         "目录自身超 260 的子树必须照样列得到")
+        self.assertFalse(any(str(p).startswith("\\\\?\\") for p in found),
+                         "对外必须是普通 Path，`\\\\?\\` 不外泄")
+
+        # 把"为什么需要它"钉在用例里：原生 rglob 在本机（未开长路径支持）会**静默**
+        # 丢掉这棵子树——不报错，只是少一块。开了长路径支持的机器上它也会找得到，
+        # 那时这条退化为恒真，主断言的强度不受影响。
+        native = [p.relative_to(sources).as_posix() for p in sources.rglob("*.java")]
+        self.assertIn(native, ([], [relative]), f"原生 rglob 不该给出别的结果：{native}")
+
+    def test_matches_native_rglob_on_a_normal_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sources = Path(tmp) / "sources"
+            (sources / "com" / "a").mkdir(parents=True)
+            (sources / "com" / "A.java").write_text("class A {}", encoding="utf-8")
+            (sources / "com" / "a" / "B.java").write_text("class B {}", encoding="utf-8")
+            (sources / "org").mkdir()
+            (sources / "org" / "Note.txt").write_text("x", encoding="utf-8")
+            mine = {p.relative_to(sources).as_posix() for p in winpath.extended_rglob(sources)}
+            self.assertEqual({"com", "com/A.java", "com/a", "com/a/B.java",
+                              "org", "org/Note.txt"}, mine,
+                             "`*` 与 rglob 一致：目录与文件都出、不含 root 自身")
+            java = {p.relative_to(sources).as_posix()
+                    for p in winpath.extended_rglob(sources, "*.java")}
+            self.assertEqual({"com/A.java", "com/a/B.java"}, java)
+
+    def test_edge_cases_fail_loudly_or_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            # 多段模式给不出可靠语义 → 显式报错，而不是悄悄返回偏差结果
+            for bad in ("com/*.java", "**/*.java", "a\\b.java"):
+                with self.assertRaises(ValueError, msg=f"{bad!r} 必须被拒绝"):
+                    winpath.extended_rglob(tmp, bad)
+            # 根不存在 = "没有这一项"，不是错误（与 _is_dir_raw 同一口径）
+            self.assertEqual([], winpath.extended_rglob(Path(tmp) / "nope", "*.java"))
+
+
 class LongPathTest(unittest.TestCase):
     """Windows MAX_PATH 回归：超过 260 的路径必须照样能列、能读、能统计、能删。
 

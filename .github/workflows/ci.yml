@@ -5,6 +5,13 @@
 #
 # runner 选 windows-latest 的原因：仓库是 Windows 单机工程（SDK 路径、winpath 的 \\?\ 扩展
 # 长度路径、test_jobs.LongPathTest 都只在 Windows 上成立），换 Linux 会假绿。
+#
+# ⚠️ 本仓库主远端是 **Gitee**（git@gitee.com:mao-yuqi-12/mobile-app-permission-check.git），
+# 而 Gitee **不执行** `.github/workflows/`（那是 GitHub Actions 的目录）。所以这份 workflow
+# 现在只是"接 GitHub 就能用"的现成件，真正生效要二者之一：
+#   ① 加一个 GitHub 远端并推送（Actions 免费额度够用）；
+#   ② 把同样的两步搬进 Gitee Go（`.workflow/` 目录或 Gitee 网页端流水线）。
+# 在那之前，两条回归仍然只能手动跑——记得先确认解释器装了 requirements.txt（见文件末尾注释）。
 name: offline-regressions
 
 on:
@@ -42,10 +49,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 根回归（11 组）
+      - name: 根回归（13 组）
         run: python tools/run_regressions.py
 
-      - name: 移动侧回归（21 项）
+      - name: 移动侧回归（23 项）
         run: python mobile/tools/run_mobile_checks.py
 
       - name: 回归判据落盘（失败运行同样保留）

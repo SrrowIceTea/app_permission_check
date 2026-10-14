@@ -76,7 +76,10 @@ class Cache:
     def usage(self) -> int:
         # 走 winpath：反编译产物的深层类文件会超过 Windows 260，普通 stat 会抛 WinError 3；
         # 而 usage() 在**成功路径**上被 mark_complete -> evict 调用，一炸就把成功记成 failed。
-        return sum(winpath.size(f) for f in self.root.rglob("*") if winpath.is_file(f))
+        # 遍历也必须走 extended_rglob：目录自身超限时普通 rglob 会静默丢整棵子树，
+        # 于是容量算少 → 淘汰判据说"还在上限之下" → 缓存无限膨胀。
+        return sum(winpath.size(f) for f in winpath.extended_rglob(self.root)
+                   if winpath.is_file(f))
 
     def evict(self, protect: str | None = None) -> list[str]:
         """按最近使用时间淘汰，直到降到上限之下。`protect` 不被淘汰（正在用的那个）。
@@ -88,14 +91,16 @@ class Cache:
         for child in self.root.iterdir():
             if not child.is_dir() or child.name == protect:
                 continue
-            mtime = max((winpath.mtime(f) for f in child.rglob("*")), default=winpath.mtime(child))
+            mtime = max((winpath.mtime(f) for f in winpath.extended_rglob(child)),
+                        default=winpath.mtime(child))
             entries.append((mtime, child))
         entries.sort()
         removed, total = [], self.usage()
         for _, child in entries:
             if total <= self.limit_bytes:
                 break
-            size = sum(winpath.size(f) for f in child.rglob("*") if winpath.is_file(f))
+            size = sum(winpath.size(f) for f in winpath.extended_rglob(child)
+                       if winpath.is_file(f))
             winpath.rmtree(child)
             total -= size
             removed.append(child.name)

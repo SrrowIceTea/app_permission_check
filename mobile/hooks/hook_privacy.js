@@ -15,7 +15,7 @@
 import { packages } from './scope.js';
 import { makeLogger, procName, threadName, stackStr, armRuntimeCache } from './runtime.js';
 import { WATCH, DATA_TYPES, META } from './targets.generated.js';
-import { describe, armValueCache } from './values.js';
+import { describe, armValueCache, argsOnly } from './values.js';
 import { matchBySpec, isDeniedClassName, discriminator, unmappedKey, preview } from './dispatch.js';
 
 var vlog = makeLogger('privacy', '/data/local/tmp/vscan-mobile.log');
@@ -124,6 +124,7 @@ function main() {
                     whitelist: CFG.whitelist, watch_apis: WATCH.length,
                     watch_limit_raw: RAW_WATCH_LIMIT, watch_limit: limit,
                     runtime_cache: cacheOk, value_cache: valueCacheOk,
+                    args_only: argsOnly(),
                     data_types: Object.keys(DATA_TYPES).length,
                     rules_sha256: META.rules_sha256, frida: Frida.version });
     if (CFG.whitelist.indexOf(STATE.pkg) < 0) {

@@ -24,217 +24,19 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import sqlite3
 import sys
 from pathlib import Path
 
-import rule_gen
+# 输入路径/JSON 读取拆到 mobile_rules_inputs（两侧共用，避免循环导入），
+# INSERT 层拆到 mobile_rules_insert。原文件越 300 行红线（§8.2 B-2）。
+from mobile_rules_inputs import (DEFAULT_OUT, DEFAULT_WINDOW_MS, HERE, REG,
+                                 SCHEMA, SEED, read_json)
+from mobile_rules_insert import insert_all, spec_data_types
 
-HERE = Path(__file__).resolve().parent
-SCHEMA = HERE / "schema_mobile.sql"
-SEED = HERE / "seed"
-BUILD = HERE / "build"
-REG = HERE / "regulations"
-CALIB = Path(os.environ["VSCAN_MOBILE_CALIB"]) if os.environ.get("VSCAN_MOBILE_CALIB") \
-    else HERE / "calibration"
-DEFAULT_OUT = HERE / "rules_mobile.db"
-DEFAULT_WINDOW_MS = 30000  # 声明值；未由移动夹具校准前不是通用阈值
-
-
-def read_json(p: Path):
-    return json.loads(p.read_text(encoding="utf-8"))
-
-
-def read_jsonl(p: Path) -> list[dict]:
-    if not p.exists():
-        return []
-    return [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
-
-
-def jdump(obj) -> str:
-    return json.dumps(obj, sort_keys=True, ensure_ascii=False)
-
-
-def load_calibration(calib_dir: Path | None = None) -> dict[str, dict]:
-    """设备实测权限 → {permission_name: {"observations": [...], "protection_level_raw", ...}}。
-
-    没有标定文件时返回空。**注意**：`definition_status` 一律保持 pending——schema 规定
-    设备观测不得标 source_verified（javap 才是 source_verified 的唯一来源）；但实测到的
-    protectionLevel 要落进 protection_level_raw/value，否则 over_permission 规则
-    永远缺「权限保护级别」这一维（此处曾是个死路：INSERT 根本没写这两列）。
-
-    接受两种字段名：`protection_level` 与车载标定产物用的 `protection_level_raw`，
-    因此 `vehicle/rules/python/extract_device_calibration.py --prefix android.permission.`
-    的产物可直接喂进来。
-    """
-    calib_dir = calib_dir or CALIB
-    out: dict[str, dict] = {}
-    for row in read_jsonl(calib_dir / "permissions-device.jsonl"):
-        entry = out.setdefault(row["permission_name"], {"observations": [],
-                                                        "protection_level_raw": None,
-                                                        "protection_level_value": None})
-        if row.get("observation"):
-            entry["observations"].append(row["observation"])
-        # 兼容车载侧标定产物的字段名（protection_level_raw），使同一格式可直接复用。
-        raw = row.get("protection_level") or row.get("protection_level_raw")
-        if raw:
-            entry["protection_level_raw"] = raw
-            pv = _protection_level_value(raw)
-            if pv is not None:
-                entry["protection_level_value"] = pv
-    return out
-
-
-# AOSP AndroidManifest.xml 里 protectionLevel 的位值（同一套值车载侧已用）
-PROTECTION_LEVEL_BITS = {"normal": 0, "dangerous": 1, "signature": 2, "privileged": 4,
-                         "system": 0x10, "development": 0x20, "appop": 0x40,
-                         "pre23": 0x80, "installer": 0x100, "verifier": 0x200,
-                         "preinstalled": 0x400, "setup": 0x800, "instant": 0x1000,
-                         "runtime_only": 0x2000}
-
-
-def _protection_level_value(raw: str) -> int | None:
-    """把 'dangerous|instant' 这类复合串按位或汇总成整数；认不出的返回 None（不编造）。"""
-    total = 0
-    known = False
-    for part in str(raw).split("|"):
-        part = part.strip().lower()
-        if part in PROTECTION_LEVEL_BITS:
-            total |= PROTECTION_LEVEL_BITS[part]
-            known = True
-    return total if known else None
-
-
-def insert_all(conn: sqlite3.Connection, *, version: str, window_ms: int) -> dict:
-    data_types = read_json(SEED / "sensitive_data_types.json")["data_types"]
-    permissions = read_json(SEED / "permissions.json")["permissions"]
-    policy_reqs = read_json(SEED / "policy_requirements.json")["requirements"]
-    necessary = read_json(REG / "necessary_info_2021.json")
-    facts = read_jsonl(BUILD / "api_facts.jsonl")
-    if not facts:
-        sys.exit("[fatal] build/api_facts.jsonl 为空或不存在，先跑 extract_android_apis.py")
-    calib = load_calibration()
-    reg_index = rule_gen.regulation_index(REG)
-
-    # --- permissions ---
-    for p in permissions:
-        cal = calib.get(p["permission_name"]) or {}
-        obs = cal.get("observations") or []
-        pl_raw = cal.get("protection_level_raw")
-        pl_val = cal.get("protection_level_value")
-        # protectionLevel 未断言时如实写 NULL 并在 notes 说明；断言了才填。
-        pl_note = ("protection_level 未断言：需设备实测（calibration/permissions-device.jsonl）"
-                   "或 aapt2 核对。" if not pl_raw else
-                   f"protection_level 来自设备实测：{pl_raw}。")
-        conn.execute(
-            "INSERT INTO permissions (permission_name, android_version, protection_level_raw,"
-            " protection_level_value, permission_group, description, definition_status,"
-            " source_refs_json, device_calibration_json, notes) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (p["permission_name"], version, pl_raw, pl_val, p["group"], p["why"],
-             "pending",
-             jdump([{"kind": "project_seed", "path": "seed/permissions.json"}]),
-             jdump(obs),
-             pl_note + ("（含设备观测记录。）" if obs else "")))
-
-    # --- sensitive_data_types ---
-    for dt in data_types:
-        cov = dt.get("coverage", "api")
-        cov_note = f" [coverage={cov}]"
-        if dt.get("coverage_reason"):
-            cov_note += f" {dt['coverage_reason']}"
-        conn.execute(
-            "INSERT INTO sensitive_data_types (data_type_key, android_version, name_zh, name_en,"
-            " sensitivity, gbt_category, api_surface, permission_hint, definition_status,"
-            " source_refs_json, device_calibration_json, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (dt["data_type_key"], version, dt["name_zh"], dt.get("name_en"), dt["sensitivity"],
-             dt["gbt_category"], dt["api_surface"], dt["permission_hint"], "pending",
-             jdump([{"kind": "regulation", "doc": "gbt35273-2020", "clause": "3.2"},
-                    {"kind": "regulation", "doc": "gbt35273-2020", "clause": "annex_b1"}]),
-             "[]",
-             "类别分级依据 GB/T 35273-2020；本行是类别事实，具体 API 见 dangerous_apis。"
-             + cov_note))
-
-    # --- dangerous_apis（全部来自 android.jar 抽取，source_verified） ---
-    for f in facts:
-        conn.execute(
-            "INSERT INTO dangerous_apis (api_key, android_version, class_name, method_name,"
-            " jvm_descriptor, api_role, data_type_key, observation_spec_json,"
-            " permission_expr_json, definition_status, source_refs_json,"
-            " device_calibration_json, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (f["api_key"], version, f["class_name"], f["method_name"], f["jvm_descriptor"],
-             f["api_role"], f["data_type_key"], f["observation_spec_json"], None,
-             "source_verified", jdump([f["source_ref"]]), "[]", f.get("note")))
-
-    # --- app_categories ---
-    for c in necessary["categories"]:
-        conn.execute(
-            "INSERT INTO app_categories (category_key, android_version, name_zh, basic_function,"
-            " necessary_data_json, no_personal_info_required, ordinal, source_refs_json, notes)"
-            " VALUES (?,?,?,?,?,?,?,?,?)",
-            (c["key"], version, c["name"], c["basic_function"], jdump(c["necessary"]),
-             1 if c.get("no_personal_info_required") else 0, c["ordinal"],
-             jdump([{"kind": "regulation", "doc": "necessary-info-2021", "clause": "5",
-                     "ordinal": c["ordinal"]}]),
-             "类目原文分条截断" if c.get("partial") else None))
-
-    # --- policy_requirements ---
-    for r in policy_reqs:
-        conn.execute(
-            "INSERT INTO policy_requirements (req_id, android_version, title, requirement,"
-            " check_kind, check_spec_json, severity, basis_refs_json, source_refs_json,"
-            " enabled, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (r["req_id"], version, r["title"], r["requirement"], r["check_kind"],
-             jdump(r.get("check_spec")), r["severity"],
-             jdump([{**b, "kind": "regulation"} for b in r["basis"]]),
-             jdump([{"kind": "project_seed", "path": "seed/policy_requirements.json"}]),
-             1, None))
-
-    # --- risk_rules ---
-    rules = rule_gen.generate(data_types, permissions, version=version, reg_index=reg_index,
-                              window_ms=window_ms, window_calibrated=False)
-    for r in rules:
-        conn.execute(
-            "INSERT INTO risk_rules (rule_id, android_version, rule_revision, title, rule_type,"
-            " severity, permission_name, data_type_key, api_key, evaluator_version,"
-            " condition_json, evidence_requirements_json, window_ms, conclusion_level,"
-            " source_refs_json, basis_refs_json, enabled, notes)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (r["rule_id"], version, 1, r["title"], r["rule_type"], r["severity"],
-             r["permission_name"], r["data_type_key"], r["api_key"], 1,
-             jdump(r["condition_json"]), jdump(r["evidence_requirements_json"]), r["window_ms"],
-             r["conclusion_level"], jdump(r["source_refs_json"]), jdump(r["basis_refs_json"]),
-             r["enabled"], r["notes"]))
-
-    return {"rules": rules, "counts": {
-        "permissions": len(permissions), "data_types": len(data_types),
-        "apis": len(facts), "app_categories": len(necessary["categories"]),
-        "policy_requirements": len(policy_reqs), "rules": len(rules),
-        "rules_by_type": rule_gen.summarize_rule_counts(rules)}}
-
-
-def spec_data_types(spec: dict) -> set[str]:
-    """从 observation_spec 里取出它可能分派到的所有数据类别。
-
-    两种形态都要认（原先只认 list，导致 provider_arg 的 gps/network 映射被漏掉）：
-      * list  —— content_uri / string_key_arg：map: [{"data_type": "contacts", ...}]
-      * dict  —— provider_arg：                map: {"gps": "precise_location", ...}
-    """
-    out: set[str] = set()
-    if not spec:
-        return out
-    m = spec.get("map")
-    if isinstance(m, list):
-        for item in m:
-            if isinstance(item, dict) and item.get("data_type"):
-                out.add(item["data_type"])
-    elif isinstance(m, dict):
-        for v in m.values():
-            if isinstance(v, str) and v:
-                out.add(v)
-    if spec.get("data_type"):
-        out.add(spec["data_type"])
-    return out
+# 对外仍从本模块导出：`main()` 用 `insert_all`，`validate()` 用 `spec_data_types`，
+# `test_rules.py` 用 `_protection_level_value`（已随标定解析搬到 inputs）。
+from mobile_rules_inputs import _protection_level_value  # noqa: F401
 
 
 def validate(conn: sqlite3.Connection, version: str) -> list[str]:
@@ -246,7 +48,8 @@ def validate(conn: sqlite3.Connection, version: str) -> list[str]:
 
     bad_api = conn.execute(
         "SELECT COUNT(*) FROM dangerous_apis WHERE android_version=? AND"
-        " (definition_status<>'source_verified' OR source_refs_json='[]')", (version,)).fetchone()[0]
+        " (definition_status<>'source_verified' OR source_refs_json='[]')",
+        (version,)).fetchone()[0]
     if bad_api:
         problems.append(f"{bad_api} 条 dangerous_apis 未带 android.jar 溯源")
 

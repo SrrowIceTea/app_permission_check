@@ -17,7 +17,6 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 for sub in ('vehicle/analyze', 'vehicle/traffic', 'vehicle/hooks', 'vehicle/rules/python'):
     sys.path.insert(0, str(ROOT / sub))
-from core.event_store import EventStore
 from evaluation import evaluate_data_egress, evaluate_sensitive_read, coverage
 from ownership import lookup, normalize, parse_rdap
 from core.collector.payloads import capture
@@ -124,43 +123,6 @@ class EvaluationTests(unittest.TestCase):
         results = evaluate_data_egress([rule()], reads, chosen)
         self.assertEqual(2, len(results))
         self.assertEqual({f['package'] for f in chosen}, {f['package'] for f in results})
-
-
-class StorageTests(unittest.TestCase):
-    def test_concurrent_collectors_initialise_and_write(self):
-        from concurrent.futures import ThreadPoolExecutor
-        with tempfile.TemporaryDirectory() as tmp:
-            barrier = threading.Barrier(4)
-            def collect(index):
-                barrier.wait()
-                store = EventStore(Path(tmp) / 'events.db')
-                try:
-                    store.append('one', str(index), read())
-                finally:
-                    store.close()
-            with ThreadPoolExecutor(max_workers=4) as pool:
-                list(pool.map(collect, range(4)))
-            store = EventStore(Path(tmp) / 'events.db')
-            self.assertEqual(4, len(store.query('one', 0, 2000)))
-            store.close()
-
-    def test_session_isolation_replay_and_range(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            store = EventStore(Path(tmp) / 'events.db')
-            for session in ('one', 'two'):
-                for _ in range(2):
-                    store.append(session, 'reads', read())
-            self.assertEqual(1, len(store.query('one', 1000, 1001, 'app.a')))
-            self.assertEqual([], store.query('one', 0, 1000))
-            self.assertEqual(1, store.buckets('one')[0]['count'])
-            store.close()
-
-    def test_unknown_clock_not_bucketed(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            store = EventStore(Path(tmp) / 'events.db')
-            store.append('one', 'reads', dict(ts=1000, pkg='app.a'))
-            self.assertEqual([], store.buckets('one'))
-            store.close()
 
 
 class OwnershipTests(unittest.TestCase):

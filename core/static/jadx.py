@@ -79,7 +79,7 @@ def run(jar, java: str, apk: Path, out: Path, *, threads: int = 4,
             proc.kill()
             code = -9
     sources = out / "sources"
-    written = sum(1 for _ in sources.rglob("*.java")) if sources.is_dir() else 0
+    written = len(winpath.extended_rglob(sources, "*.java")) if sources.is_dir() else 0
     return {"returncode": code, "errors": errors, "classes_written": written,
             "cancelled": cancelled, "log_tail": tail}
 
@@ -94,9 +94,11 @@ def source_tree(root: Path) -> list[dict]:
     if not sources.is_dir():
         return []
     entries = []
-    for path in sorted(sources.rglob("*.java")):
-        # stat 走 winpath：深包名的类文件绝对路径会超过 Windows 的 260，
-        # 直接 stat 会抛 WinError 3（详见 winpath 模块头）。rglob 本身不受影响。
+    for path in sorted(winpath.extended_rglob(sources, "*.java")):
+        # 遍历与 stat 都走 winpath：深包名的类文件绝对路径会超过 Windows 的 260，
+        # 且这里有**两个**不同的症状（详见 winpath 模块头与 extended_rglob 的说明）：
+        # 目录自身超限时 `Path.rglob` 会静默吞掉整棵子树（少列且不报错），
+        # 文件自身超限时列得到但 `stat` 抛 WinError 3。
         entries.append({"path": path.relative_to(sources).as_posix(),
                         "size": winpath.size(path)})
     return entries

@@ -97,10 +97,19 @@ def run(out: Path, seconds: int, user: int | None) -> dict:
             entry["note"] = note
         checks.append(entry)
 
-    def fail(reason: str, hint: str, events: list[dict] | None = None) -> dict:
-        return {"passed": False, "reason": reason, "hint": hint, "checks": checks,
-                "event_kinds": sorted({e.get("ev") for e in (events or [])}),
-                "out": str(out)}
+    def fail(reason: str, hint: str, events: list[dict] | None = None,
+             alive: bool | None = None, death: dict | None = None) -> dict:
+        result = {"passed": False, "reason": reason, "hint": hint, "checks": checks,
+                  "event_kinds": sorted({e.get("ev") for e in (events or [])}),
+                  "out": str(out)}
+        # 触发之后的失败要带上"存活/死亡"事实：A1 分档扫描（a1_tier_scan.py）
+        # 靠 `alive_at_end` 判定这一格崩没崩。**不给这个键 = 环境没跑起来**
+        # （APK 缺失、设备没启动、frida-server 不可用…），那种格子是无效测量，
+        # 不能算成"应用存活"，否则会把"没测到"记成"没崩"。
+        if alive is not None:
+            result["alive_at_end"] = alive
+            result["app_death"] = death
+        return result
 
     if not APK.exists():
         return fail("夹具 APK 不存在，自检无法开跑",
@@ -160,16 +169,17 @@ def run(out: Path, seconds: int, user: int | None) -> dict:
     if not readers and not alive:
         return fail("零真实事件 + 夹具进程已死——这就是 A1 的采集链路故障症状",
                     "分档定位崩点：VSCAN_WATCH_LIMIT=<n>（1→8→16→32→58）逐档跑本自检，"
-                    "见 DEV_FIX_REPORT §5.1；app-death.json 与 logcat 是旁证", events)
+                    "见 DEV_FIX_REPORT §5.1；app-death.json 与 logcat 是旁证", events,
+                    alive, death)
     if not readers and rc != 0:
         return fail("按钮没点到（trigger 失败），未产出任何 PRIVACY_READ",
                     "看 trigger.log 与 dialog.xml：界面被弹窗挡住或夹具版本变了（resource-id）",
-                    events)
+                    events, alive, death)
     if not readers:
         return fail("钩子挂上了（进程存活）但 reads.jsonl 零 PRIVACY_READ",
                     "看 hook-privacy.log 与 reads.jsonl 的 START/ARMED 行："
                     "映射层空转（UNMAPPED_ARG）或按钮没触发读取；分档见 DEV_FIX_REPORT §5.1",
-                    events)
+                    events, alive, death)
 
     check("runtime_events_captured", True, f"{len(readers)} 条 PRIVACY_READ")
     return {"passed": True, "reason": "", "hint": "", "checks": checks,

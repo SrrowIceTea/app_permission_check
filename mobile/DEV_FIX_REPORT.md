@@ -12,12 +12,12 @@
 
 | 项 | 结果 |
 |---|---|
-| 改动文件 | **46 个**（其中新建 6 个：`core/io_utils.py`、`core/sdk_paths.py`、`.github/workflows/ci.yml`、`ruff.toml`、`.pre-commit-config.yaml`、`mobile/ai/config.example.json`）+ 本报告 |
-| 分批 | 批次 1（配置与文档）→ 批次 2（小范围代码）→ 批次 3（语义级）→ 批次 4-A（**只写方案**）→ 批次 4-B（**离线可写部分落地**，2026-10-14 晚） |
-| 移动侧回归 | `mobile/tools/run_mobile_checks.py` → **22/22 passed，failed=[]**（批次 4-B 终态） |
-| 根回归 | `tools/run_regressions.py` → **12 组全 0 失败**（批次 4-B 终态） |
-| 回归次数 | 基线 1 次 + 批次 1/2/3 各 1 次 + 批次 3 收尾 2 次 + 批次 4-B 2 次，**中间出现过一次回归失败并已修**（见 §3.4） |
-| 未执行条目 | **A1 本体**、A4、A5、B-2 的中期共享化 / 超 300 行拆分、B-3 `extended_rglob`，见 §5 |
+| 改动文件 | **46 个**（其中新建 6 个：`core/io_utils.py`、`core/sdk_paths.py`、`.github/workflows/ci.yml`、`ruff.toml`、`.pre-commit-config.yaml`、`mobile/ai/config.example.json`）+ 批次 5 的 13 个新建/拆分文件 + 本报告 |
+| 分批 | 批次 1（配置与文档）→ 批次 2（小范围代码）→ 批次 3（语义级）→ 批次 4-A（**只写方案**）→ 批次 4-B（**离线可写部分落地**，2026-10-14 晚）→ 批次 5（**全量复核 + 清剩余债**，2026-10-14 第二轮/第三轮） |
+| 移动侧回归 | `mobile/tools/run_mobile_checks.py` → **23/23 passed，failed=[]**（批次 5 终态） |
+| 根回归 | `tools/run_regressions.py` → **13 组全 0 失败**（批次 5 终态） |
+| 回归次数 | 基线 1 次 + 批次 1/2/3 各 1 次 + 批次 3 收尾 2 次 + 批次 4-B 2 次 + 批次 5 至少 4 次，**中间出现过一次回归失败并已修**（见 §3.4） |
+| 未执行条目 | **A1 本体**（需设备）、A4、A5、B-2 的中期共享化、剩余 6 个超 300 行文件的拆分、`run_regressions.py --mobile` 开关，见 §6 |
 
 两条回归命令（纯离线、不需要设备）：
 
@@ -185,6 +185,47 @@ hook-bundles 0   frida-bundle-config 0
 > 另外注意 bash 里不要用 `~` 指代用户目录（本机 `HOME=/d/HZNU/GitHome`），要用绝对路径。
 > 这条正是 §8.2 B-5「全项目无 CI」的实际代价：同一个仓库、同一个命令，换台机器/换个解释器结果就不一样。
 
+### 3.6 批次 5 之后（本轮，2026-10-14 第二与第三轮）
+
+> 批次 5 = 「还有什么要修的一起都修了」这一轮的复核 + 落地。先**逐条对代码复核**了 §8.2 全部 29 条，
+> 结论：**其中 24 条与 A6/A7/A8 在批次 1–3 里其实已经落地了**，只是 `RESEARCH_OUTLOOK.md` 的状态列没跟着改
+> （该文件的这一列已按复核结果刷新，并加了「不要相信这一列，要相信代码」的警告）。
+> 真正剩下的三笔债——超 300 行拆分、`winpath.extended_rglob()`、`run_regressions.py --mobile`——本轮清掉前两笔。
+
+```
+$ <venv>/python mobile/tools/run_mobile_checks.py
+{ "status": "passed",
+  "out": "...\\output\\mobile-regression-20261014-182327",
+  "checks": 23,        # 22 → 23（新增 a1_tier_scan）
+  "failed": [] }
+
+$ <venv>/python tools/run_regressions.py
+completion 0    rules-contract 0    event-store 0    codeloc 0    correlate 0
+collector 0     tagging-vehicle 0   dashboard 0      runtime 0    parity 0
+workbench 0     hook-bundles 0      frida-bundle-config 0
+# 12 组 → 13 组（新增 event-store = core/test_event_store.py，4 例）；退出码 0
+```
+
+四个要点：
+
+1. **`event-store` 是拆出来的**：`StorageTests` 原先挤在仓库根的 `test_completion.py` 里（318 行），
+   移到 `core/test_event_store.py`（75 行）既治了"测试放错层"（内核的存储不该由 completion 套件代管），
+   也让 `test_completion.py` 降到 281 行。**测试数守恒：4 例搬到哪儿都还是 4 例**（不是删测试换绿）。
+2. **`a1_tier_scan` 是新增的检查项**，不是新功能：A1 的分档实验需要一个机器可读的"崩溃率 × 档位"表，
+   以前只有纯手工跑。它把 §5.1 的 H1/H2/H5 假设变成一条命令（`--tiers 1,3,8,16,32,58 --repeats N`），
+   并强制三态统计（`valid` / `env_failed` / `crashed`）——**环境没跑起来的格子会被排除出分母**，
+   因为把"没测到"记成"没崩"正是 A1 一直在制造的假安心（§8.6 第 1 条）。9 例纯函数用例覆盖汇总与判词。
+3. **`fetch_apk.py --help` / import 链回归**：把 `fetch_apk.py`(382→242) 拆成 + `fetch_apk_io.py`(162) 之后，
+   专门验了 `import fetch_apk, fetch_apk_io, apk_meta` 与 `apk_meta.fetch_apk.apk_identity` 这条**跨文件引用**
+   仍然可用（`fetch_apk.py` 头部显式再导出三个原名），`--help` 正常打印 usage。
+4. **`test_analyze.py` 拆分后测试数守恒 31 = 22 + 9**：`EgressTest`(9 例) 移到 `test_analyze_egress.py`，
+   新文件从 `test_analyze` 里 import 现成的 `ctx`/`read`/`rule` 夹具——**重复一份夹具比多一个文件更糟**，
+   所以这个文件自愿放弃了"完全自包含"。
+
+> ⚠️ 本轮**没有**动 `a1_tier_scan` 的真机路径：`--out output/_a1_scan_smoke` 的一次冒烟在白跑，
+> 因为无设备时 `device_guard()` 会去 shell 出 `adb`，而本机 `adb` 无设备时会挂到超时（≈10 分钟）。
+> 它的**纯函数部分**（汇总/判词/参数解析）有 9 例离线用例，设备路径要等接上设备才能验。
+
 ---
 
 ## 4. 行为变化清单（需要用户知晓）
@@ -207,35 +248,54 @@ hook-bundles 0   frida-bundle-config 0
    如果你用非 127.0.0.1/localhost 的来源（例如局域网另一台机器）访问工作台前端，会被浏览器拒绝——这是有意的收紧。
 8. **字体候选表合并后顺序是 SimHei → DengXian → 雅黑**（原来是两处各取一半）。换机可用 `VSCAN_CJK_FONT=<ttf 路径>` 覆盖而不改代码。
 9. **`sdk_paths` 会读 `VSCAN_SDK`/`VSCAN_JDK`**。换机时设这两个环境变量即可，不必再改 19 处代码。
-10. **pre-commit 的 300 行守卫会拦下现有 7 个超限文件**（`vehicle/workbench/server.py` 316、`mobile/tools/device_run.py` 457、`mobile/tools/thirdparty_env.py` 459、`mobile/tools/device_run_thirdparty.py` 411、`mobile/tools/fetch_apk.py` 382、`core/collector/addon.py` 355、`mobile/ai/evidence_bundle.py` 355）。这几个**改动前就已超限**，本轮未做拆分（属批次 4）；它们只在被提交时才会触发守卫，日常工作不受影响。
-11. **`core/frida_host/run.py` 多两个分档开关（A1 定位用，默认不启用）**。
+10. **pre-commit 的 300 行守卫曾会拦下 7 个文件**——批次 5 按"只拆低风险那批"的口径拆掉了 5 个
+    （`fetch_apk.py` 382→242、`build_mobile_rules.py` 406→209、`test_analyze.py` 324→220、
+    `test_completion.py` 318→281、`evaluation_mobile.py` 309→241），**剩 6 个故意不拆**：
+    `mobile/tools/device_run.py`(457)、`mobile/tools/thirdparty_env.py`(459)、`mobile/tools/device_run_thirdparty.py`(411)、
+    `core/collector/addon.py`(355)、`mobile/ai/evidence_bundle.py`(355)、`vehicle/workbench/server.py`(316)。
+    这 6 个是设备验证主链路（第三方的采集/编排/报告），**A1 修好前动它们风险不对等**——只在被提交时触发守卫，
+    日常工作不受影响（见 §6.4）。
+11. **`core/frida_host/run.py` 多三个分档开关（A1 定位用，默认不启用）**。
     `--watch-limit <n>`（同 `VSCAN_WATCH_LIMIT`）：只挂前 n 条监视项，`0` = 全不挂（attach 对照组），不给 = 全量 58。
     `--no-stack`（同 `VSCAN_NO_STACK=1`）：事件里不带 `thread_name`/`stack` 字段值。
-    **不给这两个参数时行为与以前完全一致**（占位符原样保留在 bundle 里，`configure()` 只替换显式传入的）；一旦启用，`START`/`ARMED` 事件会多出 `watch_limit`/`watch_limit_raw`/`runtime_cache`/`value_cache` 字段，档位可事后从证据里复核。
+    `--args-only`（同 `VSCAN_ARGS_ONLY=1`）：**整轮完全不碰返回值**——连 `count_only` 也退化成只记参数字段（批次 5 新增，针对假设 H5：事件期构造 Java 对象/做值哈希触发 VM 内部崩溃）。
+    **不给这三个参数时行为与以前完全一致**（占位符原样保留在 bundle 里，`configure()` 只替换显式传入的）；一旦启用，`START`/`ARMED` 事件会多出 `watch_limit`/`watch_limit_raw`/`runtime_cache`/`value_cache`/`args_only` 字段，档位可事后从证据里复核。
 12. **第三方批次多了一道前置门（A3）**：跑批前自动跑一次夹具阳性对照，**失败就拒绝出批**。
     - 直接后果：**没接设备 / 设备没起来时，以前会产出一批"零运行时事件"的样本结论，现在批次会直接失败退出**（退出码 1，stdout 给 `status: fixture_selftest_failed` + `reason` + `hint`）。这是期望行为，不是回归。
     - A1 未修期间确实会挡住正常工作，所以留了显式逃生口 `--skip-fixture-selftest`；**跳过时批次摘要里会留痕**（`selftest.passed = null` + 跳过原因 + "结论可信度下降"提示），事后可查——不许把它当成透明的开关用。
     - 批次产物多一个 `_fixture-selftest/` 目录（求值现场 + `result.json`）与一份 `fixture-selftest.log`；`batch-summary.json` 多一个 `selftest` 字段。
 13. **新增钩子一致性守卫（B-2）：改 `mobile/hooks/*.js` 或 `vehicle/hooks/*.js` 后被它拦下是正常的**。
     `mobile/tools/test_hooks_parity.py` 会比对 7 对共享钩子脚本；两侧不一致就失败。若差异是**有意**的，必须往 `mobile/tools/hooks_parity_whitelist.json` 加一条带 `id`/`reason`/`date` 的规则，否则守卫会一直红。**反过来，白名单里的规则一旦不再命中也会报错**——两侧代码演进后要记得清理。
+14. **`measure_clock_offset_ms()` 现在会抛错而不是返回 0**（批次 2 的行为变化，批次 5 补上了离线用例）。
+    该函数以前"一次都没成功"时静默返回 0，会把归因时间窗整体污染成"看起来对齐"。现在抛 `AdbError`，
+    调用方要接住。同理 `PackageMap.package_for()` 失败**不写缓存**（避免把一次失败固化成永久 `null`）。
+15. **新增 A1 分档扫描器 `mobile/tools/a1_tier_scan.py`（离线可跑，仅纯函数部分免设备）**：
+    `--tiers 1,3,8,16,32,58 --repeats N` 逐档跑夹具自检并出"崩溃率 × 档位"表。
+    它**不会**把环境没跑起来的格子算成"没崩"——那些格子归 `env_failed` 并**排除出分母**。
+    无设备时它会走 `device_guard()` 提前拒绝（需设备时不要拿它当冒烟测试，`adb` 会挂满超时）。
 
 ---
 
-## 5. 批次 4：方案与执行（A1 本体仍未修）
+## 5. 批次 4 与批次 5：方案与执行（A1 本体仍未修）
 
-> 本轮（2026-10-14 第二批）只做**纯离线可写**的三件事：A1 的分档/缓存预备（§5.1）、
+> 批次 4-B（2026-10-14 第二批）只做**纯离线可写**的三件事：A1 的分档/缓存预备（§5.1）、
 > A3 的夹具阳性对照（§5.2）、B-2 的钩子一致性守卫（§5.4）。**A1 本体没修**——
 > 按 §8.6 第 6 条与 §5.1 的验收判据，A1 必须设备上跑夹具出真实事件才算修好。
+>
+> 批次 5（本轮的复核轮）在那一轮之上：补 H5 的 `--args-only` 开关与分档扫描器、
+> 落地 §5.6 的 `extended_rglob`、按"只拆低风险那批"拆掉 5 个超 300 行文件、给 `uid_sampler`
+> 与字体表补兜底。**A1 本体依然没修**——所有运行时结论仍然为空。
 
 ### 5.0 执行摘要
 
-| 条目 | 本轮状态 | 落地物 | 离线证据 | 缺什么才能算完 |
+| 条目 | 状态 | 落地物 | 离线证据 | 缺什么才能算完 |
 |---|---|---|---|---|
-| **5.1 A1 分档定位** | **离线预备已落地，A1 本体未修** | `--watch-limit`/`VSCAN_WATCH_LIMIT`（H2 分档）、`--no-stack`/`VSCAN_NO_STACK`（H1 开关）、事件期缓存化 `armRuntimeCache()`/`armValueCache()` | `core/frida_host/test_bundle_config.py` 6 例全过；真实 bundle 上 3 个占位符各存活 1 次，替换后长度头自洽、模块拼接过 `node --check` | 设备上按档位跑夹具，`reads.jsonl` 出现 ≥1 条非 START/ARMED 事件且进程存活 |
-| **5.2 A3 夹具自检** | **已落地，待设备验收** | 新增 `mobile/tools/fixture_selftest.py`（209 行）；`batch_thirdparty.py` 前置门 + `--skip-fixture-selftest`；结果写进 `batch-summary.json` 的 `selftest` | 无设备跑 → `passed:false` + `reason`/`hint`；`--skip` → `passed:null` 且跳过事实落进批次摘要；门判 `False` 时批次拒绝出批 | 设备上跑批，夹具自检真出 PRIVACY_READ |
-| **5.4 B-2 一致性守卫** | **已落地并验证** | 新增 `mobile/tools/test_hooks_parity.py` + `hooks_parity_whitelist.json`（**7 对**、13 条规则） | 通过 exit 0；注入 4 种真实漂移均 exit 1 并给出行级 A/B 差异；白名单陈旧也 exit 1 | —（纯离线，已完） |
-| **5.5 超 300 行拆分** | 未做 | 只做"不新增超限文件"：从 `batch_thirdparty.py` 抽出 `apk_meta.py`（80 行），使前者维持 261 行 | — | 按 §5.5 拆分既有 7 个超限文件 |
-| **5.3 / 5.6 / 5.7** | 未做（仍为方案） | — | — | 见各自小节 |
+| **5.1 A1 分档定位** | **离线预备已落地，A1 本体未修** | `--watch-limit`/`VSCAN_WATCH_LIMIT`（H2）、`--no-stack`/`VSCAN_NO_STACK`（H1）、**`--args-only`/`VSCAN_ARGS_ONLY`（H5，批次 5）**、事件期缓存化 `armRuntimeCache()`/`armValueCache()`、扫描器 `mobile/tools/a1_tier_scan.py` | `core/frida_host/test_bundle_config.py` 6 例全过；真实 bundle 上 **4 个**占位符各存活 1 次（`hook_consent` 只有 2 个，正常），替换后长度头自洽、模块拼接过 `node --check`；`test_a1_tier_scan.py` 9 例 | 设备上按档位跑夹具，`reads.jsonl` 出现 ≥1 条非 START/ARMED 事件且进程存活 |
+| **5.2 A3 夹具自检** | **已落地，待设备验收** | `mobile/tools/fixture_selftest.py`；`batch_thirdparty.py` 前置门 + `--skip-fixture-selftest`；结果写进 `batch-summary.json` 的 `selftest` | 无设备跑 → `passed:false` + `reason`/`hint`；`--skip` → `passed:null` 且跳过事实落进批次摘要；门判 `False` 时批次拒绝出批。**批次 5 修掉一处会记错的字段**：`alive_at_end`/`app_death` 只在真的取到存活状态时才写 | 设备上跑批，夹具自检真出 PRIVACY_READ |
+| **5.4 B-2 一致性守卫** | **已落地并验证** | `mobile/tools/test_hooks_parity.py` + `hooks_parity_whitelist.json`（**7 对**、13 条规则） | 通过 exit 0；注入 4 种真实漂移均 exit 1 并给出行级 A/B 差异；白名单陈旧也 exit 1 | —（纯离线，已完） |
+| **5.5 超 300 行拆分** | **部分落地（11 → 6）** | 拆 5 个：`fetch_apk`(382→242)、`build_mobile_rules`(406→209)、`test_analyze`(324→220)、`test_completion`(318→281)、`evaluation_mobile`(309→241) | 每个都验了"测试数守恒"与受影响套件全绿（§5.5） | 剩 6 个主链路文件**等 A1 修好再拆**（用户决定） |
+| **5.6 `extended_rglob`** | **已落地并复现原缺陷** | `core/static/winpath.py::extended_rglob()`；5 个调用点改完 | 目录自身 310 字符时 `rglob` → `[]`、`extended_rglob` → `['Deep.java']`；`test_jobs.ExtendedRglobTest` 3 例 | —（纯离线，已完） |
+| **5.3 / 5.7** | 未做（仍为方案） | — | — | 见各自小节 |
 
 ### 5.1 A1 · 插桩把应用打死（P0，最高优先级）
 
@@ -249,7 +309,7 @@ hook-bundles 0   frida-bundle-config 0
 | **H2** | **一次性替换 58 个 ArtMethod 入口**本身是规模问题 | `hook_privacy.js:123` `for (var i = 0; i < WATCH.length; i++) armOne(WATCH[i]);`，全部在 `Java.perform` 里同步完成 | 分档二分：只挂 1~3 → 8 → 16 → 32 → 58，每档夹具跑 3 次，找阈值 |
 | **H3** | **attach 模式换成 spawn 模式**可规避 | 当前是 attach（`AGENTS.md` 记"spawn 超时，用 attach"）。spawn 能让钩子在应用代码执行前装好，避免替换"正在被执行/编译"的 ArtMethod——而 M029 观察到崩时进程几乎全在解释器里（新装 APK 的 `verify` 过滤器） | 用 `run.py` 的 spawn 路径 + 更长超时（如 120s）重跑夹具；对比 attach 的崩溃率 |
 | **H4** | **Frida 版本 / API 37 + 16KB 页的已知问题** | 本机 frida 17.18.0，设备 Android 16 / API 37 / 16KB 页 | 需联网核对上游 release note 与 issue（本轮未做）；若确有修复，升级后重跑夹具 |
-| **H5（次要）** | 事件期构造 Java 对象（`new java.lang.String`）与 Digest 调用开销放大竞态窗口 | `values.js:21` | 先用 `args_only` 模式跑一档（不做值哈希），看崩溃是否消失，以隔离"是哈希导致还是替换本身导致" |
+| **H5** | 事件期构造 Java 对象（`new java.lang.String`）与 Digest 调用开销放大竞态窗口 | `values.js:21` | **开关已落地**（批次 5 的 `--args-only` / `VSCAN_ARGS_ONLY=1`，整轮连 `count_only` 都退化成只记参数）：58 档 + `args_only` 跑 3 次，若活下来而关掉就崩 → 崩点在事件期，而不在"挂 58 个方法" |
 
 #### 落地步骤建议（顺序）
 
@@ -257,8 +317,17 @@ hook-bundles 0   frida-bundle-config 0
 2. **分档脚本**（**本轮已落地**）：`core/frida_host/run.py` 新增 `--watch-limit <n>`，`hook_privacy.js` 里 `for (var i = 0; i < limit; i++) armOne(WATCH[i])`；`0` 是合法档位（等价全不挂，当 attach 对照组），未给 = 全量 58。同名的 `VSCAN_WATCH_LIMIT` 环境变量可兜底。`START`/`ARMED` 事件里都带 `watch_limit`/`watch_limit_raw`，档位可事后从证据里复核。按 H2 的档位跑；每档把 `app-death.json` 与 `reads.jsonl` 落盘归档，形成可对照的表格。
 3. **H1 的缓存化改造**（**本轮已落地**）：`runtime.js` 新增 `armRuntimeCache()` 把 `Java.use('java.lang.Thread')` 提到 ARMED 阶段缓存（`threadName()`/`stackStr()` 事件期不再 `Java.use`）；`values.js` 新增 `armValueCache()` 缓存 `MessageDigest`。`stackStr()` 另有总开关 `VSCAN_NO_STACK=1` / `--no-stack`，打开后事件不带线程/栈字段。`START` 里记 `runtime_cache`/`value_cache` 两个布尔，能立刻看出缓存是否生效。**这些仍是纯离线可写、必须设备验证的改动**——按 §8.6 第 6 条，未验证前不得声称 A1 已修。
    - 坑（已踩并记录）：`frida-compile` 的压缩器会把**直接的字面量比较**（`"__VSCAN_NO_STACK__" === "1"`）常量折叠成 `false`，占位符必须走 `parseInt("__VSCAN_NO_STACK__", 10)` 消费。判断方式是构建后 `grep` bundle，确认占位符字符串还在。
+   - **批次 5 追加**：同一条路子又加了第四个占位符 `__VSCAN_ARGS_ONLY__`（H5 开关）。验证方式与 H1 一致——
+     构建后 `grep` 确认 4 个占位符在 `hook_privacy.bundle.js` 里各存活 **1 次**（`hook_consent.bundle.js` 只用到 2 个，
+     不是漏替换），替换后逐模块 UTF-8 字节长度头自洽、拼接结果过 `node --check`、且**替换后不留占位符残渣**。
 4. 每档/每次都要记：`alive_at_end`（三态）、`/data/tombstones/` 文本、crash 缓冲行数、`reads.jsonl` 真实事件数。
 5. **验收判据**（照 §8.1 A1）：夹具跑一次，`reads.jsonl` 出现 ≥1 条非 START/ARMED 的真实事件，且进程在窗口内存活。
+6. **把分档跑成一条命令**（**批次 5 已落地**）：`mobile/tools/a1_tier_scan.py --tiers 1,3,8,16,32,58 --repeats 3`
+   逐档跑 `fixture_selftest` 并渲染"崩溃率 × 捕获率 × 档位"表（外加一份 `tier-scan.md`）。
+   档位/开关通过**环境变量**下传（`thirdparty_env.start_hook` 会把 `dict(os.environ)` 原样交给 `run.py`），
+   所以同一份代码既能整体跑也能单档复现。**三态统计是硬约束**：环境没跑起来的格子记 `env_failed`
+   并**排除出分母**——不许把"没测到"记成"没崩"（§8.6 第 1 条）。
+   判词会直接给结论：首个崩档、完好上界、一轮没崩时说"再跑一轮"、最小档就崩时指向 H3/H4。
 
 #### 风险预估
 
@@ -307,19 +376,54 @@ hook-bundles 0   frida-bundle-config 0
 
 ### 5.5 B-2 · 超 300 行文件拆分
 
-- 当前 7 个：`mobile/tools/device_run.py`(457)、`mobile/tools/thirdparty_env.py`(459)、`mobile/tools/device_run_thirdparty.py`(411)、`mobile/tools/fetch_apk.py`(382)、`core/collector/addon.py`(355)、`mobile/ai/evidence_bundle.py`(355)、`vehicle/workbench/server.py`(316)。（`mobile/rules/build_mobile_rules.py`、`mobile/analyze/test_analyze.py` 也在规格名单里，本轮未复核行数。）
-- 切法建议：`addon.py` 按"流生命周期 / 归因调度 / HTTP 端点"三拆；`device_run.py` 按"adb 封装 / 进程编排 / 对话框处理"拆；`thirdparty_env.py` 把"环境变量与常量"单独抽一份给两个入口共用。
+> **批次 5 执行状态：11 → 6，用户明确选择「只拆低风险的那批」。**
+> 拆掉的 5 个（都不在设备验证主链路上）：
+>
+> | 文件 | 改前 → 改后 | 拆出 |
+> |---|---|---|
+> | `mobile/tools/fetch_apk.py` | 382 → 242 | `fetch_apk_io.py`(162)：HTTP 原语 / 下载 / 身份摘要 |
+> | `mobile/rules/build_mobile_rules.py` | 406 → 209 | `mobile_rules_inputs.py`(93) + `mobile_rules_insert.py`(155) |
+> | `mobile/analyze/test_analyze.py` | 324 → 220 | `test_analyze_egress.py`(142)，9 例 |
+> | `test_completion.py`（仓库根） | 318 → 281 | `core/test_event_store.py`(75)，4 例 |
+> | `mobile/analyze/evaluation_mobile.py` | 309 → 241 | `evaluation_mobile_parts.py`(110)，纯函数助手 |
+>
+> 每个都验了"测试数守恒"（31 = 22 + 9；存储 4 例原样搬）与受影响套件全绿，没有靠删测试换绿。
+>
+> **剩余 6 个故意不拆**（设备验证主链路，A1 修好前不动）：`mobile/tools/device_run.py`(457)、
+> `mobile/tools/thirdparty_env.py`(459)、`mobile/tools/device_run_thirdparty.py`(411)、
+> `core/collector/addon.py`(355)、`mobile/ai/evidence_bundle.py`(355)、`vehicle/workbench/server.py`(316)。
+
+- 切法建议（对剩余 6 个仍然适用）：`addon.py` 按"流生命周期 / 归因调度 / HTTP 端点"三拆；
+  `device_run.py` 按"adb 封装 / 进程编排 / 对话框处理"拆；`thirdparty_env.py` 把"环境变量与常量"单独抽一份给两个入口共用。
 - 前置：先上好 §5.4 的一致性守卫与现在的 300 行 pre-commit 钩子，拆完才不会再长回去；每拆一步跑两条回归。
+- **拆分踩过的坑（给下次拆的人）**：① 被拆出的模块如果两边互相引用，会撞**循环 import**——`mobile_rules_inputs.py`
+  与 `mobile_rules_insert.py` 之间就差点撞上，最后把共用的 `_protection_level_value` 固定在 inputs 一侧才解开；
+  ② 原文件里的名字是**别人 import 的入口**（`apk_meta.fetch_apk.apk_identity`、`test_rules.bmr._protection_level_value`），
+  拆完必须在原文件头部显式再导出，否则"离线全绿、真跑才炸"；
+  ③ 按行号做文本手术会失手（行号会漂），要**按内容定位边界**。
 
 ### 5.6 B-3 · `winpath.extended_rglob()`
 
-- 问题：`core/static/jadx.py:82,97`、`core/static/jobs.py:79,91,98` 用 `rglob`/`scandir` 不走 `\\?\` 前缀，目录自身路径超 260 时 glob **静默吞掉整棵子树**（`source_tree` 少列、LRU 淘汰失准）且无报错——`winpath` 现在只兜住文件级 `stat`。
-- 实现思路：新增 `winpath.extended_rglob(root, pattern)`——用 `os.scandir(extended(root))` **逐级自己遍历**（与 `rmtree` 同一套手工反斜杠拼接，见模块头第 2 条坑：`os.path.join` 会拼出正斜杠 → WinError 123），对每一级返回的 `entry.name` 做 `fnmatch`，命中即产出 `Path`（**对外仍是普通路径，不让 `\\?\` 渗进业务代码与 JSON**）。非 Windows 直接退化成 `Path.rglob`。
-- 风险预估：
-  1. 符号链接/联接的循环风险 —— 需要深度上限与"已访问 realpath"集合；
-  2. 与 `rmtree` 共用拼接逻辑，写错会同时打坏两处 → 建议先抽一个 `winpath._join_ext(parent, name)` 私有助手；
-  3. 返回值顺序与 `Path.rglob` 不完全一致（后者按目录序遍历），下游若有排序依赖需要显式 `sorted()`；
-  4. 必须有离线用例：`test_jobs.LongPathTest` 的现有深路径基础上再补一条"目录自身 > 260"的用例（当前用例可能只覆盖文件级）。
+> **批次 5 执行状态：已落地。** `core/static/winpath.py` 新增 `extended_rglob(root, pattern="*")`，
+> 5 个调用点全部改过来（`core/static/jadx.py` 2 处、`core/static/jobs.py` 3 处）。
+> **原始缺陷已复现为证**：同一目录下，把目录自身路径撑到 310 字符后，
+> 原生 `sources.rglob("*.java")` 返回 **`[]`**（静默吞掉整棵子树），而 `extended_rglob` 返回 `['Deep.java']`；
+> 同一路径上裸 `os.scandir` 则直接抛 `FileNotFoundError`——这就是"为什么不自己走一遍就兜不住"。
+> 新增 3 条离线用例（找到子树且不漏 `\\?\` / 普通树上与 `rglob` 结果一致 / 边界：缺失根、多段模式报 `ValueError`），
+> 全部在 `core/static/test_jobs.py::ExtendedRglobTest`。
+>
+> **实现与原始设计的偏差（照实记）**：
+> 1. **没做符号链接环防护**。用的是 `entry.is_dir(follow_symlinks=False)`，与 Python 3.13 `rglob` 的默认一致——
+>    也就是说"不跟随链接"本身就是环的天然上界，再加深度上限反而与 `rglob` 语义不一致（会产生假绿）。
+> 2. **没抽 `_join_ext` 公共助手**，而是给模块级 `_SEP` 常量：`os.name == "nt"` 但 `os.sep == "/"` 的解释器
+>    （本机 MSYS2 那个）存在，`os.path.join` 会拼出正斜杠，而 `\\?\` 只认反斜杠（见模块头第 2 条坑）。
+> 3. **返回值是普通 `Path`**，不外泄 `\\?\`；下游若依赖顺序要显式 `sorted()`（`jadx.py` 那处已经加了）。
+> 4. 非 Windows 上 `\\?\` 前缀本就是无操作，函数退化成"自己走一遍的 rglob"，行为一致。
+>
+> 原方案里的三条风险（符号链接环 / `_join_ext` 助手 / 顺序不一致）结局见上；第 4 条"必须有离线用例"
+> 已兑现，且比原要求更严——**新用例专门构造了"目录自身 > 260"的那种形态**，
+> 因为旧 `LongPathTest` 只覆盖了文件级长路径（文件级 `rglob` 仍然列得出条目，只有 `stat`/`open` 才炸，
+> 与目录级"整棵子树消失"是两种症状，见 §6.8）。
 
 ### 5.7 B-4 · `vscan_conn.log` 并发路径
 
@@ -331,14 +435,40 @@ hook-bundles 0   frida-bundle-config 0
 ## 6. 遗留问题与建议下一步
 
 1. **A1 未修，是全部运行时结论为空的根因——但工具已就位，下一步就是接设备跑。**
-   `--watch-limit` / `--no-stack` 两个开关（§5.1 第 2、3 步）已经能用，夹具阳性对照（§5.2）会自动告诉你哪一档活着。
-   建议就直接按 §5.1 的 H1 → H2 顺序做分档实验，把"崩溃率 × 钩子档位"做成一张表——这张表本身就是论文里"方法可靠性"一节可用的材料。
+   三个开关（`--watch-limit` / `--no-stack` / `--args-only`，§5.1 第 2、3 步 + 批次 5 补的 H5 开关）
+   已经能用，夹具阳性对照（§5.2）会自动告诉你哪一档活着，分档扫描器 `mobile/tools/a1_tier_scan.py`
+   直接把结果出成表。建议按 §5.1 的 H1 → H2 → H5 顺序做分档实验——这张"崩溃率 × 钩子档位"表本身
+   就是论文里"方法可靠性"一节可用的材料。
+   - **H5 的判据**：若 `--args-only=1` 能让 58 档活下来而 `--args-only=0` 崩，则崩点在**事件期的
+     返回值处理/Java 对象构造/值哈希**，而不是"挂 58 个方法"本身；接下来的优化方向是让采集
+     在事件期"只读参数、不构造对象"。
 2. **`config.local.json` 里的真实 key 仍需你本人去吊销轮换**（DeepSeek 控制台）。该文件已被 `.gitignore` 覆盖，但**历史提交里是否曾入库未核查**（需要 `git log --all -- mobile/ai/config.local.json` 与必要时 scrub 历史）。
 3. **CI / pre-commit 仍未在本机实际执行过**。仓库已推到 Gitee（`git@gitee.com:mao-yuqi-12/mobile-app-permission-check.git`，main），`.github/workflows/ci.yml` 已入库；要真正生效还需要两步：① Gitee 侧开 Actions（或改推 GitHub）并配 runner；② 本机 `pip install pre-commit && pre-commit install`。
    - ⚠️ **本机直接开 pre-commit 会炸**：`.pre-commit-config.yaml` 里挂了 `ruff-format`，而全仓有 **293 条** `ruff check` 存量问题、且代码风格（单引号等）与 `ruff-format` 的默认不一致。一旦 `pre-commit install`，git 钩子会把改动文件重新格式化，产生与存量风格断层的大 diff。**要开之前先决定**：要么先做一轮"冻结 + 全仓 format"再启用，要么把 `ruff-format` 从钩子里摘掉只留 `ruff`（本轮采取的是后者：只保证改动文件过 `ruff check`，不动格式）。
-4. **新增的 300 行守卫会拦下 7 个既有超限文件**（见 §4.10）。要不要在下一轮按 §5.5 拆，取决于你是否接受这批文件的改动量。
-5. **`mobile/report/report_common.py:19` 还有第三份字体候选表**（规格只列了两处）。移动侧不 import 车载侧（项目约定），所以要么复制合并后的顺序过去，要么把候选表下沉到 `core`（更彻底，但会让 `core` 承担"报告字体"这种表现层职责，需要你定夺）。
+4. **300 行守卫现在只会拦下 6 个文件**（批次 5 已拆 5 个，见 §5.5 与 §4.10）。
+   剩下这 6 个是设备验证主链路，**用户已明确选择等 A1 修好再拆**——A1 没修之前动采集/编排/报告主链路，
+   风险不对等（拆错了会同时失去"能定位 A1"的能力）。
+5. ~~**`mobile/report/report_common.py:19` 还有第三份字体候选表**~~ —— **批次 5 已处理**：
+   不把候选表下沉到 `core`（那会让内核承担表现层职责），而是**保持两份副本 + 加 `VSCAN_CJK_FONT` env 覆盖口**
+   （`os.environ["VSCAN_CJK_FONT"]` 会被插到候选表最前面，实测 `首候选: ('CustomCJK', 'X:/custom.ttf')`）。
+   这样两份表即使顺序漂了，换机也能不改代码救场；**顺序本身仍靠人工保持"同序同项"**，
+   `report_common.py` 里已加注释指回 `vehicle/analyze/report_extras.py`。
 6. **`sqlite` 只读连接的 URI 编码只改了 `core/rules_contract.py` 一处**。`vehicle/dashboard/dashboard.py`、`vehicle/workbench/static_rules.py`、`mobile/analyze/correlate_mobile.py:56`、`mobile/ai/evidence_bundle.py` 里还有同类 `f"file:{p}?mode=ro"` 写法，属同一风险。本轮按"小而准"只改了规格点名的那处（顺带 `rules_db_meta` 合并让 `report.py` 间接受益）。
-7. **`uid_sampler.py` 的改动没有离线用例覆盖**（该模块是独立脚本、无人 import，两条回归都不碰它）。改动后只在编译层面验证，建议补一组"adb 返回非 0 → `ok=False`"的纯函数用例，或直接依赖设备回归。
+7. ~~**`uid_sampler.py` 的改动没有离线用例覆盖**~~ —— **批次 5 已补**：新建
+   `core/collector/test_uid_sampler.py`（12 例），已挂进 `run_regressions.py` 的 `collector` 组。
+   覆盖：adb 非 0 退出算失败、超时/`OSError` 保留非空 reason、`measure_clock_offset_ms()` 抛 `AdbError`
+   而不是返回 0、设备时间不可解析算失败、中位数取样与毫秒单位、`package_for()` 失败**不写缓存**、
+   `package:` 行首命中优先且命中后不再调 adb（`fake.call_count == 1`）、无包名行是 `None` 而非失败、
+   `/proc/net/tcp` 行解析、非 TCP 行忽略。
 8. ~~**文档漂移还有一处未改**：根 `CLAUDE.md:103` 也写着"10 组回归"~~ —— **批次 4-B 已一并修正**：`CLAUDE.md` 的"10 组 / 16 项"、`AGENTS.md` 的"11 组 / 21 项"、`mobile/CLAUDE.md` 的"21 项（路径写成 `tools/`）"全部改成当前实际的 **12 组 / 22 项**，并在 `AGENTS.md` 补了一句"看到红先确认解释器依赖"。
+   - **批次 5 又改了一轮**：`12 组 / 22 项` → **`13 组 / 23 项`**（`AGENTS.md`、根 `CLAUDE.md`、`mobile/CLAUDE.md`、
+     `.github/workflows/ci.yml` 的 step 名四处同步，并把 `event-store` 补进套件枚举）。
 9. **仓库卫生**：450 个跟踪文件混入产物/证据（规格 B-5 低优先级，属批次外的独立整理），建议单独一轮处理，不要和代码修复混在一起提交。
+10. **`run_regressions.py --mobile` 开关仍未加**（§8.2 B-6 的一项）：根入口与移动侧入口现在是两条独立命令，
+    没有"一条命令跑全部"的方式；CI 里也是两个 step。加一个 `--mobile` 让根入口顺带跑移动侧是个小改动，
+    但会让"根回归全绿"这句话的含义变模糊（移动侧失败算不算根回归失败？），所以需要你定一下语义再动。
+11. **一条方法论教训（本轮的真正收获）**：`RESEARCH_OUTLOOK.md` 的状态列**曾经严重滞后**——
+    本轮逐条对代码复核 29 项，**24 项 + A6/A7/A8 其实早在批次 1–3 就落地了**，只是没改状态文字。
+    这正是"信任文档陈述"的代价：如果照状态列去"修"，会重复劳动甚至把已修的东西改坏。
+    该文件顶部已加警告（「**不要相信这一列，要相信代码**」），状态列也已按复核结果刷新为
+    `【已修】`/`【已修·部分】`/`【已修·待设备验收】` 三档，并保留 `【规划】` 给真正未动的条目。

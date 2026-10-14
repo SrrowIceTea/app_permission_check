@@ -73,9 +73,27 @@ function javaCursorCount(ret) {
   } catch (e) { return 0; }
 }
 
+// ---- H5 开关：整轮强制 args_only（批次 4 · A1 假设 H5，见 DEV_FIX_REPORT §5.1）----
+// H5：崩点也许不是"替换 ArtMethod"本身，而是**事件期构造 Java 对象**——
+// `new java.lang.String(s)` + `MessageDigest.update/digest`。打开这个开关后
+// describe() 一律返回 {}，事件里只剩"这个 API 被调用了"：不 String()、不哈希、
+// 不数长度。于是"崩 / 不崩"的差异被隔离到**这一个**变量上。
+// 它是 H1（事件期 Java.use）的更严格版本，也是 §8.6 第 1 条的用法示范：
+// 诊断期临时降低观测面，**不改判据**——PRIVACY_READ 事件照样必须出现，
+// 缺的是值字段，不是"有没有收集"的结论。
+//
+// **写法注意**：必须走 parseInt 消费——frida-compile 的压缩器会把直接的
+// 字面量比较（`"__VSCAN_ARGS_ONLY__" === "1"`）常量折叠成 false，占位符就没了。
+var FORCE_ARGS_ONLY = parseInt("__VSCAN_ARGS_ONLY__", 10) === 1;
+
+export function argsOnly() {
+  return FORCE_ARGS_ONLY;
+}
+
 export function describe(dataTypes, spec, ret) {
   var capture = (spec && spec.capture) || 'return_or_exception';
 
+  if (FORCE_ARGS_ONLY) return {};          // H5：整轮不碰返回值（含 count_only）
   if (capture === 'args_only') return {};
 
   if (capture === 'count_only') {

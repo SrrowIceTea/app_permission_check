@@ -24,88 +24,20 @@
 """
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "traffic"))
+sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent.parent))
-import tagging_mobile  # noqa: E402
 from core.collector.attribution import ATTRIB_LOOSE_MS, is_loose  # noqa: E402
+# 取值/配对/成形部件搬到相邻模块（原文件越 300 行红线，§8.2 B-2）。
+# `json` 一并去掉：它在本文件里已经没有任何用处（存量 F401）。
+from evaluation_mobile_parts import (_consent_for, _finding, _flow_types,  # noqa: E402
+                                     _flow_unusable, _ok_reads, _ts, value_matches)
 
+# 对外保留：`correlate_mobile.py` 用 `ev.CONSENT_SIGNALS` 过滤同意事件。
 CONSENT_SIGNALS = ("PERM_RESULT", "POLICY_VIEW")
-
-
-def _ts(record: dict) -> int | None:
-    v = record.get("host_received_ts")
-    return v if v is not None else record.get("ts")
-
-
-def _ok_reads(reads: list[dict], data_type: str) -> list[dict]:
-    return [r for r in reads
-            if r.get("ev") == "PRIVACY_READ" and r.get("outcome") == "ok"
-            and data_type in (r.get("data_types") or [])]
-
-
-def _consent_for(data_type: str, consent: list[dict], hints: list[str]) -> list[dict]:
-    """与该数据类别相关的同意事件。PERM_RESULT 只算 granted 的那些；
-    部分授权时 denied 的权限不算同意（否则"同意前收集"会被反过来算）。"""
-    out = []
-    for c in consent:
-        ev = c.get("ev")
-        if ev == "PERM_RESULT":
-            if any(h in (c.get("granted") or []) for h in hints):
-                out.append(c)
-        elif ev == "POLICY_VIEW":
-            out.append(c)
-    return out
-
-
-def _flow_unusable(f: dict) -> bool:
-    """这条流能不能用于给被审计包下结论。
-
-    排除两类：归因歧义（时间上分不清谁发的），和归因未解析（unresolved，可能是别的
-    App 的流落进来、尚未对上）。历史/测试流没有 attribution 字段时不算 unresolved。
-    """
-    return bool(f.get("attribution_ambiguous")) or f.get("attribution") in ("unresolved", "ambiguous")
-
-
-def _labels_for_flow(flow: dict) -> list[dict]:
-    return tagging_mobile.types_for_labels(flow.get("request_tags") or [])
-
-
-def _flow_types(flow: dict) -> set[str]:
-    """流里的标签映射到的数据类别（形态级）。"""
-    return {t["data_type"] for t in _labels_for_flow(flow) if t.get("data_type")}
-
-
-def value_matches(read: dict, flow: dict) -> str | None:
-    """读取的值哈希是否出现在流的令牌里。→ 命中的 token 或 None。"""
-    vh = read.get("value_hash")
-    if not vh:
-        return None
-    for token in (flow.get("request_tokens") or []):
-        if token.endswith(":" + vh):
-            return token
-    return None
-
-
-def _finding(rule: dict, *, evidence_kind: str, event_ids: list, extra: dict,
-             data_type_zh: str | None = None, note: str) -> dict:
-    cond = rule["condition"]
-    base = {
-        "rule_id": rule["rule_id"], "rule_revision": rule["rule_revision"],
-        "title": rule["title"], "rule_type": rule["rule_type"],
-        "severity": rule["severity"], "conclusion_level": rule["conclusion_level"],
-        "rule_enabled": bool(rule["enabled"]), "predicate": cond.get("predicate"),
-        "evidence_kind": evidence_kind, "event_ids": event_ids,
-        "data_type": cond.get("data_type"), "data_type_zh": data_type_zh,
-        "basis_refs": rule["basis_refs"], "source_refs": rule["source_refs"],
-        "evidence_source": "mobile_runtime_or_traffic", "note": note,
-    }
-    base.update(extra)
-    return base
 
 
 def evaluate(rule: dict, ctx: dict) -> dict | None:

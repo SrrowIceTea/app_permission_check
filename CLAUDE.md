@@ -100,10 +100,10 @@ vscanner/
 
 ```bash
 PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
-"$PY" tools/run_regressions.py            # 车载/内核 12 组：completion/rules-contract/codeloc/
-                                          #   correlate/collector/tagging-vehicle/dashboard/runtime/parity/
-                                          #   workbench/hook-bundles/frida-bundle-config
-"$PY" mobile/tools/run_mobile_checks.py   # 移动端 22 项
+"$PY" tools/run_regressions.py            # 车载/内核 13 组：completion/rules-contract/event-store/
+                                          #   codeloc/correlate/collector/tagging-vehicle/dashboard/
+                                          #   runtime/parity/workbench/hook-bundles/frida-bundle-config
+"$PY" mobile/tools/run_mobile_checks.py   # 移动端 23 项
 ```
 
 ## 边界（必须保留）
