@@ -214,7 +214,8 @@ workbench 0     hook-bundles 0      frida-bundle-config 0
 2. **`a1_tier_scan` 是新增的检查项**，不是新功能：A1 的分档实验需要一个机器可读的"崩溃率 × 档位"表，
    以前只有纯手工跑。它把 §5.1 的 H1/H2/H5 假设变成一条命令（`--tiers 1,3,8,16,32,58 --repeats N`），
    并强制三态统计（`valid` / `env_failed` / `crashed`）——**环境没跑起来的格子会被排除出分母**，
-   因为把"没测到"记成"没崩"正是 A1 一直在制造的假安心（§8.6 第 1 条）。9 例纯函数用例覆盖汇总与判词。
+   因为把"没测到"记成"没崩"正是 A1 一直在制造的假安心（§8.6 第 1 条）。**11 例**纯函数用例覆盖
+   汇总/判词/参数解析/渲染——其中 2 例正是无设备冒烟抓出工具自身 bug 后补的（见 §3.6 末注）。
 3. **`fetch_apk.py --help` / import 链回归**：把 `fetch_apk.py`(382→242) 拆成 + `fetch_apk_io.py`(162) 之后，
    专门验了 `import fetch_apk, fetch_apk_io, apk_meta` 与 `apk_meta.fetch_apk.apk_identity` 这条**跨文件引用**
    仍然可用（`fetch_apk.py` 头部显式再导出三个原名），`--help` 正常打印 usage。
@@ -222,9 +223,26 @@ workbench 0     hook-bundles 0      frida-bundle-config 0
    新文件从 `test_analyze` 里 import 现成的 `ctx`/`read`/`rule` 夹具——**重复一份夹具比多一个文件更糟**，
    所以这个文件自愿放弃了"完全自包含"。
 
-> ⚠️ 本轮**没有**动 `a1_tier_scan` 的真机路径：`--out output/_a1_scan_smoke` 的一次冒烟在白跑，
-> 因为无设备时 `device_guard()` 会去 shell 出 `adb`，而本机 `adb` 无设备时会挂到超时（≈10 分钟）。
-> 它的**纯函数部分**（汇总/判词/参数解析）有 9 例离线用例，设备路径要等接上设备才能验。
+> ⚠️ **无设备冒烟反而抓出了 `a1_tier_scan` 自己的一个真 bug——照实记。**
+> 跑 `--out output/_a1_scan_smoke --repeats 1`（6 档 ×1，每档等设备超时约 5 分钟，共约半小时），
+> 得到 6 格**全 `env_failed`**（`alive=None reads=None`，`reason=设备未在超时内启动完成`）——
+> 三态统计本身是对的（`crash_rate`/`capture_rate` 都渲染成 `—` 而不是 `0%`）。
+> **但判词输出了「所有档位都没崩——再跑一轮」，退出码还是 0。**
+> 那就是本工具存在的全部意义所在的那件事——**把"没测到"写成"没崩"**——只不过这次发生在
+> 工具自己身上：`_verdict()` 只看了 `crashed == 0`，没先问"到底有没有格子被测到"。
+>
+> 修法（两处，共用一条不变量）：
+> 1. 抽出 `any_valid(tiers)`——零有效格是**整轮级别的失败**，不是"结果全好"；
+> 2. `_verdict()` 把它当**前置判断**（放在 `crashing` 之前），零有效格时只输出
+>    「本轮根本没测到，不能读成没崩」+「先修环境再重跑」，不出现任何"没崩"式的字眼；
+> 3. `main()` 在表落盘后仍**返回 2**——现场要留，但脚本层面不能是成功，否则批量脚本里
+>    "退出码 0"会被读成"跑过了"。
+>
+> 新增 2 条用例（`test_a1_tier_scan.py` 9 → **11**）：一条把"全 env_failed 不得出现
+> 「都没崩」/「再跑一轮」"钉死，另一条是反向用例（只要有一格有效就必须走正常判词，
+> 防止上一条被"一律拒绝"糊弄过去）。并用**真实冒烟数据回放**验证修复后的判词与退出码。
+>
+> 纯函数部分（汇总/判词/参数解析/渲染）现有 11 例离线用例；真机路径（`run_cell`）仍需设备。
 
 ---
 
@@ -269,10 +287,13 @@ workbench 0     hook-bundles 0      frida-bundle-config 0
 14. **`measure_clock_offset_ms()` 现在会抛错而不是返回 0**（批次 2 的行为变化，批次 5 补上了离线用例）。
     该函数以前"一次都没成功"时静默返回 0，会把归因时间窗整体污染成"看起来对齐"。现在抛 `AdbError`，
     调用方要接住。同理 `PackageMap.package_for()` 失败**不写缓存**（避免把一次失败固化成永久 `null`）。
-15. **新增 A1 分档扫描器 `mobile/tools/a1_tier_scan.py`（离线可跑，仅纯函数部分免设备）**：
-    `--tiers 1,3,8,16,32,58 --repeats N` 逐档跑夹具自检并出"崩溃率 × 档位"表。
-    它**不会**把环境没跑起来的格子算成"没崩"——那些格子归 `env_failed` 并**排除出分母**。
-    无设备时它会走 `device_guard()` 提前拒绝（需设备时不要拿它当冒烟测试，`adb` 会挂满超时）。
+15. **新增 A1 分档扫描器 `mobile/tools/a1_tier_scan.py`（236 行，纯函数部分离线可验）**：
+    `--tiers 1,3,8,16,32,58 --repeats N` 逐档跑夹具自检并出"崩溃率 × 档位"表 + `tier-scan.md`。
+    它**不会**把环境没跑起来的格子算成"没崩"——那些格子归 `env_failed`、**排除出分母**、
+    且**零有效格时退出码为 2**（表照样落盘，但脚本层面不能算成功）。
+    - ⚠️ **别把它当"无设备冒烟测试"跑**：`device_guard()` 只拦"多设备且未指定 ANDROID_SERIAL"，
+      **不拦"没有设备"**——无设备时每一档都会老老实实等设备超时（约 5 分钟/档），
+      6 档 ×1 复次就要半小时。想验离线部分直接跑 `test_a1_tier_scan`。
 
 ---
 
@@ -290,7 +311,7 @@ workbench 0     hook-bundles 0      frida-bundle-config 0
 
 | 条目 | 状态 | 落地物 | 离线证据 | 缺什么才能算完 |
 |---|---|---|---|---|
-| **5.1 A1 分档定位** | **离线预备已落地，A1 本体未修** | `--watch-limit`/`VSCAN_WATCH_LIMIT`（H2）、`--no-stack`/`VSCAN_NO_STACK`（H1）、**`--args-only`/`VSCAN_ARGS_ONLY`（H5，批次 5）**、事件期缓存化 `armRuntimeCache()`/`armValueCache()`、扫描器 `mobile/tools/a1_tier_scan.py` | `core/frida_host/test_bundle_config.py` 6 例全过；真实 bundle 上 **4 个**占位符各存活 1 次（`hook_consent` 只有 2 个，正常），替换后长度头自洽、模块拼接过 `node --check`；`test_a1_tier_scan.py` 9 例 | 设备上按档位跑夹具，`reads.jsonl` 出现 ≥1 条非 START/ARMED 事件且进程存活 |
+| **5.1 A1 分档定位** | **离线预备已落地，A1 本体未修** | `--watch-limit`/`VSCAN_WATCH_LIMIT`（H2）、`--no-stack`/`VSCAN_NO_STACK`（H1）、**`--args-only`/`VSCAN_ARGS_ONLY`（H5，批次 5）**、事件期缓存化 `armRuntimeCache()`/`armValueCache()`、扫描器 `mobile/tools/a1_tier_scan.py` | `core/frida_host/test_bundle_config.py` 6 例全过；真实 bundle 上 **4 个**占位符各存活 1 次（`hook_consent` 只有 2 个，正常），替换后长度头自洽、模块拼接过 `node --check`；`test_a1_tier_scan.py` 11 例 | 设备上按档位跑夹具，`reads.jsonl` 出现 ≥1 条非 START/ARMED 事件且进程存活 |
 | **5.2 A3 夹具自检** | **已落地，待设备验收** | `mobile/tools/fixture_selftest.py`；`batch_thirdparty.py` 前置门 + `--skip-fixture-selftest`；结果写进 `batch-summary.json` 的 `selftest` | 无设备跑 → `passed:false` + `reason`/`hint`；`--skip` → `passed:null` 且跳过事实落进批次摘要；门判 `False` 时批次拒绝出批。**批次 5 修掉一处会记错的字段**：`alive_at_end`/`app_death` 只在真的取到存活状态时才写 | 设备上跑批，夹具自检真出 PRIVACY_READ |
 | **5.4 B-2 一致性守卫** | **已落地并验证** | `mobile/tools/test_hooks_parity.py` + `hooks_parity_whitelist.json`（**7 对**、13 条规则） | 通过 exit 0；注入 4 种真实漂移均 exit 1 并给出行级 A/B 差异；白名单陈旧也 exit 1 | —（纯离线，已完） |
 | **5.5 超 300 行拆分** | **部分落地（11 → 6）** | 拆 5 个：`fetch_apk`(382→242)、`build_mobile_rules`(406→209)、`test_analyze`(324→220)、`test_completion`(318→281)、`evaluation_mobile`(309→241) | 每个都验了"测试数守恒"与受影响套件全绿（§5.5） | 剩 6 个主链路文件**等 A1 修好再拆**（用户决定） |

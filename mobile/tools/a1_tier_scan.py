@@ -129,8 +129,26 @@ def summarize(results: list[dict]) -> dict[int, dict]:
     return tiers
 
 
+def any_valid(tiers: dict[int, dict]) -> bool:
+    """有没有任何一格真的被测到。
+
+    零有效格是**整轮级别的失败**，不是"结果全好"：此时既不许给任何"没崩"式的判词，
+    退出码也不能是 0。两处（判词、退出码）都走这一个判断，避免只改一处。
+    """
+    return any(t["valid"] for t in tiers.values())
+
+
 def _verdict(tiers: dict[int, dict]) -> list[str]:
     """把表读成一句话：崩点从哪一档开始。"""
+    if not any_valid(tiers):
+        # 这一条是**先于**别的判词的前置判断，不能挪到后面。理由：全部格子都是
+        # env_failed 时，`crashing` 必然为空，任何"没崩"式的判词都会把"没测到"
+        # 说成"没崩"——那正是 A1 一直在制造、而本工具存在的意义就是不许它发生的假象。
+        # （真踩过：6 档全 env_failed 时判词曾输出"所有档位都没崩——再跑一轮"。）
+        return ["- **本轮一个有效格都没有**：所有档位都是环境未就绪，"
+                "所以「崩不崩」这件事**本轮根本没测到**，不能读成「没崩」。",
+                "- 先修环境（设备连上没 / frida-server 起来没 / 夹具 APK 装得上没），"
+                "再重跑同一条命令；在那之前这张表只有「没跑成」这一个信息。"]
     crashing = [t for t in sorted(tiers) if tiers[t]["crashed"]]
     clean = [t for t in sorted(tiers) if tiers[t]["valid"] and not tiers[t]["crashed"]]
     if not crashing:
@@ -229,6 +247,12 @@ def main() -> int:
     report = render_md(tiers, meta)
     (args.out / "scan.md").write_text(report, encoding="utf-8")
     print(report, flush=True)
+    if not any_valid(tiers):
+        # 表照出（现场要留），但退出码不能是 0：零有效格的一轮在脚本层面也必须是失败，
+        # 否则 CI/批量脚本里"退出码 0"会被读成"跑过了"。
+        print("[a1-scan] 本轮零有效格：表已落盘，但没有任何档位被真正测到——"
+              "这不是「没崩」，先修环境再重跑", file=sys.stderr, flush=True)
+        return 2
     return 0
 
 

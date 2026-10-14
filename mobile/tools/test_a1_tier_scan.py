@@ -91,6 +91,27 @@ class VerdictTest(unittest.TestCase):
         self.assertIn("无效格", table)
         self.assertIn("16 档 ×1", table)
 
+    def test_all_invalid_never_reads_as_no_crash(self) -> None:
+        """**真踩过的坑**（2026-10-14 无设备冒烟）：6 档全 env_failed 时，判词输出了
+        "所有档位都没崩——再跑一轮"，退出码还是 0。那正是"把没测到写成没崩"，
+        也正是本工具存在的全部意义所在。这条用例把那句话钉死。"""
+        rows = [cell(t, None, reason="设备未在超时内启动完成") for t in (1, 3, 8, 16, 32, 58)]
+        tiers = scan.summarize(rows)
+        self.assertFalse(scan.any_valid(tiers), "全 env_failed 就不该有任何有效格")
+        self.assertEqual(6, sum(t["env_failed"] for t in tiers.values()))
+        verdict = "\n".join(scan._verdict(tiers))
+        self.assertIn("一个有效格都没有", verdict)
+        self.assertIn("根本没测到", verdict)
+        self.assertNotIn("都没崩", verdict, "零有效格时不许出现任何「没崩」式结论")
+        self.assertNotIn("再跑一轮", verdict, "零有效格时的建议是修环境，不是再跑一轮")
+
+    def test_one_valid_cell_is_enough_to_allow_a_real_verdict(self) -> None:
+        """反向用例：只要有一格被测到，就该走正常判词（否则上一条会被"一律拒绝"糊弄过去）。"""
+        rows = [cell(1, None, reason="设备未在超时内启动完成"), cell(58, True, 4)]
+        tiers = scan.summarize(rows)
+        self.assertTrue(scan.any_valid(tiers))
+        self.assertIn("再跑一轮", "\n".join(scan._verdict(tiers)))
+
 
 class ParseTiersTest(unittest.TestCase):
     def test_accepts_ascii_and_full_width_commas(self) -> None:
