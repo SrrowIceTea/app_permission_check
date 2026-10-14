@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from attribution import AMBIGUITY_MS, MATCH_TOLERANCE_MS, TimeAttribution  # noqa: E402
+from attribution import AMBIGUITY_MS, MATCH_TOLERANCE_MS, TimeAttribution, target_match  # noqa: E402
 
 A = "com.vscanner.targetapp"
 B = "com.vscanner.targetapp2"
@@ -37,6 +37,15 @@ def write_events(path: Path, events: list[tuple[int, str]]) -> None:
         for ts, package in events:
             handle.write(json.dumps(
                 {"ev": "EGRESS_CONNECT", "package": package, "host_received_ts": ts}) + "\n")
+
+
+def write_target_events(path: Path, events: list[tuple[int, str, str | None, str | None]]) -> None:
+    """带目标地址的 egress 事件：(ts, package, target_host, target_ip)。"""
+    with path.open("a", encoding="utf-8") as handle:
+        for ts, package, host, ip in events:
+            handle.write(json.dumps(
+                {"ev": "EGRESS_CONNECT", "package": package, "host_received_ts": ts,
+                 "target_host": host, "target_ip": ip}) + "\n")
 
 
 class AttributionTimingTest(unittest.TestCase):
@@ -159,6 +168,130 @@ class AttributionTimingTest(unittest.TestCase):
         """事件文件还没建出来时不能崩——它是在 run.py 第一次落盘时才出现的。"""
         self.assertFalse(self.path.exists())
         self.assertFalse(self.attrib.resolve(FLOW_B_TS).resolved)
+
+
+class TargetMatchTest(unittest.TestCase):
+    """目标地址校验：只有"目标匹配"的候选才能归属（见 core/collector/DECISIONS D413）。
+
+    这是修掉移动端"别的 App 的流被静默认领给被审计包"的第二信号——时间归因的固有
+    盲区（"真主迟到 600ms + 竞争者 65ms"与"真主就是 65ms 那个"证据同形）只能靠它补。
+    """
+
+    def test_four_way_identity(self) -> None:
+        """host/IP/peername 三选一：任一非空字段对上就算匹配。"""
+        self.assertTrue(target_match({"host": "api.example.com", "ip": "1.2.3.4"},
+                                     {"host": "api.example.com", "ip": "5.6.7.8"}))  # host 同
+        self.assertTrue(target_match({"host": "1.2.3.4", "ip": "1.2.3.4"},
+                                     {"host": "api.example.com", "ip": "1.2.3.4"}))  # OkHttp 返回 IP
+        self.assertTrue(target_match({"host": "API.Example.COM", "ip": None},
+                                     {"host": "api.example.com", "ip": "1.2.3.4"}))  # 大小写
+        self.assertFalse(target_match({"host": "api.example.com", "ip": "1.2.3.4"},
+                                      {"host": "evil.net", "ip": "9.9.9.9"}))  # 都不匹配
+        self.assertFalse(target_match(None, {"host": "h", "ip": "1.1.1.1"}))  # uid 事件无目标
+        self.assertFalse(target_match({"host": None, "ip": None},
+                                      {"host": "h", "ip": None}))  # 事件侧全空
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "egress_events.jsonl"
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_matching_target_resolves(self) -> None:
+        write_target_events(self.path, [(1000, A, "api.example.com", "1.2.3.4")])
+        found = TimeAttribution([self.path], target_check=True).resolve(
+            1010, {"host": "api.example.com", "ip": "1.2.3.4"})
+        self.assertEqual(found.package, A)
+
+    def test_cdn_ip_divergence_still_matches_via_host(self) -> None:
+        """两端解析域名拿到不同 CDN IP → 靠 host 兜住，不落到 unresolved。"""
+        write_target_events(self.path, [(1000, A, "api.example.com", "1.2.3.4")])
+        found = TimeAttribution([self.path], target_check=True).resolve(
+            1010, {"host": "api.example.com", "ip": "5.6.7.8"})
+        self.assertEqual(found.package, A)
+
+    def test_mismatching_target_is_unresolved(self) -> None:
+        """别的 App 的流（不同目标）不得认领给 A——宁缺勿错。"""
+        write_target_events(self.path, [(1000, A, "api.example.com", "1.2.3.4")])
+        found = TimeAttribution([self.path], target_check=True).resolve(
+            1010, {"host": "evil.example.net", "ip": "9.9.9.9"})
+        self.assertFalse(found.resolved)
+        self.assertEqual(found.label, "unresolved")
+
+    def test_check_off_keeps_time_only(self) -> None:
+        """目标校验默认关：reverse 模式下仍按时间就近归因（D413 的显式开关）。"""
+        write_target_events(self.path, [(1000, A, "api.example.com", "1.2.3.4")])
+        found = TimeAttribution([self.path], target_check=False).resolve(
+            1010, {"host": "evil.example.net", "ip": "9.9.9.9"})
+        self.assertEqual(found.package, A)
+
+    def test_no_target_event_excluded_when_check_on(self) -> None:
+        """uid_sampler 风格事件（无目标）在目标校验开启时不得参与。"""
+        write_events(self.path, [(1000, A)])
+        found = TimeAttribution([self.path], target_check=True).resolve(
+            1010, {"host": "api.example.com", "ip": "1.2.3.4"})
+        self.assertFalse(found.resolved)
+
+    def test_candidates_populated(self) -> None:
+        """Top-K 候选扩成列表（D414），取证价值高于只存亚军。"""
+        write_target_events(self.path, [(1000, A, "h", "1.1.1.1"),
+                                        (1010, B, "h2", "2.2.2.2")])
+        found = TimeAttribution([self.path]).resolve(1005)
+        self.assertEqual(found.package, A)
+        self.assertEqual(len(found.candidates), 2)
+        self.assertEqual(found.candidates[0]["package"], A)
+        self.assertEqual(found.candidates[1]["package"], B)
+
+
+class ConservativeTest(unittest.TestCase):
+    """保守弃权开关（D415）：存在竞争候选即弃权，宁可错杀不可静默串包。
+
+    默认关（保留并发确定性）；`conservative=True` 时，容差窗口内只要有另一个包名的
+    候选——无论离冠军多远——都标 ambiguous。代价是 D407 的双应用并发 MATCH 退化。
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "egress_events.jsonl"
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_off_distant_runner_up_still_resolves(self) -> None:
+        """默认：亚军离冠军超过 AMBIGUITY_MS 就不构成歧义，正常归因。"""
+        write_events(self.path, [(1000, A), (1700, B)])  # 亚军离冠军 700ms > 500ms
+        found = TimeAttribution([self.path]).resolve(1000)
+        self.assertFalse(found.ambiguous)
+        self.assertEqual(found.package, A)
+
+    def test_on_distant_runner_up_abstains(self) -> None:
+        """保守：亚军即使在 AMBIGUITY_MS 之外，也照样弃权。"""
+        write_events(self.path, [(1000, A), (1700, B)])
+        found = TimeAttribution([self.path], conservative=True).resolve(1000)
+        self.assertTrue(found.ambiguous)
+        self.assertEqual(found.label, "ambiguous")
+        self.assertEqual(found.runner_up, B)
+
+    def test_on_no_rival_not_ambiguous(self) -> None:
+        write_events(self.path, [(1000, A)])
+        found = TimeAttribution([self.path], conservative=True).resolve(1005)
+        self.assertFalse(found.ambiguous)
+        self.assertEqual(found.package, A)
+
+    def test_on_same_package_twice_not_ambiguous(self) -> None:
+        """同一包两次连接不算竞争候选——仍确定是它。"""
+        write_events(self.path, [(1000, A), (1700, A)])
+        found = TimeAttribution([self.path], conservative=True).resolve(1000)
+        self.assertFalse(found.ambiguous)
+        self.assertEqual(found.package, A)
+
+    def test_on_runner_up_beyond_tolerance_is_ignored(self) -> None:
+        """容差窗口外的候选不参与 resolve，故不构成竞争候选、不弃权。"""
+        write_events(self.path, [(1000, A), (1000 + MATCH_TOLERANCE_MS + 1, B)])
+        found = TimeAttribution([self.path], conservative=True).resolve(1000)
+        self.assertFalse(found.ambiguous)
+        self.assertEqual(found.package, A)
 
 
 if __name__ == "__main__":

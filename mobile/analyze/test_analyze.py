@@ -183,6 +183,46 @@ class EgressTest(unittest.TestCase):
         self.assertTrue(f["window_overridden"], "用了覆盖值必须如实标注")
         self.assertEqual(f["window_declared_ms"], 30000)
 
+    def test_unresolved_attribution_flow_is_skipped(self):
+        """unresolved 的流（package=None）可能是别的 App 的流，不得升级成结论。"""
+        flows = [{"evt_id": 2, "host": "h", "host_received_ts": 200, "ts": 200,
+                  "request_tags": ["digit15_shape"],
+                  "request_tokens": ["digit15_shape:abc123"], "method": "POST",
+                  "attribution": "unresolved"}]
+        f = ev.evaluate(self.R, ctx(reads=[read(1, "imei", 100, value_hash="abc123")],
+                                    flows=flows))
+        self.assertIsNone(f, "unresolved 的流不得参与关联（D413 移动端形态）")
+
+    def test_loose_attribution_caps_conclusion(self):
+        """归因距离 ≥ ATTRIB_LOOSE_MS 时，correlated 封顶 candidate（D414）。"""
+        R = rule("data_egress", "read_before_egress_within_window", "imei",
+                 content_match="required")
+        R["conclusion_level"] = "correlated"
+        flows = [{"evt_id": 2, "host": "h", "host_received_ts": 200, "ts": 200,
+                  "request_tags": ["digit15_shape"],
+                  "request_tokens": ["digit15_shape:abc123"], "method": "POST",
+                  "attribution_delta_ms": 1800}]
+        f = ev.evaluate(R, ctx(reads=[read(1, "imei", 100, value_hash="abc123")],
+                               flows=flows))
+        self.assertIsNotNone(f)
+        self.assertEqual(f["conclusion_level"], "candidate")
+        self.assertEqual(f["declared_conclusion_level"], "correlated")
+        self.assertEqual(f["conclusion_capped_by"], "attribution_loose")
+
+    def test_tight_attribution_keeps_level(self):
+        """归因距离很小（< LOOSE）时不得无端封顶。"""
+        R = rule("data_egress", "read_before_egress_within_window", "imei",
+                 content_match="required")
+        R["conclusion_level"] = "correlated"
+        flows = [{"evt_id": 2, "host": "h", "host_received_ts": 200, "ts": 200,
+                  "request_tags": ["digit15_shape"],
+                  "request_tokens": ["digit15_shape:abc123"], "method": "POST",
+                  "attribution_delta_ms": 5}]
+        f = ev.evaluate(R, ctx(reads=[read(1, "imei", 100, value_hash="abc123")],
+                               flows=flows))
+        self.assertIsNotNone(f)
+        self.assertEqual(f["conclusion_level"], "correlated")
+
 
 class OverCollectionTest(unittest.TestCase):
     def setUp(self):

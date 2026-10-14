@@ -29,6 +29,22 @@ MATCH_TOLERANCE_MS = 2000
 # 那就不该说"最近的是它"，只能说"分不清是哪个"。见 Attribution.ambiguous。
 AMBIGUITY_MS = 500
 
+# 归因"松"的阈值：|delta| ≥ 此值视为"离流太远、可能不是同一次外发"。
+# 下游（evaluate_* / 报告）据它把结论封顶 candidate，并把距离写进证据。
+# 取 MATCH_TOLERANCE_MS 的 3/4：低于它的是夹具实测锚点（2/65/575/1128ms），
+# 高于它的才逼近"这可能是另一条流"的容差边界。
+ATTRIB_LOOSE_MS = 1500
+
+
+def is_loose(flow: dict) -> bool:
+    """一条流的时间归因是否"松"（|delta| 达到/超过 ATTRIB_LOOSE_MS）。
+
+    只对**有** delta 的流判松；缺 delta（历史/测试流）返回 False，不推断——
+    否则所有旧证据的结论都会被无差别压到 candidate。
+    """
+    delta = flow.get("attribution_delta_ms")
+    return delta is not None and delta >= ATTRIB_LOOSE_MS
+
 
 def is_egress_connect(record: dict) -> bool:
     """这条记录是不是"一次出站连接"。
@@ -48,6 +64,32 @@ def is_ok_outcome(record: dict) -> bool:
     改成"必须等于 ok"会静默丢弃全部旧事件。
     """
     return record.get("outcome") != "error"
+
+
+def _norm(value) -> str | None:
+    """把 host/ip 归一成可比较的字符串（小写、去空白、空→None）。"""
+    if value is None:
+        return None
+    s = str(value).strip().lower()
+    return s or None
+
+
+def target_match(event_target: dict | None, flow_target: dict | None) -> bool:
+    """事件的目标地址与流的目标地址是否**可能**是同一个（host/IP/peername 三选一）。
+
+    只做**身份**匹配，不 gate 端口（端口已采集、但故意不用于拒绝——见 DECISIONS D413）。
+    任一非空字段对上就算匹配；任一侧完全无 target（例如 uid_sampler 事件）不算匹配。
+    这正好覆盖三个实测坑：① getHostString() 对 OkHttp 常返回解析后 IP → event.host 可能
+    是 IP，靠 `event.host == flow.ip` 或 `event.ip == flow.ip` 兜住；② 两端解析域名可能
+    拿到不同 CDN IP → host 仍是同一个 hostname，靠 `event.host == flow.host` 兜住；
+    ③ 匹配失败时外面落到 unresolved，而不是"随便选一个"。
+    """
+    if not event_target or not flow_target:
+        return False
+    eh, ei = _norm(event_target.get("host")), _norm(event_target.get("ip"))
+    fh, fi = _norm(flow_target.get("host")), _norm(flow_target.get("ip"))
+    return any(x is not None and x == y for x in (eh, ei) for y in (fh, fi))
+
 
 HERE = Path(__file__).resolve().parent
 
@@ -77,6 +119,7 @@ class Attribution(NamedTuple):
     source: str = "none"
     ambiguous: bool = False
     runner_up: str | None = None
+    candidates: tuple = ()
 
     @property
     def resolved(self) -> bool:
@@ -109,10 +152,25 @@ class TimeAttribution:
     增量读取：只 seek 到上次读到的位置，因此 `resolve()` 可以反复调用。
     """
 
-    def __init__(self, paths: list[Path]) -> None:
-        self.paths = paths
-        self.events: list[tuple[int, str, str]] = []
-        self._offsets: dict[Path, int] = {p: 0 for p in paths}
+    def __init__(self, paths: list[Path] | None = None, target_check: bool = False,
+                 conservative: bool = False,
+                 events: list[tuple[int, str, str, dict | None]] | None = None) -> None:
+        self.paths = paths or []
+        # 每个事件：(ts, package, source, target)。target 只有 egress_hook 来源有，
+        # 是 `{"host": target_host, "ip": target_ip, "port": target_port}`；uid_sampler 为 None。
+        # `events` 直接注入（离线实验/测试用）时绕过文件增量读取，resolve 的排序与
+        # 歧义/弃权/目标校验逻辑**完全不变**——只是"事件从哪来"这一环被省掉。
+        self.events: list[tuple[int, str, str, dict | None]] = (
+            list(events) if events is not None else [])
+        self._offsets: dict[Path, int] = {p: 0 for p in self.paths}
+        # 目标校验开关。**默认关**：reverse 模式下所有 App 都寻址同一代理端口，
+        # 目标校验会把整场归因静默变成 unresolved。只在常规代理模式（移动端第三方样本）
+        # 由 addon 按 VSCAN_ATTRIB_TARGET_CHECK 显式打开。
+        self.target_check = target_check
+        # 保守弃权开关。**默认关**：见 DECISIONS D415——开启后只要容差窗口内存在
+        # 另一个包名的候选就标 ambiguous（宁可错杀，不可静默串包）。代价是 D407 的
+        # 双应用并发 MATCH 全部退化成 ambiguous，所以做成显式开关，不悄悄改默认值。
+        self.conservative = conservative
 
     def _refresh(self) -> None:
         """增量读取事件文件。**只在读到完整行之后才推进偏移。**
@@ -170,28 +228,45 @@ class TimeAttribution:
                     ts = record.get("host_received_ts")
                     if ts is None:
                         ts = record.get("ts")
+                    target = None
+                    if source == "egress_hook":
+                        host = record.get("target_host")
+                        ip = record.get("target_ip") or record.get("literal_ip")
+                        port = record.get("target_port")
+                        if host is not None or ip is not None:
+                            target = {"host": host, "ip": ip, "port": port}
                     if package and ts is not None:
-                        self.events.append((ts, package, source))
+                        self.events.append((ts, package, source, target))
                 self._offsets[path] = consumed
 
-    def resolve(self, ts_ms: int) -> Attribution:
+    def resolve(self, ts_ms: int, flow_target: dict | None = None) -> Attribution:
         self._refresh()
         ranked = sorted(
-            (abs(event_ts - ts_ms), package, source)
-            for event_ts, package, source in self.events
+            (abs(event_ts - ts_ms), package, source, target)
+            for event_ts, package, source, target in self.events
             if abs(event_ts - ts_ms) <= MATCH_TOLERANCE_MS
         )
+        if self.target_check:
+            ranked = [r for r in ranked if target_match(r[3], flow_target)]
         if not ranked:
             return Attribution()
 
-        delta, package, source = ranked[0]
+        delta, package, source, _target = ranked[0]
         # 亚军只在**包名不同**时才构成歧义；同一包名的两条事件只是同一个 App
         # 连了两次，仍然确定是它。
         runner_up = None
         ambiguous = False
-        for delta2, package2, _ in ranked[1:]:
+        for delta2, package2, _, _ in ranked[1:]:
             if package2 != package:
                 runner_up = package2
-                ambiguous = delta2 - delta <= AMBIGUITY_MS
+                # 保守模式：只要存在另一个包的竞争候选就弃权（不管离得多远）；
+                # 默认模式：只在亚军贴近到 AMBIGUITY_MS 之内才标歧义（D415）。
+                ambiguous = True if self.conservative else (delta2 - delta <= AMBIGUITY_MS)
                 break
-        return Attribution(package, delta, source, ambiguous, runner_up)
+        # Top-K 候选：只存亚军不够取证，扩成候选列表（纯增量，见 DECISIONS D414）。
+        # 只留前 5 个，避免把容差窗口里的噪声全写进报告。
+        candidates = tuple(
+            {"package": p, "delta_ms": d, "source": s}
+            for d, p, s, _ in ranked[:5]
+        )
+        return Attribution(package, delta, source, ambiguous, runner_up, candidates)

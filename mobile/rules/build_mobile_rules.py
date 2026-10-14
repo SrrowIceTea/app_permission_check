@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -35,7 +36,8 @@ SCHEMA = HERE / "schema_mobile.sql"
 SEED = HERE / "seed"
 BUILD = HERE / "build"
 REG = HERE / "regulations"
-CALIB = HERE / "calibration"
+CALIB = Path(os.environ["VSCAN_MOBILE_CALIB"]) if os.environ.get("VSCAN_MOBILE_CALIB") \
+    else HERE / "calibration"
 DEFAULT_OUT = HERE / "rules_mobile.db"
 DEFAULT_WINDOW_MS = 30000  # 声明值；未由移动夹具校准前不是通用阈值
 
@@ -54,12 +56,54 @@ def jdump(obj) -> str:
     return json.dumps(obj, sort_keys=True, ensure_ascii=False)
 
 
-def load_calibration() -> dict[str, list[dict]]:
-    """设备实测权限 → {permission_name: [observation, ...]}。没有标定文件时返回空。"""
-    out: dict[str, list[dict]] = {}
-    for row in read_jsonl(CALIB / "permissions-device.jsonl"):
-        out.setdefault(row["permission_name"], []).append(row["observation"])
+def load_calibration(calib_dir: Path | None = None) -> dict[str, dict]:
+    """设备实测权限 → {permission_name: {"observations": [...], "protection_level_raw", ...}}。
+
+    没有标定文件时返回空。**注意**：`definition_status` 一律保持 pending——schema 规定
+    设备观测不得标 source_verified（javap 才是 source_verified 的唯一来源）；但实测到的
+    protectionLevel 要落进 protection_level_raw/value，否则 over_permission 规则
+    永远缺「权限保护级别」这一维（此处曾是个死路：INSERT 根本没写这两列）。
+
+    接受两种字段名：`protection_level` 与车载标定产物用的 `protection_level_raw`，
+    因此 `vehicle/rules/python/extract_device_calibration.py --prefix android.permission.`
+    的产物可直接喂进来。
+    """
+    calib_dir = calib_dir or CALIB
+    out: dict[str, dict] = {}
+    for row in read_jsonl(calib_dir / "permissions-device.jsonl"):
+        entry = out.setdefault(row["permission_name"], {"observations": [],
+                                                        "protection_level_raw": None,
+                                                        "protection_level_value": None})
+        if row.get("observation"):
+            entry["observations"].append(row["observation"])
+        # 兼容车载侧标定产物的字段名（protection_level_raw），使同一格式可直接复用。
+        raw = row.get("protection_level") or row.get("protection_level_raw")
+        if raw:
+            entry["protection_level_raw"] = raw
+            pv = _protection_level_value(raw)
+            if pv is not None:
+                entry["protection_level_value"] = pv
     return out
+
+
+# AOSP AndroidManifest.xml 里 protectionLevel 的位值（同一套值车载侧已用）
+PROTECTION_LEVEL_BITS = {"normal": 0, "dangerous": 1, "signature": 2, "privileged": 4,
+                         "system": 0x10, "development": 0x20, "appop": 0x40,
+                         "pre23": 0x80, "installer": 0x100, "verifier": 0x200,
+                         "preinstalled": 0x400, "setup": 0x800, "instant": 0x1000,
+                         "runtime_only": 0x2000}
+
+
+def _protection_level_value(raw: str) -> int | None:
+    """把 'dangerous|instant' 这类复合串按位或汇总成整数；认不出的返回 None（不编造）。"""
+    total = 0
+    known = False
+    for part in str(raw).split("|"):
+        part = part.strip().lower()
+        if part in PROTECTION_LEVEL_BITS:
+            total |= PROTECTION_LEVEL_BITS[part]
+            known = True
+    return total if known else None
 
 
 def insert_all(conn: sqlite3.Connection, *, version: str, window_ms: int) -> dict:
@@ -75,20 +119,30 @@ def insert_all(conn: sqlite3.Connection, *, version: str, window_ms: int) -> dic
 
     # --- permissions ---
     for p in permissions:
-        obs = calib.get(p["permission_name"], [])
+        cal = calib.get(p["permission_name"]) or {}
+        obs = cal.get("observations") or []
+        pl_raw = cal.get("protection_level_raw")
+        pl_val = cal.get("protection_level_value")
+        # protectionLevel 未断言时如实写 NULL 并在 notes 说明；断言了才填。
+        pl_note = ("protection_level 未断言：需设备实测（calibration/permissions-device.jsonl）"
+                   "或 aapt2 核对。" if not pl_raw else
+                   f"protection_level 来自设备实测：{pl_raw}。")
         conn.execute(
             "INSERT INTO permissions (permission_name, android_version, protection_level_raw,"
-            " permission_group, description, definition_status, source_refs_json,"
-            " device_calibration_json, notes) VALUES (?,?,?,?,?,?,?,?,?)",
-            (p["permission_name"], version, None, p["group"], p["why"],
-             "pending" if obs else "pending",
+            " protection_level_value, permission_group, description, definition_status,"
+            " source_refs_json, device_calibration_json, notes) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (p["permission_name"], version, pl_raw, pl_val, p["group"], p["why"],
+             "pending",
              jdump([{"kind": "project_seed", "path": "seed/permissions.json"}]),
              jdump(obs),
-             "protection_level 未断言：需 probe_permissions.py 设备实测或 aapt2 核对。"
-             + ("已含设备实测。" if obs else "")))
+             pl_note + ("（含设备观测记录。）" if obs else "")))
 
     # --- sensitive_data_types ---
     for dt in data_types:
+        cov = dt.get("coverage", "api")
+        cov_note = f" [coverage={cov}]"
+        if dt.get("coverage_reason"):
+            cov_note += f" {dt['coverage_reason']}"
         conn.execute(
             "INSERT INTO sensitive_data_types (data_type_key, android_version, name_zh, name_en,"
             " sensitivity, gbt_category, api_surface, permission_hint, definition_status,"
@@ -98,7 +152,8 @@ def insert_all(conn: sqlite3.Connection, *, version: str, window_ms: int) -> dic
              jdump([{"kind": "regulation", "doc": "gbt35273-2020", "clause": "3.2"},
                     {"kind": "regulation", "doc": "gbt35273-2020", "clause": "annex_b1"}]),
              "[]",
-             "类别分级依据 GB/T 35273-2020；本行是类别事实，具体 API 见 dangerous_apis。"))
+             "类别分级依据 GB/T 35273-2020；本行是类别事实，具体 API 见 dangerous_apis。"
+             + cov_note))
 
     # --- dangerous_apis（全部来自 android.jar 抽取，source_verified） ---
     for f in facts:
@@ -158,6 +213,30 @@ def insert_all(conn: sqlite3.Connection, *, version: str, window_ms: int) -> dic
         "rules_by_type": rule_gen.summarize_rule_counts(rules)}}
 
 
+def spec_data_types(spec: dict) -> set[str]:
+    """从 observation_spec 里取出它可能分派到的所有数据类别。
+
+    两种形态都要认（原先只认 list，导致 provider_arg 的 gps/network 映射被漏掉）：
+      * list  —— content_uri / string_key_arg：map: [{"data_type": "contacts", ...}]
+      * dict  —— provider_arg：                map: {"gps": "precise_location", ...}
+    """
+    out: set[str] = set()
+    if not spec:
+        return out
+    m = spec.get("map")
+    if isinstance(m, list):
+        for item in m:
+            if isinstance(item, dict) and item.get("data_type"):
+                out.add(item["data_type"])
+    elif isinstance(m, dict):
+        for v in m.values():
+            if isinstance(v, str) and v:
+                out.add(v)
+    if spec.get("data_type"):
+        out.add(spec["data_type"])
+    return out
+
+
 def validate(conn: sqlite3.Connection, version: str) -> list[str]:
     """返回问题列表；空列表 = 通过。"""
     problems: list[str] = []
@@ -203,20 +282,41 @@ def validate(conn: sqlite3.Connection, version: str) -> list[str]:
     apis_by_dt = {r[0] for r in conn.execute(
         "SELECT DISTINCT data_type_key FROM dangerous_apis WHERE android_version=?"
         " AND data_type_key IS NOT NULL", (version,))}
-    mapped_by_spec = set()
+    mapped_by_spec: set[str] = set()
     for r in conn.execute("SELECT observation_spec_json FROM dangerous_apis WHERE"
                           " android_version=?", (version,)):
-        spec = json.loads(r[0]) if r[0] else {}
-        for m in (spec.get("map") or []):
-            if isinstance(m, dict) and m.get("data_type"):
-                mapped_by_spec.add(m["data_type"])
+        mapped_by_spec |= spec_data_types(json.loads(r[0]) if r[0] else {})
     orphan = sorted((apis_by_dt | mapped_by_spec) - covered)
     if orphan:
         problems.append(f"数据类别有 API 可观测但无规则: {orphan}")
+
+    # --- 覆盖守护：每个数据类别要么有 API 抓手，要么显式声明为设计缺口 ---
+    # 过去这一步靠人工核对，结果就是 advertising_id / notification_content 这类
+    # 「有规则、无抓手」的空转规则躺在库里没人发现。改成构建期断言后，
+    # 新增数据类别时若不补 API 也不声明缺口，构建直接失败。
+    seed_types = read_json(SEED / "sensitive_data_types.json")["data_types"]
+    reaches = apis_by_dt | mapped_by_spec
+    for dt in seed_types:
+        key = dt["data_type_key"]
+        cov = dt.get("coverage", "api")
+        if cov not in ("api", "uncovered_by_design"):
+            problems.append(f"数据类别 {key} 的 coverage 声明非法: {cov!r}"
+                            "（只允许 'api' / 'uncovered_by_design'）")
+            continue
+        if cov == "api" and key not in reaches:
+            problems.append(f"数据类别 {key} 声明 coverage=api 但没有任何 API 抓手"
+                            "（补 seed/api_targets.json，或改声明为 uncovered_by_design）")
+        if cov == "uncovered_by_design":
+            if not (dt.get("coverage_reason") or "").strip():
+                problems.append(f"数据类别 {key} 声明为设计缺口但没写 coverage_reason")
+            if key in reaches:
+                problems.append(f"数据类别 {key} 已声明为设计缺口，却查到了 API 抓手"
+                                "（声明过期，应改回 coverage=api）")
     return problems
 
 
-def summarize(out: Path, info: dict, version: str) -> dict:
+def summarize(out: Path, info: dict, version: str, pl_stats: dict | None = None) -> dict:
+    pl_stats = pl_stats or {}
     return {
         "status": "mobile_privacy_library",
         "android_version": version,
@@ -224,8 +324,15 @@ def summarize(out: Path, info: dict, version: str) -> dict:
         "window_ms": DEFAULT_WINDOW_MS,
         "window_calibrated": False,
         "window_note": "30000ms 为声明值，尚未由移动夹具校准；不是法律阈值，也不是通用参数。",
+        "permissions_protection_level": {
+            "asserted": pl_stats.get("asserted", 0),
+            "total": info["counts"]["permissions"],
+            "note": "未断言保护级别的权限，其 over_permission 规则缺少「保护级别」这一维；"
+                    "本项必须随设备实测更新，不得当作已完成。",
+        },
         "api_source": "android.jar (SDK platform 36) via javap -s",
-        "permission_source": "seed（protection_level 未断言，待设备实测）",
+        "permission_source": ("seed + 设备实测" if pl_stats.get("asserted")
+                              else "seed（protection_level 未断言，待设备实测）"),
         "regulation_docs": sorted(p.name for p in REG.glob("*.json")),
         "database_sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
     }
@@ -270,6 +377,9 @@ def main() -> int:
             for p in problems:
                 print(f"[fatal] {p}", file=sys.stderr)
             raise SystemExit(1)
+        pl_stats = {"asserted": conn.execute(
+            "SELECT COUNT(*) FROM permissions WHERE android_version=?"
+            " AND protection_level_raw IS NOT NULL", (args.version,)).fetchone()[0]}
     except BaseException:
         # 任何失败（含未预期异常）都不得留下半成品 DB ——
         # 半成品和成功产物在文件系统上长得一模一样，是最难发现的静默失败。
@@ -279,8 +389,14 @@ def main() -> int:
     finally:
         conn.close()
 
-    summary = summarize(out, info, args.version)
-    (HERE / "rules_mobile.summary.json").write_text(
+    summary = summarize(out, info, args.version, pl_stats)
+    # 摘要必须跟它描述的那个 DB 在一起。写死 HERE 时，测试用 --out <临时目录> 构建的
+    # 结果会覆盖正式摘要 —— 于是正式摘要变成测试夹具的数字（例如 asserted=2），
+    # 而真实库是 0/N，哈希还指向一个已不存在的临时 DB。这条静默污染会直接废掉
+    # 「未断言状态每次可见」的承诺，且从文件上看不出任何异常。
+    summary_path = (HERE / "rules_mobile.summary.json" if out.resolve() == DEFAULT_OUT.resolve()
+                    else out.with_suffix(".summary.json"))
+    summary_path.write_text(
         json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(json.dumps(summary, indent=2, ensure_ascii=False))
     return 0

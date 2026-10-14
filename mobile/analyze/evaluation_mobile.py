@@ -30,7 +30,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "traffic"))
+sys.path.insert(0, str(HERE.parent.parent))
 import tagging_mobile  # noqa: E402
+from core.collector.attribution import ATTRIB_LOOSE_MS, is_loose  # noqa: E402
 
 CONSENT_SIGNALS = ("PERM_RESULT", "POLICY_VIEW")
 
@@ -58,6 +60,15 @@ def _consent_for(data_type: str, consent: list[dict], hints: list[str]) -> list[
         elif ev == "POLICY_VIEW":
             out.append(c)
     return out
+
+
+def _flow_unusable(f: dict) -> bool:
+    """这条流能不能用于给被审计包下结论。
+
+    排除两类：归因歧义（时间上分不清谁发的），和归因未解析（unresolved，可能是别的
+    App 的流落进来、尚未对上）。历史/测试流没有 attribution 字段时不算 unresolved。
+    """
+    return bool(f.get("attribution_ambiguous")) or f.get("attribution") in ("unresolved", "ambiguous")
 
 
 def _labels_for_flow(flow: dict) -> list[dict]:
@@ -165,7 +176,7 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
                 continue
             for f in (ctx.get("flows") or []):
                 ft = _ts(f)
-                if ft is None or f.get("attribution_ambiguous"):
+                if ft is None or _flow_unusable(f):
                     continue
                 if not (0 <= ft - rt <= window):
                     continue
@@ -181,21 +192,38 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
                     "matched_token": token,
                     "flow_host": f.get("host"), "flow_path": f.get("path"),
                     "flow_method": f.get("method"), "client_tls": f.get("intercepted_tls"),
+                    # 归因置信信息（D414）：让"这条配对建立在多紧的归因上"可见。
+                    "attribution_delta_ms": f.get("attribution_delta_ms"),
+                    "attribution_runner_up": f.get("attribution_runner_up"),
+                    "attribution_candidates": f.get("attribution_candidates"),
+                    "attribution_loose": is_loose(f),
                 })
         if not pairs:
             return None
         strong = any(p["content_match_basis"] == "value_hash_in_payload" for p in pairs)
+        extra = {"package": ctx["package"], "pair_count": len(pairs),
+                 "pairs": pairs, "window_ms": window,
+                 "window_declared_ms": rule.get("window_ms"),
+                 "window_overridden": window != rule.get("window_ms"),
+                 "content_match": True,
+                 "content_match_basis": ("value_hash_in_payload" if strong
+                                         else "shape_tag")}
+        if any(p.get("attribution_loose") for p in pairs):
+            extra["conclusion_level"] = "candidate"
+            extra["declared_conclusion_level"] = rule["conclusion_level"]
+            extra["conclusion_capped_by"] = "attribution_loose"
+            note = (f"值级匹配：读取到的值的哈希出现在报文中（但至少一条流的时间归因距离 ≥ "
+                    f"{ATTRIB_LOOSE_MS}ms，归因偏松，结论封顶 candidate）。" if strong else
+                    f"仅形态级匹配（报文出现同类形状），且至少一条流的时间归因距离 ≥ "
+                    f"{ATTRIB_LOOSE_MS}ms，结论封顶 candidate。")
+            return _finding(rule, evidence_kind="read_then_egress",
+                            event_ids=sorted({p["read_event_id"] for p in pairs}
+                                             | {p["flow_event_id"] for p in pairs}),
+                            extra=extra, data_type_zh=ctx["dt_zh"].get(dt), note=note)
         return _finding(rule, evidence_kind="read_then_egress",
                         event_ids=sorted({p["read_event_id"] for p in pairs}
                                          | {p["flow_event_id"] for p in pairs}),
-                        extra={"package": ctx["package"], "pair_count": len(pairs),
-                               "pairs": pairs, "window_ms": window,
-                               "window_declared_ms": rule.get("window_ms"),
-                               "window_overridden": window != rule.get("window_ms"),
-                               "content_match": True,
-                               "content_match_basis": ("value_hash_in_payload" if strong
-                                                       else "shape_tag")},
-                        data_type_zh=ctx["dt_zh"].get(dt),
+                        extra=extra, data_type_zh=ctx["dt_zh"].get(dt),
                         note=("值级匹配：读取到的值的哈希出现在报文中。"
                               if strong else
                               "仅形态级匹配（报文出现同类形状），**不等于**该值被传输。"))
@@ -224,7 +252,7 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
     if pred == "sensitive_data_in_plaintext_flow":
         out = []
         for f in (ctx.get("flows") or []):
-            if f.get("attribution_ambiguous"):
+            if _flow_unusable(f):
                 continue
             plaintext = (f.get("scheme") == "http") or (f.get("intercepted_tls") is False)
             if not plaintext:
@@ -247,7 +275,7 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
 
     if pred == "sensitive_data_to_third_party_domain":
         out = [f for f in (ctx.get("flows") or [])
-               if not f.get("attribution_ambiguous") and dt in _flow_types(f)]
+               if not _flow_unusable(f) and dt in _flow_types(f)]
         if not out:
             return None
         domains = sorted({f.get("host") for f in out if f.get("host")})

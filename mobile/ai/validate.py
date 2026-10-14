@@ -198,6 +198,22 @@ def validate_stage3(out: dict, *, bundle: dict) -> dict:
         for p, ref in _collect_refs(rec, f"recommendations[{i}]"):
             if ref not in refs:
                 problems.append(f"{p} 引用了不存在的证据: {ref}")
+
+    # 必要段落整体缺失：模型没按 schema 输出时，"无条目可校验"会静默通过。
+    # 2026-10-13 实测（同一模型两轮，两种偏法）：camera 轮的 stage3 完全没有 items /
+    # recommendations / uncertainties，却因校验器只查"已存在的条目"而零警告通过；
+    # keepass 轮则把工具结论的字段形态搬进 items、被上面的 problems 挡下。
+    # 定为警告而非 problem：输出已落盘、报告层原样展示，不阻断流水线；若后续频发再升级。
+    for key, label in (("items", "items（研判条目）"),
+                       ("recommendations", "recommendations（整改建议）"),
+                       ("uncertainties", "uncertainties（不确定性清单）")):
+        v = out.get(key)
+        if not (isinstance(v, list) and v):
+            warnings.append(f"{label} 缺失或为空：模型未按 schema 输出")
+    if not out.get("overall_risk_reason"):
+        warnings.append("overall_risk_reason 缺失：总评缺少依据说明")
+    if not out.get("coverage_note"):
+        warnings.append("coverage_note 缺失：未给证据覆盖面小结")
     return {"ok": not problems, "problems": problems, "warnings": warnings}
 
 

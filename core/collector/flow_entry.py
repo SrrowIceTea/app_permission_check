@@ -42,9 +42,15 @@ def _common(flow, found, ts_ms: int, session: str) -> dict:
         "attribution_delta_ms": found.delta_ms,
         "attribution_ambiguous": found.ambiguous,
         "attribution_runner_up": found.runner_up,
+        "attribution_candidates": list(found.candidates),
         "scheme": req.scheme,
         "method": req.method,
         "host": req.pretty_host,
+        # 目标地址（供目标校验 / 取证）。`host` 保留 pretty_host 不变（对外证据契约），
+        # 这里另存**原始** host 与 port：与 hook 侧的 getHostString()/getAddress() 口径一致。
+        # 用 getattr：测试/假 flow 的最小报文可能只有 pretty_host 而没有 host/port。
+        "target_host": getattr(req, "host", None),
+        "target_port": getattr(req, "port", None),
         "server_ip": (flow.server_conn.peername or (None,))[0],
         "path": req.path,
         "intercepted_tls": client_tls(flow),

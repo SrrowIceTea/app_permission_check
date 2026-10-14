@@ -2,26 +2,31 @@
   "status": "mobile_privacy_library",
   "android_version": "36",
   "counts": {
-    "permissions": 37,
-    "data_types": 24,
-    "apis": 47,
+    "permissions": 40,
+    "data_types": 28,
+    "apis": 58,
     "app_categories": 39,
     "policy_requirements": 16,
-    "rules": 193,
+    "rules": 223,
     "rules_by_type": {
-      "data_egress": 23,
-      "no_consent_read": 22,
-      "over_collection": 24,
-      "over_permission": 37,
-      "plaintext_transmission": 17,
-      "policy_mismatch": 23,
-      "sensitive_read": 24,
-      "third_party_share": 23
+      "data_egress": 27,
+      "no_consent_read": 26,
+      "over_collection": 28,
+      "over_permission": 40,
+      "plaintext_transmission": 20,
+      "policy_mismatch": 27,
+      "sensitive_read": 28,
+      "third_party_share": 27
     }
   },
   "window_ms": 30000,
   "window_calibrated": false,
   "window_note": "30000ms 为声明值，尚未由移动夹具校准；不是法律阈值，也不是通用参数。",
+  "permissions_protection_level": {
+    "asserted": 0,
+    "total": 40,
+    "note": "未断言保护级别的权限，其 over_permission 规则缺少「保护级别」这一维；本项必须随设备实测更新，不得当作已完成。"
+  },
   "api_source": "android.jar (SDK platform 36) via javap -s",
   "permission_source": "seed（protection_level 未断言，待设备实测）",
   "regulation_docs": [
@@ -30,5 +35,5 @@
     "pipl_2021.json",
     "yrd_method_2019.json"
   ],
-  "database_sha256": "0a6fb107d5d5a89dc852e2279be3d485d5fd633aaac6676b0197fc62f4113e3e"
+  "database_sha256": "b16cfb42ea84b5f2a1805e53dc18f96ecd36296b139473bba9c2db6860a31cb0"
 }

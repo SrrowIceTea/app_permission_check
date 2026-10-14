@@ -1,16 +1,18 @@
 // 由 gen_targets.py 生成 —— 请勿手改。
-// 规则库 sha256: 62f3bfd0f35dfe4c40d4cd2a096c8dbf9d6270bf406a0e4941437c7069eb8ba5
+// 规则库 sha256: b16cfb42ea84b5f2a1805e53dc18f96ecd36296b139473bba9c2db6860a31cb0
 // android_version: 36
 
-export const META = {"android_version": "36", "db": "rules_mobile.db", "rules_sha256": "62f3bfd0f35dfe4c40d4cd2a096c8dbf9d6270bf406a0e4941437c7069eb8ba5"};
+export const META = {"android_version": "36", "db": "rules_mobile.db", "rules_sha256": "b16cfb42ea84b5f2a1805e53dc18f96ecd36296b139473bba9c2db6860a31cb0"};
 
 export const DATA_TYPES = {
   "accounts": {"name_zh": "账户列表", "sensitivity": "personal"},
   "advertising_id": {"name_zh": "广告标识符（OAID/GAID）", "sensitivity": "personal"},
   "android_id": {"name_zh": "Android ID", "sensitivity": "sensitive_personal"},
+  "biometric_data": {"name_zh": "生物识别（指纹/人脸认证）", "sensitivity": "sensitive_personal"},
   "bluetooth_info": {"name_zh": "蓝牙设备信息（MAC/名称/配对状态）", "sensitivity": "sensitive_personal"},
   "calendar": {"name_zh": "日历", "sensitivity": "personal"},
   "call_log": {"name_zh": "通话记录", "sensitivity": "sensitive_personal"},
+  "camera_capture": {"name_zh": "摄像头采集（拍照/录像）", "sensitivity": "sensitive_personal"},
   "clipboard": {"name_zh": "剪贴板内容", "sensitivity": "sensitive_personal"},
   "coarse_location": {"name_zh": "粗略定位", "sensitivity": "personal"},
   "contacts": {"name_zh": "通讯录", "sensitivity": "sensitive_personal"},
@@ -21,9 +23,11 @@ export const DATA_TYPES = {
   "ip_address": {"name_zh": "设备 IP 地址", "sensitivity": "personal"},
   "mac_address": {"name_zh": "设备 MAC 地址", "sensitivity": "sensitive_personal"},
   "media_images": {"name_zh": "相册图片/媒体", "sensitivity": "sensitive_personal"},
+  "microphone_capture": {"name_zh": "麦克风录音", "sensitivity": "sensitive_personal"},
   "notification_content": {"name_zh": "通知内容", "sensitivity": "sensitive_personal"},
   "phone_number": {"name_zh": "本机电话号码", "sensitivity": "sensitive_personal"},
   "precise_location": {"name_zh": "精确定位（行踪轨迹）", "sensitivity": "sensitive_personal"},
+  "screen_capture": {"name_zh": "屏幕内容采集（录屏/截屏）", "sensitivity": "sensitive_personal"},
   "sensor_data": {"name_zh": "传感器数据", "sensitivity": "personal"},
   "sim_info": {"name_zh": "SIM 卡信息（运营商/国家/序列号）", "sensitivity": "sensitive_personal"},
   "sms": {"name_zh": "短信", "sensitivity": "sensitive_personal"},
@@ -47,12 +51,19 @@ export const WATCH = [
   {"cls": "android.content.pm.PackageManager", "dataType": "installed_apps", "desc": "(Landroid/content/pm/PackageManager$ApplicationInfoFlags;)Ljava/util/List;", "method": "getInstalledApplications", "role": "query", "spec": {"capture": "count_only", "kind": "direct"}, "types": ["android.content.pm.PackageManager$ApplicationInfoFlags"]},
   {"cls": "android.content.pm.PackageManager", "dataType": "installed_apps", "desc": "(I)Ljava/util/List;", "method": "getInstalledPackages", "role": "query", "spec": {"capture": "count_only", "kind": "direct"}, "types": ["int"]},
   {"cls": "android.content.pm.PackageManager", "dataType": "installed_apps", "desc": "(Landroid/content/pm/PackageManager$PackageInfoFlags;)Ljava/util/List;", "method": "getInstalledPackages", "role": "query", "spec": {"capture": "count_only", "kind": "direct"}, "types": ["android.content.pm.PackageManager$PackageInfoFlags"]},
+  {"cls": "android.hardware.Camera", "dataType": "camera_capture", "desc": "()Landroid/hardware/Camera;", "method": "open", "role": "read", "spec": {"capture": "args_only", "kind": "direct"}, "types": []},
+  {"cls": "android.hardware.Camera", "dataType": "camera_capture", "desc": "(I)Landroid/hardware/Camera;", "method": "open", "role": "read", "spec": {"capture": "args_only", "kind": "direct"}, "types": ["int"]},
   {"cls": "android.hardware.SensorManager", "dataType": "sensor_data", "desc": "(Landroid/hardware/SensorEventListener;Landroid/hardware/Sensor;I)Z", "method": "registerListener", "role": "observe", "spec": {"capture": "args_only", "kind": "direct"}, "types": ["android.hardware.SensorEventListener", "android.hardware.Sensor", "int"]},
   {"cls": "android.hardware.SensorManager", "dataType": "sensor_data", "desc": "(Landroid/hardware/SensorEventListener;Landroid/hardware/Sensor;II)Z", "method": "registerListener", "role": "observe", "spec": {"capture": "args_only", "kind": "direct"}, "types": ["android.hardware.SensorEventListener", "android.hardware.Sensor", "int", "int"]},
   {"cls": "android.hardware.SensorManager", "dataType": "sensor_data", "desc": "(Landroid/hardware/SensorEventListener;Landroid/hardware/Sensor;IILandroid/os/Handler;)Z", "method": "registerListener", "role": "observe", "spec": {"capture": "args_only", "kind": "direct"}, "types": ["android.hardware.SensorEventListener", "android.hardware.Sensor", "int", "int", "android.os.Handler"]},
   {"cls": "android.hardware.SensorManager", "dataType": "sensor_data", "desc": "(Landroid/hardware/SensorEventListener;Landroid/hardware/Sensor;ILandroid/os/Handler;)Z", "method": "registerListener", "role": "observe", "spec": {"capture": "args_only", "kind": "direct"}, "types": ["android.hardware.SensorEventListener", "android.hardware.Sensor", "int", "android.os.Handler"]},
   {"cls": "android.hardware.SensorManager", "dataType": "sensor_data", "desc": "(Landroid/hardware/SensorListener;I)Z", "method": "registerListener", "role": "observe", "spec": {"capture": "args_only", "kind": "direct"}, "types": ["android.hardware.SensorListener", "int"]},
   {"cls": "android.hardware.SensorManager", "dataType": "sensor_data", "desc": "(Landroid/hardware/SensorListener;II)Z", "method": "registerListener", "role": "observe", "spec": {"capture": "args_only", "kind": "direct"}, "types": ["android.hardware.SensorListener", "int", "int"]},
+  {"cls": "android.hardware.biometrics.BiometricPrompt", "dataType": "biometric_data", "desc": "(Landroid/hardware/biometrics/BiometricPrompt$CryptoObject;Landroid/os/CancellationSignal;Ljava/util/concurrent/Executor;Landroid/hardware/biometrics/BiometricPrompt$AuthenticationCallback;)V", "method": "authenticate", "role": "observe", "spec": {"capture": "args_only", "kind": "direct"}, "types": ["android.hardware.biometrics.BiometricPrompt$CryptoObject", "android.os.CancellationSignal", "java.util.concurrent.Executor", "android.hardware.biometrics.BiometricPrompt$AuthenticationCallback"]},
+  {"cls": "android.hardware.biometrics.BiometricPrompt", "dataType": "biometric_data", "desc": "(Landroid/os/CancellationSignal;Ljava/util/concurrent/Executor;Landroid/hardware/biometrics/BiometricPrompt$AuthenticationCallback;)V", "method": "authenticate", "role": "observe", "spec": {"capture": "args_only", "kind": "direct"}, "types": ["android.os.CancellationSignal", "java.util.concurrent.Executor", "android.hardware.biometrics.BiometricPrompt$AuthenticationCallback"]},
+  {"cls": "android.hardware.camera2.CameraManager", "dataType": "camera_capture", "desc": "(Ljava/lang/String;Landroid/hardware/camera2/CameraDevice$StateCallback;Landroid/os/Handler;)V", "method": "openCamera", "role": "read", "spec": {"capture": "args_only", "kind": "direct"}, "types": ["java.lang.String", "android.hardware.camera2.CameraDevice$StateCallback", "android.os.Handler"]},
+  {"cls": "android.hardware.camera2.CameraManager", "dataType": "camera_capture", "desc": "(Ljava/lang/String;Ljava/util/concurrent/Executor;Landroid/hardware/camera2/CameraDevice$StateCallback;)V", "method": "openCamera", "role": "read", "spec": {"capture": "args_only", "kind": "direct"}, "types": ["java.lang.String", "java.util.concurrent.Executor", "android.hardware.camera2.CameraDevice$StateCallback"]},
+  {"cls": "android.hardware.fingerprint.FingerprintManager", "dataType": "biometric_data", "desc": "(Landroid/hardware/fingerprint/FingerprintManager$CryptoObject;Landroid/os/CancellationSignal;ILandroid/hardware/fingerprint/FingerprintManager$AuthenticationCallback;Landroid/os/Handler;)V", "method": "authenticate", "role": "observe", "spec": {"capture": "args_only", "kind": "direct"}, "types": ["android.hardware.fingerprint.FingerprintManager$CryptoObject", "android.os.CancellationSignal", "int", "android.hardware.fingerprint.FingerprintManager$AuthenticationCallback", "android.os.Handler"]},
   {"cls": "android.location.LocationManager", "dataType": null, "desc": "(Ljava/lang/String;)Landroid/location/Location;", "method": "getLastKnownLocation", "role": "read", "spec": {"arg_index": 0, "kind": "provider_arg", "map": {"fused": "coarse_location", "gps": "precise_location", "network": "coarse_location", "passive": "coarse_location"}, "unmapped": "ignore"}, "types": ["java.lang.String"]},
   {"cls": "android.location.LocationManager", "dataType": null, "desc": "(JFLandroid/location/Criteria;Landroid/app/PendingIntent;)V", "method": "requestLocationUpdates", "role": "observe", "spec": {"arg_index": 0, "kind": "provider_arg", "map": {"fused": "coarse_location", "gps": "precise_location", "network": "coarse_location", "passive": "coarse_location"}, "unmapped": "ignore"}, "types": ["long", "float", "android.location.Criteria", "android.app.PendingIntent"]},
   {"cls": "android.location.LocationManager", "dataType": null, "desc": "(JFLandroid/location/Criteria;Landroid/location/LocationListener;Landroid/os/Looper;)V", "method": "requestLocationUpdates", "role": "observe", "spec": {"arg_index": 0, "kind": "provider_arg", "map": {"fused": "coarse_location", "gps": "precise_location", "network": "coarse_location", "passive": "coarse_location"}, "unmapped": "ignore"}, "types": ["long", "float", "android.location.Criteria", "android.location.LocationListener", "android.os.Looper"]},
@@ -63,6 +74,9 @@ export const WATCH = [
   {"cls": "android.location.LocationManager", "dataType": null, "desc": "(Ljava/lang/String;JFLjava/util/concurrent/Executor;Landroid/location/LocationListener;)V", "method": "requestLocationUpdates", "role": "observe", "spec": {"arg_index": 0, "kind": "provider_arg", "map": {"fused": "coarse_location", "gps": "precise_location", "network": "coarse_location", "passive": "coarse_location"}, "unmapped": "ignore"}, "types": ["java.lang.String", "long", "float", "java.util.concurrent.Executor", "android.location.LocationListener"]},
   {"cls": "android.location.LocationManager", "dataType": null, "desc": "(Ljava/lang/String;Landroid/location/LocationRequest;Landroid/app/PendingIntent;)V", "method": "requestLocationUpdates", "role": "observe", "spec": {"arg_index": 0, "kind": "provider_arg", "map": {"fused": "coarse_location", "gps": "precise_location", "network": "coarse_location", "passive": "coarse_location"}, "unmapped": "ignore"}, "types": ["java.lang.String", "android.location.LocationRequest", "android.app.PendingIntent"]},
   {"cls": "android.location.LocationManager", "dataType": null, "desc": "(Ljava/lang/String;Landroid/location/LocationRequest;Ljava/util/concurrent/Executor;Landroid/location/LocationListener;)V", "method": "requestLocationUpdates", "role": "observe", "spec": {"arg_index": 0, "kind": "provider_arg", "map": {"fused": "coarse_location", "gps": "precise_location", "network": "coarse_location", "passive": "coarse_location"}, "unmapped": "ignore"}, "types": ["java.lang.String", "android.location.LocationRequest", "java.util.concurrent.Executor", "android.location.LocationListener"]},
+  {"cls": "android.media.AudioRecord", "dataType": "microphone_capture", "desc": "()V", "method": "startRecording", "role": "read", "spec": {"capture": "args_only", "kind": "direct"}, "types": []},
+  {"cls": "android.media.AudioRecord", "dataType": "microphone_capture", "desc": "(Landroid/media/MediaSyncEvent;)V", "method": "startRecording", "role": "read", "spec": {"capture": "args_only", "kind": "direct"}, "types": ["android.media.MediaSyncEvent"]},
+  {"cls": "android.media.projection.MediaProjectionManager", "dataType": "screen_capture", "desc": "(ILandroid/content/Intent;)Landroid/media/projection/MediaProjection;", "method": "getMediaProjection", "role": "read", "spec": {"capture": "args_only", "kind": "direct"}, "types": ["int", "android.content.Intent"]},
   {"cls": "android.net.wifi.WifiInfo", "dataType": "wifi_ssid_bssid", "desc": "()Ljava/lang/String;", "method": "getBSSID", "role": "read", "spec": {"capture": "return_or_exception", "kind": "direct"}, "types": []},
   {"cls": "android.net.wifi.WifiInfo", "dataType": "mac_address", "desc": "()Ljava/lang/String;", "method": "getMacAddress", "role": "read", "spec": {"capture": "return_or_exception", "kind": "direct"}, "types": []},
   {"cls": "android.net.wifi.WifiInfo", "dataType": "wifi_ssid_bssid", "desc": "()Ljava/lang/String;", "method": "getSSID", "role": "read", "spec": {"capture": "return_or_exception", "kind": "direct"}, "types": []},
@@ -79,6 +93,7 @@ export const WATCH = [
   {"cls": "android.telephony.TelephonyManager", "dataType": "sim_info", "desc": "()Ljava/lang/String;", "method": "getSimSerialNumber", "role": "read", "spec": {"capture": "return_or_exception", "kind": "direct"}, "types": []},
   {"cls": "android.telephony.TelephonyManager", "dataType": "imsi", "desc": "()Ljava/lang/String;", "method": "getSubscriberId", "role": "read", "spec": {"capture": "return_or_exception", "kind": "direct"}, "types": []},
   {"cls": "java.net.NetworkInterface", "dataType": "mac_address", "desc": "()[B", "method": "getHardwareAddress", "role": "read", "spec": {"capture": "return_or_exception", "kind": "direct"}, "types": []},
+  {"cls": "java.net.NetworkInterface", "dataType": "ip_address", "desc": "()Ljava/util/Enumeration;", "method": "getInetAddresses", "role": "read", "spec": {"capture": "args_only", "kind": "direct"}, "types": []},
 ];
 
 export const CONSENT_WATCH = [

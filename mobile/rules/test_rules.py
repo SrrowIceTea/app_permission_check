@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -28,10 +29,12 @@ PY = sys.executable
 REG = HERE / "regulations"
 
 
-def build(out: Path) -> subprocess.CompletedProcess:
+def build(out: Path, env_extra: dict | None = None) -> subprocess.CompletedProcess:
+    env = dict(os.environ)
+    env.update(env_extra or {})
     return subprocess.run([PY, str(HERE / "build_mobile_rules.py"), "--out", str(out)],
                           capture_output=True, text=True, encoding="utf-8", errors="replace",
-                          cwd=HERE, timeout=300)
+                          cwd=HERE, timeout=300, env=env)
 
 
 class RuleLibraryTest(unittest.TestCase):
@@ -108,6 +111,25 @@ class RuleLibraryTest(unittest.TestCase):
         self.assertEqual(total, 39, "39 类必要个人信息不齐")
         self.assertEqual(free, 13, "「无须个人信息」的类目数应为 13")
 
+    def _reachable_data_types(self) -> set[str]:
+        """dangerous_apis 能触及的全部数据类别（含 1:1 直连与 spec 分派）。
+
+        provider_arg 的 map 是 dict（provider → 类别），content_uri / string_key_arg 的
+        map 是 list；两种都要认——只认 list 会把 precise/coarse_location 漏掉。
+        """
+        out: set[str] = set()
+        for r in self.conn.execute("SELECT data_type_key, observation_spec_json FROM dangerous_apis"):
+            if r["data_type_key"]:
+                out.add(r["data_type_key"])
+            spec = json.loads(r["observation_spec_json"]) if r["observation_spec_json"] else {}
+            m = spec.get("map")
+            if isinstance(m, list):
+                out |= {i["data_type"] for i in m
+                        if isinstance(i, dict) and i.get("data_type")}
+            elif isinstance(m, dict):
+                out |= {v for v in m.values() if isinstance(v, str) and v}
+        return out
+
     def test_no_orphan_observable_data_types(self):
         """有 API 可观测的数据类别，必须有规则；否则观测到了却判不了。"""
         covered = set()
@@ -115,14 +137,29 @@ class RuleLibraryTest(unittest.TestCase):
             dt = json.loads(r["condition_json"]).get("data_type")
             if dt:
                 covered.add(dt)
-        observable = {r[0] for r in self.conn.execute(
-            "SELECT DISTINCT data_type_key FROM dangerous_apis WHERE data_type_key IS NOT NULL")}
-        for r in self.conn.execute("SELECT observation_spec_json FROM dangerous_apis"):
-            spec = json.loads(r[0]) if r[0] else {}
-            for m in (spec.get("map") or []):
-                if isinstance(m, dict) and m.get("data_type"):
-                    observable.add(m["data_type"])
-        self.assertEqual(sorted(observable - covered), [], "存在可观测但无规则的数据类别")
+        self.assertEqual(sorted(self._reachable_data_types() - covered), [],
+                         "存在可观测但无规则的数据类别")
+
+    def test_every_data_type_has_api_or_declared_gap(self):
+        """反向守护：每个数据类别要么有 API 抓手，要么显式声明为设计缺口。
+
+        这正是过去靠人工核对、结果漏掉 3 类（advertising_id / ip_address /
+        notification_content）的那一步——「有规则、无抓手」的空转规则必须在
+        构建期就被拦住，而不是等答辩时被问出来。
+        """
+        seed = json.loads((HERE / "seed" / "sensitive_data_types.json").read_text(encoding="utf-8"))
+        reaches = self._reachable_data_types()
+        for dt in seed["data_types"]:
+            key = dt["data_type_key"]
+            cov = dt.get("coverage", "api")
+            self.assertIn(cov, ("api", "uncovered_by_design"), f"{key} 的 coverage 非法")
+            if cov == "api":
+                self.assertIn(key, reaches, f"{key} 声称有 API 抓手，实际没有")
+            else:
+                self.assertTrue((dt.get("coverage_reason") or "").strip(),
+                                f"{key} 声明为设计缺口却没写理由")
+                self.assertNotIn(key, reaches,
+                                 f"{key} 已声明为设计缺口，却查到了 API 抓手（声明过期）")
 
     def test_no_partial_db_left_on_failure(self):
         """构建失败时不得留下半成品 DB —— 半成品与成功产物难以区分。"""
@@ -137,6 +174,51 @@ class RuleLibraryTest(unittest.TestCase):
                               errors="replace", cwd=HERE, timeout=120)
         self.assertNotEqual(proc.returncode, 0, "已存在产物时必须拒绝覆盖")
         self.assertEqual(out.read_bytes(), b"stale", "拒绝构建时不得改动既有文件")
+
+    def test_protection_level_bits(self):
+        """protectionLevel 复合串按位或；认不出的级别词必须返回 None（不编造）。"""
+        sys.path.insert(0, str(HERE))
+        import build_mobile_rules as bmr
+        self.assertEqual(bmr._protection_level_value("dangerous"), 1)
+        self.assertEqual(bmr._protection_level_value("signature|privileged"), 2 | 4)
+        self.assertEqual(bmr._protection_level_value("normal"), 0)
+        self.assertIsNone(bmr._protection_level_value("完全认不出的级别"))
+
+    def test_device_calibration_reaches_protection_level(self):
+        """回归一条曾经的**死路**：permissions 的 INSERT 没写 protection_level_raw，
+        于是设备实测文件喂进来也永远落不到库里，over_permission 规则永远缺保护级别这一维。
+
+        本用例把标定文件喂给构建器，断言值确实到了 protection_level_raw/value，
+        且 definition_status 仍是 pending（schema 规定设备观测不得标 source_verified）。
+        """
+        calib = Path(self.tmp.name) / "calib"
+        calib.mkdir(exist_ok=True)
+        (calib / "permissions-device.jsonl").write_text(
+            json.dumps({"permission_name": "android.permission.CAMERA",
+                        "protection_level_raw": "dangerous"}) + "\n"
+            + json.dumps({"permission_name": "android.permission.USE_BIOMETRIC",
+                          "protection_level_raw": "signature|privileged"}) + "\n",
+            encoding="utf-8")
+        out = Path(self.tmp.name) / "calibrated.db"
+        proc = build(out, {"VSCAN_MOBILE_CALIB": str(calib)})
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+        conn = sqlite3.connect(out)
+        row = conn.execute(
+            "SELECT protection_level_raw, protection_level_value, definition_status"
+            " FROM permissions WHERE permission_name=?",
+            ("android.permission.CAMERA",)).fetchone()
+        self.assertEqual(row[0], "dangerous")
+        self.assertEqual(row[1], 1)
+        self.assertEqual(row[2], "pending", "设备观测不得标 source_verified")
+        self.assertEqual(conn.execute(
+            "SELECT protection_level_raw FROM permissions WHERE permission_name=?",
+            ("android.permission.USE_BIOMETRIC",)).fetchone()[0], "signature|privileged")
+        self.assertIsNone(conn.execute(
+            "SELECT protection_level_raw FROM permissions WHERE permission_name=?",
+            ("android.permission.INTERNET",)).fetchone()[0],
+            "没有标定的权限必须留 NULL，不得猜")
+        conn.close()
 
     def test_jvm_descriptor_to_frida_types(self):
         """数组类型必须转成 Frida 认的 JVM 形态。

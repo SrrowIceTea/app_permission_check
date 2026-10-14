@@ -47,6 +47,10 @@
 }
 ```
 
+**字段名严格按上面的 schema，不要照抄输入里的字段形态**：`items[]` 的结论字段是
+`conclusion`（取值四选一），不是 `conclusion_level`——后者是工具结论（TOOL_FINDINGS）
+里的字段名。把输入的字段形态搬进 `items` 会让整份输出校验不过，报告只能原样退回问题清单。
+
 ## 撰写口径
 
 - **`category` 取值**：证据包 `rules.regulations` 中列出的条款号（如 `C3.1`、`C4.1`、`51`）。

@@ -92,6 +92,22 @@ class EvaluationTests(unittest.TestCase):
         results = evaluate_sensitive_read([rule('sensitive_read')], [read('app.a'), read('app.ab')])
         self.assertEqual(2, len(results))
 
+    def test_loose_attribution_caps_to_candidate(self):
+        """归因距离 ≥ ATTRIB_LOOSE_MS 时，correlated 封顶 candidate（D414）。"""
+        f = dict(flow()); f['attribution_delta_ms'] = 1800
+        result = evaluate_data_egress([rule()], [read()], [f])
+        self.assertEqual(1, len(result))
+        self.assertEqual('candidate', result[0]['conclusion_level'])
+        self.assertEqual('correlated', result[0]['declared_conclusion_level'])
+        self.assertEqual('attribution_loose', result[0]['conclusion_capped_by'])
+        self.assertTrue(result[0]['pairs'][0]['attribution_loose'])
+
+    def test_tight_attribution_keeps_correlated(self):
+        """归因距离很小（< LOOSE）时不得无端封顶。"""
+        f = dict(flow()); f['attribution_delta_ms'] = 5
+        result = evaluate_data_egress([rule()], [read()], [f])
+        self.assertEqual('correlated', result[0]['conclusion_level'])
+
     def test_subscription_registration_not_read(self):
         r = dict(read(), ev='SUBSCRIPTION_REGISTER')
         self.assertEqual([], evaluate_sensitive_read([rule('sensitive_read')], [r]))

@@ -31,7 +31,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from attribution import AMBIGUITY_MS, MATCH_TOLERANCE_MS, TimeAttribution  # noqa: E402
+from attribution import AMBIGUITY_MS, MATCH_TOLERANCE_MS, TimeAttribution, target_match  # noqa: E402
 
 A = "com.vscanner.targetapp"     # 流真正属于的那个包
 B = "com.vscanner.targetapp2"    # 竞争者
@@ -108,6 +108,28 @@ def sweep_rival(true_lateness: int, limit: int = 4000, step: int = 100) -> list[
 def find_wrong_band(cases: list[dict]) -> list[dict]:
     """挑出 wrong 的区间——这是唯一会把无辜 App 写进报告的结果。"""
     return [c for c in cases if c["observed"] == "wrong"]
+
+
+def run_target_case(flow_target: dict | None, event_host: str | None, event_ip: str | None,
+                    true_lateness: int = REAL_LATENESS_A_MS) -> dict:
+    """目标校验开关下的归属：流目标与事件目标是否匹配（D413 的第二信号维度）。
+
+    这是时间归因盲区的对照实验——"真主迟到 600ms + 竞争者 65ms"与"真主就是 65ms"
+    在**纯时间**证据上同形，只有目标地址能拆开。此维度只做离线交叉核对，不含真机分布。
+    """
+    flow_ts = 1_000_000
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "egress_events.jsonl"
+        with path.open("w", encoding="utf-8") as handle:
+            handle.write(json.dumps({
+                "ev": "EGRESS_CONNECT", "package": A, "outcome": "ok",
+                "host_received_ts": flow_ts + true_lateness,
+                "target_host": event_host, "target_ip": event_ip}) + "\n")
+        on = TimeAttribution([path], target_check=True).resolve(flow_ts, flow_target)
+        off = TimeAttribution([path], target_check=False).resolve(flow_ts)
+    return {"flow_target": flow_target, "event_host": event_host, "event_ip": event_ip,
+            "target_check_on": on.label, "target_check_off": off.label,
+            "matches": target_match({"host": event_host, "ip": event_ip}, flow_target)}
 
 
 def grace_experiment(lateness: int, rival_gap: int | None, grace_ms: int,
@@ -201,6 +223,18 @@ def main() -> int:
     all_cases = no_rival + with_rival + rival_near + rival_far
     disagreements = [c for c in all_cases if not c["agrees"]]
 
+    # 目标校验维度（D413）：时间盲区只能靠第二信号拆开。四类目标关系各跑一例。
+    target_cases = [
+        run_target_case({"host": "api.example.com", "ip": "1.2.3.4"},
+                        "api.example.com", "1.2.3.4"),   # host+ip 都同
+        run_target_case({"host": "api.example.com", "ip": "1.2.3.4"},
+                        "1.2.3.4", "1.2.3.4"),           # OkHttp 把 host 解析成 IP
+        run_target_case({"host": "api.example.com", "ip": "5.6.7.8"},
+                        "api.example.com", "1.2.3.4"),   # 两端 CDN IP 不同，靠 host 兜
+        run_target_case({"host": "evil.example.net", "ip": "9.9.9.9"},
+                        "api.example.com", "1.2.3.4"),   # 目标不匹配 → unresolved
+    ]
+
     report = {
         "constants": {"match_tolerance_ms": MATCH_TOLERANCE_MS, "ambiguity_ms": AMBIGUITY_MS,
                       "grace_ms": 3000},
@@ -234,6 +268,7 @@ def main() -> int:
         },
         "cross_check": {"cases": len(all_cases), "disagreements": len(disagreements),
                         "detail": disagreements[:10]},
+        "target_check": target_cases,
         "caveat": "受控时序扫描，不是真机分布；结论是「规则在什么条件下给出什么」，"
                   "不是「某 App 有百分之多少会被误判」。真实误判率取决于事件迟到分布，"
                   "需要长时间真机采集才能得到。",

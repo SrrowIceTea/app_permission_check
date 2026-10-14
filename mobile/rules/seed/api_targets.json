@@ -153,6 +153,39 @@
                              {"value": "bluetooth_name", "data_type": "bluetooth_info"},
                              {"value": "wifi_networks_provisioned", "data_type": "wifi_ssid_bssid"}],
                      "unmapped": "ignore"},
-     "note": "扩展 Settings.Secure 的 key 分派；新增蓝牙名称与 WiFi 网络键。"}
+     "note": "扩展 Settings.Secure 的 key 分派；新增蓝牙名称与 WiFi 网络键。"},
+
+    {"class_name": "java.net.NetworkInterface", "method_name": "getInetAddresses", "select": "zero_arg",
+     "data_type_key": "ip_address", "api_role": "read",
+     "observation": {"kind": "direct", "capture": "args_only"},
+     "note": "枚举本机网络接口的 IP 地址；只记调用事实（Enumeration 无长度，count_only 会恒为 0），不落具体地址。"},
+
+    {"class_name": "android.hardware.camera2.CameraManager", "method_name": "openCamera", "select": "all",
+     "data_type_key": "camera_capture", "api_role": "read",
+     "observation": {"kind": "direct", "capture": "args_only"},
+     "note": "Camera2 打开摄像头设备。回调里才真正拿到帧，本条目记录「已申请打开」这一事实。"},
+    {"class_name": "android.hardware.Camera", "method_name": "open", "select": "all",
+     "data_type_key": "camera_capture", "api_role": "read",
+     "observation": {"kind": "direct", "capture": "args_only"},
+     "note": "已废弃的 Camera1 入口；存量 App 仍在用，保留覆盖。"},
+
+    {"class_name": "android.media.AudioRecord", "method_name": "startRecording", "select": "all",
+     "data_type_key": "microphone_capture", "api_role": "read",
+     "observation": {"kind": "direct", "capture": "args_only"},
+     "note": "开始录音。MediaRecorder.start() 有意不钩：它同时覆盖录像路径，start() 时无法判定音/视频源。"},
+
+    {"class_name": "android.media.projection.MediaProjectionManager", "method_name": "getMediaProjection", "select": "all",
+     "data_type_key": "screen_capture", "api_role": "read",
+     "observation": {"kind": "direct", "capture": "args_only"},
+     "note": "拿到屏幕投射句柄（录屏/截屏的前提）。createScreenCaptureIntent 与用户授权不算采集。"},
+
+    {"class_name": "android.hardware.biometrics.BiometricPrompt", "method_name": "authenticate", "select": "all",
+     "data_type_key": "biometric_data", "api_role": "observe",
+     "observation": {"kind": "direct", "capture": "args_only"},
+     "note": "发起生物识别认证。模板在 TEE，App 侧只看到通过/失败；本条目记录「发起了识别」。"},
+    {"class_name": "android.hardware.fingerprint.FingerprintManager", "method_name": "authenticate", "select": "all",
+     "data_type_key": "biometric_data", "api_role": "observe",
+     "observation": {"kind": "direct", "capture": "args_only"},
+     "note": "API 28 前的指纹认证入口，已废弃但存量 App 大量使用。"}
   ]
 }

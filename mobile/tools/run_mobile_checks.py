@@ -49,6 +49,10 @@ def main() -> int:
         ("analyze", MOBILE / "analyze", [PY, "-m", "unittest", "test_analyze"]),
         ("ai", MOBILE / "ai", [PY, "-m", "unittest", "test_ai"]),
         ("report", MOBILE / "report", [PY, "-m", "unittest", "test_report"]),
+        ("apk_packer", MOBILE / "tools", [PY, "-m", "unittest", "test_apk_packer"]),
+        ("app_death", MOBILE / "tools", [PY, "-m", "unittest", "test_app_death"]),
+        ("launcher_activity", MOBILE / "tools",
+         [PY, "-m", "unittest", "test_launcher_activity"]),
     ]
     for name, cwd, cmd in unit:
         if not cwd.exists():
@@ -84,6 +88,10 @@ def main() -> int:
                         "--bundle", str(aiout / "bundle.json"),
                         "--session", "offline-demo",
                         "--out", str(e2e / "report.pdf")]),
+        # 规则覆盖矩阵：把「数据类别 × 规则类型」的空格与空转规则渲染成产物。
+        # 退出码 1 = 存在未声明的空转规则（有规则、无 API 抓手），必须挡住。
+        ("e2e_rule_coverage", [PY, str(MOBILE / "tools" / "rule_coverage_report.py"),
+                               "--out-dir", str(out / "rule-coverage")]),
     ]
     for name, cmd in steps:
         rc = run(cmd, MOBILE, out / f"{name}.log")
@@ -97,6 +105,8 @@ def main() -> int:
          .get("policy", {}).get("available") is True if (aiout / "bundle.json").exists() else False),
         ("report_nonempty", (e2e / "report.pdf").exists()
          and (e2e / "report.pdf").stat().st_size > 20_000),
+        ("rule_coverage_artifacts", (out / "rule-coverage" / "rules_coverage.md").exists()
+         and (out / "rule-coverage" / "rules_coverage.json").exists()),
     ]
     for name, ok in assertions:
         checks.append({"name": name, "exit_code": 0 if ok else 1})
