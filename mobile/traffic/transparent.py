@@ -29,6 +29,16 @@
 装系统 CA 需要可写 /system —— 实测本 AVD `adb remount` 报
 "Device must be bootloader unlocked"，**必须用 `-writable-system` 启动模拟器**。
 
+**Android 14+ 还要多做一层**（本 AVD 是 API 37，2026-10-14 实机踩过）：
+系统信任库搬进了 conscrypt APEX（`/apex/com.android.conscrypt/cacerts`，只读 loop 镜像），
+应用**只读那一份**；往 `/system/etc/security/cacerts` 写文件不生效、也不报错——
+实测装完 CA 后 F-Droid 依然 `certificate unknown`。而且应用进程有**自己的 mount
+namespace**（zygote 启动时 unshare 过），所以 bind mount 必须用
+`nsenter -t <pid> -m` 做进 **zygote 的 namespace**：之后 fork 的应用才继承得到，
+已运行的进程要重启才看得到。
+重启模拟器后挂载会丢（内存挂载），重跑 `install_system_ca()` 即可恢复。
+APEX 那一层的命令生成与执行全在 `apex_ca.py`（含测试），本模块只负责调用。
+
 ## 这两件事都要重启模拟器
 
 所以本模块只做两件事：**把该加的启动参数算出来**、**把该装的 CA 装进去**；
@@ -43,7 +53,9 @@ from pathlib import Path
 
 # SDK 路径解析统一走 core/sdk_paths（§8.2 B-4）：不再写死本机绝对路径。
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # 同级模块 apex_ca
 from core import sdk_paths  # noqa: E402
+import apex_ca  # noqa: E402
 
 ADB = sdk_paths.sdk_tool("platform-tools", "adb.exe")
 CA_PEM = Path.home() / ".mitmproxy" / "mitmproxy-ca-cert.pem"
@@ -159,6 +171,15 @@ def install_system_ca(pem_path: Path = CA_PEM, log: Path | None = None) -> dict:
     result["installed"] = ok
     if not ok:
         result["error"] = "证书已拷贝但复核没通过——检查文件名与权限（644/root:root）"
+    else:
+        # Android 14+ 应用只读 APEX 那份，上面写 /system 等于白写（见模块开头）。
+        # 半成品必须报失败：否则又退回"看着装好了、其实没用"的假象。
+        apex = apex_ca.install(fname, f"/sdcard/{fname}")
+        result["apex"] = apex
+        if not apex.get("mounted"):
+            result["installed"] = False
+            result["error"] = ("系统库写好了，但 APEX 信任库没挂进 zygote 命名空间——"
+                               "应用依然不会信任代理证书；别只看系统库那一步")
     if log:
         log.write_text(str(result), encoding="utf-8")
     return result
@@ -174,6 +195,9 @@ def capture_verdict() -> dict:
                               "它只是「尽力而为」，不是强制"),
         "system_ca_installed": ok_ca,
         "system_ca_name": fname,
+        # Android 14+ 应用只读 APEX 那份：system_ca_installed 为 true 也可能完全没用。
+        "apex_trust_store": apex_ca.status(fname),
+        "apex_note": "证书有没有真的生效看 zygote_sees_ca，不要看 shell 里的 ls",
         "recommended": {
             "force_proxy": "emulator -http-proxy http://10.0.2.2:8888（SLIRP 层强制，应用绕不过）",
             "trust_ca": "emulator -writable-system + install_system_ca()",

@@ -11,9 +11,11 @@
 """
 from __future__ import annotations
 
+import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -125,6 +127,37 @@ class IptablesRuleTest(unittest.TestCase):
         self.assertIn("SO_ORIGINAL_DST", r["precondition"])
 
 
+class ApexWiringTest(unittest.TestCase):
+    """Android 14+ 上最容易出的一种假象：`/system/etc/security/cacerts` 写好了、
+    `ls` 也有那张证书，但应用只读 APEX 那份，所以照样 `certificate unknown`。
+    这里钉住：APEX 那一层没挂上时，install_system_ca() 必须报**失败**。"""
+
+    def _install_with(self, apex_result: dict, tmp: Path) -> dict:
+        pem = make_cert(tmp)
+        if pem is None:
+            self.skipTest("cryptography 未安装")
+        ok0 = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        with mock.patch.object(tp, "adb", lambda *a, **k: ok0), \
+                mock.patch.object(tp, "ca_installed", lambda *a, **k: (True, "x.0")), \
+                mock.patch.object(tp.apex_ca, "install", lambda *a, **k: apex_result):
+            return tp.install_system_ca(pem)
+
+    def test_apex_not_mounted_marks_install_failed(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            res = self._install_with({"mounted": False, "error": "半成品"}, Path(td))
+        self.assertFalse(res["installed"])
+        self.assertIn("APEX", res["error"])
+        self.assertIn("apex", res)
+
+    def test_apex_mounted_keeps_install_ok(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            res = self._install_with({"mounted": True, "error": None}, Path(td))
+        self.assertTrue(res["installed"])
+        self.assertIsNone(res["error"])
+
+
 class ModuleDocTest(unittest.TestCase):
     def test_module_explains_why_not_iptables(self):
         """这条结论是实测推理出来的，写在模块开头；删掉它就只剩一个"为什么不用 iptables"
@@ -132,6 +165,9 @@ class ModuleDocTest(unittest.TestCase):
         doc = (HERE / "transparent.py").read_text(encoding="utf-8")
         self.assertIn("SO_ORIGINAL_DST", doc)
         self.assertIn("-http-proxy", doc)
+        # Android 14+ 那一层：应用只读 APEX 那份信任库，往 /system 写等于白写。
+        self.assertIn("/apex/com.android.conscrypt/cacerts", doc)
+        self.assertIn("nsenter", doc)
 
 
 if __name__ == "__main__":
