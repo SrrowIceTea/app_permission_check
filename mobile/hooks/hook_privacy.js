@@ -16,7 +16,7 @@ import { packages } from './scope.js';
 import { makeLogger, procName, threadName, stackStr, armRuntimeCache } from './runtime.js';
 import { WATCH, DATA_TYPES, META } from './targets.generated.js';
 import { describe, armValueCache, argsOnly } from './values.js';
-import { matchBySpec, isDeniedClassName, discriminator, unmappedKey, preview } from './dispatch.js';
+import { matchBySpec, describeException, discriminator, unmappedKey, preview } from './dispatch.js';
 
 var vlog = makeLogger('privacy', '/data/local/tmp/vscan-mobile.log');
 var CFG = { whitelist: packages() };
@@ -69,8 +69,11 @@ function buildExtra(entry, dts, args, ret, outcome, err) {
     var desc = describe(dts, entry.spec || {}, ret);
     for (var k in desc) if (Object.prototype.hasOwnProperty.call(desc, k)) extra[k] = desc[k];
   } else if (err) {
-    extra.exc_class = String((err && err.$className) || (err && err.name) || '?');
-    extra.exc_msg = preview(String((err && err.message) || err), 200);
+    extra.exc_class = err.class_name;
+    extra.exc_wrapper_class = err.wrapper_class;
+    extra.exc_class_source = err.class_source;
+    extra.exc_msg = preview(err.message, 200);
+    extra.exc_msg_truncated = err.message.length > 200;
   }
   return extra;
 }
@@ -91,14 +94,14 @@ function armOne(entry) {
       if (CFG.whitelist.indexOf(STATE.pkg) < 0) return ov.apply(this, args);
       var dts = matchBySpec(entry.spec, args, entry.dataType);
       if (dts.length === 0) { noteUnmapped(entry, args); return ov.apply(this, args); }
-      var ret = null, err = null, outcome = 'ok';
+      var ret = null, err = null, errInfo = null, outcome = 'ok';
       try { ret = ov.apply(this, args); }
       catch (e) {
         err = e;
-        outcome = isDeniedClassName(String((e && e.$className) || (e && e.name) || ''))
-          ? 'denied' : 'error';
+        errInfo = describeException(e);
+        outcome = errInfo.denied ? 'denied' : 'error';
       }
-      try { vlog('PRIVACY_READ', buildExtra(entry, dts, args, ret, outcome, err)); }
+      try { vlog('PRIVACY_READ', buildExtra(entry, dts, args, ret, outcome, errInfo)); }
       catch (e2) {}
       if (err) throw err;
       return ret;

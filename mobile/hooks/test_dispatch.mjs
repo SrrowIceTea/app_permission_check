@@ -6,7 +6,7 @@
 // 为什么值得单独测：这些判断错了不会报错，只会让**某类数据从来没被判出来**，
 // 或者反过来把不相干的调用记成敏感读取。两种都是静默失败。
 import assert from 'node:assert/strict';
-import { matchBySpec, isDeniedClassName, looksLikePolicy, discriminator, unmappedKey,
+import { matchBySpec, isDeniedClassName, describeException, looksLikePolicy, discriminator, unmappedKey,
          toJsArray, shortName, splitGrantResults, preview } from './dispatch.js';
 
 let pass = 0, fail = 0;
@@ -87,6 +87,68 @@ t('普通异常不算拒绝（否则"脚本出错"会被报成"权限被拒"）'
   assert.equal(isDeniedClassName('java.lang.NullPointerException'), false);
   assert.equal(isDeniedClassName(''), false);
   assert.equal(isDeniedClassName(null), false);
+});
+
+// --- Java errors wrapped by Frida 17: anchored diagnosis only ---
+t('direct Java class wins and original wrapper/message remain available', () => {
+  const msg = 'original message java.lang.NullPointerException: context';
+  const result = describeException({ $className: 'java.lang.SecurityException', name: 'Error', message: msg });
+  assert.equal(result.class_name, 'java.lang.SecurityException');
+  assert.equal(result.wrapper_class, 'java.lang.SecurityException');
+  assert.equal(result.class_source, 'java_class');
+  assert.equal(result.message, msg);
+  assert.equal(result.denied, true);
+});
+t('wrapped SecurityException is denied with Error wrapper preserved', () => {
+  const msg = 'java.lang.SecurityException: caller has no READ_PHONE_NUMBERS';
+  const result = describeException(new Error(msg));
+  assert.equal(result.class_name, 'java.lang.SecurityException');
+  assert.equal(result.wrapper_class, 'Error');
+  assert.equal(result.class_source, 'wrapper_message_prefix');
+  assert.equal(result.message, msg);
+  assert.equal(result.denied, true);
+});
+t('all exact known denied prefixes work when class is missing', () => {
+  for (const cls of ['java.lang.SecurityException', 'java.lang.PermissionDeniedException',
+                     'android.permission.PermissionDeniedException']) {
+    const result = describeException({ message: cls + ': explicitly denied' });
+    assert.equal(result.class_name, cls);
+    assert.equal(result.wrapper_class, null);
+    assert.equal(result.denied, true);
+  }
+});
+t('actual Java non-denial class cannot be replaced by denial-like message', () => {
+  const result = describeException({ $className: 'java.lang.NullPointerException', name: 'Error',
+                                     message: 'java.lang.SecurityException: mentioned context' });
+  assert.equal(result.class_name, 'java.lang.NullPointerException');
+  assert.equal(result.denied, false);
+});
+t('typed JS errors remain errors despite a denied-class prefix', () => {
+  const result = describeException(new TypeError('java.lang.SecurityException: not a Java wrapper'));
+  assert.equal(result.class_name, 'TypeError');
+  assert.equal(result.denied, false);
+});
+t('ordinary errors and permission mentions never imply denial', () => {
+  for (const msg of ['READ_PHONE_NUMBERS permission required',
+                     'observed java.lang.SecurityException: while reporting another error',
+                     'Caused by: java.lang.SecurityException: context',
+                     ' java.lang.SecurityException: leading space',
+                     'java.lang.SecurityExceptionSpoof: forged class',
+                     'evil.java.lang.SecurityException: suffix is not the class',
+                     'java.lang.SecurityException$Permission: unknown wrapped subclass',
+                     'java.lang.NullPointerException: data unavailable']) {
+    assert.equal(describeException(new Error(msg)).denied, false, msg);
+  }
+});
+t('denied class matches exact or nested Java class boundaries only', () => {
+  assert.equal(isDeniedClassName('java.lang.SecurityException$Permission'), true);
+  assert.equal(isDeniedClassName('evil.java.lang.SecurityException'), false);
+  assert.equal(isDeniedClassName('java.lang.SecurityExceptionSpoof'), false);
+  assert.equal(isDeniedClassName('message java.lang.SecurityException: denied'), false);
+});
+t('wrapper helper preserves untruncated message for caller preview policy', () => {
+  const msg = 'java.lang.SecurityException: ' + 'x'.repeat(300);
+  assert.equal(describeException(new Error(msg)).message, msg);
 });
 
 // --- looksLikePolicy ---

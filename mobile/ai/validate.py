@@ -26,6 +26,10 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from mobile.analyze.read_semantics import read_state
 
 
 def _normalize(text: str) -> str:
@@ -123,6 +127,18 @@ def validate_stage2(out: dict, *, bundle: dict) -> dict:
         a = item.get("assessment")
         if a not in valid_assess:
             problems.append(f"per_data_type[{i}] assessment 越界: {a!r}")
+        if item.get("policy_consent_state", "unknown") != "unknown":
+            problems.append(f"per_data_type[{i}] 政策接受缺直接信号，状态只能为 unknown")
+        if (item.get("observed_collection") is True
+                or a in ("undisclosed_collection", "over_collection", "consistent")):
+            read_refs = item.get("read_evidence_refs") or []
+            if not any(read_state(reads_by_id.get(ref, {})) == "obtained"
+                       and item.get("data_type") in ([reads_by_id[ref].get("data_type")]
+                           + (reads_by_id[ref].get("data_types") or [])) for ref in read_refs
+                       if ref in reads_by_id):
+                problems.append(f"per_data_type[{i}] 声称收集却无取得非空数据的读取证据")
+        if a == "read_before_consent" or "read_before_consent" in (item.get("also_applicable") or []):
+            problems.append(f"per_data_type[{i}] 无直接政策接受信号，不能判定政策同意前收集")
         for p, ref in _collect_refs(item, f"per_data_type[{i}]"):
             if ref not in refs:
                 problems.append(f"{p} 引用了不存在的证据: {ref}")
@@ -141,7 +157,9 @@ def validate_stage2(out: dict, *, bundle: dict) -> dict:
             read = reads_by_id.get(rid)
             if read is None:
                 problems.append(f"per_data_type[{i}].value_level_transfer[{j}] 的读取事件不存在: {rid}")
-            elif read.get("value_hash") and token and not token.endswith(read["value_hash"]):
+            elif read_state(read) != "obtained" or not read.get("value_hash"):
+                problems.append(f"per_data_type[{i}].value_level_transfer[{j}] 的读取无有效值哈希")
+            elif not isinstance(token, str) or not token.endswith(":" + read["value_hash"]):
                 problems.append(f"per_data_type[{i}].value_level_transfer[{j}] 的 token 与该读取"
                                 f"事件的值哈希不一致（{rid}）")
     for j, ins in enumerate(out.get("insufficient") or []):
@@ -198,7 +216,6 @@ def validate_stage3(out: dict, *, bundle: dict) -> dict:
         for p, ref in _collect_refs(rec, f"recommendations[{i}]"):
             if ref not in refs:
                 problems.append(f"{p} 引用了不存在的证据: {ref}")
-
     # 必要段落整体缺失：模型没按 schema 输出时，"无条目可校验"会静默通过。
     # 2026-10-13 实测（同一模型两轮，两种偏法）：camera 轮的 stage3 完全没有 items /
     # recommendations / uncertainties，却因校验器只查"已存在的条目"而零警告通过；
@@ -226,7 +243,10 @@ def parse_json_output(text: str) -> tuple[dict | None, list[str]]:
         raw = re.sub(r"^```[a-zA-Z]*\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
     try:
-        return json.loads(raw), warnings
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            return None, warnings + ["模型输出必须是 JSON 对象"]
+        return parsed, warnings
     except json.JSONDecodeError as e:
         return None, warnings + [f"输出不是合法 JSON: {e}"]
 

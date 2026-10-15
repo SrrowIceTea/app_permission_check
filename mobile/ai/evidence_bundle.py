@@ -34,44 +34,17 @@ ROOT = HERE.parent.parent
 sys.path.insert(0, str(HERE.parent / "policy"))
 sys.path.insert(0, str(HERE.parent / "tools"))
 sys.path.insert(0, str(ROOT))
-from core.io_utils import load_jsonl_counting  # noqa: E402  JSONL 唯一实现（§8.2 B-2）
+from bundle_observations import read_jsonl, top_app_frame, build_reads, build_consent, build_flows
 import policy_lint  # noqa: E402
 import apk_packer_probe  # noqa: E402  加固特征探测：命中即把「结论受限」写进 gaps
 
 BUNDLE_VERSION = "1"
 
 
-def read_jsonl(path: Path, gaps: list[str] | None = None) -> list[dict]:
-    """统一走 core/io_utils（§8.2 B-2）。
-
-    坏行**不再静默 `continue`**：给了 `gaps` 就写进 gaps（证据包本来就有这个清单），
-    否则打到 stderr。"少了几条证据"必须看得见。
-    """
-    rows, skipped = load_jsonl_counting(path)
-    if skipped:
-        note = f"{path.name} 有 {skipped} 行无法解析的 JSONL，已跳过（证据不完整）"
-        if gaps is not None:
-            gaps.append("[jsonl] " + note)
-        else:
-            print(f"[warn] {note}", file=sys.stderr)
-    return rows
-
-
 def sha256_file(path: Path) -> str | None:
     if not path.exists():
         return None
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def top_app_frame(stack: str | None) -> str | None:
-    """栈里第一条应用帧的文本。整栈可达数百行，打包时只留第一帧做定位线索。"""
-    if not stack:
-        return None
-    for line in stack.splitlines():
-        s = line.strip()
-        if s.startswith("at ") and "com.android" not in s and "android." not in s[:40]:
-            return s[:200]
-    return None
 
 
 def load_rules_meta(db: Path, version: str) -> dict:
@@ -117,90 +90,6 @@ def load_category(db: Path, version: str, key: str | None) -> dict:
             "necessary_data": json.loads(row["necessary_data_json"]),
             "no_personal_info_required": bool(row["no_personal_info_required"]),
             "ordinal": row["ordinal"], "source_refs": json.loads(row["source_refs_json"])}
-
-
-def build_reads(session: Path, gaps: list[str]) -> list[dict]:
-    events = read_jsonl(session / "reads.jsonl", gaps)
-    if not events:
-        gaps.append("reads.jsonl 缺失或为空：无动态读取证据（不等于没有读取，"
-                    "可能只是钩子没挂上或应用没运行）")
-    out = []
-    n = 0
-    for e in events:
-        if e.get("ev") != "PRIVACY_READ":
-            continue
-        n += 1
-        out.append({
-            "evidence_id": f"R{n}",
-            "data_type": (e.get("data_types") or [None])[0],
-            "data_types": e.get("data_types"),
-            "data_type_zh": (e.get("data_types_zh") or [None])[0],
-            "sensitivity": e.get("max_sensitivity"),
-            "api": e.get("api"),
-            "outcome": e.get("outcome"),
-            "arg_disc": e.get("arg_disc"),
-            "value_kind": e.get("value_kind"),
-            "value_hash": e.get("value_hash"),
-            "value_preview": e.get("value_preview"),
-            "value_count": e.get("value_count"),
-            "column_count": e.get("column_count"),
-            "ts": e.get("ts"),
-            "host_received_ts": e.get("host_received_ts"),
-            "app_frame": top_app_frame(e.get("stack")),
-        })
-    return out
-
-
-def build_consent(session: Path, gaps: list[str]) -> list[dict]:
-    events = read_jsonl(session / "consent.jsonl", gaps)
-    if not events:
-        gaps.append("consent.jsonl 缺失或为空：**无法判定「同意前收集」**——"
-                    "没有同意时序就没有「之前」这个基准")
-        return []
-    out = []
-    n = 0
-    for e in events:
-        if e.get("ev") not in ("PERM_REQ", "PERM_RESULT", "PERM_CHECK", "POLICY_VIEW"):
-            continue
-        n += 1
-        item = {"evidence_id": f"C{n}", "signal": e.get("ev"), "ts": e.get("ts"),
-                "host_received_ts": e.get("host_received_ts")}
-        for k in ("permissions", "granted", "denied", "permission",
-                  "check_granted", "url", "request_code"):
-            if e.get(k) is not None:
-                item[k] = e[k]
-        out.append(item)
-    return out
-
-
-def build_flows(session: Path, gaps: list[str], *, include_previews: bool) -> tuple[list, list]:
-    flows = read_jsonl(session / "flows.jsonl", gaps)
-    if not flows:
-        gaps.append("flows.jsonl 缺失或为空：无网络流证据（不等于没有外发）")
-    out, plaintext = [], []
-    for i, f in enumerate(flows, 1):
-        eid = f"F{i}"
-        rec = {
-            "evidence_id": eid,
-            "host": f.get("host"), "path": f.get("path"), "method": f.get("method"),
-            "scheme": f.get("scheme"), "intercepted_tls": f.get("intercepted_tls"),
-            "status_code": f.get("status_code"),
-            "attribution": f.get("attribution"),
-            "attribution_ambiguous": f.get("attribution_ambiguous"),
-            "request_tags": f.get("request_tags") or [],
-            "request_tokens": f.get("request_tokens") or [],
-            "response_tags": f.get("response_tags") or [],
-            "request_bytes": f.get("request_bytes"),
-            "ts": f.get("ts"),
-        }
-        if (rec["request_tags"] or rec["response_tags"]):
-            rec["sensitive_payload"] = True
-        if rec["scheme"] == "http" or rec["intercepted_tls"] is False:
-            plaintext.append(eid)
-        if include_previews:
-            rec["request_preview"] = f.get("request_preview")
-        out.append(rec)
-    return out, plaintext
 
 
 def build(session: Path, rules_db: Path, *, version: str, policy_store: Path | None,
@@ -282,10 +171,16 @@ def build(session: Path, rules_db: Path, *, version: str, policy_store: Path | N
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "app": app,
         "rules": load_rules_meta(rules_db, version),
-        "dynamic": {"reads": reads, "consent_timeline": consent, "hook_health": health},
+        "dynamic": {"reads": reads, "consent_timeline": consent, "hook_health": health,
+                    "policy_consent_state": "unknown"},
         "traffic": {"flows": flows, "plaintext_flow_ids": plaintext},
         "findings": [{"rule_id": f.get("rule_id"), "rule_type": f.get("rule_type"),
                       "severity": f.get("severity"), "conclusion_level": f.get("conclusion_level"),
+                      "title": f.get("title"), "policy_consent_state": f.get("policy_consent_state"),
+                      "permission_state": f.get("permission_state"), "consent_basis": f.get("consent_basis"),
+                      "conclusion_capped_by": f.get("conclusion_capped_by"),
+                      "declared_conclusion_level": f.get("declared_conclusion_level"),
+                      "pairs": f.get("pairs"),
                       "data_type": (f.get("condition") or {}).get("data_type")
                       if isinstance(f.get("condition"), dict) else f.get("data_type"),
                       "evidence_kind": f.get("evidence_kind"),

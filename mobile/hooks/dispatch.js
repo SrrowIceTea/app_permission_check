@@ -23,9 +23,42 @@ var DENIED_CLASSES = [
 export function isDeniedClassName(name) {
   if (!name) return false;
   for (var i = 0; i < DENIED_CLASSES.length; i++) {
-    if (name.indexOf(DENIED_CLASSES[i]) >= 0) return true;
+    if (name === DENIED_CLASSES[i] || name.indexOf(DENIED_CLASSES[i] + '$') === 0) return true;
   }
   return false;
+}
+
+function exceptionField(err, key) {
+  try {
+    var value = err && err[key];
+    return value === null || value === undefined ? null : String(value);
+  } catch (ignored) { return null; }
+}
+
+export function describeException(err) {
+  // Frida 17 can wrap a thrown Java exception in JS Error, putting the Java class
+  // at the *start* of message. Never infer denial from a mention in prose/stack.
+  var javaClass = exceptionField(err, '$className');
+  var wrapperClass = javaClass || exceptionField(err, 'name');
+  var message = exceptionField(err, 'message');
+  if (message === null) {
+    try { message = String(err); } catch (ignored) { message = ''; }
+  }
+  var className = wrapperClass || '?';
+  var source = javaClass ? 'java_class' : wrapperClass ? 'wrapper_class' : 'unknown';
+  // An actual Java class always wins; TypeError and other typed JS errors also
+  // cannot be reclassified based on text. Match only exact known denied prefixes.
+  if (!javaClass && (!wrapperClass || wrapperClass === 'Error')) {
+    for (var i = 0; i < DENIED_CLASSES.length; i++) {
+      if (message.indexOf(DENIED_CLASSES[i] + ':') === 0) {
+        className = DENIED_CLASSES[i];
+        source = 'wrapper_message_prefix';
+        break;
+      }
+    }
+  }
+  return { class_name: className, wrapper_class: wrapperClass,
+           message: message, class_source: source, denied: isDeniedClassName(className) };
 }
 
 export function preview(value, maxLen) {

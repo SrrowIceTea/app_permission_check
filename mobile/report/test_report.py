@@ -15,10 +15,13 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import Mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PY = sys.executable
+sys.path.insert(0, str(HERE))
+import report_common as rc
 
 BUNDLE = {
     "bundle_version": "1",
@@ -170,6 +173,54 @@ class ReportTest(unittest.TestCase):
                               errors="replace", cwd=HERE, timeout=120)
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("fatal", proc.stderr.lower() + proc.stdout.lower())
+
+
+class ReportFormatTest(unittest.TestCase):
+    def test_paired_bold_becomes_reportlab_markup(self):
+        self.assertEqual(rc.bold_markup("前 **粗体** 与 **second** 后"),
+                         "前 <b>粗体</b> 与 <b>second</b> 后")
+        p = rc.Paragraph("plain **bold**", rc.styles("Helvetica")["body"])
+        self.assertEqual(p.getPlainText(), "plain bold")
+        self.assertEqual(p.frags[-1].fontName, "Helvetica-Bold")
+
+    def test_non_bold_star_sequences_stay_literal(self):
+        for text in ("*single*", "**unpaired", "***ambiguous***", "****", "**a*b**"):
+            with self.subTest(text=text):
+                self.assertEqual(rc.bold_markup(text), text)
+        self.assertIsNone(rc.bold_markup(None))
+
+    def test_xml_escaping_is_not_removed_or_applied_twice(self):
+        text = rc.esc("**<untrusted> & data**")
+        self.assertEqual(rc.bold_markup(text), "<b>&lt;untrusted&gt; &amp; data</b>")
+        p = rc.Paragraph(text, rc.styles("Helvetica")["body"])
+        self.assertEqual(p.getPlainText(), "<untrusted> & data")
+        self.assertEqual(rc.bold_markup("<b>existing</b> &amp; safe"),
+                         "<b>existing</b> &amp; safe")
+
+    def test_table_helpers_use_the_same_bold_wrapper(self):
+        st = rc.styles("Helvetica")
+        kv = rc.kv_table([("Key", "**value**")], st, "Helvetica")
+        grid = rc.grid_table(["Head"], [["**value**"]], st, "Helvetica")
+        for cell in (kv._cellvalues[0][1], grid._cellvalues[1][0]):
+            self.assertIsInstance(cell, rc.Paragraph)
+            self.assertEqual(cell.getPlainText(), "value")
+            self.assertEqual(cell.frags[0].fontName, "Helvetica-Bold")
+
+    def test_paragraph_splits_without_reparsing_none(self):
+        p = rc.Paragraph("**bold** " * 40, rc.styles("Helvetica")["body"])
+        p.wrap(100, 1000)
+        pieces = p.split(100, 30)
+        self.assertGreater(len(pieces), 1)
+        self.assertTrue(all(isinstance(part, rc.Paragraph) for part in pieces))
+
+    def test_footer_uses_the_document_selected_font(self):
+        canvas, doc = Mock(), Mock(page=3, report_font="Selected-CJK")
+        rc.footer(canvas, doc)
+        canvas.setFont.assert_called_once_with("Selected-CJK", 7.5)
+        self.assertIn("仅用于授权测试", canvas.drawString.call_args.args[2])
+        self.assertEqual(canvas.drawRightString.call_args.args[2], "第 3 页")
+        canvas.saveState.assert_called_once_with()
+        canvas.restoreState.assert_called_once_with()
 
 
 if __name__ == "__main__":

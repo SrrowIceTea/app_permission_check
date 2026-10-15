@@ -7,7 +7,7 @@
 
     manifest_permission_requires_necessity_review  清单权限          → candidate
     successful_sensitive_api_read                  读取事件          → observed
-    read_before_consent_or_permission_grant        读取 + 同意时序   → observed
+    read_before_consent_or_permission_grant        读取 + 权限结果   → candidate
     read_before_egress_within_window               读取 + 流         → correlated
     data_type_not_in_necessary_scope               读取 + 类目范围   → candidate
     sensitive_data_in_plaintext_flow               流                → observed
@@ -16,8 +16,7 @@
 
 三条贯穿全篇的诚实规则：
   * **不同意就说不可判**：同意时序缺失时，no_consent 类结论不产出（进 gaps），
-    不把"没采到同意事件"当成"没有同意"。同意时序存在但没有相关授权，
-    才是"窗口内未授权"的证据。
+    不把"没采到同意事件"当成"没有同意"。政策接受缺直接信号时未知，不能从缺事件反推未同意。
   * **值级匹配 > 形态匹配**：只有读取事件的值哈希出现在报文的令牌里才算
     "确实发了这个值"；仅标签形状相同只给弱依据，并如实标注。
   * **缺输入不猜**：类目未知、政策未取得时，对应谓词返回 not_evaluable。
@@ -33,11 +32,12 @@ sys.path.insert(0, str(HERE.parent.parent))
 from core.collector.attribution import ATTRIB_LOOSE_MS, is_loose  # noqa: E402
 # 取值/配对/成形部件搬到相邻模块（原文件越 300 行红线，§8.2 B-2）。
 # `json` 一并去掉：它在本文件里已经没有任何用处（存量 F401）。
-from evaluation_mobile_parts import (_consent_for, _finding, _flow_types,  # noqa: E402
+from evaluation_mobile_parts import (_finding, _flow_types,  # noqa: E402
                                      _flow_unusable, _ok_reads, _ts, value_matches)
 
 # 对外保留：`correlate_mobile.py` 用 `ev.CONSENT_SIGNALS` 过滤同意事件。
-CONSENT_SIGNALS = ("PERM_RESULT", "POLICY_VIEW")
+from consent_semantics import permission_timing
+CONSENT_SIGNALS = ("PERM_REQ", "PERM_RESULT", "PERM_CHECK", "POLICY_VIEW")
 
 
 def evaluate(rule: dict, ctx: dict) -> dict | None:
@@ -66,33 +66,23 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
                         event_ids=[r.get("evt_id") for r in hits],
                         extra={"package": ctx["package"], "read_count": len(hits)},
                         data_type_zh=ctx["dt_zh"].get(dt),
-                        note=f"成功读取 {len(hits)} 次（outcome=ok）。被拒绝的读取不计入。")
+                        note=f"观测到 {len(hits)} 次非空返回值/非空结果集。空值、拒绝、调用未证实取得值不计入。")
 
     if pred == "read_before_consent_or_permission_grant":
         hits = _ok_reads(reads, dt)
         if not hits:
             return None
-        consent = ctx.get("consent")
-        if consent is None:
-            return None          # 时序缺失 → 不产出（由 gaps 说明），不猜
-        hints = ctx["dt_hints"].get(dt) or []
-        rel = _consent_for(dt, consent, hints)
-        first_read = min(_ts(r) for r in hits if _ts(r) is not None) if hits else None
-        first_consent = min((_ts(c) for c in rel if _ts(c) is not None), default=None)
-        if first_consent is not None and first_read is not None and first_consent <= first_read:
-            return None          # 同意在先，不构成
-        return _finding(rule, evidence_kind="read_event",
-                        event_ids=[r.get("evt_id") for r in hits[:5]],
-                        extra={"package": ctx["package"],
-                               "first_read_ts": first_read, "first_consent_ts": first_consent,
-                               "consent_evidence_ids": [c.get("evt_id") for c in rel],
-                               "consent_absent": first_consent is None,
-                               "related_permission_hints": hints},
-                        data_type_zh=ctx["dt_zh"].get(dt),
-                        note=("观察窗口内未出现该数据类别的同意事件（权限授予或政策页打开）。"
-                              if first_consent is None else
-                              "该数据类别的读取早于对应同意事件。")
-                             + " 同意状态由权限结果/政策页打开代理，不是同意的直接证明。")
+        timing = permission_timing(hits, ctx.get("consent"), ctx["dt_hints"].get(dt) or [])
+        if timing is None:
+            return None
+        note = timing.pop("note")
+        result = _finding(rule, evidence_kind="read_event",
+                          event_ids=[r.get("evt_id") for r in hits[:5]],
+                          extra={"package": ctx["package"], **timing},
+                          data_type_zh=ctx["dt_zh"].get(dt), note=note)
+        result["title"] = "运行时权限时序待复核（政策同意未知）"
+        result["conclusion_level"] = "candidate"
+        return result
 
     if pred == "read_before_egress_within_window":
         hits = _ok_reads(reads, dt)
@@ -186,7 +176,7 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
         for f in (ctx.get("flows") or []):
             if _flow_unusable(f):
                 continue
-            plaintext = (f.get("scheme") == "http") or (f.get("intercepted_tls") is False)
+            plaintext = f.get("intercepted_tls") is False
             if not plaintext:
                 continue
             types = _flow_types(f)

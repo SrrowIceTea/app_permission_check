@@ -9,9 +9,9 @@
 from __future__ import annotations
 
 from reportlab.lib.units import mm
-from reportlab.platypus import PageBreak, Paragraph, Spacer
+from reportlab.platypus import PageBreak, Spacer
 
-from report_common import grid_table, kv_table
+from report_common import Paragraph, grid_table, kv_table
 
 RISK_ZH = {"high": "高", "medium": "中", "low": "低",
            "insufficient_evidence": "证据不足，无法评估"}
@@ -62,7 +62,7 @@ def section_ai_assessment(stage3: dict | None, st: dict, font: str, meta: dict) 
 
     if not stage3:
         out.append(Paragraph(
-            "**本轮未生成 AI 研判**（未配置 API 或未运行 AI 阶段）。"
+            "**本轮未生成 AI 研判**（未运行、调用失败或校验未通过）。"
             "第四章的工具规则结论不依赖 AI，仍然有效；"
             "但「政策—行为一致性」与「涉嫌条款」两节缺失。", st["warn"]))
         return out
@@ -112,7 +112,7 @@ def section_ai_assessment(stage3: dict | None, st: dict, font: str, meta: dict) 
 def section_consistency(stage2: dict | None, st: dict, font: str) -> list:
     out = [PageBreak(), Paragraph("六、隐私政策—行为一致性对照", st["h1"])]
     if not stage2:
-        out.append(Paragraph("**本轮未生成一致性对照**（AI 阶段未运行）。", st["warn"]))
+        out.append(Paragraph("**本轮未生成一致性对照**（AI 未运行或校验未通过）。", st["warn"]))
         return out
     rows = []
     for it in stage2.get("per_data_type") or []:
@@ -138,7 +138,7 @@ def section_consistency(stage2: dict | None, st: dict, font: str) -> list:
         out.append(Paragraph("6.1 政策声明但本轮未观测到（差异记录，不是违规）", st["h2"]))
         for it in only:
             out.append(Paragraph(
-                "• " + str(it.get("data_type")) + "：" + str(it.get("note")), st["body"]))
+                "- " + str(it.get("data_type")) + "：" + str(it.get("note")), st["body"]))
 
     ins = stage2.get("insufficient") or []
     if ins:
@@ -164,7 +164,7 @@ def section_recommendations(stage3: dict | None, st: dict, font: str) -> list:
     if not recs:
         out.append(Paragraph(
             "本轮未生成整改建议。**这不代表没有问题**——"
-            "可能是未运行 AI 阶段，也可能是证据不足以支撑建议。", st["warn"]))
+            "可能是未运行 AI 阶段、校验未通过，或证据不足以支撑建议。", st["warn"]))
         return out
     out.append(grid_table(
         ["优先级", "建议动作", "对应条目", "理由"],
@@ -195,11 +195,11 @@ def section_ai_validation(validation: dict | None, st: dict, font: str,
             if v.get("problems"):
                 out.append(Paragraph(f"{stage} 的问题（这些内容已从结论中排除）", st["h2"]))
                 for p in v["problems"][:40]:
-                    out.append(Paragraph("• " + str(p), st["warn"]))
+                    out.append(Paragraph("- " + str(p), st["warn"]))
             if v.get("warnings"):
                 out.append(Paragraph(f"{stage} 的提示", st["h2"]))
                 for w in v["warnings"][:20]:
-                    out.append(Paragraph("• " + str(w), st["small"]))
+                    out.append(Paragraph("- " + str(w), st["small"]))
     if prompts_meta:
         # 路径必须由调用方传入，不能写死：写死过一次 "ai-out/prompts/"，与实际
         # 交付布局（out/ai/prompts/）不符——报告是交付物，指向不存在的目录会让人

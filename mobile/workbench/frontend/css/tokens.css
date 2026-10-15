@@ -1,0 +1,24 @@
+:root{--ink:#162d3d;--muted:#74818b;--teal:#137a65;--teal-light:#e9f4ef;--bg:#f4f6f4;--surface:#fff;--line:#e3e8e4;--sidebar:#172b3a;--amber:#a86c15;--red:#b54843;--radius:12px;--shadow:0 4px 20px #182d3c05; font-family:"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;color:var(--ink);background:var(--bg);font-synthesis:none}
+
+*{box-sizing:border-box}
+body{margin:0;font-size:14px;line-height:1.6}
+button,input,select,textarea{font:inherit}
+button,a,input,select{ -webkit-tap-highlight-color:transparent}
+button{cursor:pointer}
+a{color:var(--teal);text-decoration:none}
+button:disabled{cursor:not-allowed;opacity:.55}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #45a991;outline-offset:3px}
+h1,h2,h3,p{margin:0}
+h1{font-size:28px;line-height:1.3;letter-spacing:-.8px;font-weight:650}
+h2{font-size:16px;font-weight:650}
+h3{font-size:15px}
+code,pre,.mono{font-family:Consolas,"SFMono-Regular",monospace;font-size:12px}
+::selection{background:#cce8de}
+svg.icon{width:20px;height:20px;flex-shrink:0}
+small{font-size:12px;color:var(--muted)}
+.muted{color:var(--muted)}
+.eyebrow{font-size:10px;font-weight:700;letter-spacing:2px;color:var(--teal);margin-bottom:9px}
+.skip-link{position:fixed;top:-80px;left:20px;background:white;padding:12px;z-index:20}
+.skip-link:focus{top:10px}
+.launch{max-width:600px;margin:20vh auto;padding:32px}
+.launch p{margin:20px 0}

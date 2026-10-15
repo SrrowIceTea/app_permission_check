@@ -1,3 +1,6 @@
+import groovy.json.JsonSlurper
+import java.security.MessageDigest
+
 // 移动隐私演示夹具 —— 仅用于授权测试（自有设备与自有 APK）。
 //
 // 三个可独立触发的行为，覆盖赛题要求的三条检测线：
@@ -24,7 +27,19 @@ android {
         versionName = "1.0"
     }
 
+    // Preserve the exact library/config bytes bound by gadget-provenance.json.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += setOf("**/libgadget.so", "**/libgadget.config.so")
+        }
+    }
     buildTypes {
+        create("gadget") {
+            initWith(getByName("debug"))
+            matchingFallbacks += listOf("debug")
+            isDebuggable = true
+        }
         release {
             // 刻意不混淆、不加固：靶子 App 必须对审计工具完全可观察。
             isMinifyEnabled = false
@@ -44,3 +59,39 @@ android {
 dependencies {
     // 无依赖：全部走平台 android.* / org.json / Kotlin 标准库。
 }
+
+// Fail only the gadget variant if its verified binary/provenance has not been prepared.
+val verifyGadgetFiles by tasks.registering {
+    doLast {
+        val provenance = file("src/gadget/assets/gadget-provenance.json")
+        require(provenance.isFile) {
+            "Prepare the owned fixture first: python mobile/fixture-app/gadget_prepare.py --abi x86_64"
+        }
+        val record = JsonSlurper().parse(provenance) as Map<*, *>
+        require(record["authorized_package"] == "com.vscanner.privacydemo" &&
+                record["scope"] == "self-owned-source-fixture" && record["mode"] == "gadget") {
+            "Gadget provenance must identify this self-owned source fixture"
+        }
+        val artifacts = record["artifacts"] as? List<*> ?: error("Missing Gadget artifacts")
+        require(artifacts.isNotEmpty()) { "No prepared Frida Gadget library" }
+        val hashes = MessageDigest.getInstance("SHA-256")
+        fun sha256(input: java.io.File) = hashes.digest(input.readBytes())
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        val declared = artifacts.map { raw ->
+            val artifact = raw as Map<*, *>
+            val abi = artifact["abi"] as String
+            require(abi in setOf("x86_64", "arm64-v8a")) { "Unsupported Gadget ABI" }
+            val directory = file("src/gadget/jniLibs/$abi")
+            val library = directory.resolve("libgadget.so")
+            val config = directory.resolve("libgadget.config.so")
+            require(library.isFile && config.isFile) { "Missing Gadget files for $abi" }
+            require(sha256(library) == artifact["gadget_sha256"] &&
+                    sha256(config) == artifact["config_sha256"]) { "Stale Gadget provenance for $abi" }
+            abi
+        }.toSet()
+        val packaged = file("src/gadget/jniLibs").listFiles()?.filter { it.isDirectory }
+            ?.filter { it.resolve("libgadget.so").isFile }?.map { it.name }?.toSet().orEmpty()
+        require(packaged == declared) { "Undeclared stale Gadget ABI; re-prepare all present ABIs" }
+    }
+}
+tasks.matching { it.name == "preGadgetBuild" }.configureEach { dependsOn(verifyGadgetFiles) }

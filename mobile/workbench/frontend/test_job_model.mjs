@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {jobPresentation} from './js/job-model.js';
+assert.equal(jobPresentation({state:'done',percent:null}).stage,'处理已结束');
+assert.equal(jobPresentation({state:'done',stage:'旧阶段',percent:0}).percent,null);
+assert.doesNotMatch(jobPresentation({state:'done'}).message,/后台处理中/);
+assert.equal(jobPresentation({state:'running',percent:null}).progressLabel,'百分比未报告');
+assert.equal(jobPresentation({state:'running',percent:24}).progressLabel,'24%');
+assert.equal(jobPresentation({state:'running',percent:200}).percent,100);
+assert.equal(jobPresentation({state:'queued'}).active,true);
+assert.equal(jobPresentation({state:'failed',error:'真实错误'}).message,'真实错误');
+assert.equal(jobPresentation({state:'cancelled'}).active,false);
+assert.equal(jobPresentation({state:'unknown'}).stage,'状态未知');
+console.log('PASS 10 job presentation assertions (offline lifecycle fixtures).');

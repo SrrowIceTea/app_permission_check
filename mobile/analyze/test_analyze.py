@@ -38,7 +38,7 @@ def read(evt_id: int, data_type: str, ts: int, *, outcome: str = "ok",
          value_hash: str | None = None) -> dict:
     return {"ev": "PRIVACY_READ", "evt_id": evt_id, "ev": "PRIVACY_READ", "ts": ts,
             "host_received_ts": ts, "outcome": outcome, "data_types": [data_type],
-            "value_hash": value_hash, "stack": "at com.demo.app.A.m(A.kt:1)"}
+            "value_hash": value_hash, "non_empty": outcome == "ok", "stack": "at com.demo.app.A.m(A.kt:1)"}
 
 
 BASE_CTX = {"package": "com.demo.app", "reads": [], "consent": [], "flows": [],
@@ -89,7 +89,8 @@ class NoConsentTest(unittest.TestCase):
                     "host_received_ts": 500, "ts": 500}]
         f = ev.evaluate(self.R, ctx(reads=[read(1, "imei", 100)], consent=consent))
         self.assertIsNotNone(f)
-        self.assertFalse(f["consent_absent"])
+        self.assertIsNone(f["consent_absent"])
+        self.assertEqual(f["policy_consent_state"], "unknown")
         self.assertEqual(f["first_consent_ts"], 500)
 
     def test_consent_before_read_is_not_a_finding(self):
@@ -98,12 +99,11 @@ class NoConsentTest(unittest.TestCase):
         f = ev.evaluate(self.R, ctx(reads=[read(1, "imei", 100)], consent=consent))
         self.assertIsNone(f)
 
-    def test_no_related_consent_is_marked_absent(self):
+    def test_no_related_consent_is_unknown(self):
         consent = [{"ev": "PERM_RESULT", "evt_id": 9, "granted": ["READ_CONTACTS"],
                     "host_received_ts": 50, "ts": 50}]
         f = ev.evaluate(self.R, ctx(reads=[read(1, "imei", 100)], consent=consent))
-        self.assertIsNotNone(f)
-        self.assertTrue(f["consent_absent"])
+        self.assertIsNone(f)
 
     def test_denied_permission_does_not_count_as_consent(self):
         """部分授权里被拒的权限不算同意 —— 否则「同意前收集」会被反过来算。"""
@@ -111,12 +111,14 @@ class NoConsentTest(unittest.TestCase):
                     "denied": ["READ_PHONE_STATE"], "host_received_ts": 50, "ts": 50}]
         f = ev.evaluate(self.R, ctx(reads=[read(1, "imei", 100)], consent=consent))
         self.assertIsNotNone(f, "被拒的权限不得当作已同意")
-        self.assertTrue(f["consent_absent"])
+        self.assertIsNone(f["consent_absent"])
+        self.assertEqual(f["permission_state"], "denial_observed")
 
-    def test_policy_view_counts_as_consent_proxy(self):
+    def test_policy_view_alone_leaves_policy_consent_unknown(self):
         consent = [{"ev": "POLICY_VIEW", "evt_id": 9, "host_received_ts": 50, "ts": 50}]
         f = ev.evaluate(self.R, ctx(reads=[read(1, "imei", 100)], consent=consent))
-        self.assertIsNone(f, "政策页在读取之前打开 → 不构成同意前收集")
+        self.assertIsNone(f, "只有政策页打开不能确定政策接受时刻")
+
 
 
 

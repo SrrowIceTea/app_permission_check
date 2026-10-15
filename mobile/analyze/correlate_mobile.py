@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT))
 from core.evidence import codeloc  # noqa: E402  复用（车载/移动共用一套行号提取）
 from core.io_utils import load_jsonl_counting  # noqa: E402  JSONL 唯一实现（§8.2 B-2）
 import evaluation_mobile as ev  # noqa: E402
-
+from read_semantics import read_state, read_gaps
 
 def read_jsonl(path: Path | None, gaps: list[str] | None = None) -> list[dict]:
     """统一走 core/io_utils（§8.2 B-2）。
@@ -146,6 +146,8 @@ def main() -> int:
     reads, flows, egress = (read_jsonl(reads_p, gaps), read_jsonl(flows_p, gaps),
                             read_jsonl(egress_p, gaps))
     consent_raw = read_jsonl(consent_p, gaps)
+    gaps.extend(read_gaps(reads))
+    gaps.append("政策接受缺少直接信号：policy_consent_state=unknown；POLICY_VIEW/PERM_RESULT 不证明接受政策。")
     if not reads:
         gaps.append("reads.jsonl 缺失或为空：无读取证据（不等于没有读取，可能钩子未挂上）")
     if not consent_raw:
@@ -222,7 +224,7 @@ def main() -> int:
         if dt:
             observed_data_types.add(dt)
     for r in reads:
-        if r.get("ev") == "PRIVACY_READ" and r.get("outcome") == "ok":
+        if r.get("ev") == "PRIVACY_READ" and read_state(r) == "obtained":
             for dt in (r.get("data_types") or []):
                 observed_data_types.add(dt)
 
@@ -273,7 +275,7 @@ def main() -> int:
         "code_locs": codeloc.summarize(findings),
         "app_category": ctx["category"].get("key"),
         "window_override_ms": args.window_override_ms,
-        "gaps": gaps,
+        "gaps": gaps, "policy_consent_state": "unknown",
         "rules_sha256": hashlib.sha256(Path(args.rules).read_bytes()).hexdigest(),
         "caveat": "本工具不产出 policy_violation：是否违规是政策判定，需人工/AI 复核。"
                   "结论等级由规则自身封顶，引擎不抬高。",

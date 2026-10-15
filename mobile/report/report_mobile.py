@@ -32,11 +32,14 @@ sys.path.insert(0, str(HERE))
 
 from reportlab.lib.pagesizes import A4  # noqa: E402
 from reportlab.lib.units import mm  # noqa: E402
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer  # noqa: E402
+from reportlab.platypus import SimpleDocTemplate, Spacer  # noqa: E402
 
 import report_ai_sections as ai_sec  # noqa: E402
 import report_common as rc  # noqa: E402
+from report_common import Paragraph  # noqa: E402
 import report_sections as sec  # noqa: E402
+sys.path.insert(0, str(HERE.parents[1]))
+from mobile.ai.review_gates import load_checked_stages
 
 
 def load_json(path: Path | None) -> dict | None:
@@ -89,10 +92,8 @@ def ai_meta(ai_dir: Path | None) -> tuple[str, str]:
 def build_story(bundle: dict, ai_dir: Path | None, meta: dict) -> list:
     font = meta["font"]
     st = rc.styles(font)
-    stage1 = load_json(ai_dir / "stage1.json") if ai_dir else None
-    stage2 = load_json(ai_dir / "stage2.json") if ai_dir else None
-    stage3 = load_json(ai_dir / "stage3.json") if ai_dir else None
-    validation = load_json(ai_dir / "validation.json") if ai_dir else None
+    checked, validation = load_checked_stages(ai_dir, bundle)
+    stage1, stage2, stage3 = (checked.get(f"stage{n}") for n in (1, 2, 3))
 
     story: list = []
     story.append(Paragraph("移动 App 隐私数据泄露检测与合规评估报告", st["title"]))
@@ -164,6 +165,7 @@ def main() -> int:
     doc = SimpleDocTemplate(str(out), pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm,
                             topMargin=16 * mm, bottomMargin=16 * mm,
                             title="移动 App 隐私合规检测报告")
+    doc.report_font = font
     doc.build(build_story(bundle, ai_dir, meta),
               onFirstPage=rc.footer, onLaterPages=rc.footer)
     print(json.dumps({

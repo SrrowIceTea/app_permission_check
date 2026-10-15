@@ -1,0 +1,80 @@
+.button{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid #dce4df;border-radius:7px;padding:9px 14px;font-size:12px;white-space:nowrap;line-height:1.5;background:white;color:var(--ink);transition:background .15s,transform .15s}
+.button .icon{width:16px;height:16px}
+.button:hover{background:#edf2ee}
+.button.primary{background:var(--teal);color:white;border-color:var(--teal);box-shadow:0 3px 8px #137a6512}
+.button.primary:hover{background:#0b6653}
+.button.ghost{background:transparent;border-color:transparent;color:var(--teal);padding:6px 0}
+.button.danger{color:var(--red);border-color:#ead6d2}
+.icon-button{border:0;background:none;color:var(--muted);width:30px;height:30px;border-radius:6px;display:grid;place-items:center;font-size:23px}
+.icon-button:hover{background:#e8efea}
+.panel{border:1px solid var(--line);border-radius:var(--radius);background:white;box-shadow:var(--shadow);overflow:hidden}
+.panel-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 23px;border-bottom:1px solid #edf0ed}
+.panel-heading>div{min-width:0}
+.panel-heading p{font-size:11px;color:var(--muted);margin-top:4px;overflow-wrap:anywhere}
+.panel-body{padding:22px}
+.badge{display:inline-flex;align-items:center;gap:5px;border-radius:4px;padding:3px 7px;font-size:10px;font-weight:500;white-space:nowrap;line-height:1.4}
+.badge.green{color:#27715b;background:#e9f4ed}
+.badge.red{color:#a24240;background:#fbefed}
+.badge.amber{color:#9d6c21;background:#faf3e5}
+.badge.neutral{color:#7b878b;background:#f0f3f1}
+.metric{background:white;border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.metric-top{display:flex;align-items:center;justify-content:space-between;color:#75867c;font-size:11px}
+.metric-top .icon{width:17px;height:17px;color:#92aa9b}
+.metric-value{font-size:30px;line-height:1.3;font-weight:600;margin-top:10px;letter-spacing:-1px}
+.metric p{font-size:10px;color:#91a095;margin-top:7px}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:240px;padding:32px 20px}
+.empty-icon{width:53px;height:53px;background:#f0f4f0;border:1px solid #e4ebe5;border-radius:15px;display:grid;place-items:center;color:#809d8b;margin-bottom:16px}
+.empty-icon .icon{width:24px;height:24px}
+.empty-state h3{font-size:14px;font-weight:550}
+.empty-state p{color:var(--muted);font-size:12px;max-width:380px;line-height:1.8;margin-top:8px}
+.empty-state .button{margin-top:17px}
+.notice{background:#f3f6f2;border:1px solid #e2e9df;border-radius:8px;padding:13px 16px;display:flex;gap:12px;font-size:11px;line-height:1.8;color:#687d6a}
+.notice.warning{background:#faf6ec;border-color:#eee3c9;color:#947334}
+.notice.error{background:#fcf0ef;border-color:#efd9d6;color:#a4554d}
+.notice .icon{width:17px;margin-top:2px}
+.table-scroll{overflow:auto;width:100%}
+table{border-collapse:collapse;width:100%;font-size:12px;text-align:left}
+th{background:#fafbf9;color:#8b978f;font-size:10px;font-weight:500;letter-spacing:.3px;padding:12px 22px;white-space:nowrap;border-bottom:1px solid var(--line)}
+td{padding:16px 22px;border-bottom:1px solid #edf1ed;vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:#fbfcfa}
+td .subtext{font-size:10px;color:var(--muted);display:block;margin-top:3px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-link{padding:0;border:0;background:none;color:var(--ink);font-size:12px;font-weight:550;text-align:left;max-width:270px;overflow-wrap:anywhere}
+.row-link:hover{color:var(--teal)}
+.toolbar{display:flex;gap:10px;align-items:center;padding:14px 22px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.search-input{display:flex;align-items:center;gap:9px;flex:1;min-width:190px;border:1px solid var(--line);border-radius:6px;padding:7px 10px;background:white}
+.search-input .icon{width:15px;height:15px;color:#8d9c93}
+.search-input input{border:0;outline:0;width:100%;font-size:11px;background:none;color:var(--ink)}
+select.filter{border:1px solid var(--line);padding:7px 10px;border-radius:6px;background:white;font-size:11px;color:#65756a}
+.tabs{display:flex;border-bottom:1px solid var(--line);gap:24px;padding:0 22px;overflow:auto}
+.tab{border:0;background:none;color:var(--muted);font-size:12px;padding:16px 1px;white-space:nowrap;border-bottom:2px solid transparent}
+.tab.active{border-color:var(--teal);color:var(--teal);font-weight:600}
+.keyvalues{display:grid;grid-template-columns:110px 1fr;gap:10px 16px;margin:0;font-size:12px}
+.keyvalues dt{color:var(--muted)}
+.keyvalues dd{margin:0;overflow-wrap:anywhere}
+.json-block{padding:18px;margin:0;background:#f8faf7;border-radius:7px;border:1px solid var(--line);color:#567062;overflow:auto;max-height:440px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8}
+.detail{padding:22px;overflow:auto}
+.detail h3{margin-bottom:14px}
+.detail .keyvalues{margin:18px 0}
+.detail details{margin-top:20px;font-size:12px}
+.detail summary{color:var(--teal);cursor:pointer;margin-bottom:10px}
+.gaps{margin:0;padding:0;list-style:none;display:grid;gap:10px;font-size:11px;color:#8e774a}
+.gaps li{border-left:2px solid #d5bd84;padding-left:12px;line-height:1.8}
+.toast{position:fixed;bottom:26px;right:26px;background:var(--sidebar);color:white;border-radius:9px;padding:15px 20px;max-width:460px;font-size:12px;box-shadow:0 8px 35px #132b3c30;display:flex;align-items:center;gap:12px;z-index:30}
+.toast-error{background:#914d49}
+.toast+.toast{bottom:90px}
+.loading{padding:70px;text-align:center;color:var(--muted);font-size:12px}
+.loading:before{content:'';display:block;width:22px;height:22px;border:2px solid #d9e4dd;border-top-color:var(--teal);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}
+}
+@media(max-width:760px){.panel-heading{padding:17px}
+.panel-body,.detail{padding:17px}
+.metric{padding:15px}
+.metric-value{font-size:26px}
+td{padding:14px 17px}
+th{padding:11px 17px}
+.toolbar{padding:12px 17px}
+.toast{left:16px;right:16px;bottom:16px}
+.keyvalues{grid-template-columns:90px 1fr}
+.tabs{gap:18px;padding:0 17px}
+}

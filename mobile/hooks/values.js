@@ -8,31 +8,34 @@
 // 三种 capture 模式（与 observation_spec_json 一致）：
 //   count_only          → { count: N }              （列表/集合类 API）
 //   return_or_exception → { value_hash, value_preview, non_empty } （标量 API）
-//   args_only           → {}                        （只记调用行为，不记返回值）
+//   args_only           → { collection_state: 'call_only' }                        （只记调用行为，不记返回值）
 //
 // 值哈希：SHA-256 前 16 hex。下游 correlate_mobile.py 用它与流量令牌比对，
 // 是"值级匹配"的证据基础。不落原文：报告与 LLM 不该再拿到一份个人信息副本。
 // ============================================================================
 'use strict';
 
-// ---- 事件期缓存（批次 4 · A1 假设 H1，见 DEV_FIX_REPORT §5.1）----
-// 假设：崩点在被替换的 ArtMethod 内做 Java.use()。MessageDigest 的 Java.use
-// 收敛到 ARMED 阶段解析一次（armValueCache）；缓存缺失时 value_hash 退化为
-// null（下游本来就允许 null，见 correlate 对 value_hash 的处理），事件照发。
-var MD_CLS = null;
+// Preserve upstream ARMED-phase caches: event handlers never call Java.use.
+var MD_CLS = null, STRING_CLS = null;
+var FORCE_ARGS_ONLY = parseInt("__VSCAN_ARGS_ONLY__", 10) === 1;
 
 export function armValueCache() {
   try {
     MD_CLS = Java.use('java.security.MessageDigest');
-    return MD_CLS !== null;
-  } catch (e) { MD_CLS = null; return false; }
+    STRING_CLS = Java.use('java.lang.String');
+    return MD_CLS !== null && STRING_CLS !== null;
+  } catch (e) { MD_CLS = null; STRING_CLS = null; return false; }
+}
+
+export function argsOnly() {
+  return FORCE_ARGS_ONLY;
 }
 
 function sha256hex16(s) {
-  if (MD_CLS === null) return null;
+  if (MD_CLS === null || STRING_CLS === null) return null;
   try {
     var md = MD_CLS.getInstance('SHA-256');
-    var bytes = new java.lang.String(s).getBytes('UTF-8');
+    var bytes = STRING_CLS.$new(s).getBytes('UTF-8');
     md.update(bytes);
     var digest = md.digest();
     var hex = '';
@@ -52,65 +55,42 @@ function safeStringify(v, maxLen) {
   return s.length <= maxLen ? s : s.slice(0, maxLen) + '…';
 }
 
-function javaArrayLength(ret) {
-  try {
-    if (ret === null || ret === undefined) return 0;
-    return Number(ret.length) | 0;
-  } catch (e) { return 0; }
-}
-
-function javaListSize(ret) {
-  try {
-    if (ret === null || ret === undefined) return 0;
-    return Number(ret.size()) | 0;
-  } catch (e) { return 0; }
-}
-
-function javaCursorCount(ret) {
-  try {
-    if (ret === null || ret === undefined) return 0;
-    return Number(ret.getCount()) | 0;
-  } catch (e) { return 0; }
-}
-
-// ---- H5 开关：整轮强制 args_only（批次 4 · A1 假设 H5，见 DEV_FIX_REPORT §5.1）----
-// H5：崩点也许不是"替换 ArtMethod"本身，而是**事件期构造 Java 对象**——
-// `new java.lang.String(s)` + `MessageDigest.update/digest`。打开这个开关后
-// describe() 一律返回 {}，事件里只剩"这个 API 被调用了"：不 String()、不哈希、
-// 不数长度。于是"崩 / 不崩"的差异被隔离到**这一个**变量上。
-// 它是 H1（事件期 Java.use）的更严格版本，也是 §8.6 第 1 条的用法示范：
-// 诊断期临时降低观测面，**不改判据**——PRIVACY_READ 事件照样必须出现，
-// 缺的是值字段，不是"有没有收集"的结论。
-//
-// **写法注意**：必须走 parseInt 消费——frida-compile 的压缩器会把直接的
-// 字面量比较（`"__VSCAN_ARGS_ONLY__" === "1"`）常量折叠成 false，占位符就没了。
-var FORCE_ARGS_ONLY = parseInt("__VSCAN_ARGS_ONLY__", 10) === 1;
-
-export function argsOnly() {
-  return FORCE_ARGS_ONLY;
+function resultCount(ret) {
+  var readers = [function () { return ret.length; },
+                 function () { return ret.size(); },
+                 function () { return ret.getCount(); }];
+  for (var i = 0; i < readers.length; i++) {
+    try {
+      var raw = readers[i]();
+      if (raw === null || raw === undefined) continue;
+      var n = Number(raw);
+      if (Number.isFinite(n) && n >= 0 && Number.isInteger(n)) return n;
+    } catch (e) {}  // 不能把不支持/失败的计数读成空列表
+  }
+  return null;
 }
 
 export function describe(dataTypes, spec, ret) {
   var capture = (spec && spec.capture) || 'return_or_exception';
-
-  if (FORCE_ARGS_ONLY) return {};          // H5：整轮不碰返回值（含 count_only）
-  if (capture === 'args_only') return {};
-
-  if (capture === 'count_only') {
-    var count = 0;
-    if (ret !== null && ret !== undefined) {
-      count = javaArrayLength(ret);
-      if (count === 0) count = javaListSize(ret);
-      if (count === 0) count = javaCursorCount(ret);
-    }
-    return { count: count };
+  // Diagnostic args-only still records a call, never claims data collection.
+  if (FORCE_ARGS_ONLY || capture === 'args_only') return { collection_state: 'call_only' };
+  if (ret === null || ret === undefined) {
+    return { collection_state: 'empty', non_empty: false, value_kind: 'null' };
   }
-
-  var s = safeStringify(ret, 200);
-  var nonEmpty = s !== null && s.length > 0;
-  var out = { non_empty: nonEmpty };
+  if (capture === 'count_only') {
+    var count = resultCount(ret);
+    return { count: count, value_count: count,
+             collection_state: count === null ? 'unknown' : count > 0 ? 'obtained' : 'empty',
+             non_empty: count === null ? null : count > 0 };
+  }
+  var s;
+  try { s = String(ret); }
+  catch (e) { return { collection_state: 'unknown' }; }
+  var nonEmpty = s.length > 0;
+  var out = { non_empty: nonEmpty, value_len: s.length,
+              collection_state: nonEmpty ? 'obtained' : 'empty' };
   if (nonEmpty) {
-    out.value_preview = safeStringify(s, 80);
+    out.value_preview = safeStringify(s, 6);  // 展示截断不改变值哈希输入
     out.value_hash = sha256hex16(s);
   }
   return out;

@@ -3,13 +3,13 @@
 
 仅用于授权测试（已获授权的样本与设备）。
 
-字体策略与车载侧（`vehicle/analyze/report_extras.py`）保持同一份候选表与优先级：
-优先嵌入选定的中文字体（可移植），否则退到 reportlab 的 STSong-Light（不嵌入，依赖阅读器），
-再退 Helvetica。**退到哪个必须写进报告**——否则中文在别的机器上显示成方块，而生成方毫不知情。
-换机不想改代码时设 `VSCAN_CJK_FONT`。
+字体策略沿用 vehicle/analyze/report.py：优先嵌入选定的中文字体（可移植），
+否则退到 reportlab 的 STSong-Light（不嵌入，依赖阅读器），再退 Helvetica。
+**退到哪个必须写进报告**——否则中文在别的机器上显示成方块，而生成方毫不知情。
 """
 from __future__ import annotations
 
+import re
 import os
 
 from reportlab.lib import colors
@@ -18,15 +18,27 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import Paragraph as _Paragraph
 
-# 与 `vehicle/analyze/report_extras.py` 的那份**同序同项**（§6.5）：两侧各写一份且不一致时，
-# 换机只改一处就会让另一侧的报告印成方块，而生成方毫不知情。
+
+_BOLD = re.compile(r"(?<!\*)\*\*([^*]+?)\*\*(?!\*)")
+
+
+def bold_markup(text: str | None) -> str | None:
+    """只转换成对的 **粗体**；调用方的 XML 转义和既有标签保持不变。"""
+    return _BOLD.sub(r"<b>\1</b>", text) if text is not None else None
+
+
+class Paragraph(_Paragraph):
+    def __init__(self, text, *args, **kwargs):
+        super().__init__(bold_markup(text), *args, **kwargs)
+
 FONT_CANDIDATES = [
     ("SimHei", r"C:\Windows\Fonts\simhei.ttf"),
     ("DengXian", r"C:\Windows\Fonts\Deng.ttf"),
     ("MicrosoftYaHei", r"C:\Windows\Fonts\msyh.ttc"),
 ]
-# 换机不想改代码时的逃生口，与车载侧同一个变量名，排在最前（优先级最高）。
+
 if os.environ.get("VSCAN_CJK_FONT"):
     FONT_CANDIDATES.insert(0, ("CustomCJK", os.environ["VSCAN_CJK_FONT"]))
 
@@ -93,7 +105,7 @@ def table_style(font: str, *, widths=None) -> "object":
 
 def footer(canvas, doc) -> None:
     canvas.saveState()
-    canvas.setFont("Helvetica", 7.5)
+    canvas.setFont(getattr(doc, "report_font", "Helvetica"), 7.5)
     canvas.setFillColor(colors.HexColor("#666666"))
     canvas.drawString(18 * mm, 10 * mm,
                       "V-Scanner Mobile | 仅用于授权测试（已获授权的样本与设备）")
@@ -102,7 +114,7 @@ def footer(canvas, doc) -> None:
 
 
 def kv_table(rows: list[tuple[str, str]], st: dict, font: str, *, col1=38 * mm):
-    from reportlab.platypus import Paragraph, Table
+    from reportlab.platypus import Table
     data = [[Paragraph(f"<b>{k}</b>", st["cell"]), Paragraph(v or "—", st["cell"])]
             for k, v in rows]
     t = Table(data, colWidths=[col1, 174 * mm - col1])
@@ -111,7 +123,7 @@ def kv_table(rows: list[tuple[str, str]], st: dict, font: str, *, col1=38 * mm):
 
 
 def grid_table(header: list[str], rows: list[list[str]], st: dict, font: str, widths=None):
-    from reportlab.platypus import Paragraph, Table
+    from reportlab.platypus import Table
     data = [[Paragraph(f"<b>{h}</b>", st["cellh"]) for h in header]]
     for r in rows:
         data.append([Paragraph(str(c) if c is not None else "—", st["cell"]) for c in r])

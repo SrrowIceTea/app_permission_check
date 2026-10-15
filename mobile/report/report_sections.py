@@ -9,15 +9,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from reportlab.lib.units import mm
-from reportlab.platypus import KeepTogether, PageBreak, Paragraph, Spacer
+from reportlab.platypus import KeepTogether, PageBreak, Spacer
 
-from report_common import SEVERITY_COLORS, esc, grid_table, kv_table
+from report_common import Paragraph, SEVERITY_COLORS, esc, grid_table, kv_table
+from report_health import health_state
 
 LEVEL_ZH = {"candidate": "候选（待复核）", "observed": "已观测",
             "correlated": "已关联", "policy_violation": "政策违规（本工具不产出）"}
 TYPE_ZH = {
     "over_permission": "权限必要性", "sensitive_read": "敏感读取",
-    "no_consent_read": "同意前/未授权读取", "data_egress": "读取后外发",
+    "no_consent_read": "运行时权限时序（政策同意未知）", "data_egress": "读取后外发",
     "over_collection": "超出必要范围收集", "plaintext_transmission": "明文/未加密传输",
     "third_party_share": "向第三方外发", "policy_mismatch": "政策未声明即收集",
 }
@@ -53,7 +54,7 @@ def section_overview(bundle: dict, st: dict, font: str, meta: dict) -> list:
     if bundle.get("gaps"):
         out.append(Paragraph("本轮证据缺口（影响范围见各节）", st["h2"]))
         for g in bundle["gaps"]:
-            out.append(Paragraph("• " + esc(g), st["warn"]))
+            out.append(Paragraph("- " + esc(g), st["warn"]))
     out.append(Spacer(1, 4))
     out.append(Paragraph(
         "本报告由自动化工具生成。工具**不产出 policy_violation**：是否构成违规是政策判定，"
@@ -100,8 +101,7 @@ def section_evidence(bundle: dict, st: dict, font: str) -> list:
                          st["h2"]))
     rows = []
     for src, h in sorted(health.items()):
-        state = ("未挂载/未运行" if h.get("armed") is None else
-                 f"挂载 {h.get('armed')} 条，失败 {h.get('failed')} 条")
+        state = health_state(h)
         if h.get("not_target"):
             state += "（进程不在白名单：事件为空是预期行为）"
         rows.append([esc(src), esc(state), esc(h.get("note") or "")])
@@ -148,7 +148,7 @@ def section_evidence(bundle: dict, st: dict, font: str) -> list:
         out.append(grid_table(
             ["证据", "方法", "主机", "路径", "TLS", "敏感标签", "状态"],
             [[esc(f.get("evidence_id")), esc(f.get("method")), esc(f.get("host")),
-              esc((f.get("path") or "")[:34]), "是" if f.get("intercepted_tls") else "**否**",
+              esc((f.get("path") or "")[:34]), "是" if f.get("intercepted_tls") is True else "否" if f.get("intercepted_tls") is False else "未知",
               esc("、".join(f.get("request_tags") or []) or "—"),
               esc(f.get("status_code"))] for f in flows],
             st, font, widths=[14 * mm, 15 * mm, 38 * mm, 40 * mm, 11 * mm, 38 * mm, 14 * mm]))
@@ -246,14 +246,14 @@ def section_method(bundle: dict, st: dict, font: str, meta: dict) -> list:
         "自带网络栈并直连的客户端（例如重打包的 Apache HttpClient）不走代理，"
         "此时「无网络流」是**覆盖缺口**而非「没有外发」，须用设备侧连接采样等旁路证据补。",
         "剪贴板与部分系统 API 的读取在很多版本上无需运行时权限，"
-        "因此「无同意事件」既可能是违规，也可能是该 API 本就不需要同意——需结合具体 API 判断。",
+        "因此政策接受缺直接信号时只能标未知；POLICY_VIEW 和系统权限授予不等于政策接受。",
         "「形态标签」是线索不是结论：报文里出现 15 位数字**不等于**就是 IMEI。"
         "只有值哈希匹配才构成「确实传输了该值」。",
         "隐私政策的关键词预扫是**正则代理指标**：未命中不等于政策未声明，换措辞就不命中。",
         "本工具不做法条定性，不产出 policy_violation；AI 章节同样只给「涉嫌」级判断。",
     ]
     for lim in limits:
-        out.append(Paragraph("• " + esc(lim), st["body"]))
+        out.append(Paragraph("- " + esc(lim), st["body"]))
 
     if policy.get("available"):
         out.append(Paragraph("9.2 隐私政策来源", st["h2"]))
@@ -277,7 +277,7 @@ def section_appendix(bundle: dict, st: dict, font: str, meta: dict) -> list:
     rows = []
     for r in (bundle.get("dynamic") or {}).get("reads") or []:
         rows.append([esc(r.get("evidence_id")), "读取", esc(r.get("data_type_zh")),
-                     esc(r.get("api")), esc(r.get("outcome")),
+                     esc(r.get("api")), esc(str(r.get("outcome")) + "/" + str(r.get("collection_state", "unknown"))),
                      esc((r.get("app_frame") or "")[:60])])
     for c in (bundle.get("dynamic") or {}).get("consent_timeline") or []:
         rows.append([esc(c.get("evidence_id")), "同意", esc(_consent_desc(c)), "", "", ""])
@@ -291,7 +291,7 @@ def section_appendix(bundle: dict, st: dict, font: str, meta: dict) -> list:
     out.append(Paragraph("附录 B：本轮证据缺口", st["h1"]))
     if bundle.get("gaps"):
         for g in bundle["gaps"]:
-            out.append(Paragraph("• " + esc(g), st["warn"]))
+            out.append(Paragraph("- " + esc(g), st["warn"]))
         out.append(Paragraph(
             "缺口的含义：这些判定**没有被执行**，不是被执行后判定为合规。", st["small"]))
     else:

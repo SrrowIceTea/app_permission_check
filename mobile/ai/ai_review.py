@@ -9,9 +9,8 @@
      stage1 政策条款抽取 → stage2 行为-政策一致性 → stage3 综合研判与建议。
      跳阶段会让 stage3 失去可追溯的中间结论。
 
-  2. **每阶段输出先过校验再进入下一阶段。** 校验不过时仍然继续（报告里如实记录
-     问题清单），但**不允许拿没校验过的输出去生成报告结论**——
-     校验结果会写进 validation.json，由报告层原样展示。
+  2. **每阶段输出先过校验再进入下一阶段。** 硬伤立即停止后续调用；
+     原始输出、调用记录与 validation.json 仍保留，未通过的内容不进入报告结论。
 
   3. **--dry-run 全程不联网**：只把渲染好的提示词写到 `--out-dir/prompts/`。
      没有 key 时这是审阅"到底要发什么出去"的唯一途径。
@@ -34,6 +33,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import llm_client  # noqa: E402
 import validate as vd  # noqa: E402
+from review_gates import validate_stage  # noqa: E402
 
 PROMPTS = HERE / "prompts"
 
@@ -85,10 +85,9 @@ def fence_untrusted(text: str, kind: str) -> str:
 def build_stage1_user(bundle: dict) -> str:
     policy = bundle.get("policy") or {}
     reqs = (policy.get("lint") or {}).get("checks") or []
-    # 关键字段白名单化：只把判定必需的三个字段交给模型，不整段外传 lint 结果。
     req_brief = [{"req_id": c["req_id"], "title": c["title"], "requirement": c["requirement"]}
                  for c in reqs]
-    return render(load_template("stage1_user.md"), {
+    return load_template("stage1_policy_extract.md") + "\n\n" + render(load_template("stage1_user.md"), {
         "POLICY_TEXT": (fence_untrusted(policy.get("text"), "policy.text")
                         if policy.get("text") else "（未取得政策正文）"),
         "DISCLOSURE_SCAN": dump(policy.get("disclosure_scan") or {}, 20000),
@@ -97,7 +96,7 @@ def build_stage1_user(bundle: dict) -> str:
 
 
 def build_stage2_user(bundle: dict, stage1: dict) -> str:
-    return render(load_template("stage2_user.md"), {
+    return load_template("stage2_consistency.md") + "\n\n" + render(load_template("stage2_user.md"), {
         "POLICY_EXTRACT": dump(stage1, 30000),
         "READS": dump(bundle["dynamic"]["reads"], 30000),
         "CONSENT": dump(bundle["dynamic"]["consent_timeline"], 20000),
@@ -110,7 +109,7 @@ def build_stage2_user(bundle: dict, stage1: dict) -> str:
 
 def build_stage3_user(bundle: dict, stage2: dict) -> str:
     policy = bundle.get("policy") or {}
-    return render(load_template("stage3_user.md"), {
+    return load_template("stage3_assessment.md") + "\n\n" + render(load_template("stage3_user.md"), {
         "CONSISTENCY": dump(stage2, 40000),
         "TOOL_FINDINGS": dump(bundle.get("findings") or [], 15000),
         "POLICY_LINT": dump((policy.get("lint") or {}).get("by_result") or {}, 2000),
@@ -123,110 +122,82 @@ def build_stage3_user(bundle: dict, stage2: dict) -> str:
     })
 
 
+def save_json(path: Path, value) -> None:
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def save_prompt(out_dir: Path, stage: str, system: str, user: str) -> None:
+    (out_dir / "prompts" / f"{stage}.rendered.md").write_text(
+        f"<!-- SYSTEM -->\n{system}\n\n<!-- USER -->\n{user}\n", encoding="utf-8")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--bundle", required=True)
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--config", default=None)
     ap.add_argument("--dry-run", action="store_true", help="只渲染提示词，不联网")
-    ap.add_argument("--stages", default="1,2,3", help="只跑指定阶段（dry-run 时常用来分段审阅）")
+    ap.add_argument("--stages", default="1,2,3", help="连续阶段：1 或 1,2 或 1,2,3")
     args = ap.parse_args()
-
+    try:
+        stages = {int(s.strip()) for s in args.stages.split(",") if s.strip()}
+    except ValueError:
+        ap.error("--stages 只能是 1 或 1,2 或 1,2,3")
+    if stages not in ({1}, {1, 2}, {1, 2, 3}):
+        ap.error("阶段必须从 1 开始连续运行，不允许跳过中间校验")
     bundle = json.loads(Path(args.bundle).read_text(encoding="utf-8"))
     out_dir = Path(args.out_dir)
+    # 不与上一次的输出/校验混用：失败后也必须使用新目录重跑。
+    old = [p.name for p in out_dir.glob("stage*.json")]
+    old += [n for n in ("validation.json", "llm-calls.jsonl") if (out_dir / n).exists()]
+    if old:
+        ap.error(f"输出目录已有 AI 产物 {old}；请为本次运行选择新目录")
     (out_dir / "prompts").mkdir(parents=True, exist_ok=True)
     system = load_template("system.md")
-
-    stages = {int(s) for s in args.stages.split(",") if s.strip()}
-    req_ids = [c["req_id"] for c in (bundle.get("policy", {}).get("lint", {}) or {}).get("checks", [])]
-
-    rendered = {}
-    rendered["stage1"] = (system, build_stage1_user(bundle))
-    for name, (sys_md, user_md) in rendered.items():
-        (out_dir / "prompts" / f"{name}.rendered.md").write_text(
-            f"<!-- SYSTEM -->\n{sys_md}\n\n<!-- USER -->\n{user_md}\n", encoding="utf-8")
-
+    stage1_user = build_stage1_user(bundle)
+    save_prompt(out_dir, "stage1", system, stage1_user)
     if args.dry_run:
-        print(json.dumps({
-            "status": "dry_run", "out_dir": str(out_dir),
-            "note": "只渲染了阶段一提示词；阶段二/三依赖前序输出，需真实调用后渲染。",
-            "system_chars": len(rendered["stage1"][0]),
-            "stage1_chars": len(rendered["stage1"][1]),
-            "policy_available": bool(bundle.get("policy", {}).get("available")),
-            "gaps": bundle.get("gaps") or [],
-        }, ensure_ascii=False, indent=2))
+        print(json.dumps({"status": "dry_run", "out_dir": str(out_dir),
+                          "note": "阶段一已包含完整指令与 schema；二/三依赖通过校验的前序输出。",
+                          "system_chars": len(system), "stage1_chars": len(stage1_user),
+                          "policy_available": bool((bundle.get("policy") or {}).get("available")),
+                          "gaps": bundle.get("gaps") or []}, ensure_ascii=False, indent=2))
         return 0
-
     cfg = llm_client.load_config(Path(args.config) if args.config else None)
-    results: dict[str, dict] = {}
-    validations: dict[str, dict] = {}
-    calls: list[dict] = []
-
-    def run_stage(num: int, user_md: str, tag: str):
-        (out_dir / "prompts" / f"stage{num}.rendered.md").write_text(
-            f"<!-- SYSTEM -->\n{system}\n\n<!-- USER -->\n{user_md}\n", encoding="utf-8")
-        call = llm_client.chat(cfg, system=system, user=user_md, tag=tag)
-        calls.append(call)
-        parsed, parse_warnings = vd.parse_json_output(call["text"])
-        return parsed, parse_warnings
-
-    # ---- stage 1 ----
-    if 1 in stages:
-        parsed, warns = run_stage(1, rendered["stage1"][1], "stage1")
+    results, validations = {}, {}
+    for num in sorted(stages):
+        stage = f"stage{num}"
+        user = (stage1_user if num == 1 else
+                build_stage2_user(bundle, results["stage1"]) if num == 2 else
+                build_stage3_user(bundle, results["stage2"]))
+        save_prompt(out_dir, stage, system, user)
+        parsed, parse_warnings = None, []
+        try:
+            call = llm_client.chat(cfg, system=system, user=user, tag=stage)
+            # 每次调用立即保存；解析失败或门控失败也不能丢掉原始响应。
+            llm_client.write_call_log(out_dir, [call], cfg)
+            parsed, parse_warnings = vd.parse_json_output(call["text"])
+        except llm_client.LLMError as exc:
+            parse_warnings = [f"模型调用失败: {exc}"]
+        checked = validate_stage(stage, parsed, bundle)
+        checked["warnings"].extend(parse_warnings)
         if parsed is None:
-            print(json.dumps({"status": "failed", "stage": 1, "problems": warns},
+            checked["problems"].extend(parse_warnings)
+        else:
+            save_json(out_dir / f"{stage}.json", parsed)
+        validations[stage] = checked
+        save_json(out_dir / "validation.json", validations)
+        if not checked["ok"]:
+            print(json.dumps({"status": "validation_failed", "stage": num,
+                              "out_dir": str(out_dir), "problems": checked["problems"],
+                              "note": "后续阶段未调用；失败输出仅作为审计记录，不进入报告结论。"},
                              ensure_ascii=False, indent=2))
             return 1
-        results["stage1"] = parsed
-        validations["stage1"] = vd.validate_stage1(
-            parsed, req_ids=req_ids, policy_text=(bundle.get("policy") or {}).get("text") or "")
-        validations["stage1"]["warnings"] += warns
-        (out_dir / "stage1.json").write_text(
-            json.dumps(parsed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    else:
-        print("[fatal] 阶段二/三依赖阶段一输出，必须从 1 开始跑。", file=sys.stderr)
-        return 2
-
-    # ---- stage 2 ----
-    if 2 in stages:
-        parsed, warns = run_stage(2, build_stage2_user(bundle, results["stage1"]), "stage2")
-        if parsed is None:
-            print(json.dumps({"status": "failed", "stage": 2, "problems": warns},
-                             ensure_ascii=False, indent=2))
-            return 1
-        results["stage2"] = parsed
-        validations["stage2"] = vd.validate_stage2(parsed, bundle=bundle)
-        validations["stage2"]["warnings"] += warns
-        (out_dir / "stage2.json").write_text(
-            json.dumps(parsed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-    # ---- stage 3 ----
-    if 3 in stages and "stage2" in results:
-        parsed, warns = run_stage(3, build_stage3_user(bundle, results["stage2"]), "stage3")
-        if parsed is None:
-            print(json.dumps({"status": "failed", "stage": 3, "problems": warns},
-                             ensure_ascii=False, indent=2))
-            return 1
-        results["stage3"] = parsed
-        validations["stage3"] = vd.validate_stage3(parsed, bundle=bundle)
-        validations["stage3"]["warnings"] += warns
-        (out_dir / "stage3.json").write_text(
-            json.dumps(parsed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-    llm_client.write_call_log(out_dir, calls, cfg)
-    (out_dir / "validation.json").write_text(
-        json.dumps(validations, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-    failed = [k for k, v in validations.items() if not v["ok"]]
-    print(json.dumps({
-        "status": "ok" if not failed else "validation_failed",
-        "out_dir": str(out_dir), "stages": sorted(results.keys()),
-        "validation_failed_stages": failed,
-        "problems": {k: v["problems"] for k, v in validations.items() if v["problems"]},
-        "note": ("校验未通过不等于调用失败：输出已落盘，报告层会原样展示问题清单，"
-                 "不把未经校验的结论当结论。" if failed else "全部阶段通过校验。"),
-    }, ensure_ascii=False, indent=2))
-    return 0 if not failed else 1
+        results[stage] = parsed
+    print(json.dumps({"status": "ok", "out_dir": str(out_dir),
+                      "stages": sorted(results), "note": "全部运行阶段通过硬门控。"},
+                     ensure_ascii=False, indent=2))
+    return 0
 
 
 if __name__ == "__main__":

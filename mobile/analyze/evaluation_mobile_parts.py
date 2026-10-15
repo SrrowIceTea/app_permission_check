@@ -23,6 +23,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "traffic"))
 import tagging_mobile  # noqa: E402
+from read_semantics import obtained_reads
 
 
 def _ts(record: dict) -> int | None:
@@ -31,23 +32,9 @@ def _ts(record: dict) -> int | None:
 
 
 def _ok_reads(reads: list[dict], data_type: str) -> list[dict]:
-    return [r for r in reads
-            if r.get("ev") == "PRIVACY_READ" and r.get("outcome") == "ok"
-            and data_type in (r.get("data_types") or [])]
+    return obtained_reads(reads, data_type)
 
 
-def _consent_for(data_type: str, consent: list[dict], hints: list[str]) -> list[dict]:
-    """与该数据类别相关的同意事件。PERM_RESULT 只算 granted 的那些；
-    部分授权时 denied 的权限不算同意（否则"同意前收集"会被反过来算）。"""
-    out = []
-    for c in consent:
-        ev = c.get("ev")
-        if ev == "PERM_RESULT":
-            if any(h in (c.get("granted") or []) for h in hints):
-                out.append(c)
-        elif ev == "POLICY_VIEW":
-            out.append(c)
-    return out
 
 
 def _flow_unusable(f: dict) -> bool:
