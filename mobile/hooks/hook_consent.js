@@ -119,7 +119,7 @@ function armOne(entry) {
   }
 }
 
-function main() {
+export function main() {
   try {
     STATE.pkg = procName();
     STATE.uid = Java.use('android.os.Process').myUid();
@@ -142,4 +142,5 @@ function main() {
   }
 }
 
-Java.perform(main);
+// 独立入口由构建提供（build.mjs 的薄入口）——本文件不自执行，见 hook_privacy.js
+// 顶部关于"单 agent 合并"的注释（2026-10-16 A1 修复：多脚本各自替换不被 bridge 支持）。

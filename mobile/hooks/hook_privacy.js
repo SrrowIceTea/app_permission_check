@@ -13,7 +13,8 @@
 'use strict';
 
 import { packages } from './scope.js';
-import { makeLogger, procName, threadName, stackStr, armRuntimeCache } from './runtime.js';
+import { makeLogger, procName, threadName, stackStr, armRuntimeCache,
+         deoptimizeBeforeArm } from './runtime.js';
 import { WATCH, DATA_TYPES, META } from './targets.generated.js';
 import { describe, armValueCache, argsOnly } from './values.js';
 import { matchBySpec, describeException, discriminator, unmappedKey, preview } from './dispatch.js';
@@ -114,10 +115,13 @@ function armOne(entry) {
   }
 }
 
-function main() {
+export function main() {
   try {
     STATE.pkg = procName();
     STATE.uid = Java.use('android.os.Process').myUid();
+    // A1 修复（2026-10-16）：替换 ArtMethod 前先把已编译方法退回解释器，
+    // 消除 JIT 编译线程与 entrypoint 替换的竞态（崩溃现场在 Jit thread pool）。
+    var deopt = deoptimizeBeforeArm();
     // A1：事件期不再 Java.use——缓存与分档都在 ARMED 阶段一次定妥。
     var cacheOk = armRuntimeCache();
     var valueCacheOk = armValueCache();
@@ -127,6 +131,7 @@ function main() {
                     whitelist: CFG.whitelist, watch_apis: WATCH.length,
                     watch_limit_raw: RAW_WATCH_LIMIT, watch_limit: limit,
                     runtime_cache: cacheOk, value_cache: valueCacheOk,
+                    deoptimize: deopt,
                     args_only: argsOnly(),
                     data_types: Object.keys(DATA_TYPES).length,
                     rules_sha256: META.rules_sha256, frida: Frida.version });
@@ -146,4 +151,9 @@ function main() {
   }
 }
 
-Java.perform(main);
+// 独立入口由构建提供（build.mjs 的薄入口先 import 本模块再 Java.perform(main)）：
+// 本文件导出 main 而**不**在顶层自执行——这样它既能被独立 bundle 使用，也能被
+// hook_all（单 agent 合并入口）与其他模块一起装配。背景：frida-java-bridge 不支持
+// "多脚本各自替换"（见 bridge 的 ensureArtKnowsHowToHandleReplacementMethods 注释），
+// 多个 run.py（=多个 agent）各自 attach 同一进程时偶发 ART FATAL（2026-10-16 实测，
+// 双脚本 ~50% vs 单脚本 5/5）——故 production 统一收敛为单 bundle。

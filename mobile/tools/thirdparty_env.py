@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
@@ -236,8 +237,33 @@ def orchestrator_notes(death: dict) -> list[str]:
     return notes
 
 
+def tcp_open(host: str, port: int, timeout: float = 1.5) -> bool:
+    """宿主端口上是否有进程在听。用于代理前置/复用判定（2026-10-16）。
+
+    为什么要有它：模拟器 37.x 启动时探测代理可达性，失败会把 SLIRP 强制代理
+    整条关掉；编排层需在冷启动前确认"端口已有人在听"，device_run 也用它决定
+    「复用编排层预启动的代理」还是「回退自行启动」。
+    """
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 def start_mitm(session: Path, log: Path, package: str) -> subprocess.Popen:
-    """**常规代理模式**（不是 reverse）——第三方样本要访问它自己的服务端。"""
+    """**常规代理模式**（不是 reverse）——第三方样本要访问它自己的服务端。
+
+    启动前后各加一道校验（2026-10-16）：
+      ① 端口被占 → 直接报错。原先 mitmdump 抢不到端口会**立刻退出**，而调用方
+         睡 7 秒后照常返回——采集带着"没有代理"静默跑完，报告漏掉全部网络证据，
+         事后完全看不出来。
+      ② 启动后确认真的在监听；没监听就把死进程收了再报错（同上，防静默）。
+    """
+    if tcp_open("127.0.0.1", MITM_PORT):
+        raise RuntimeError(
+            f"端口 {MITM_PORT} 已被占用——可能是上一轮残留的 mitmproxy（未清理）或"
+            f"其它进程。先排查：netstat -ano | findstr :{MITM_PORT}，再重跑。")
     env = dict(os.environ)
     env.update({
         "VSCAN_FLOW_LOG": str(session / "flows.jsonl"),
@@ -265,8 +291,21 @@ def start_mitm(session: Path, log: Path, package: str) -> subprocess.Popen:
          "--listen-host", "0.0.0.0", "--listen-port", str(MITM_PORT)],
         stdin=subprocess.DEVNULL, stdout=open(log, "w", encoding="utf-8"),
         stderr=subprocess.STDOUT, env=env)
-    time.sleep(7.0)   # mitmproxy 启动要几秒；等不够会"应用连不上代理"而非"代理没起来"
-    return proc
+    # mitmproxy 启动要几秒；等不够会"应用连不上代理"而非"代理没起来"。
+    # 轮询而不是死睡：就绪即返回；20s 内没监听 → 收掉死进程并报错（防静默）。
+    for _ in range(40):
+        if proc.poll() is not None:
+            break
+        if tcp_open("127.0.0.1", MITM_PORT):
+            return proc
+        time.sleep(0.5)
+    try:
+        if proc.poll() is None:
+            proc.kill()
+    except Exception:  # noqa: BLE001
+        pass
+    raise RuntimeError(f"mitmproxy 未能在 {MITM_PORT} 上监听（20s 超时）；"
+                       f"启动日志见 {log}")
 
 
 def start_hook(script: Path, session: Path, out_name: str, log: Path,
@@ -274,14 +313,59 @@ def start_hook(script: Path, session: Path, out_name: str, log: Path,
     env = dict(os.environ)
     env["VSCAN_SESSION"] = session.name
     env["PYTHONUNBUFFERED"] = "1"   # 见 start_mitm 的注释：杀掉子进程时缓冲内容会丢
+    # 优雅停止哨兵（2026-10-16）：run.py 每 tick 检查该文件，出现即正常 detach 退出。
+    # 收尾必须走 stop_hook() 而不是 kill_tree——强杀会让 agent 在未清理状态下
+    # 做 JNI 调用（DeleteGlobalRef），CheckJNI 的 userdebug 上必 aborts 被测应用，
+    # 实测每轮一次、污染 app-death 取证。路径挂在返回的 Popen 上供 stop_hook 取用；
+    # 启动前先删残留（否则上一轮的 .stop 会让新会话秒退）。
+    stop_file = session / (out_name + ".stop")
+    try:
+        stop_file.unlink()
+    except OSError:
+        pass
     proc = subprocess.Popen(
         [PY, str(ROOT / "core" / "frida_host" / "run.py"), "--package", package,
          "--script", str(script), "--seconds", str(seconds),
          "--allow-package", package, "--session", session.name,
-         "--out", str(session / out_name)],
+         "--out", str(session / out_name), "--stop-file", str(stop_file)],
         stdin=subprocess.DEVNULL, stdout=open(log, "w", encoding="utf-8"),
         stderr=subprocess.STDOUT, env=env)
+    proc.stop_file = stop_file  # type: ignore[attr-defined]
     return proc
+
+
+def stop_hook(proc: subprocess.Popen | None, log: Path | None = None,
+              timeout_s: float = 12.0) -> str:
+    """优雅停止 hook 进程：写哨兵 → 等 run.py 正常 detach → 超时才强杀兜底。
+
+    为什么不能一步 taskkill /F（2026-10-16 实测）：强杀让 frida agent 在未清理
+    状态下收尾——userdebug（CheckJNI 强制开启）上必发
+    "a thread is making JNI calls without being attached / in call to DeleteGlobalRef"
+    abort，**每轮一次**，且把"工具收尾噪声"写进 app-death 取证（会污染
+    「应用在窗口结束时仍存活」的判定）。对照实验：同一流程自然 detach 时
+    crash buffer 零 abort。
+
+    返回值："exited"（自然退出，期望路径）/ "killed"（超时或哨兵不可写，兜底强杀）/
+    "none"（进程已不在或没有进程）。
+    """
+    if proc is None or proc.poll() is not None:
+        return "none"
+    stop_file = getattr(proc, "stop_file", None)
+    if stop_file is None:
+        # 不是 start_hook 起的进程（或不认识哨兵协议）：维持旧行为。
+        kill_tree(proc, log)
+        return "killed"
+    try:
+        stop_file.write_text("stop", encoding="utf-8")
+    except OSError:
+        kill_tree(proc, log)
+        return "killed"
+    try:
+        proc.wait(timeout=timeout_s)
+        return "exited"
+    except subprocess.TimeoutExpired:
+        kill_tree(proc, log)
+        return "killed"
 
 
 def app_uid(package: str) -> int | None:
@@ -417,14 +501,24 @@ def app_death_reason(package: str) -> dict:
       ③ adb 报错 ≠ 应用死亡：多设备未指定 ANDROID_SERIAL 时 pidof 会报错，
          旧实现把它当 alive=False，会把"查不到"写成"死了"。
     """
-    pid_res = adb("shell", "pidof", package, timeout=30)
+    try:
+        pid_res = adb("shell", "pidof", package, timeout=30)
+    except subprocess.TimeoutExpired:
+        # adb 抖动（服务重启窗口）时 pidof 会挂满超时——**不能让它把整轮采集炸掉**
+        # （2026-10-16 实测：一次 adb 抖动把夹具自检整个掀翻在死亡取证这一步）。
+        # 语义上与"adb 报错"一致：无法判定 → alive_at_end=None，由调用方如实降级。
+        return {"alive_at_end": None, "pid": None, "fatal_lines": [], "cause": None,
+                "error": "adb pidof 超时（30s）——无法判定存活", "package": package}
     err = (pid_res.stderr or "").strip()
     if "error:" in err:
         return {"alive_at_end": None, "pid": None, "fatal_lines": [], "cause": None,
                 "error": err.splitlines()[0], "package": package}
     pid = (pid_res.stdout or "").strip()
-    log = adb("logcat", "-d", "-b", "main", "-b", "system", "-b", "crash",
-              "-v", "time", timeout=120).stdout or ""
+    try:
+        log = adb("logcat", "-d", "-b", "main", "-b", "system", "-b", "crash",
+                  "-v", "time", timeout=120).stdout or ""
+    except subprocess.TimeoutExpired:
+        log = ""   # 同上：拿不到崩溃缓冲就如实为空，不让它掀翻整轮
     return {"alive_at_end": bool(pid), "pid": pid or None,
             **parse_app_death(log, package)}
 

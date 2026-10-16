@@ -192,6 +192,12 @@ dev eth0 table eth0`），而 `ip route` 只显示 **main 表**——正常联�
   **不接入** `correlate_mobile.py` 的判定（不改规则库、不产出违规结论）。
 - **能力边界保留**：静态链接自有 BoringSSL（Cronet，符号不导出）、不经 JCE 的
   手工加密 / XOR，仍拿不到明文——这是 Hook 方案的固有边界，非移动端独有。
+- **现状注记（2026-10-16 核实）**：这两个钩子**从未被任何运行时入口挂载**——
+  `device_run.py` / `device_run_thirdparty.py` / `fixture_selftest.py` 全部只挂
+  `hook_all`（privacy+consent+egress_tp+ssl_pinning_tp）；对二者的引用只剩
+  `build.mjs`（遗留入口构建）与 `test_hooks_parity.py`（一致性守卫）。若要接线
+  （合并进 hook_all）：① 先处理授权范围差异（此二者头部标注"自有设备与自有 APK"，
+  比 tp 版的"已授权的公开第三方样本"窄）；② 挂钩面变大后必须重跑 A1 稳定性夹具。
 
 ## M020 常规代理模式开目标校验 + 流类谓词跳过 unresolved（2026-10-13）
 
@@ -509,9 +515,185 @@ app）与 Fossify Camera 的崩法**同型**（SIGABRT + abort message 是一条
 
 不变式：**"没有数据"必须先归因到上面三类之一，才允许写进报告**。
 
+## M031 A1 根因（三层）与修复：单 agent 收敛（2026-10-16）
+
+A1（"插桩把应用打死"）不是单一缺陷，是**三层独立问题叠加**——此前只有第 3 层的表象
+（"主线程取指到未映射页 / abort message 是一条内存映射行"）。全部实机定位，逐层修复：
+
+1. **JIT × ArtMethod 替换竞态**：分档实验（46 档不崩 / 49 档崩）排除"规模问题"，
+   把崩点锁在"被 hook 方法被调用"；崩溃线程是 `Jit thread pool`（SEGV_ACCERR）。
+   **【2026-10-16 晚修正：本项的"关 JIT"修复不成立，见 M032 追记】**——setprop +
+   框架重启**关不掉** JIT（复证：usejit=false 后夹具进程仍有 `Jit thread pool` 与
+   `dalvik-jit-code-cache`），`-prop` 被 emulator 37.1.11 拒绝；修复的实质是
+   第 2/3 层，且全部验证都在 JIT 开启状态下完成。
+2. **JNI transition frame reference**（Android 14+ 起）：ART 把 `this`/对象参数以
+   transition ref 传给 native；CheckJNI（userdebug 强制开启）对任何校验型 JNI 调用
+   都会因"Frida trampoline 帧让栈遍历失败"而拒绝 → 上游 frida#3700/#3745（未修）→
+   **bridge 补丁**（`patches/02-class-factory-transition-ref.patch`：解码 + AddGlobalRef；
+   `build.mjs` 构建前幂等重放，`npm install` 后不丢）。
+3. **多脚本不被 bridge 支持**：bridge 源码注释原文 "we don't support replacing methods
+   from multiple scripts"；tombstone 一级 FATAL 栈 `ArtMethod::GetOatQuickMethodHeader
+   ← Frida 匿名段`，且 **x64 + API 37 恰落在 bridge 防护的"未覆盖区"**（libart 被 strip、
+   符号三路皆查无；x64 分支被作者标注 "Not needed on x86 and x64"）。对照实验：
+   **双脚本 ~50% 崩 vs 单脚本 5/5** → **单 agent 合并**（`hook_all` bundle：
+   privacy+consent+egress_tp+ssl_pinning_tp 同一个 JS 上下文；挂载清单 5→1；
+   事件由 `split_events.py` 分流回独立文件，下游零改动）。
+
+**证伪留痕**：`deoptimizeEverything`（引出 JNI 副作用新崩溃）、`deoptimizeBootImage`
+（无效）、"重启 frida-server / 换新模拟器 / 重置应用编译状态"（均非变量）。
+**退役**：vehicle 版 egress / ssl_pinning_bypass 从 mobile 链路移除（观测面被 tp 版覆盖；
+vehicle 版 TLS 含**已实证会炸 ART** 的 HttpsURLConnection 手法）。
+
+**配套工程**（同批）：哨兵优雅停止（`run.py --stop-file` + `thirdparty_env.stop_hook`）；
+窗口证据前移（reads/alive/死亡取证全部在拆钩**之前**——拆钩噪声隔离）；
+死亡取证对齐 `/proc/<挂钩 pid>`（防"崩溃重启"骗过存活检查）。
+
+**验证**：夹具 `hook_all` ×5 全绿；真实样本（voicerecorder）端到端 `passed`（21 项
+检查零失败）。执行记录与实验矩阵见 DEV_FIX_REPORT §5.8。
+
+## M032 JIT-off 不成立（复证）+ SLIRP 强制代理失效根因与修复（2026-10-16 晚）
+
+**JIT-off 复证**（修正 M031 第 1 项，详见 DEV_FIX_REPORT §5.9①）：两条铁证——
+① `setprop dalvik.vm.usejit false` + `stop/start` 后，夹具进程**仍有** `Jit thread pool`
+线程与 `dalvik-jit-code-cache` 映射（与 M029 旧结论互相印证）；② emulator 37.1.11
+只接受 `qemu.*` 前缀的 `-prop`。修复的实质 = bridge 补丁 + 单 agent；JIT 开启下
+hook_all 49 档 2/2 复跑通过。已清退 `runner._ensure_jit_off`（连同 stop/start + CA
+重装的整套动作）与 `-prop` 参数。
+
+**SLIRP 强制代理失效（P0 级，已修）**：emulator 37.x 启动时从**宿主进程**对
+`-http-proxy` 地址做一次性可达性探测——传 guest 侧别名 `10.0.2.2` 在宿主上不可
+路由 → 必超时（启动日志固定出现 "Could not connect to proxy at 10.0.2.2:8888:
+timed out" + "Proxy will be ignored!"）→ **整条 SLIRP 重定向被关闭**。guest raw
+socket 实测（`nc`，绕开一切应用层代理设置）证明：此前只有"读设备侧 global
+http_proxy 的组件"能被抓到，**不读系统代理的直连流量一直全漏**——与"SLIRP 层强制
+走代理：应用绕不过去"的既有承诺不符。修复两件套（缺一不可）：
+① `-http-proxy` 地址改**宿主侧回环** `127.0.0.1`（`transparent.PROXY_ARG_HOST`；
+设备侧 `settings put global http_proxy` 仍为 guest 侧 `10.0.2.2`，两个地址空间各自
+语义不变）；② **冷启动前置 mitmproxy**（`runner._start_early_mitm` +
+`device_run_thirdparty --reuse-mitm`）——探测只在模拟器启动那一刻做、失败不重试，
+代理必须先于模拟器进程存在。
+
+**验证（铁证）**：同一模拟器上 `nc` 直连 example.com:80 拿到经代理的真实 200；
+直连任意 dummy IP 收到 `Server: mitmproxy` 的报错页（raw socket 都被重定向）；
+代理日志有完整连接记录。配套加固：`start_mitm` 端口占用预检 + 启动后监听校验
+（把"抢不到端口静默跑完"变成响亮报错）；`app_death_reason` 抗 adb 超时；
+模拟器 stdout 落 `emulator.log`（启动期关键警告不再随 DEVNULL 消失）。
+
+## M033 现场复验：系统代理全禁下 TCP 仍被强制劫持（铁证）+ UDP 不经代理的边界确认（2026-10-16 下午）
+
+**动机**：M032 的修复（宿主侧地址 + 前置代理）需要一个**独立于端到端**的现场复验——
+端到端里设备侧 `settings http_proxy` 一直存在（会被部分组件尊重），"系统代理完全
+不存在时还能不能抓"没有被单独证明过；UDP 行为（QUIC 的承载层）此前也从未测过。
+
+**方法**（新工具 `mobile/tools/verify_force_proxy.py`，可重复跑）：前置 mitmdump →
+冷启动模拟器（启动参数与流水线同源 `tp.emulator_capture_args`）→ 等 boot →
+**等多目标 TCP 探测通过**（对齐 `ensure_wifi`，就绪才开测）→
+`settings put global http_proxy :0` 彻底禁用系统代理 → 三测：
+A：`nc -4` 直连 example.com:80｜B：`nc -4` 直连 203.0.113.7:80（TEST-NET-3，不带
+Host）｜C：`nc -4 -u` 到宿主 UDP listener（10.0.2.2:9999）。
+
+**结果**（工具化复跑 2026-10-16 15:45–15:49 全绿，证据
+`D:/vscanner-tp/verify-force-proxy/20261016-154525/verdict.json`（同目录含
+mitm.log / emulator.log / emulator-start.log / session/）；早期手稿轮证据在
+`D:/vscanner-tp/manual/proxy-verify/`）：
+- 前置条件全绿：模拟器日志无 'Proxy will be ignored'；`settings get` 实测 `':0'`。
+- **A 被捕获**：代理侧 client connect 增量（手稿轮 +4 / 工具化复跑 +3，含设备自身
+  连接的噪声）；mitm.log 记录到 guest 的 `GET http://example.com/ HTTP/1.0` flow。
+- **B 是铁证**：203.0.113.7 是保留给文档的不可达地址，guest 却收到了
+  `HTTP/1.1 400 Bad Request` + `Server: mitmproxy 12.2.3` +
+  "HTTP request has no host header, destination unknown."——响应只能由本机
+  mitmproxy 产生，证明 raw socket 直连（系统代理已禁用）被 SLIRP 强制劫持
+  （手稿轮 +9 / 工具化复跑 captured(+2)，报错页逐字复现）。
+- **C 确认边界**：宿主 UDP listener 收到 `b'VSCAN_UDP_PROBE'`（两轮均复现；源地址为
+  SLIRP 宿主回环 + 临时端口，如 127.0.0.1:62221 / :53517）→ **UDP 直出、不经代理**。
+  `-http-proxy` 只重定向 TCP，QUIC/HTTP3 走 UDP 443 因此不在包内——与 CLAUDE.md
+  "能力边界：QUIC 不在覆盖内"一致，报告应如实引用（不解码 QUIC）。
+- **固化的教训（v1 假阴性）**：boot 完成 ≠ 网络就绪——冷启动后 eth0 的 DHCP 还要等
+  （两轮实测 36s / 106s），过早测试全是 "Network is unreachable"（那是"网络没醒"，
+  不是"代理没抓"）。`verify_force_proxy.py` 内置网络等待，就绪才开测。
+- **排障注记**：mitmproxy 对**无 Host 的畸形请求**（如 raw socket 直连 IP 不带 Host）
+  直接回 400，但**不产生 flow 日志行、也不进 flows.jsonl**（本地隔离实验复现）——
+  判断这类直连是否被劫持不能查 flow 日志，要看连接增量或客户端实际收到的响应。
+  手稿轮 mitm.log 里"找不到测试 B 的 400"正是此因，非采集缺陷。
+
+**结论**：M032 修复在"系统代理完全禁用"的极端条件下依然成立；UDP/QUIC 属已知且
+已声明的边界。
+
+## M034 工程小项整改：conn_probe 并发防撞 + `run_regressions --mobile` 开关（2026-10-16）
+
+**动机**：对 `TWO_DEV_PLAN.md`（v3）逐条独立核查后，确认"存在"档中两项可离线修复的小项：
+
+1. **工程-6**：`mobile/tools/conn_probe.py` 设备侧脚本/日志路径固定为
+   `vscan_conn_all.*`。两个实例并发时，后启动者的开头 `rm -f` 会删掉前者的脚本，
+   正在跑的那个下一轮 `sh <script>` 找不到文件而**静默失明**——症状与"应用没外发"
+   难分（本项目最忌讳的失真形态）。
+2. **工程-7**：`tools/run_regressions.py` 没有 `--mobile` 开关，移动侧 23 项检查
+   不在根回归入口内（待办原注"需先定义语义"）。
+
+**修复**：
+
+- conn_probe：设备路径改为 `vscan_conn_<pid>_<epoch>.sh/.log`（唯一后缀），启动时
+  顺带清一次旧固定名残留，收尾 `finally` 里 `rm -f` 本轮脚本（唯一后缀保证不误删
+  并发实例的文件）。同时确认 `DEVICE_LOG` 是遗留名（本工具从不写入，走 stdout 流），
+  仅保留为清理目标。
+- run_regressions：新增 `--mobile`。**语义定为：移动侧失败 = 根回归失败（非零退出）**，
+  理由是"根回归绿了但移动端已烂"的静默状态正是"文档状态列不可信"教训的来源；
+  不想受影响时不带该开关即可。移动组超时单独放宽到 600s（整批依赖 requirements.txt，
+  缺包会假红——AGENTS.md「先确认解释器再判红」）。
+
+**验证**：两文件 `py_compile` 通过；`run_regressions.py --mobile` 全量跑通
+（13 组根回归 + mobile-checks 组）。
+
+**顺带核查更正**：TWO_DEV_PLAN.md 把"工程-5 sqlite 只读 URI"标为 ⚠️部分（4 处未改）
+已**滞后**——现全仓所有只读连接（correlate_mobile / evidence_bundle / policy_lint /
+gen_targets / rule_coverage_report / static_scan_thirdparty 等）均已带 `?mode=ro` URI，
+不带 URI 的剩余连接全是写库/测试/内存库，属正常。该项无需动作。
+
+## M035 C1 派生值匹配 + C2 静态/动态覆盖差集（2026-10-16）
+
+**动机**：TWO_DEV_PLAN §3.3 的 C1/C2 是"存在（未做）"档里仅有的两项可纯离线完成、
+且修的是**静默失真**的功能项（其余 C/E 项需要真机或排期给两人）。
+
+**C1 · 派生值匹配**（`core/collector/derive.py` 平台无关内核 + 三处接线）：
+真实应用常把读到的值**变换后再外发**（base64/url/hex/gzip+b64 编码、md5/sha1/sha256
+摘要）。原值级匹配只认「原值 hash16」一种形态，这些场景全部**静默降级**成
+"仅形态相似"——证据强度凭空掉档且无任何标注。做法：
+  * 可逆编码：报文侧 `reversible_decodings()` 解回原文 → 重新过形态扫描 →
+    令牌仍是**解码后原值**的 hash16 → 读取侧（value_hash）**零改动**即命中；
+  * 单向摘要：只能从原值方向算——读取侧 `hash16_candidates()` 对完整原值
+    （value_preview 未截断时）算各摘要形态的 hash16，与报文侧
+    `md5/sha1/sha256_hex_shape` 形态令牌比对。截断预览（以 … 结尾）的摘要候选
+    整体不参与——只可能漏配，不可能错配；
+  * 诚实边界：解码产物只贡献**值级令牌**与 `derived_*` 标记，不贡献形态级标签
+    （乱码/巧合解码可能凑出假形状）；「报文里有个 md5」本身不构成任何匹配；
+  * 配对记录新增 `value_match_form`（raw/md5/sha1/sha256），配对可溯源到具体形态。
+  * **阈值教训**：首跑 test_derive 即失败——15 位 IMEI 的 base64 只有 20 字符、
+    hex 只有 30 字符，最初 24/32 字符的门槛把最典型场景挡在门外。阈值按真实目标
+    反推（b64≥16、hex≥10 字节），误报由「charset+对齐+可打印 UTF-8+敏感形态重扫」
+    四层兜底。另：tagging 的 urlencoded 用例初版把手机号里塞了 `%2D`（连字符），
+    数字串被截断不可能匹配——改用 URL 编码 JSON 体的真实场景。
+
+**C2 · 覆盖差集**（`mobile/analyze/coverage_gap.py` + evidence_bundle 接线）：
+静态 dex 引用与动态观测是两条独立证据链，各有盲区且盲区**长得一样**（都是
+"该类别没出现在结论里"）。不摆差集，"静态有引用但动态没触发"（多半是本轮
+场景没走到）会被误读成"运行时没这个行为"；反过来会被误读成"静态漏报可修"。
+做法：纯函数 `compute_gaps()`（精确 key 匹配、不做同义词归并），差集三区
+`static_only` / `dynamic_only` / `both`，四条诚实边界写死在输出的 caveats；
+`evidence_bundle.py` 新增 `--static-supplement`，提供了 static_scan_thirdparty
+产物才算（没跑静态扫描时硬算只会产出误导性的全 dynamic_only）；产物不可解析/
+不存在时写 `[coverage]` gap，绝不静默。
+
+**验收**：test_derive 12 例 + test_tagging_mobile 24 例（含 8 个派生值用例，含
+反例：别的 15 位数字不得产出本 IMEI 的值级命中）+ test_coverage_gap 11 例全绿；
+evidence_bundle `py_compile` 通过；全量 `run_regressions.py --mobile` 复跑。
+C1/C2 均不改变既有结论的判定路径——C1 只把原本静默降级的匹配升回来，
+C2 是纯增量字段。
+
 ## 待办（已想清楚要做什么，尚未做）
 
-- **P0 · 修`hook_privacy` 打死应用**（M030 的结论）：夹具（自己最简单的 app）在
+- ~~**P0 · 修`hook_privacy` 打死应用**（M030 的结论）~~ **→ 已修（2026-10-16，见 M031
+  / DEV_FIX_REPORT §5.8）**：三层根因全部定位修复，夹具 hook_all 5/5、真实样本端到端
+  passed。以下原文保留（对同类排查仍有参考价值）：夹具（自己最简单的 app）在
   `armed 58/58` 之后第一次被监视 API 调用附近就 SIGABRT，读数一条没有；同夹具不挂钩子
   则完全健康。缩小钩子面分档实验是第一步：先只挂 1~3 个 API（如
   `Settings$Secure.getString` / `TelephonyManager.getLine1Number`）确认机制本身可用，

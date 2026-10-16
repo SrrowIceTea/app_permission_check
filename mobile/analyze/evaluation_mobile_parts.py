@@ -22,7 +22,13 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "traffic"))
+_REPO = str(HERE.parent.parent)
+if _REPO not in sys.path:
+    sys.path.insert(0, _REPO)
 import tagging_mobile  # noqa: E402
+# main 侧新增：把仓库根加入 sys.path 以便导入平台无关内核 `core.collector.derive`（C1）。
+# ch 侧新增：读取语义判定移到 `read_semantics.obtained_reads`。两者互补，一并保留。
+from core.collector import derive  # noqa: E402  派生值候选（C1，平台无关内核）
 from read_semantics import obtained_reads
 
 
@@ -56,13 +62,56 @@ def _flow_types(flow: dict) -> set[str]:
     return {t["data_type"] for t in _labels_for_flow(flow) if t.get("data_type")}
 
 
-def value_matches(read: dict, flow: dict) -> str | None:
-    """读取的值哈希是否出现在流的令牌里。→ 命中的 token 或 None。"""
+def candidate_hashes(read: dict) -> dict[str, str]:
+    """读取事件能提供的全部**值级**候选（C1）：形态名 → hash16。
+
+    * `raw`：hook 记的原值 sha256 前 16 位（M005 口径，不变）；
+    * `md5`/`sha1`/`sha256`：**完整**原值预览的各摘要形态的 hash16——
+      应用"先摘要再外发"时，报文里出现的是摘要十六进制串，其令牌后缀
+      等于这里的候选（与 tagging 侧 `sha*_hex_shape` 令牌配对）。
+    预览以 …（U+2026）结尾 = 被截断：对截断串做摘要没有意义，
+    摘要候选整体不参与（只可能漏配，不可能错配——错误方向的候选凑不出哈希相等）。
+    """
+    out: dict[str, str] = {}
     vh = read.get("value_hash")
-    if not vh:
+    if vh:
+        out["raw"] = vh
+    preview = read.get("value_preview")
+    if preview and not preview.endswith("\u2026"):
+        out.update(derive.hash16_candidates(preview))
+    return out
+
+
+# 报文侧摘要形态标签 → 摘要形态名（用于配对溯源，判定可追溯）。
+_HASH_FORM_BY_LABEL = {"md5_hex_shape": "md5", "sha1_hex_shape": "sha1",
+                       "sha256_hex_shape": "sha256"}
+
+
+def value_match_form(token: str | None) -> str:
+    """命中的令牌用的是哪种形态：raw / md5 / sha1 / sha256 / none。
+
+    报文侧摘要标签（sha*_hex_shape）→ 对应摘要形态；其余标签（含解码产物的
+    digit15_shape 等）说明命中的是**原值本身**（可能只是传输途中被编码，
+    解码后哈希对上了），一律记 raw。
+    """
+    if not token:
+        return "none"
+    label = token.split(":", 1)[0]
+    return _HASH_FORM_BY_LABEL.get(label, "raw")
+
+
+def value_matches(read: dict, flow: dict) -> str | None:
+    """读取的值（原值或其摘要形态）的 hash16 是否出现在流的令牌里。
+
+    → 命中的 token 或 None。C1 扩展前只比 `raw` 一种形态；现在比对
+    `candidate_hashes(read)` 的全部候选。令牌后缀是 16 位 hex 短哈希，
+    逐候选比较的成本可忽略。
+    """
+    cands = candidate_hashes(read)
+    if not cands:
         return None
     for token in (flow.get("request_tokens") or []):
-        if token.endswith(":" + vh):
+        if any(token.endswith(":" + h) for h in cands.values()):
             return token
     return None
 

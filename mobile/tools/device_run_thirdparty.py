@@ -65,6 +65,23 @@ def has_api_key() -> bool:
     return key not in placeholders
 
 
+def _emit_events(events: Path | None, stage: str, status: str, message: str = "") -> None:
+    """把阶段事件追加到 events.jsonl，供编排层（pipeline server）的 SSE 实时读取。
+
+    只追加、只 flush；**绝不失败主流程**——事件上报是旁路，不能因为它把检测搞挂。
+    status 取值：running（进入阶段）/ done（成功）/ failed（失败）/ skipped（跳过）。
+    """
+    if events is None:
+        return
+    try:
+        with events.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"ts": time.time(), "stage": stage, "status": status,
+                                 "message": message}, ensure_ascii=False) + "\n")
+            fh.flush()
+    except OSError:
+        pass
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--apk", required=True)
@@ -85,6 +102,12 @@ def main() -> int:
                     help="对照实验：不挂任何 Frida 钩子。用于回答「应用在窗口内死亡是不是"
                          "插桩引起的」——同一 App、同一流程，只少钩子这一项（2026-10-13 "
                          "待办的控制实验，见 mobile/DECISIONS.md）。")
+    ap.add_argument("--events", default=None,
+                    help="阶段事件落盘路径（JSONL，供编排层 SSE 实时读取）")
+    ap.add_argument("--reuse-mitm", action="store_true",
+                    help="复用编排层预启动的 mitmproxy（端口已监听则直接用；未监听则"
+                         "回退为自行启动）。冷启动前置的原因见 pipeline/runner 的 "
+                         "_start_early_mitm 注释")
     args = ap.parse_args()
 
     # 多设备且未指定 ANDROID_SERIAL → 启动前就停。理由见 thirdparty_env.device_guard：
@@ -101,6 +124,11 @@ def main() -> int:
     o.mkdir(exist_ok=True)
     checks: list[dict] = []
 
+    events_path = Path(args.events) if args.events else None
+
+    def emit(stage: str, status: str, message: str = "") -> None:
+        _emit_events(events_path, stage, status, message)
+
     def check(name: str, code: int, optional: bool = False, note: str | None = None) -> int:
         e = {"name": name, "exit_code": code}
         if optional:
@@ -111,7 +139,9 @@ def main() -> int:
         return code
 
     if not apk.exists():
+        emit("prepare", "failed", f"样本不存在：{apk}")
         sys.exit(f"[fatal] 样本不存在：{apk}")
+    emit("prepare", "running", f"目标 {args.package}，会话 {args.seconds}s")
     # 溯源与静态产物按**样本同一性**（APK sha256）绑定，与动态运行无关；拷进交付目录使交付自洽，
     # 原文不在此重算，避免"看起来是这轮做的"。
     if args.provenance and Path(args.provenance).exists():
@@ -123,14 +153,22 @@ def main() -> int:
             shutil.rmtree(dst)
         shutil.copytree(args.static_dir, dst)
         check("static_copied", 0, note=f"{Path(args.static_dir).name} -> static/")
+    emit("boot", "running", "确认设备启动完成")
     if not env.wait_boot():
+        emit("boot", "failed", "设备未在超时内启动完成")
         sys.exit("[fatal] 设备未在超时内启动完成")
+    emit("boot", "done", "设备已启动")
 
+    emit("frida_server", "running", "确保 frida-server 以 root 运行")
     ok, state = env.ensure_frida_server(out / "frida-check.log", Path(args.frida_server))
     check("frida_server", 0 if ok else 1, note=f"state={state}")
-    check("network_up", 0 if env.ensure_wifi(out / "wifi-check.log") else 1,
+    emit("frida_server", "done" if ok else "failed", f"state={state}")
+    emit("network", "running", "确认设备外网连通")
+    net_ok = env.ensure_wifi(out / "wifi-check.log")
+    check("network_up", 0 if net_ok else 1,
           note="设备侧实测 TCP（多目标任一可连即通过）。不查路由表：Android 走策略路由，"
                "default 在 per-network 表里，`ip route` 看不到")
+    emit("network", "done" if net_ok else "failed", "外网连通" if net_ok else "外网不通")
 
     prev_proxy = env.get_proxy()
     setattr(main, "_prev_proxy", prev_proxy)
@@ -138,10 +176,13 @@ def main() -> int:
     # 先卸载再装：`install -r` 保留应用数据，应用带着旧缓存/旧定位进场，首次取数会被
     # 自己的限流吃掉（实测：不干净装时窗口内零外发，干净装则启动即连 open-meteo:443）。
     # 隐私扫描要的本来就是**首次运行**状态。
+    emit("install", "running", f"安装样本 {args.package}")
     env.adb("uninstall", args.package, timeout=120)
     install = env.adb("install", "-r", "-g", str(apk), timeout=300)
     (out / "install.log").write_text(install.stdout + install.stderr, encoding="utf-8")
     check("install", 0 if "Success" in install.stdout else 1)
+    emit("install", "done" if "Success" in install.stdout else "failed",
+         "安装成功" if "Success" in install.stdout else "安装失败，见 install.log")
 
     # 坐标注入（仅模拟器有 `emu`）。实测该 AVD 无 Google 连通性，应用的 GMS 定位路径会报
     # "Something went wrong"；注入坐标后系统 LocationManager 才给得出位置，应用才走得到网络请求。
@@ -173,12 +214,15 @@ def main() -> int:
     # 且应用会在窗口内崩溃重启（实测 pid 10658→14037），只有让设备端每轮重解 pid，
     # 才不会在那之后整段失明。也不过滤 uid——过滤等于静默丢数据，丢了补不回来。
     uid = env.app_uid(args.package)
+    emit("conn_probe", "running", f"开启设备侧连接采样（package={args.package}）")
     collector = env.start_conn_probe(session, out / "conn-probe.log",
                                      args.package, args.seconds)
     check("conn_probe_started", 0, optional=True,
           note=f"package={args.package} app_uid={uid}（设备端每轮重解 pid，不过滤 uid）")
+    emit("conn_probe", "done", f"app_uid={uid}")
 
     # 冷启动竞争：先 am start，等到 pid 再挂钩子（钩子是 attach 模式）
+    emit("launch", "running", f"启动应用 {main_activity}")
     env.adb("shell", "am", "start", "-W", "-n",
             f"{args.package}/{main_activity}", timeout=150)
     pid = env.wait_for_app(args.package)
@@ -186,6 +230,7 @@ def main() -> int:
           note=(f"pid={pid}" if pid else "应用未在超时内出现（冷启动竞争或启动崩溃）")
                + f"；activity={main_activity}"
                + ("" if resolved_activity else "（回退值：设备解析为空）"))
+    emit("launch", "done" if pid else "failed", f"pid={pid}" if pid else "应用未启动")
     if not pid:
         env.kill_tree(collector, out / "kill-conn.log")   # 早退也不能留孤儿
         (out / "verification.json").write_text(json.dumps(
@@ -194,40 +239,58 @@ def main() -> int:
         print(json.dumps({"status": "failed", "reason": "app_started"}, ensure_ascii=False))
         return 1
 
-    # 代理：常规模式下让设备把 HTTP(S) 交给宿主 mitmproxy
-    mitm = env.start_mitm(session, out / "mitm.log", args.package)
+    # 代理：常规模式下让设备把 HTTP(S) 交给宿主 mitmproxy。
+    # **--reuse-mitm**（编排层路径）：模拟器冷启动前编排层已把代理拉起来——必须
+    # 先于模拟器，因为 emulator 37.x 启动时探测代理可达性，不可达会把 SLIRP 强制
+    # 重定向整条关掉（2026-10-16 实测 "Proxy will be ignored!"）。这里先探端口：
+    # 活着直接复用；死了回退自行启动，不把"代理没了"静默带进采集。
+    emit("mitm", "running", "启动 mitmproxy 中间人代理（常规模式）")
+    mitm = None
+    mitm_error = None
+    if args.reuse_mitm and env.tcp_open("127.0.0.1", env.MITM_PORT):
+        emit("mitm", "running", "复用编排层预启动的 mitmproxy（端口已监听）")
+    else:
+        if args.reuse_mitm:
+            emit("mitm", "running", "编排层预启动的代理不在（端口未监听），回退为自行启动")
+        try:
+            mitm = env.start_mitm(session, out / "mitm.log", args.package)
+        except RuntimeError as exc:
+            mitm_error = str(exc)
+    check("mitm_ready", 0 if mitm_error is None else 1,
+          note=mitm_error or f"port={env.MITM_PORT}（{'复用' if mitm is None else '本轮启动'}）")
     env.set_proxy(f"{env.GUEST_HOST}:{env.MITM_PORT}", out / "proxy-set.log")
     proxy_now = env.get_proxy()
     check("proxy_set_for_capture", 0 if str(env.MITM_PORT) in proxy_now else 1,
           note=f"http_proxy={proxy_now!r} (原值 {prev_proxy!r})")
+    emit("mitm", "done", f"代理已就绪，设备 http_proxy={proxy_now!r}")
 
     if args.no_hooks:
         # 对照实验：同一 App、同一流程，只少"挂钩子"这一项。用于判定应用死亡
         # （SIGABRT/SIGSEGV）是否由插桩引起——挂钩与不挂钩各跑一轮比对。
         hooks = []
+        emit("hooks", "skipped", "对照实验：--no-hooks，本轮不挂任何钩子")
         check("hooks_armed", 0, optional=True,
               note="对照实验：--no-hooks，本轮不挂任何钩子（其余流程不变）")
     else:
+        # **单 agent 合并 bundle**（2026-10-16 A1 修复）：privacy/consent/egress_tp/
+        # ssl_pinning_tp 四模块在同一个 JS 上下文里装配。原"5 个脚本各起一个 run.py"
+        # 的实现被 frida-java-bridge 的已知限制击穿——"多脚本各自替换方法"不受支持
+        # （bridge 源码注释原文 "we don't support replacing methods from multiple
+        # scripts"；实测双脚本 ~50% 触发 ART 的 GetOatQuickMethodHeader FATAL
+        # 【主线程 abort】，单脚本 5/5 稳定）。vehicle 版 hook_egress/ssl_pinning_bypass
+        # 一并退役：观测面被 tp 版覆盖（tp 是"同源加强版"，见各自文件头），且 vehicle
+        # 版 TLS 含"已实证会炸 ART 的 HttpsURLConnection 主机名钩子"（tls_bypasses_tp.js
+        # 头部有记录）。事件全落 reads.jsonl，收尾阶段由 split_events.py 按 src 分流回
+        # consent/egress/tls 独立文件（下游 correlate/evidence_bundle 零改动）。
+        emit("hooks", "running", "挂载 Frida 钩子（单 agent 合并 bundle：隐私/同意/出站/TLS）")
         hooks = [
-            env.start_hook(MOBILE / "hooks" / "dist" / "hook_privacy.bundle.js", session,
-                           "reads.jsonl", out / "hook-privacy.log", args.seconds, args.package),
-            env.start_hook(MOBILE / "hooks" / "dist" / "hook_consent.bundle.js", session,
-                           "consent.jsonl", out / "hook-consent.log", args.seconds, args.package),
-            # egress / TLS 绕过直接复用 core/frida_host 成品：Socket.connect 与证书校验与"车载"无关
-            env.start_hook(ROOT / "core" / "frida_host" / "dist" / "hook_egress.bundle.js", session,
-                           "egress.jsonl", out / "hook-egress.log", args.seconds, args.package),
-            # **第三方专用**出站钩子：vehicle/hooks 版只挂 `java.net.Socket.connect`，而真实样本的
-            # HTTPS 走 Apache HttpClient，connect() 在 conscrypt 子类里被重写，钩子一条抓不到。
-            # 这一版挂到 libcore 汇聚点 + URI/URL 构造，见 mobile/hooks/hook_egress_tp.js。
-            env.start_hook(MOBILE / "hooks" / "dist" / "hook_egress_tp.bundle.js", session,
-                           "egress_tp.jsonl", out / "hook-egress-tp.log", args.seconds, args.package),
-            # **第三方专用** TLS 绕过：裁掉了 vehicle/hooks 版里会触发 ART abort 的
-            # HttpsURLConnection 主机名钩子（证据见 mobile/hooks/tls_bypasses_tp.js 头部）。
-            env.start_hook(MOBILE / "hooks" / "dist" / "ssl_pinning_tp.bundle.js", session,
-                           "tls.jsonl", out / "hook-tls.log", args.seconds, args.package),
+            env.start_hook(MOBILE / "hooks" / "dist" / "hook_all.bundle.js", session,
+                           "reads.jsonl", out / "hook-all.log", args.seconds, args.package),
         ]
         time.sleep(9)   # 等钩子挂上：钩子掉线与"应用没动作"长得一样（D309）
+        emit("hooks", "done", "钩子已发起挂载（attach 模式，单 agent）")
 
+    emit("explore", "running", f"UI 交互驱动（最多 {args.max_rounds} 轮）")
     actions = flow.explore(out / "ui", args.seconds, args.max_rounds, args.package,
                            main_activity)
     (out / "ui-actions.json").write_text(json.dumps(
@@ -235,31 +298,79 @@ def main() -> int:
         ensure_ascii=False, indent=2), encoding="utf-8")
     taps = [a for a in actions if a["action"] == "tap"]
     check("ui_taps_made", 0 if taps else 1, note=f"完成 {len(taps)} 次点击")
+    emit("explore", "done", f"完成 {len(taps)} 次点击")
 
     env.set_proxy(prev_proxy if prev_proxy not in ("", "null") else ":0", out / "proxy-restore.log")
-    # 收**整棵进程树**，不是只收直接子进程。孤儿会攥住句柄，让编排层之后每一次
-    # subprocess.run 都阻塞（实测：policy_fetch 卡满 300s 超时、correlate 不返回；
-    # 杀掉孤儿后整条尾段立刻跑完）。详见 thirdparty_env.kill_tree 的注释。
-    for i, proc in enumerate(hooks + [mitm] + ([collector] if collector else [])):
+    # 应用是否在窗口内死亡，以及死于什么。"窗口后半段没事件"有两种含义：应用没做，
+    # 还是应用已经死了——只看事件文件分不出来，所以必须单独取证。
+    # **必须在拆钩之前取证**（2026-10-16）：拆钩动作（无论优雅 detach 还是强杀）
+    # 会让 frida agent 在应用里做一次未清理的 JNI 调用（Thread-N 的 DeleteGlobalRef
+    # "without being attached"，CheckJNI 上必 abort）——那是**工具拆钩噪声**，
+    # 不是应用在采集窗口内的行为；若在拆钩后取证，记录到的就是"我们拆钩的结果"。
+    emit("death_probe", "running", "窗口结束，取证应用存活状态")
+    death = env.app_death_reason(args.package)
+    # **对齐"被挂钩的 pid"**（2026-10-16）：pidof 只查"包名有进程"——应用崩溃后
+    # 自动重启的新进程（不同 pid）会把"死亡"伪装成"存活"（实测踩过：fix 轮
+    # alive=True 实为"检查太早 + 新进程"的假象）。/proc/<挂钩 pid> 是"同一个
+    # 进程还活着"的唯一可信判据；取不到时退化为包名判据（旧行为）。
+    hooked_pid_alive = None
+    if pid:
+        probe = env.adb("shell", f"if test -d /proc/{pid}; then echo y; else echo n; fi",
+                        timeout=30)
+        hooked_pid_alive = (probe.stdout or "").strip() == "y"
+    death["hooked_pid"] = pid
+    death["hooked_pid_alive"] = hooked_pid_alive
+    (out / "app-death.json").write_text(json.dumps(death, ensure_ascii=False, indent=2) + "\n",
+                                        encoding="utf-8")
+    # 死亡结论按优先级合成：被挂钩 pid > 包名 pidof；两者皆缺（None）不能写成
+    # "窗口内死亡"——那是把"查不到"说成结论。
+    if hooked_pid_alive is not None:
+        window_alive = hooked_pid_alive
+        if hooked_pid_alive:
+            death_note = "应用（被挂钩进程）在窗口结束时仍存活"
+        elif death["alive_at_end"]:
+            death_note = (f"被挂钩进程 pid={pid} 在窗口内消失，包名另有新进程（崩溃后重启）；"
+                          + str(death.get("cause") or (death["fatal_lines"] or ["原因未记录"])[0]))
+        else:
+            death_note = "被挂钩进程在窗口内死亡：" + str(
+                death.get("cause") or (death["fatal_lines"] or ["原因未记录"])[0])
+    else:
+        window_alive = death["alive_at_end"]
+        if window_alive is None:
+            death_note = "无法判定：" + str(death.get("error") or "adb 报错")
+        elif window_alive:
+            death_note = "应用在窗口结束时仍存活"
+        else:
+            death_note = "应用在窗口内死亡：" + str(
+                death.get("cause") or (death["fatal_lines"] or ["原因未记录"])[0])
+    death["window_alive"] = window_alive
+    check("app_alive_at_window_end", 0 if window_alive else 1, optional=True, note=death_note)
+    emit("death_probe", "done", death_note)
+
+    # 收尾：hooks 走**优雅停止**（哨兵 → run.py 正常 detach），替代强杀。
+    # 注意：拆钩噪声（见上）本轮到这里才会发生——双脚本场景仍会触发一次拆钩 abort，
+    # 但取证已在前、不受影响。见 thirdparty_env.stop_hook。
+    for i, handle in enumerate(hooks):
+        env.stop_hook(handle, out / f"hooks-stop-{i}.log")
+    # mitm/collector 不是 hook 进程：维持**整棵进程树强杀**，不是只收直接子进程。
+    # 孤儿会攥住句柄，让编排层之后每一次 subprocess.run 都阻塞（实测：policy_fetch
+    # 卡满 300s 超时、correlate 不返回；杀掉孤儿后整条尾段立刻跑完）。
+    # 详见 thirdparty_env.kill_tree 的注释。
+    # mitm 为 None = 复用了编排层预启动的代理（生命周期归编排层，这里不动它）。
+    for i, proc in enumerate(([mitm] if mitm is not None else [])
+                             + ([collector] if collector else [])):
         env.kill_tree(proc, out / f"kill-{i}.log")
     time.sleep(3)   # 给 mitmproxy 的 done() 排空挂起队列
 
-    # 应用是否在窗口内死亡，以及死于什么。"窗口后半段没事件"有两种含义：应用没做，
-    # 还是应用已经死了——只看事件文件分不出来，所以必须单独取证。
-    death = env.app_death_reason(args.package)
-    (out / "app-death.json").write_text(json.dumps(death, ensure_ascii=False, indent=2) + "\n",
-                                        encoding="utf-8")
-    # alive_at_end 有三态：True / False / None（adb 报错，无法判定）。None 时不能
-    # 写成"窗口内死亡"——那是把"查不到"说成结论。
-    if death["alive_at_end"] is None:
-        death_note = "无法判定：" + str(death.get("error") or "adb 报错")
-    elif death["alive_at_end"]:
-        death_note = "应用在窗口结束时仍存活"
-    else:
-        death_note = "应用在窗口内死亡：" + str(
-            death.get("cause") or (death["fatal_lines"] or ["原因未记录"])[0])
-    check("app_alive_at_window_end", 0 if death["alive_at_end"] else 1, optional=True,
-          note=death_note)
+    # 合并产物分流（2026-10-16）：单 agent 合并 bundle 把所有事件落进 reads.jsonl，
+    # 这里按 src 分流回 consent/egress/tls 独立文件——下游（correlate/evidence_bundle/
+    # build_delivery）零改动。独立脚本模式下为 no-op（幂等）。见 mobile/tools/split_events.py。
+    emit("split", "running", "事件分流（合并产物 → 独立文件）")
+    check("split_events", env.run(
+        [PY, str(MOBILE / "tools" / "split_events.py"), "--session", str(session)],
+        out / "split.log"), optional=True,
+        note="reads.jsonl 按 src 分流回 consent/egress/tls（合并模式分流；独立模式 no-op）")
+    emit("split", "done", "分流完成")
 
     # 收尾：把样本强制停掉。**必须放在死亡取证之后**（在跑就杀会让 alive 永远为 false，
     # 那是自己制造假结论）；不停掉的话，样本会带着残留状态活到下一样本的窗口里——
@@ -320,6 +431,7 @@ def main() -> int:
          "--store", str(policy_store), "--tag", "apk"], out / "policy.log", timeout=300),
         optional=True, note="APK 内可能不含隐私政策页；缺失会写进 summary.gaps")
 
+    emit("correlate", "running", "关联引擎：运行时事件 × 权限 × 政策")
     check("correlate", env.run(
         [PY, str(MOBILE / "analyze" / "correlate_mobile.py"),
          "--session", str(session), "--package", args.package,
@@ -328,6 +440,7 @@ def main() -> int:
          "--policy-store", str(policy_store),
          "--out", str(o / "findings.jsonl"), "--summary", str(o / "summary.json")],
         out / "correlate.log"))
+    emit("correlate", "done", "关联完成，结论写入 findings.jsonl")
 
     sha = hashlib.sha256(apk.read_bytes()).hexdigest()
     bundle_cmd = [PY, str(MOBILE / "ai" / "evidence_bundle.py"),
@@ -346,8 +459,9 @@ def main() -> int:
         # 而不是让报告看起来"本轮没有发现"。
         bundle_cmd += ["--note", "本轮 reads.jsonl 只有 START/ARMED，零运行时事件："
                                  "钩子已挂载但不能据此判定「应用未收集」（§8.1 A1/A2）"]
+    emit("bundle", "running", "证据封装（含加固探测与 [orch] 缺口）")
     check("bundle", env.run(bundle_cmd, out / "bundle.log"))
-    check("bundle", env.run(bundle_cmd, out / "bundle.log"))
+    emit("bundle", "done", "bundle.json 已生成")
 
     # 旁路证据索引：egress_tp / tls / conns / ui-actions 不进 bundle、不参与规则求值，
     # 不单独成文就等于在报告里不存在。原始 JSONL 仍是证据本体，这里只是索引与计数。
@@ -366,12 +480,18 @@ def main() -> int:
         ai_cmd = [PY, str(MOBILE / "ai" / "ai_review.py"),
                   "--bundle", str(o / "bundle.json"), "--out-dir", str(ai_dir)]
         if has_api_key():
+            emit("ai_review", "running", "AI 研判（真实调用）")
             check("ai_review", env.run(ai_cmd, out / "ai.log", timeout=1800),
                   note="已配置 API key：真实调用")
+            emit("ai_review", "done", "AI 三阶段研判完成")
         else:
+            emit("ai_review", "running", "AI 研判（未配 key，dry-run 渲染提示词）")
             check("ai_review_dry_run",
                   env.run(ai_cmd + ["--dry-run"], out / "ai.log", timeout=600),
                   note="未配置 API key：仅渲染提示词、不联网")
+            emit("ai_review", "done", "dry-run：仅渲染提示词，未联网")
+    else:
+        emit("ai_review", "skipped", "--skip-ai：本轮不跑 AI 研判")
 
     rep = [PY, str(MOBILE / "report" / "report_mobile.py"),
            "--bundle", str(o / "bundle.json"), "--session", session.name,
@@ -380,7 +500,9 @@ def main() -> int:
     # 旧条件（要求 stage3.json）会让它们变孤儿文件、报告只能印硬编码的错误路径。
     if ai_dir.exists():
         rep += ["--ai-out-dir", str(ai_dir)]
+    emit("report", "running", "生成 PDF 报告（工具结论 + AI 研判）")
     check("report", env.run(rep, out / "report.log"))
+    emit("report", "done", "mobile-report.pdf 已生成")
 
     failed = [c["name"] for c in checks if c.get("exit_code") and not c.get("optional")]
     optional_failed = [c["name"] for c in checks if c.get("exit_code") and c.get("optional")]

@@ -12,7 +12,7 @@
 | --- | --- |
 | `rules/` | **规则库**：schema v2 + 法规依据 + android.jar 签名抽取 + 构建器 |
 | `rules/regulations/` | 法规原文（认定方法 / 必要信息规定 / 个保法 / GB-T 35273），带条款号与 URL |
-| `hooks/` | Frida 钩子：敏感 API 读取 + 同意时序 + 内存 Hook（JCE 加密前明文 / native TLS 明文）。监视表由规则库生成，不手抄 |
+| `hooks/` | Frida 钩子：敏感 API 读取 + 同意时序 + TLS 校验收宽（Java 层 pinning 绕过，随 hook_all 挂载）。内存 Hook（JCE/native 明文）已移植但**未接线**，详见「能力边界」段。监视表由规则库生成，不手抄 |
 | `traffic/` | mitmproxy 移动适配：打标表 + 注入壳（复用 core/collector/addon.py）+ 透明代理（transparent.py） |
 | `policy/` | 隐私政策获取 / 正文抽取 / 规则化检查 |
 | `analyze/` | 关联引擎与八种移动谓词（复用 core/evidence/codeloc.py 的行号链） |
@@ -108,12 +108,28 @@ cp mobile/ai/config.example.json mobile/ai/config.local.json   # ← 在这里�
   而该类已被 R8 裁掉 → `am start` 报 "Activity class does not exist"（结果码 -92）。
   统一用 `cmd package resolve-activity --brief -c android.intent.category.LAUNCHER`，
   badging 仅作回退，并把两个来源都写进 `main-activity.log`。
-- **插桩会让样本非确定地死掉，且不可用 ART 参数规避**：挂全套钩子时 keepass 崩在
-  `art_quick_invoke_static_stub` 跳入未映射页（ArtMethod 入口失效），主线程取指 SIGSEGV；
-  同配置同 UI 序列下**一死一活**。`setprop dalvik.vm.usejit false` + 框架重启**无效**
-  （zygote 与 app 进程的 `/proc/<pid>/task/*/comm` 里仍有 `Jit thread pool`）。
-  诊断时优先拉 `/data/tombstones/`（需 `adb root`）——文本 tombstone 比 logcat 的
-  crash 缓冲完整得多。缓解走工程韧性（分段采集 + 崩溃自愈），见 M029/M030。
+- **插桩打死应用（A1）已修：bridge 补丁 + 单 agent**（2026-10-16，两层根因：
+  JNI transition ref 上游 bug + 多脚本各自替换不被 bridge 支持；见 M031/M032 与
+  DEV_FIX_REPORT §5.1）。**"关 JIT"这条路已被双向证伪、不要再走**：
+  `setprop dalvik.vm.usejit false` + 框架重启**无效**（zygote 与 app 进程的
+  `/proc/<pid>/task/*/comm` 里仍有 `Jit thread pool`），`-prop` 也被 37.x 拒绝
+  （只接受 `qemu.*`）。诊断时优先拉 `/data/tombstones/`（需 `adb root`）——文本
+  tombstone 比 logcat 的 crash 缓冲完整得多。
+- **模拟器抓包两个硬前提**（2026-10-16 实测，M032）：① `-http-proxy` 必须传
+  **宿主侧地址 `127.0.0.1`**——emulator 37.x 从宿主进程探测代理，传 guest 别名
+  `10.0.2.2` 宿主不可路由 → 探测必超时 → 打印 "Proxy will be ignored!" 并把
+  SLIRP 强制重定向整条关掉（表现为：只有读设备侧 http_proxy 的组件能抓到，
+  直连流量全漏）；② **代理必须先于模拟器进程存在**（探测只在启动那一刻做、
+  失败不重试），冷启动路径由 pipeline 的 `_start_early_mitm` 保证。排障第一步：
+  看 `emulator.log` 里有没有那句 "Proxy will be ignored!"。
+- **抓包强制性的现场复验（2026-10-16 下午，M033）**：`mobile/tools/verify_force_proxy.py`
+  ——前置 mitm → 冷启动 → **等网络就绪** → `settings put global http_proxy :0`
+  彻底禁系统代理 → raw socket 三测。已实测（系统代理全禁的极端条件）：A `nc -4`
+  直连域名被捕获；B 直连 TEST-NET-3 不可达 IP 收到 **mitmproxy 自己的 400 页**
+  （"no host header"，铁证）；C UDP 到宿主 **直出、不经代理**（`-http-proxy` 只重定向
+  TCP；QUIC/UDP 属已声明边界 §能力边界，不解码）。**boot 完成 ≠ 网络就绪**（eth0
+  DHCP 实测还要等 36s / 106s 两轮），过早测试全是 "Network is unreachable" 假阴性——
+  本工具内置网络等待，同源探测勿在别处绕过。
 
 ## 阳性对照：夹具 App（**读数为零时的第一件事**）
 
@@ -125,19 +141,21 @@ python mobile/tools/device_run.py --seconds 120           # 全链路（装夹�
 python mobile/tools/trigger.py --package com.vscanner.privacydemo --button btnDeviceId
 ```
 
-**实测结论（2026-10-13，务必先看这条）**：夹具 12 个按钮**全部命中**且带真实结果
+**实测结论（2026-10-13 现场；2026-10-16 已修复——保留作判据设计依据）**：夹具 12 个按钮**全部命中**且带真实结果
 （`line1=+15551234567`、`installed_apps=270`、三个权限 GRANTED），但 `reads.jsonl`
 **一条事件都没有**——钩子日志停在 `armed 58/58 apis; failed=0`。最小化实验复现：
 钩子 attach 到 pid X → 按 `btnDeviceId` → **X 当场消失**（SIGABRT，`abort message`
 是一条内存映射行，2 帧栈）；**同夹具同按钮不挂钩子则全程健康**（pid 稳定 +30s、
 crash 缓冲 0 行）。
 
-→ **`armed` ≠ 能捕到。`hook_privacy` 的 58 个钩子会把应用（连我们自己的夹具也一样）
-在第一次被监视 API 调用附近打死，崩前的事件发不出来。** 因此：
+→ **`armed` ≠ 能捕到**——这条判据设计依据至今成立。**A1（58 钩子打死应用）已于
+2026-10-16 修复**（根因 = JNI transition ref 上游 bug + 多脚本替换不被 bridge 支持；
+修复 = bridge 补丁 + 单 agent，见 M031/M032）。此结论的两个保留用途：
 
 - 读数为零**不得**先归因成"该应用没有收集"；先跑夹具自检，再按 M030 的三类拆
   （采集缺陷 / 能力边界 / 样本行为）。
-- 这条与 M016「钩子必须自证挂载成功」是两层：挂上 ≠ 生效。修法与分档实验见 DECISIONS 待办 P0。
+- 这条与 M016「钩子必须自证挂载成功」是两层：挂上 ≠ 生效。修复史与分档实验归档
+  见 `DECISIONS.md` M031/M032、`DEV_FIX_REPORT.md` §5.8/§5.9 与 `D:/vscanner-tp/a1-scan/`。
 
 ## 状态（2026-10-03，计数更新于 2026-10-13）
 
@@ -185,10 +203,13 @@ AI 三阶段研判（含编造校验）、PDF 报告（十章 + 三附录）、�
   理由与前置条件见 `EVAL_CROSSCHECK.md` 第四节。
 
 **能力边界**：加固壳 / QUIC 不在覆盖内——加固壳现由 `apk_packer_probe.py` 在报告里
-如实标注"结论受限"，但仍**不具备**脱壳能力；native TLS 与 JCE 自绘加密已由内存 Hook
-（`hook_cipher.js` / `hook_native_ssl.js`，从 vehicle/hooks 移植）覆盖**加密前明文**，
-但静态链接自有 BoringSSL（Cronet 常见，符号不导出）与不经 JCE 的手工加密 / XOR
-仍拿不到明文；
+如实标注"结论受限"，但仍**不具备**脱壳能力；**明文的当前来源只有两条**：mitmproxy
+解密（系统 CA + `-http-proxy`）+ Java 层 TLS 校验收宽（`tls_bypasses_tp.js` 三手法）。
+`hook_cipher.js` / `hook_native_ssl.js`（JCE 加密前明文 / native TLS 明文）**已移植但
+未接线进流水线**（2026-10-16 核实：`device_run*.py` 只挂 `hook_all`，二者仅存在于
+构建产物与一致性守卫；授权范围标注也窄一档："自有设备与自有 APK"）——接线需合并进
+hook_all 并重跑 A1 稳定性；静态链接自有 BoringSSL（Cronet 常见，符号不导出）与不经
+JCE 的手工加密 / XOR 属该路径本身的覆盖外；
 剪贴板等无需运行时权限的 API，"无同意事件"需要结合 API 判断；
 政策关键词预扫是正则代理指标，未命中不等于未声明；
 静态扫描看不到被 D8 折叠掉的版本分支（M013）。

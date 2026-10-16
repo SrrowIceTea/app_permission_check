@@ -26,7 +26,13 @@
     </div>
 
     <nav class="sidebar-nav">
-      <a href="#" class="nav-item active" data-page="source">
+      <a href="#" class="nav-item active" data-page="pipeline">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M11 2L4 12h4l-1 6 7-10h-4l1-6z"/>
+        </svg>
+        <span>一键审计</span>
+      </a>
+      <a href="#" class="nav-item" data-page="source">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
           <path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm2 2h4v2H8V6zm0 4h4v2H8v-2z"/>
         </svg>
@@ -67,34 +73,34 @@
     <div class="page-header">
       <div class="page-header-content">
         <div class="current-apk" id="current-apk-info">
-          <span class="current-apk-label">当前 APK</span>
-          <span class="current-apk-name" id="current-apk-name">尚未上传</span>
+          <span class="current-apk-label">当前样本</span>
+          <span class="current-apk-name" id="current-apk-name">尚未拖入</span>
+          <select class="apk-switch" id="apk-switch" style="display:none" aria-label="切换历史样本"></select>
         </div>
-        <div class="upload-zone" id="upload-zone">
-          <div class="upload-icon">
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="currentColor">
-              <path d="M16 4l-8 8h5v8h6v-8h5l-8-8z"/>
-              <path d="M6 24h20v2H6v-2z"/>
-            </svg>
-          </div>
-          <div class="upload-text">
-            <span class="upload-title">上传 APK 开始审计</span>
-            <span class="upload-hint">拖拽文件至此或点击选择</span>
-          </div>
-          <input type="file" id="apk-input" accept=".apk" hidden>
-        </div>
-      </div>
-      <div class="progress-bar" id="progress-bar" style="display:none">
-        <div class="progress-track">
-          <div class="progress-fill" id="progress-fill"></div>
-        </div>
-        <div class="progress-text" id="progress-text"></div>
-        <button class="progress-cancel" id="progress-cancel" type="button">取消</button>
+        <div class="upload-hint-bar">APK 只能在「一键审计」页拖入，其他页面展示该样本的审计结果</div>
       </div>
     </div>
 
     <div class="page-container">
-      <section class="page active" id="page-source">
+      <section class="page active" id="page-pipeline">
+        <div class="page-title-bar">
+          <h2>一键审计（全自动流水线）</h2>
+        </div>
+        <div class="pipeline-container">
+          <div class="pipeline-dropzone" id="pipeline-dropzone">
+            <div class="pipeline-dz-title">拖入 APK，一键全流程审计</div>
+            <div class="pipeline-dz-sub">静态剖析 → 模拟器动态采集（Frida 插桩 / 流量镜像）→ 关联分析 → AI 研判 → 报告</div>
+            <input type="file" id="pipeline-apk-input" accept=".apk" hidden>
+          </div>
+          <div class="pipeline-progress" id="pipeline-progress" style="display:none">
+            <div class="pipeline-job" id="pipeline-job"></div>
+            <ol class="pipeline-timeline" id="pipeline-timeline"></ol>
+          </div>
+          <div class="pipeline-result" id="pipeline-result" style="display:none"></div>
+        </div>
+      </section>
+
+      <section class="page" id="page-source">
         <div class="page-title-bar">
           <h2>源码查看</h2>
           <div class="source-filter">
@@ -107,7 +113,7 @@
               <svg width="48" height="48" viewBox="0 0 48 48" fill="currentColor" opacity="0.3">
                 <path d="M8 8h32v32H8V8zm4 4v24h24V12H12zm4 4h16v2H16v-2zm0 6h16v2H16v-2zm0 6h10v2H16v-2z"/>
               </svg>
-              <p>上传 APK 后查看反编译源码</p>
+              <p>在一键审计页拖入 APK 后查看反编译源码</p>
             </div>
           </div>
           <div class="code-view" id="code-view">
@@ -130,7 +136,7 @@
             <svg width="64" height="64" viewBox="0 0 64 64" fill="currentColor" opacity="0.3">
               <path d="M12 8h40v48H12V8zm4 4v40h32V12H16zm6 6h20v4H22v-4zm0 8h20v4H22v-4zm0 8h14v4H22v-4z"/>
             </svg>
-            <p>上传 APK 后查看静态审计结果</p>
+            <p>在一键审计页拖入 APK 后查看静态审计结果</p>
           </div>
         </div>
       </section>
@@ -144,7 +150,7 @@
             <svg width="64" height="64" viewBox="0 0 64 64" fill="currentColor" opacity="0.3">
               <path d="M32 8a24 24 0 100 48 24 24 0 000-48zm0 4a20 20 0 110 40 20 20 0 010-40zm-2 8v14l12 7 2-3-10-6V20h-4z"/>
             </svg>
-            <p>上传 APK 后查看静动交叉核对结果</p>
+            <p>在一键审计页拖入 APK 后查看动态审计结果</p>
           </div>
         </div>
       </section>
@@ -158,7 +164,7 @@
             <svg width="64" height="64" viewBox="0 0 64 64" fill="currentColor" opacity="0.3">
               <path d="M16 8h32v48H16V8zm4 4v40h24V12H20zm4 6h16v4H24v-4zm0 8h16v4H24v-4zm0 8h10v4H24v-4z"/>
             </svg>
-            <p>上传 APK 后查看综合审计报告</p>
+            <p>在一键审计页拖入 APK 后查看综合审计报告</p>
           </div>
         </div>
       </section>

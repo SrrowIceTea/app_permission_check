@@ -52,8 +52,9 @@
   **"确实发了这个值"**。
 - **形态与定性分离（M006）**：`digit15_shape` 等 9 个形态标签的 `data_type` 故意为 `None`，
   只凭形态**不产出任何数据类别结论**——这条设计是本报告全部建议都必须尊重的地基。
-- **内存 Hook**：`hook_cipher.js`（JCE 加密前明文）/ `hook_native_ssl.js`（BoringSSL 明文），
-  从车载侧移植，只作证据落盘、不参与判定（M019）。
+- **内存 Hook（已移植、未接线）**：`hook_cipher.js`（JCE 加密前明文）/ `hook_native_ssl.js`
+  （BoringSSL 明文），从车载侧移植（M019）、有构建产物与一致性守卫，但截至 2026-10-16
+  核实**无任何运行时入口挂载**；设计意图是只作证据落盘、不参与判定。
 - **强制代理**：`traffic/transparent.py` 用 `emulator -http-proxy` + 系统 CA，
   让无视系统代理的第三方 App（如 loopj/AsyncHttpClient）也无法绕过抓包。
 
@@ -407,7 +408,7 @@
 
 | # | 严重度 | 缺陷 | 现场证据 | 修复方案 | 验收判据 | 状态 |
 |---|---|---|---|---|---|---|
-| **A1** | **P0** | **Frida 插桩在第一次被监视 API 调用附近把被测应用打死**，运行时读数永远为空 | 最小化实验：起夹具 pid=32755 → 挂钩子 → 按 `btnDeviceId` → 按后 pid 为空。dropbox 现场 `SIGABRT`、`2 帧栈`（`abort+189`→`<anonymous>`）、`Process uptime: 37s`。**不挂钩子对照：同夹具同按钮 pid 1599 全程稳定、再等 30s 存活、crash 缓冲 0 行** | 分档二分定位：先只挂 1~3 个 API → 8 → 16 → 32 → 58，找出崩点所在档；定位后要么换挂载方式（`Java.perform` 内批量 `Java.use` 改为惰性 resolve）、要么降规模并显式记 gap | 夹具跑一次，`reads.jsonl` 出现 ≥1 条非 START/ARMED 的真实事件，且应用进程在窗口内存活 | 【待修·离线预备已落地】 |
+| **A1** | **P0** | **Frida 插桩在第一次被监视 API 调用附近把被测应用打死**，运行时读数永远为空 | 最小化实验：起夹具 pid=32755 → 挂钩子 → 按 `btnDeviceId` → 按后 pid 为空。dropbox 现场 `SIGABRT`、`2 帧栈`（`abort+189`→`<anonymous>`）、`Process uptime: 37s`。**不挂钩子对照：同夹具同按钮 pid 1599 全程稳定、再等 30s 存活、crash 缓冲 0 行** | 分档二分定位：先只挂 1~3 个 API → 8 → 16 → 32 → 58，找出崩点所在档；定位后要么换挂载方式（`Java.perform` 内批量 `Java.use` 改为惰性 resolve）、要么降规模并显式记 gap | 夹具跑一次，`reads.jsonl` 出现 ≥1 条非 START/ARMED 的真实事件，且应用进程在窗口内存活 | **【已修】（2026-10-16，M031/M032）**——bridge 补丁 + 单 agent；夹具 hook_all 5/5、JIT 开启 49 档 2/2、真实样本 `e2e-1` passed；批次级复跑待做 |
 | **A2** | **P0** | **判据层盲区：`hook_*_armed` 成功 ≠ 能捕到事件**。现在"零读取"会被判为通过，报告在应用真的收集时会写成零 | 夹具 12 个按钮全部命中且带回真实结果（`line1=+15551234567`、`gps=39.908998,116.397`、`installed_apps=270`、3 权限 GRANTED），必然调用被监视 API；`reads.jsonl` 仍只有 START/ARMED，钩子日志停在 `armed 58/58 apis; failed=0` | 判据升级：`armed` 之外增加"**窗口内至少有 1 条真实事件**"作为**强制**判据（非 optional）；零事件时判据失败并写进 `gaps`，而不是静默通过 | 人为让夹具不点任何按钮跑一次 → 该判据必须失败 | 【已修·待设备验收】 |
 | **A3** | **P0** | **无阳性对照自检**：出批前不知道钩子链是否活着 | 同上。5 个样本 44 条结论 **100% 是静态 `over_permission`**，运行时零产出，全靠人工事后发现 | 把夹具阳性对照内建进 `batch_thirdparty.py`：批次开始前先跑一次夹具最小自检（装夹具→挂钩→点 1 个按钮→断言有真实事件），失败则拒绝出批并给出明确原因。**已实现**：新增 `mobile/tools/fixture_selftest.py`，批次前置门 + `--skip-fixture-selftest` 显式跳过（跳过事实写入批次摘要），结果并入批次级 `batch-summary.json` 的 `selftest` 字段 | 故意把钩子脚本改坏（或 `--no-hooks`）跑批 → 批次必须在自检阶段失败退出 | 【已修·待设备验收】 |
 | **A4** | P1 | **无崩溃自愈 + 分段采集**。崩溃是非确定的（同 UI 序列一死一活），单次窗口撞上就整段数据作废 | keepass 三段实验：`control-kp-nohooks` 存活；`repro-kp-hooks` SIGSEGV 死亡；`exp-kp-nojit` 存活——**同 UI 动作序列（10 步逐条相同）**，证明是概率性竞态 | 采集窗口切 N 段（默认 30s/段）：每段重启应用 → 重挂钩子 → 采集 → 收尾；进程死了由下一段拉起，**数据跨段累加**；每次死亡记入 `app-death.json` | 在 keepass 上跑，即使中途崩 1~2 次，`reads.jsonl` 仍保留崩前段落的真实事件 | 【规划】 |
@@ -422,6 +423,7 @@
 | **A13** | — | **AI stage3 不严格遵循 schema**：`items`/`recommendations`/`uncertainties` 为空，改用 `findings`/`missing` 等自造字段 | keepass/camera 两次真实调用实测 | 提示词加字段名警示段（`conclusion` 非 `conclusion_level`）+ 校验器加整体缺失警告（warning 不阻断） | 真实调用不再报 `conclusion 越界` | 【部分修】 |
 | **A14** | — | **多设备未指定 `ANDROID_SERIAL`**：裸 adb 静默失败返回空串 | 宿主机存在第二台模拟器 5556 | `device_guard()` 启动前拦截 | 已修 | 【已修】 |
 | **A15** | — | **`--no-hooks` 对照开关**、`device.serial` 用 `get-serialno` 而非 `get-state` | — | 已加 | — | 【已修】 |
+| **A16** | **P0** | **SLIRP 强制代理此前一直失效**：emulator 37.x 从**宿主进程**探测 `-http-proxy` 地址，guest 别名 `10.0.2.2` 在宿主不可路由 → 探测必超时 → 打印 `Proxy will be ignored!` 并把整条 SLIRP 重定向关掉（**不读系统代理的直连流量全漏**） | `emulator.log` 固定出现 `Could not connect to proxy at 10.0.2.2:8888: timed out`；guest `nc` 裸 socket 直连实测：修复前 mitmproxy 零连接记录 | ① `-http-proxy` 改宿主侧回环 `127.0.0.1`（`transparent.PROXY_ARG_HOST`）；② 冷启动前置 mitmproxy（`runner._start_early_mitm` + `--reuse-mitm`；探测只在启动一刻做、失败不重试） | `nc` 直连 example.com 拿到经代理真实 200；dummy IP 收 `Server: mitmproxy` 报错页 | **【已修】（2026-10-16，M032）** |
 
 ---
 
@@ -558,7 +560,7 @@
 > | 批次 1 · 零风险配置与文档 | 1–5 | **全部完成** |
 > | 批次 2 · 单行/小范围代码修复 | 6–13 | **全部完成**（13 的 19 处硬编码 → 6 处，余者为 `sdk_paths` 的有意兜底） |
 > | 批次 3 · 语义级修复 | 14–18 | **全部完成** |
-> | 批次 3 附加 | 19（A2 + A6 + A12） | **完成**；A2 的验收判据本身要设备 → `【已修·待设备验收】` |
+> | 批次 3 附加 | 19（A2 + A6 + A12） | **完成**；A2 判据已设备验证（2026-10-16，`e2e-1` `runtime_events_captured ✓`） |
 > | 批次 4 · 只写方案不动代码 | 20–26 | **部分落地**，见下 |
 >
 > 批次 4 的逐条现状：
@@ -566,16 +568,18 @@
 > * **20 · A1 分档定位**：分档开关（`--watch-limit` / `VSCAN_WATCH_LIMIT`）、栈开关
 >   （`--no-stack` / `VSCAN_NO_STACK`）、H5 的 `--args-only` / `VSCAN_ARGS_ONLY`、
 >   事件期缓存化、分档扫描脚本（`mobile/tools/a1_tier_scan.py`）**全部落地且离线验证**。
->   **缺陷本体未修**——按 §8.6 第 6 条，要设备跑出"≥1 条非 START/ARMED 的真实事件
->   且进程存活"才算验收。**这是全项目唯一还挡着运行时结论的一项。**
+>   **2026-10-16 追记：A1 已修**——真根因不是规模，而是 JNI transition ref（bridge 补丁）
+>   + 多脚本替换不被 bridge 支持（单 agent 合并）；判据达成：夹具 hook_all 5/5、真实样本
+>   `e2e-1` passed。分档表与实验矩阵归档于 `D:/vscanner-tp/a1-scan/`。详见 M031/M032。
 > * **21 · A3 夹具阳性对照**：`fixture_selftest.py` + `batch_thirdparty.py` 批前门**已落地**；
->   设备侧验收待 A1。
-> * **22 · A4 崩溃自愈 + 分段采集**：**未做**。它依赖 A1 的结论（崩点在哪一档、
->   是否与替换规模相关），先做会白做。
+>   A1 已修（2026-10-16）→ 待做的是"去掉 `--skip-fixture-selftest` 重跑批次"的批次级验收。
+> * **22 · A4 崩溃自愈 + 分段采集**：**未做**（可顺延）。A1 已修（2026-10-16），
+>   其"非确定崩溃"背景消失 → A4 从"必要缓解"降级为"鲁棒性增强"（长时采集防意外崩溃）。
 > * **23 · B-2 钩子共享化**：**短期守卫已落地**（`test_hooks_parity.py`，7 对全绿）；
 >   中期 `core/hooks_shared/` **未做**。
 > * **24 · B-2 超 300 行拆分**：**已拆 5 个低风险文件**（318→281、324→220、309→241、
->   382→242、406→209），**剩 6 个**采集/编排主链路，留给 A1 之后（理由见 §8.2 B-2）。
+>   382→242、406→209），**剩 6 个**采集/编排主链路——"等 A1"前置已满足（2026-10-16），
+>   可按计划启动拆分（理由见 §8.2 B-2）。
 > * **25 · B-3 `winpath.extended_rglob()`**：**已落地**并接进全部 5 个调用点
 >   （`jadx.py` ×2、`jobs.py` ×3），3 条离线用例 + 缺陷复现证据。
 > * **26 · B-4 `vscan_conn.log` 并发路径**：**已在批次 2 一并做完**（pid 后缀）。

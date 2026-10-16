@@ -87,6 +87,14 @@ class EmulatorArgsTest(unittest.TestCase):
         self.assertIn("-http-proxy", args)
         self.assertIn("http://10.0.2.2:8888", args)
 
+    def test_default_proxy_host_is_host_loopback(self):
+        """默认必须是**宿主侧可达地址**（127.0.0.1），不是 guest 别名 10.0.2.2：
+        emulator 37.x 从宿主进程探测代理，10.0.2.2 在宿主上不可路由 → 探测必超时
+        → "Proxy will be ignored!" → 整条 SLIRP 重定向静默失效（2026-10-16 实测：
+        换 127.0.0.1 后同一模拟器上 nc 直连流量立即被重定向进代理）。"""
+        args = tp.emulator_capture_args()
+        self.assertIn("http://127.0.0.1:8888", args)
+
     def test_writable_system_flag_present_by_default(self):
         """没有 -writable-system 就 remount 不了，系统 CA 装不进去——
         而失败发生在设备侧，看起来像"CA 装了但没生效"。"""

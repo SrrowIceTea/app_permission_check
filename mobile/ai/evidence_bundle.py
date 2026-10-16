@@ -38,6 +38,11 @@ from bundle_observations import read_jsonl, top_app_frame, build_reads, build_co
 import policy_lint  # noqa: E402
 import apk_packer_probe  # noqa: E402  加固特征探测：命中即把「结论受限」写进 gaps
 
+HERE_ANALYZE = HERE.parent / "analyze"
+if str(HERE_ANALYZE) not in sys.path:
+    sys.path.insert(0, str(HERE_ANALYZE))
+import coverage_gap  # noqa: E402  C2 静态/动态覆盖差集
+
 BUNDLE_VERSION = "1"
 
 
@@ -94,7 +99,8 @@ def load_category(db: Path, version: str, key: str | None) -> dict:
 
 def build(session: Path, rules_db: Path, *, version: str, policy_store: Path | None,
           findings_path: Path | None, app: dict, include_previews: bool,
-          notes: list[str] | None = None, apk_path: Path | None = None) -> dict:
+          notes: list[str] | None = None, apk_path: Path | None = None,
+          static_supplement_path: Path | None = None) -> dict:
     gaps: list[str] = []
     # 编排层显式提供的缺口说明。它们**不替代**下面自动发现的缺口，只做补充：
     # 有些限制是样本/环境特有的（例如"该样本的 HTTP 客户端不读系统代理，抓包结构性为空"），
@@ -121,6 +127,21 @@ def build(session: Path, rules_db: Path, *, version: str, policy_store: Path | N
     reads = build_reads(session, gaps)
     consent = build_consent(session, gaps)
     flows, plaintext = build_flows(session, gaps, include_previews=include_previews)
+
+    # C2 覆盖差集：静态 dex 引用 vs 动态观测。提供了静态产物才算（没跑静态扫描
+    # 时差集没有"静态侧"可言，硬算只会产出误导性的全 dynamic_only）。
+    coverage_gaps = None
+    if static_supplement_path is not None:
+        if static_supplement_path.is_file():
+            try:
+                supp = json.loads(static_supplement_path.read_text(encoding="utf-8"))
+                coverage_gaps = coverage_gap.compute_gaps(supp, reads, flows)
+            except json.JSONDecodeError as e:
+                gaps.append(f"[coverage] 静态补充扫描产物无法解析"
+                            f"（{static_supplement_path.name}: {e}）：覆盖差集未计算")
+        else:
+            gaps.append(f"[coverage] 指定的静态补充扫描产物不存在: {static_supplement_path}；"
+                        "覆盖差集未计算（静态侧盲区本轮不可见）")
 
     findings = read_jsonl(findings_path, gaps) if findings_path else []
     if not findings:
@@ -174,6 +195,7 @@ def build(session: Path, rules_db: Path, *, version: str, policy_store: Path | N
         "dynamic": {"reads": reads, "consent_timeline": consent, "hook_health": health,
                     "policy_consent_state": "unknown"},
         "traffic": {"flows": flows, "plaintext_flow_ids": plaintext},
+        **({"coverage_gaps": coverage_gaps} if coverage_gaps is not None else {}),
         "findings": [{"rule_id": f.get("rule_id"), "rule_type": f.get("rule_type"),
                       "severity": f.get("severity"), "conclusion_level": f.get("conclusion_level"),
                       "title": f.get("title"), "policy_consent_state": f.get("policy_consent_state"),
@@ -213,6 +235,9 @@ def main() -> int:
     ap.add_argument("--apk-sha256", default=None)
     ap.add_argument("--apk", default=None,
                     help="样本 APK 路径；提供则做加固特征探测，命中时写入 gaps（结论受限）")
+    ap.add_argument("--static-supplement", default=None,
+                    help="static_mobile_supplement.json 路径（static_scan_thirdparty 产物）；"
+                         "提供则计算 C2 静态/动态覆盖差集，写入 coverage_gaps")
     ap.add_argument("--device", default=None)
     ap.add_argument("--include-previews", action="store_true",
                     help="把报文预览原文一并写入（默认关闭：预览可能含个人信息原文）")
@@ -231,7 +256,9 @@ def main() -> int:
                    policy_store=Path(args.policy_store) if args.policy_store else None,
                    findings_path=Path(args.findings) if args.findings else None,
                    app=app, include_previews=args.include_previews, notes=args.note,
-                   apk_path=Path(args.apk) if args.apk else None)
+                   apk_path=Path(args.apk) if args.apk else None,
+                   static_supplement_path=(Path(args.static_supplement)
+                                           if args.static_supplement else None))
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

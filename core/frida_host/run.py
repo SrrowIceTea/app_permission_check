@@ -101,6 +101,16 @@ def main() -> int:
                         help="事件不带 thread_name/stack 字段值。同 VSCAN_NO_STACK=1")
     parser.add_argument("--args-only", action="store_true",
                         help="H5：事件不带任何返回值字段（不哈希、不计数）。同 VSCAN_ARGS_ONLY=1")
+    parser.add_argument("--deoptimize", type=int, default=None, choices=[0, 1, 2],
+                        help="A1 修复：替换 ArtMethod 前把已编译方法退回解释器，消除 JIT 竞态"
+                             "（1=everything、2=boot image、0=关）。同 VSCAN_DEOPTIMIZE")
+    parser.add_argument("--stop-file", type=Path, default=None,
+                        help="优雅停止哨兵：该文件一出现就结束采集、走正常 detach 退出。"
+                             "调用方应以此替代 taskkill /F——强杀会让 agent 在未清理状态下"
+                             "收尾，CheckJNI（userdebug 默认开启）上必发 "
+                             "'DeleteGlobalRef ... without being attached' abort，"
+                             "每轮一次、污染 app-death 取证（2026-10-16 实测，见 "
+                             "thirdparty_env.stop_hook 注释）")
     args = parser.parse_args()
     if args.watch_limit is None:
         env_limit = os.environ.get("VSCAN_WATCH_LIMIT", "").strip()
@@ -113,6 +123,15 @@ def main() -> int:
         parser.error("--watch-limit 不能为负（0=全不挂）")
     no_stack = args.no_stack or os.environ.get("VSCAN_NO_STACK", "").strip() == "1"
     args_only = args.args_only or os.environ.get("VSCAN_ARGS_ONLY", "").strip() == "1"
+    if args.deoptimize is None:
+        env_deopt = os.environ.get("VSCAN_DEOPTIMIZE", "").strip()
+        if env_deopt:
+            try:
+                args.deoptimize = int(env_deopt)
+            except ValueError:
+                parser.error(f"VSCAN_DEOPTIMIZE 不是整数：{env_deopt!r}")
+    if args.deoptimize is not None and args.deoptimize not in (0, 1, 2):
+        parser.error("VSCAN_DEOPTIMIZE 只能是 0（关）/ 1（everything）/ 2（boot image）")
     global FRIDA_PORT
     FRIDA_PORT = args.port or (27044 if args.gadget else 27043)
     # 白名单**没有默认值**（§8.2 B-1）：内核不再默认放行车载夹具包名，
@@ -161,10 +180,11 @@ def main() -> int:
     store = EventStore(args.event_db or args.out.with_suffix(".sqlite"))
     script = session.create_script(
         configure(body, allowed, watch_limit=args.watch_limit, no_stack=no_stack,
-                  args_only=args_only))
-    if args.watch_limit is not None or no_stack or args_only:
+                  args_only=args_only, deoptimize=args.deoptimize))
+    if (args.watch_limit is not None or no_stack or args_only
+            or args.deoptimize is not None):
         print(f"分档模式：watch_limit={args.watch_limit} no_stack={no_stack} "
-              f"args_only={args_only}", flush=True)
+              f"args_only={args_only} deoptimize={args.deoptimize}", flush=True)
 
     counts: dict[str, int] = {}
     records = 0
@@ -231,6 +251,13 @@ def main() -> int:
         while time.monotonic() < deadline:
             time.sleep(1.0)
             if failed:
+                break
+            if args.stop_file is not None and args.stop_file.exists():
+                # 优雅停止（2026-10-16）：调用方以文件哨兵收尾而非 taskkill——
+                # 强杀会让 agent 在未清理状态下收尾，CheckJNI 上必发
+                # "DeleteGlobalRef ... without being attached" abort（实测每轮一次）。
+                # 这里 break 后走 finally 的 session.detach()，正常卸载。
+                print("stop-file 出现：优雅收尾（正常 detach）", flush=True)
                 break
             if not args.gadget and died_at is None and not pid_alive(pid):
                 died_at = time.monotonic()

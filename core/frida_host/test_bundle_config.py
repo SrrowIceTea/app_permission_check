@@ -4,7 +4,7 @@
 
 为什么值得单测：替换发生在**注入前一刻**，出错不会报错——Frida 只会拒绝加载
 （length header mismatch）或让人误读模块，而这两种症状都长得像"钩子没挂上"。
-四个占位符的替换值长度各不相同，A1 分档新增的三个尤其要盯住。
+五个占位符的替换值长度各不相同，A1 分档新增的三个与 A1 修复的 deoptimize 尤其要盯住。
 
 跑法：cd core/frida_host && python -m unittest test_bundle_config
 """
@@ -15,8 +15,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from core.frida_host.bundle_config import (ARGS_ONLY_MARKER, MARKER,  # noqa: E402
-                                           NO_STACK_MARKER, WATCH_LIMIT_MARKER,
+from core.frida_host.bundle_config import (ARGS_ONLY_MARKER, DEOPTIMIZE_MARKER,  # noqa: E402
+                                           MARKER, NO_STACK_MARKER, WATCH_LIMIT_MARKER,
                                            configure)
 
 
@@ -37,41 +37,48 @@ def parse(body: str) -> list[str]:
 
 
 def source() -> str:
-    """与真实脚本同形的四处占位符用法（都必须是字符串字面量；
+    """与真实脚本同形的五处占位符用法（都必须是字符串字面量；
     分档三个走 parseInt 消费——直接字面量比较会被 frida-compile 折叠掉）。"""
     return ('var p = "' + MARKER + '";\n'
             'var lim = parseInt("' + WATCH_LIMIT_MARKER + '", 10);\n'
             'var ns = parseInt("' + NO_STACK_MARKER + '", 10) === 1;\n'
-            'var ao = parseInt("' + ARGS_ONLY_MARKER + '", 10) === 1;\n')
+            'var ao = parseInt("' + ARGS_ONLY_MARKER + '", 10) === 1;\n'
+            'var dp = parseInt("' + DEOPTIMIZE_MARKER + '", 10);\n')
 
 
 class ConfigureTest(unittest.TestCase):
     def test_all_markers_replaced_and_headers_recomputed(self):
         out = configure(pack([source(), 'no markers here']), ['com.a.b'],
-                        watch_limit=8, no_stack=True, args_only=True)
+                        watch_limit=8, no_stack=True, args_only=True, deoptimize=1)
         modules = parse(out)
         self.assertIn('var p = "[\\"com.a.b\\"]";', modules[0])
         self.assertIn('var lim = parseInt("8", 10);', modules[0])
         self.assertIn('var ns = parseInt("1", 10) === 1;', modules[0])
         self.assertIn('var ao = parseInt("1", 10) === 1;', modules[0])
-        for marker in (MARKER, WATCH_LIMIT_MARKER, NO_STACK_MARKER, ARGS_ONLY_MARKER):
+        self.assertIn('var dp = parseInt("1", 10);', modules[0])
+        for marker in (MARKER, WATCH_LIMIT_MARKER, NO_STACK_MARKER, ARGS_ONLY_MARKER,
+                       DEOPTIMIZE_MARKER):
             self.assertNotIn(marker, modules[0])
 
     def test_switches_absent_leaves_their_markers(self):
-        """旧调用形态（只给包名）不许动分档占位符——车载路径依赖这条。"""
+        """旧调用形态（只给包名）不许动分档/去优化占位符——车载路径依赖这条。"""
         modules = parse(configure(pack([source()]), ['com.a.b']))
         self.assertNotIn(MARKER, modules[0])
         self.assertIn(WATCH_LIMIT_MARKER, modules[0])
         self.assertIn(NO_STACK_MARKER, modules[0])
         self.assertIn(ARGS_ONLY_MARKER, modules[0])
+        self.assertIn(DEOPTIMIZE_MARKER, modules[0])
 
     def test_zero_limit_and_false_switches_are_explicit(self):
-        """0 是合法档位（attach 对照组），要与"没给"区分开；False 同理。"""
+        """0 是合法档位（attach 对照组），要与"没给"区分开；False 同理；
+        deoptimize=0（关）也必须显式替换为 "0"——脚本侧 parseInt→0→off。"""
         modules = parse(configure(pack([source()]), ['com.a.b'],
-                                  watch_limit=0, no_stack=False, args_only=False))
+                                  watch_limit=0, no_stack=False, args_only=False,
+                                  deoptimize=0))
         self.assertIn('var lim = parseInt("0", 10);', modules[0])
         self.assertIn('var ns = parseInt("0", 10) === 1;', modules[0])
         self.assertIn('var ao = parseInt("0", 10) === 1;', modules[0])
+        self.assertIn('var dp = parseInt("0", 10);', modules[0])
 
     def test_plain_body_without_header(self):
         out = configure('x = parseInt("' + WATCH_LIMIT_MARKER + '", 10);', [], watch_limit=3)
