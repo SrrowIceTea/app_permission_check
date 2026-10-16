@@ -143,21 +143,45 @@ def run(out: Path, seconds: int, user: int | None) -> dict:
         return fail("夹具未在 60s 内启动（pidof 无输出）",
                     "冷启动竞争或装到了别的用户（--user）；与\"装机失败\"看 install.log 区分")
 
+    # **单 agent 合并 bundle**（2026-10-16 A1 修复）：四个模块（privacy/consent/
+    # egress_tp/ssl_pinning_tp）在同一个 JS 上下文里装配——frida-java-bridge 不支持
+    # "多脚本各自替换方法"（实测双脚本 ~50% 触发 ART 的 GetOatQuickMethodHeader
+    # FATAL 主线程 abort，单脚本 5/5 稳定）。事件全部落 reads.jsonl。
     hooks = [
-        env.start_hook(MOBILE / "hooks" / "dist" / "hook_privacy.bundle.js", session,
-                       "reads.jsonl", out / "hook-privacy.log", seconds, PKG),
-        env.start_hook(MOBILE / "hooks" / "dist" / "hook_consent.bundle.js", session,
-                       "consent.jsonl", out / "hook-consent.log", seconds, PKG),
+        env.start_hook(MOBILE / "hooks" / "dist" / "hook_all.bundle.js", session,
+                       "reads.jsonl", out / "hook-all.log", seconds, PKG),
     ]
-    time.sleep(8)   # 等钩子挂上；D309：钩子掉线与"应用没动作"长得一样，不能省
+    # **等"挂妥"再点击**（2026-10-16）：原来是固定 sleep(8)，设备忙时（刚重启/
+    # 首次 attach/frida-server 冷启）可能钩子还没 arm 完就点了按钮——那一轮会
+    # 产出"点击成功、应用也执行了读取，但零事件"的假阴性（jiton-49-r1 实遇）。
+    # 改为轮询 hook 日志的挂妥标记（脚本侧 "armed N/N" + 驱动侧 "collecting for"），
+    # 最多等 90s；等不到 → 失败退出，而不是继续跑出误导性的"零事件"格子。
+    armed_ok = False
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        try:
+            txt = (out / "hook-all.log").read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            txt = ""
+        if "armed" in txt and "collecting for" in txt:
+            armed_ok = True
+            break
+        time.sleep(0.5)
+    check("hooks_armed_in_time", armed_ok, "hook-all.log 已出现 armed + collecting 标记")
+    if not armed_ok:
+        return fail("钩子 90s 内未确认挂妥，放弃本轮（防假零事件）",
+                    "看 hook-all.log：attach 卡住 / 脚本加载报错 / frida-server 未起")
     dialog = clear_dialogs(out / "dialog.xml")
     check("dialog_cleared", dialog == "cleared", f"state={dialog}")
     rc = trigger(out / "trigger.log", user)
     check("trigger", rc == 0, f"rc={rc}")
     time.sleep(5)   # 等事件回传落盘
 
-    for handle in hooks:
-        env.kill_tree(handle, out / "hooks-kill.log")
+    # **窗口证据必须在拆钩之前采集**（2026-10-16）：拆钩（无论优雅 detach 还是强杀）
+    # 会在应用进程里触发一次工具侧 abort（Thread-N 的 DeleteGlobalRef
+    # "without being attached"，CheckJNI 上必 abort，双脚本场景必现）——那是拆钩噪声，
+    # 不是应用在采集窗口内的行为。检查若放拆钩之后，就成了"测我们自己的拆钩动作"，
+    # 还会随拆钩快慢忽真忽假（实测同一配置出现过 True/False 两种读数）。
     events = read_events(session / "reads.jsonl")
     readers = [e for e in events if e.get("ev") == "PRIVACY_READ"]
     alive = pid_alive(pid)
@@ -165,6 +189,9 @@ def run(out: Path, seconds: int, user: int | None) -> dict:
     death = env.app_death_reason(PKG)
     (out / "app-death.json").write_text(json.dumps(death, ensure_ascii=False, indent=2),
                                         encoding="utf-8")
+
+    for handle in hooks:
+        env.stop_hook(handle, out / "hooks-stop.log")
 
     if not readers and not alive:
         return fail("零真实事件 + 夹具进程已死——这就是 A1 的采集链路故障症状",

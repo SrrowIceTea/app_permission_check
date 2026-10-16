@@ -146,6 +146,15 @@
       "vehicle": "['com.vscanner.targetapp', 'com.vscanner.targetapp2']",
       "reason": "占位符未注入时的兜底包名按平台给定：移动侧夹具 com.vscanner.privacydemo；车载侧 targetapp/targetapp2。正常路径必被宿主的 __VSCAN_SESSION_PACKAGES__ 替换覆盖，兜底仅防御性",
       "date": "2026-10-14"
+    },
+    {
+      "id": "ssl-main-export",
+      "pair": "ssl_pinning",
+      "kind": "sub",
+      "mobile": "export function main() {",
+      "vehicle": "function main() {",
+      "reason": "A1 修复（2026-10-16）：移动侧改为「导出 main + 构建薄入口」——hook_all（单 agent 合并入口）需要 import 各模块的 main；vehicle 侧维持顶层自执行（见 mobile/hooks/build.mjs 注释）",
+      "date": "2026-10-16"
     }
   ],
   "exempt_functions": [
@@ -180,6 +189,14 @@
       "name": "armRuntimeCache",
       "reason": "批次 4 · A1/H1：移动侧把 Thread 的 Java.use 收敛到 ARMED 阶段解析一次（事件期不再 Java.use，见 runtime.js 注释）；车载侧无事件期 threadName/stackStr，无此问题",
       "date": "2026-10-14"
+    },
+    {
+      "id": "rt-deopt",
+      "pair": "runtime",
+      "side": "mobile",
+      "name": "deoptimizeBeforeArm",
+      "reason": "A1 修复（2026-10-16）：去优化开关——替换 ArtMethod 前把已编译方法退回解释器，消除与 JIT 编译线程的竞态（Jit thread pool SIGSEGV）。车载侧暂无对应崩溃证据、未引入",
+      "date": "2026-10-16"
     }
   ],
   "drop": [
@@ -216,6 +233,22 @@
       "lines": ["var THREAD_CLS = null;", "var NO_STACK = parseInt(\"__VSCAN_NO_STACK__\", 10) === 1;"],
       "reason": "批次 4 · A1：事件期缓存变量与栈开关变量。__VSCAN_NO_STACK__ 与 hook_privacy.js 的 __VSCAN_WATCH_LIMIT__ 同为宿主注入前替换的占位符（core/frida_host/bundle_config.py），车载侧无",
       "date": "2026-10-14"
+    },
+    {
+      "id": "ssl-standalone-entry",
+      "pair": "ssl_pinning",
+      "side": "vehicle",
+      "lines": ["Java.perform(main);"],
+      "reason": "A1 修复（2026-10-16）：移动侧的顶层自执行已摘除（入口由 build.mjs 的薄入口提供，见 ssl-main-export）；vehicle 侧保留独立入口",
+      "date": "2026-10-16"
+    },
+    {
+      "id": "rt-deopt-var",
+      "pair": "runtime",
+      "side": "mobile",
+      "lines": ["var RAW_DEOPTIMIZE = \"__VSCAN_DEOPTIMIZE__\";"],
+      "reason": "A1 修复（2026-10-16）：deoptimizeBeforeArm 的开关占位符（宿主注入前替换，core/frida_host/bundle_config.py），随豁免函数一并孤立",
+      "date": "2026-10-16"
     }
   ]
 }

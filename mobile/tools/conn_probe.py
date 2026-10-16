@@ -44,6 +44,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import os
 import re
 import socket
 import struct
@@ -58,8 +59,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core import sdk_paths  # noqa: E402
 
 ADB = sdk_paths.sdk_tool("platform-tools", "adb.exe")
-DEVICE_LOG = "/data/local/tmp/vscan_conn_all.log"
-DEVICE_SCRIPT = "/data/local/tmp/vscan_conn_all.sh"
+# 工程-6（并发防撞，2026-10-16）：设备侧路径带 pid+时间戳后缀。旧版固定名
+# vscan_conn_all.* 在两个实例并发时会互踩——后启动的实例开头 `rm -f` 会删掉
+# 前者的脚本，正在跑的那个下一轮 `sh <script>` 找不到文件而**静默失明**
+# （症状又是"没采到"，与"应用没外发"难分，正是本项目最忌讳的失真形态）。
+_U = f"{os.getpid()}_{int(time.time())}"
+DEVICE_LOG = f"/data/local/tmp/vscan_conn_{_U}.log"   # 遗留名：本工具从不写入它，仅为兼容保留
+DEVICE_SCRIPT = f"/data/local/tmp/vscan_conn_{_U}.sh"
+# 旧版固定名：每轮启动顺带清一次，防设备侧历史残留累积。
+DEVICE_LEGACY = ("/data/local/tmp/vscan_conn_all.log",
+                 "/data/local/tmp/vscan_conn_all.sh")
 # --package 模式下多少轮重解一次 pid。取 25：20ms 一轮时约 0.5s 一次 `pidof`，
 # 相对每轮都要 fork 的 `date` 可以忽略，但比"绑死一个 pid"能扛住应用重启。
 PIDOF_EVERY = 25
@@ -171,7 +180,8 @@ def main() -> int:
         f"  sleep {args.interval}\n"
         "done\n"
     )
-    adb("shell", f"rm -f {DEVICE_LOG} {DEVICE_SCRIPT}")
+    # 启动时清旧固定名残留 + 本轮同名兜底（同名兜底正常情况是 no-op，只为防极端重放）。
+    adb("shell", "rm -f " + " ".join((*DEVICE_LEGACY, DEVICE_LOG, DEVICE_SCRIPT)))
     # 命令拆成列表项而不是拼一整条字符串：`DEVICE_SCRIPT` 现在是常量，但拼字符串的
     # 写法一旦让它带上用户输入，`>` 前面就多了一整个 shell 注入面（§8.2 B-4）。
     # 真正的内容仍走 `input=`，不经过命令行。
@@ -260,6 +270,8 @@ def main() -> int:
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             proc.kill()
+        # 收尾清掉本轮设备侧脚本（带唯一后缀后不会误删别的实例的文件）。
+        adb("shell", f"rm -f {DEVICE_SCRIPT}")
 
     print(f"[conn_probe] scanned {rows} rows; {len(seen)} distinct endpoints "
           f"(pids={sorted({r['pid'] for r in seen.values()})}); unparsed={skipped}", flush=True)

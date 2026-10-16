@@ -6,10 +6,14 @@
 
 为什么需要它（三件事必须一起做才有用）：
 
-  1. `-http-proxy http://10.0.2.2:8888`
+  1. `-http-proxy http://127.0.0.1:8888`（宿主侧地址；由 tp.emulator_capture_args 生成）
      在 SLIRP 层把 TCP 连接交给代理。**应用无法绕过**——实测 NewPipe 用
      loopj/AsyncHttpClient，完全不理 `settings put global http_proxy`，
      而这一层对它有效。这是"flows.jsonl 为空"的根因。
+     **两个硬前提**（2026-10-16，M032）：地址必须是宿主可达的 127.0.0.1
+     （历史上传 guest 侧别名 10.0.2.2 → 宿主不可路由 → 启动探测超时 →
+     整条重定向静默失效）；且代理必须先于模拟器启动（探测只做一次、失败不重试，
+     冷启动路径由 pipeline/runner 的前置 mitm 保证）。
   2. `-writable-system`
      否则 `adb remount` 报 "Device must be bootloader unlocked"，系统 CA 装不进去。
   3. 装系统 CA

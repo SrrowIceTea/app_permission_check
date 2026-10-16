@@ -86,6 +86,31 @@ export function armRuntimeCache() {
   } catch (e) { THREAD_CLS = null; return false; }
 }
 
+// ---- A1 修复（2026-10-16）：JIT × ArtMethod 替换竞态防护 ----
+// 证据：58 档夹具自检挂上钩子、按钮触发后，崩溃在 `Jit thread pool` 上
+// （SIGSEGV / SEGV_ACCERR，fault addr 落在 JIT 代码区）——JIT 编译线程与
+// "Frida 替换 ArtMethod entrypoint"读写同一方法结构，状态不一致即崩。
+// 在替换任何 ArtMethod **之前**把已编译方法退回解释器（deoptimize），
+// 让 JIT 从干净状态起步，不与钩子抢同一份机器码。
+// `__VSCAN_DEOPTIMIZE__`：0=关（默认，保持旧行为；A/B 对照用）、
+// 1=deoptimizeEverything（全部退回解释器）、2=deoptimizeBootImage（只处理
+// boot image 类——被监视 API 全是系统类，观测面等价且对应用自身代码更温和）。
+// **写法同 NO_STACK**：必须 parseInt 消费——直接字面量比较会被 frida-compile
+// 常量折叠掉占位符（2026-10-14 实测）。
+var RAW_DEOPTIMIZE = "__VSCAN_DEOPTIMIZE__";
+
+export function deoptimizeBeforeArm() {
+  var mode = parseInt(RAW_DEOPTIMIZE, 10);
+  if (!isFinite(mode) || mode <= 0) return 'off';
+  try {
+    if (mode === 2) { Java.deoptimizeBootImage(); return 'boot_image'; }
+    Java.deoptimizeEverything(); return 'everything';
+  } catch (e) {
+    // 去优化失败不阻断挂钩：如实回报模式串，由事件留痕（失败可诊断）。
+    return 'failed:' + String((e && e.message) || e).slice(0, 60);
+  }
+}
+
 export function threadName() {
   if (NO_STACK || THREAD_CLS === null) return 'unknown';
   try {

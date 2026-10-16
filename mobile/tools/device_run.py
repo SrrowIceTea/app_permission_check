@@ -31,7 +31,9 @@ MOBILE = ROOT / "mobile"
 PY = sys.executable
 # SDK 路径解析统一走 core/sdk_paths（§8.2 B-4）：不再写死本机绝对路径。
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # 同目录的 thirdparty_env
 from core import sdk_paths  # noqa: E402
+import thirdparty_env as tp_env  # noqa: E402
 
 ADB = sdk_paths.sdk_tool("platform-tools", "adb.exe")
 PKG = "com.vscanner.privacydemo"
@@ -177,12 +179,21 @@ def start_hook(script: str, session: Path, out_name: str, log: Path,
                seconds: int) -> subprocess.Popen:
     env = dict(os.environ)
     env["VSCAN_SESSION"] = session.name
+    # 优雅停止哨兵（2026-10-16）：收尾走 tp_env.stop_hook 而不是 proc.terminate()——
+    # 强杀会让 agent 在未清理状态下收尾（CheckJNI 必发 DeleteGlobalRef abort，
+    # 污染死亡取证）。路径挂在 Popen 上供 stop_hook 取用；启动前删残留。
+    stop_file = session / (out_name + ".stop")
+    try:
+        stop_file.unlink()
+    except OSError:
+        pass
     proc = subprocess.Popen(
         [PY, str(ROOT / "core" / "frida_host" / "run.py"), "--package", PKG,
          "--script", str(script), "--seconds", str(seconds),
          "--allow-package", PKG, "--session", session.name,
-         "--out", str(session / out_name)],
+         "--out", str(session / out_name), "--stop-file", str(stop_file)],
         stdout=open(log, "w", encoding="utf-8"), stderr=subprocess.STDOUT, env=env)
+    proc.stop_file = stop_file  # type: ignore[attr-defined]
     return proc
 
 
@@ -312,19 +323,17 @@ def main() -> int:
     upstream_port = pick_free_port()
     collector = start_collector(out / "collector.log", upstream_port)
     mitm = start_mitm(session, out / "mitm.log", upstream_port)
+    # **单 agent 合并 bundle**（2026-10-16 A1 修复）：privacy/consent/egress_tp/
+    # ssl_pinning_tp 四模块在同一个 JS 上下文里装配——frida-java-bridge 不支持
+    # "多脚本各自替换方法"（实测双脚本 ~50% 触发 ART 的 GetOatQuickMethodHeader
+    # FATAL，单脚本 5/5 稳定；见 mobile/hooks/build.mjs 注释）。vehicle 版
+    # egress/pinning 一并退役（观测面被 tp 版覆盖；vehicle 版 TLS 含已实证会炸 ART
+    # 的 HttpsURLConnection 手法）。夹具不做证书固定，但目标 SDK 不信任用户证书，
+    # tp 版 TLS 绕过同样覆盖 conscrypt 信任链（实测 SSLHandshakeException:
+    # Trust anchor not found 由它解决）。
     hooks = [
-        start_hook(MOBILE / "hooks" / "dist" / "hook_privacy.bundle.js", session,
-                   "reads.jsonl", out / "hook-privacy.log", args.seconds),
-        start_hook(MOBILE / "hooks" / "dist" / "hook_consent.bundle.js", session,
-                   "consent.jsonl", out / "hook-consent.log", args.seconds),
-        # egress 直接复用 core/frida_host 的成品（Socket.connect 与车载无关）
-        start_hook(ROOT / "core" / "frida_host" / "dist" / "hook_egress.bundle.js", session,
-                   "egress.jsonl", out / "hook-egress.log", args.seconds),
-        # TLS 绕过也复用 core/frida_host 成品：夹具不做证书固定，但目标 SDK 35 不信任用户证书，
-        # 不加这一路 HTTPS 会在握手就失败（实测 SSLHandshakeException: Trust anchor not found）。
-        # 只对白名单进程生效，仅为审计流量捕获。
-        start_hook(ROOT / "core" / "frida_host" / "dist" / "ssl_pinning_bypass.bundle.js", session,
-                   "tls.jsonl", out / "hook-tls.log", args.seconds),
+        start_hook(MOBILE / "hooks" / "dist" / "hook_all.bundle.js", session,
+                   "reads.jsonl", out / "hook-all.log", args.seconds),
     ]
     time.sleep(8)   # 等钩子挂上；D309：钩子掉线与"应用没动作"长得一样
 
@@ -376,13 +385,25 @@ def main() -> int:
                        "note": None if armed else
                        ("钩子脚本抛错，未挂载" if script_error else "没有 ARMED 事件：钩子没跑起来")})
 
-    for proc in hooks + [mitm, collector]:
+    # hooks 走**优雅停止**（哨兵 → 正常 detach），替代 proc.terminate()（Windows 上
+    # 即强杀，会触发 CheckJNI 的 DeleteGlobalRef teardown abort——2026-10-16 实测，
+    # 见 thirdparty_env.stop_hook）；mitm/collector 维持原强杀 + 排空。
+    for i, handle in enumerate(hooks):
+        tp_env.stop_hook(handle, out / f"hooks-stop-{i}.log")
+    for proc in [mitm, collector]:
         try:
             proc.terminate()
             proc.wait(timeout=30)
         except Exception:  # noqa: BLE001
             proc.kill()
     time.sleep(3)   # 给 mitmproxy 的 done() 排空挂起队列
+
+    # 合并产物分流（2026-10-16）：单 agent 合并 bundle 的事件全落 reads.jsonl，
+    # 这里按 src 分流回 consent/egress/tls 独立文件——下游（correlate/evidence_bundle/
+    # build_delivery）零改动。独立脚本模式下为 no-op。见 mobile/tools/split_events.py。
+    check("split_events", run([PY, str(MOBILE / "tools" / "split_events.py"),
+                               "--session", str(session)], out / "split.log"),
+          optional=True)
 
     # ---- 关联 / 证据包 / 报告 ----
     o = out / "out"

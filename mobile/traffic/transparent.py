@@ -62,6 +62,7 @@ CA_PEM = Path.home() / ".mitmproxy" / "mitmproxy-ca-cert.pem"
 SYSTEM_CA_DIR = "/system/etc/security/cacerts"
 MITM_PORT = 8888
 EMULATOR_HOST = "10.0.2.2"      # 模拟器里指向宿主机
+PROXY_ARG_HOST = "127.0.0.1"    # 传给 emulator -http-proxy 的地址：**宿主侧**地址，见函数注释
 
 
 # --------------------------------------------------------------------------
@@ -84,13 +85,32 @@ def android_ca_name(pem_path: Path) -> tuple[str, str]:
     return f"{hash_int:08x}", f"{hash_int:08x}.0"
 
 
-def emulator_capture_args(port: int = MITM_PORT, host: str = EMULATOR_HOST,
+def emulator_capture_args(port: int = MITM_PORT, host: str = PROXY_ARG_HOST,
                           writable_system: bool = True) -> list[str]:
     """模拟器启动参数（追加到常规参数之后）。
 
-    -http-proxy     SLIRP 层强制走代理：应用绕不过去
+    -http-proxy     SLIRP 层强制走代理：应用绕不过去（raw socket 的 nc 都被
+                    重定向——2026-10-16 实测：guest 直连任意 IP 会收到 mitmproxy
+                    自己的报错页，直连 example.com 拿到经代理的真实 200）。
+                    **有两条硬约束，缺一条整条重定向就是静默失效**：
+                    ① 地址必须是**宿主侧可达**的。emulator 37.x 启动时从宿主进程
+                       对代理做一次可达性探测，失败打印 "Proxy will be ignored !"
+                       并把重定向整条关掉。历史上传的是 "10.0.2.2"（guest 侧别名）
+                       ——宿主上不可路由 → 探测必超时 → 每台机器上必然失效
+                       （启动日志："Could not connect to proxy at 10.0.2.2:8888:
+                       timed out"）。改成 127.0.0.1 后探测通过、重定向生效。
+                    ② 代理必须先于模拟器进程存在。探测只在启动那一刻做、失败了
+                       不重试（事后补起代理也不恢复）。冷启动路径由
+                       pipeline/runner.py `_start_early_mitm` 保证；复用在线设备
+                       时它启动时刻的状态无法追溯（见 ensure_device 注释）。
     -writable-system 允许 adb remount，装系统 CA 用
     -no-snapshot-load 每次都从干净状态起：抓包要的是**首次运行**行为
+
+    历史（留痕）：曾在此加 `-prop dalvik.vm.usejit=false` 想关 JIT（当时的
+    "A1 修复第 1 层"），两条依据都已证伪——① emulator 37.1.11 只接受 `qemu.*`
+    前缀的 -prop；② setprop + stop/start 也关不掉：usejit=false 且框架重启后，
+    夹具进程仍有 `Jit thread pool` 线程与 `dalvik-jit-code-cache` 映射（复证
+    M029）。A1 的实际修复是 bridge 补丁 + 单 agent，见 DEV_FIX_REPORT §5.1/§5.8。
     """
     args = ["-http-proxy", f"http://{host}:{port}", "-no-snapshot-load"]
     if writable_system:
@@ -199,7 +219,8 @@ def capture_verdict() -> dict:
         "apex_trust_store": apex_ca.status(fname),
         "apex_note": "证书有没有真的生效看 zygote_sees_ca，不要看 shell 里的 ls",
         "recommended": {
-            "force_proxy": "emulator -http-proxy http://10.0.2.2:8888（SLIRP 层强制，应用绕不过）",
+            "force_proxy": "emulator -http-proxy http://127.0.0.1:8888（SLIRP 层强制，应用绕不过；"
+                           "地址必须是宿主侧可达的 127.0.0.1——传 10.0.2.2 会静默失效，见 emulator_capture_args）",
             "trust_ca": "emulator -writable-system + install_system_ca()",
             "note": "两者都要重启模拟器；重启会打断同机上其他正在跑的采集",
         },
