@@ -9,7 +9,8 @@
 frontend/
 ├── index.html      # 首页（Landing Page）
 ├── landing.css     # 首页样式
-├── landing.js      # 首页动画与交互
+├── landing.js      # 首页动画与交互（含 3s 兜底：GSAP 异常时强制显示入场元素）
+├── assets/         # 首页背景视频（网络安全监视实拍，Mixkit 免费可商用，720p）
 ├── app.html        # 工作台主界面
 ├── app.css         # 工作台样式
 ├── app.js          # 工作台逻辑（对接 vehicle/workbench 后端）
