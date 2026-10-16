@@ -25,6 +25,15 @@ from __future__ import annotations
 
 import hashlib
 import re
+import sys
+from pathlib import Path
+
+# 派生值解码内核（C1，平台无关）在 core/collector：按路径加载（addon 场景）时
+# sys.path 不保证有仓库根，这里防御性补一条。导入失败不致命——下面的派生扫描
+# 会在 derive 缺失时整段跳过（import 归到函数内，见 tag_sensitive）。
+_REPO = str(Path(__file__).resolve().parents[2])
+if _REPO not in sys.path:
+    sys.path.insert(0, _REPO)
 
 # 标签 → (数据类别, 强度)。
 #
@@ -44,6 +53,16 @@ TYPE_BY_LABEL: dict[str, tuple[str | None, str]] = {
     "coordinate_shape": ("precise_location", "shape"),
     "email_shape": ("email", "shape"),
     "json_key_personal": (None, "key"),      # 键名线索，具体类别看键名内容
+    # C1 派生形态：摘要/编码痕迹。一律不定类别、不做形态级结论——
+    # 32/40/64 位 hex 可能是任何东西的哈希（ETag、缓存键、随机串）；
+    # derived_* 只说明"报文里出现过可逆编码"（解码产物是否敏感看值级令牌）。
+    "md5_hex_shape": (None, "hash"),
+    "sha1_hex_shape": (None, "hash"),
+    "sha256_hex_shape": (None, "hash"),
+    "derived_url": (None, "derived"),
+    "derived_b64": (None, "derived"),
+    "derived_gzip": (None, "derived"),
+    "derived_hex": (None, "derived"),
 }
 
 SENSITIVE: list[tuple[str, re.Pattern[str]]] = [
@@ -51,6 +70,12 @@ SENSITIVE: list[tuple[str, re.Pattern[str]]] = [
     ("digit19_shape", re.compile(r"(?<!\d)\d{19,20}(?!\d)")),
     ("digit15_shape", re.compile(r"(?<!\d)\d{15}(?!\d)")),
     ("id_card_shape", re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")),
+    # 摘要十六进制串（C1）：长度互不覆盖靠 lookaround（40 位串里的 32 位窗口
+    # 两侧都是 hex，进不了 md5 规则）。只认小写——应用层摘要几乎都是小写，
+    # 大写串另有歧义（与 hex 编码撞形态），先不收，误报面最小。
+    ("sha256_hex_shape", re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{64}(?![0-9a-fA-F])")),
+    ("sha1_hex_shape", re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{40}(?![0-9a-fA-F])")),
+    ("md5_hex_shape", re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{32}(?![0-9a-fA-F])")),
     ("android_id_shape", re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{16}(?![0-9a-fA-F])")),
     ("mac_shape", re.compile(r"(?<![0-9a-fA-F:])(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}(?![0-9a-fA-F:])")),
     ("phone_cn_shape", re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")),
@@ -70,18 +95,39 @@ def _hash16(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
 
 
-def tag_sensitive(text: str) -> tuple[list[str], list[str]]:
-    """→ (标签列表, 令牌列表)。令牌形如 `digit15_shape:9f2c…`，**不含原文**。"""
-    labels: set[str] = set()
-    tokens: set[str] = set()
-    if not text:
-        return [], []
+def _scan(text: str, labels: set[str], tokens: set[str]) -> None:
+    """原文形态扫描（原有行为）：命中即加标签 + 令牌 `标签:hash16(命中串)`。"""
     for label, pattern in SENSITIVE:
         for m in pattern.finditer(text):
             labels.add(label)
             value = m.group(0)
             if len(value) <= HASH_MAX_LEN:
                 tokens.add(f"{label}:{_hash16(value)}")
+
+
+def tag_sensitive(text: str) -> tuple[list[str], list[str]]:
+    """→ (标签列表, 令牌列表)。令牌形如 `digit15_shape:9f2c…`，**不含原文**。
+
+    C1 扩展（派生值匹配）：报文里 base64/hex/url/gzip+b64 编码的敏感值，
+    解码回原文后**重新过形态扫描**，其令牌（仍是解码后原值的 hash16）与
+    hook 侧 value_hash 同口径——读取侧零改动即可命中"先编码再外发"的传输。
+    诚实边界：解码产物只贡献**值级令牌**与 `derived_*` 标记，不贡献形态级
+    标签（乱码/巧合解码可能凑出假形状；形态结论只来自报文原文）。
+    单向摘要（md5/sha1/sha256 十六进制串）由上面的 sha*_hex_shape 形态在
+    原文扫描中给出，与读取侧 `derive.hash16_candidates` 的候选比对。
+    """
+    labels: set[str] = set()
+    tokens: set[str] = set()
+    if not text:
+        return [], []
+    _scan(text, labels, tokens)
+    try:
+        from core.collector import derive  # noqa: E402  延迟导入：缺失时只降级派生扫描
+    except Exception:  # noqa: BLE001 — 派生匹配是增强，不是前提
+        return sorted(labels), sorted(tokens)
+    for form, decoded in derive.reversible_decodings(text):
+        labels.add(f"derived_{form}")
+        _scan(decoded, set(), tokens)   # 只要令牌；解码产物不给形态标签
     return sorted(labels), sorted(tokens)
 
 

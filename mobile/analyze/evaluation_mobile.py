@@ -34,7 +34,8 @@ from core.collector.attribution import ATTRIB_LOOSE_MS, is_loose  # noqa: E402
 # 取值/配对/成形部件搬到相邻模块（原文件越 300 行红线，§8.2 B-2）。
 # `json` 一并去掉：它在本文件里已经没有任何用处（存量 F401）。
 from evaluation_mobile_parts import (_consent_for, _finding, _flow_types,  # noqa: E402
-                                     _flow_unusable, _ok_reads, _ts, value_matches)
+                                     _flow_unusable, _ok_reads, _ts, value_match_form,
+                                     value_matches)
 
 # 对外保留：`correlate_mobile.py` 用 `ev.CONSENT_SIGNALS` 过滤同意事件。
 CONSENT_SIGNALS = ("PERM_RESULT", "POLICY_VIEW")
@@ -122,6 +123,9 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
                     "content_match": True,
                     "content_match_basis": "value_hash_in_payload" if token else "shape_tag",
                     "matched_token": token,
+                    # C1 溯源：raw=原值哈希命中；md5/sha1/sha256=原值的摘要形态命中
+                    #（报文里是摘要串，不是原值本身——如实区分，不许混称）。
+                    "value_match_form": value_match_form(token),
                     "flow_host": f.get("host"), "flow_path": f.get("path"),
                     "flow_method": f.get("method"), "client_tls": f.get("intercepted_tls"),
                     # 归因置信信息（D414）：让"这条配对建立在多紧的归因上"可见。
@@ -133,6 +137,9 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
         if not pairs:
             return None
         strong = any(p["content_match_basis"] == "value_hash_in_payload" for p in pairs)
+        forms = {p.get("value_match_form") for p in pairs
+                 if p["content_match_basis"] == "value_hash_in_payload"}
+        derived = forms - {"raw"}
         extra = {"package": ctx["package"], "pair_count": len(pairs),
                  "pairs": pairs, "window_ms": window,
                  "window_declared_ms": rule.get("window_ms"),
@@ -152,13 +159,20 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
                             event_ids=sorted({p["read_event_id"] for p in pairs}
                                              | {p["flow_event_id"] for p in pairs}),
                             extra=extra, data_type_zh=ctx["dt_zh"].get(dt), note=note)
+        # 值级命中的表述按实际形态如实区分（C1）：摘要命中 ≠ 原值明文出现。
+        if strong and derived:
+            names = "、".join(sorted(derived))
+            note = ("值级匹配（摘要形态）：读取值的 " + names +
+                    " 摘要出现在报文中——原值本身未必以明文出现，"
+                    "但摘要可由原值算出，仍属「确实发了这个值」的值级证据。")
+        elif strong:
+            note = "值级匹配：读取到的值的哈希出现在报文中。"
+        else:
+            note = "仅形态级匹配（报文出现同类形状），**不等于**该值被传输。"
         return _finding(rule, evidence_kind="read_then_egress",
                         event_ids=sorted({p["read_event_id"] for p in pairs}
                                          | {p["flow_event_id"] for p in pairs}),
-                        extra=extra, data_type_zh=ctx["dt_zh"].get(dt),
-                        note=("值级匹配：读取到的值的哈希出现在报文中。"
-                              if strong else
-                              "仅形态级匹配（报文出现同类形状），**不等于**该值被传输。"))
+                        extra=extra, data_type_zh=ctx["dt_zh"].get(dt), note=note)
 
     if pred == "data_type_not_in_necessary_scope":
         category = ctx.get("category") or {}

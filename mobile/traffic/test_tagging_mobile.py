@@ -9,6 +9,8 @@
 """
 from __future__ import annotations
 
+import base64
+import gzip
 import hashlib
 import unittest
 from pathlib import Path
@@ -127,6 +129,80 @@ class AddonContractTest(unittest.TestCase):
         for token in tokens:
             self.assertNotIn(secret, token)
             self.assertEqual(token, f"phone_cn_shape:{h16(secret)}")
+
+
+class DerivedValueTest(unittest.TestCase):
+    """C1 派生值匹配的报文侧行为：解码产物进**值级令牌**，不进形态级标签。"""
+
+    IMEI = "490154203237518"
+
+    def test_b64_encoded_imei_yields_value_token(self):
+        """读到 IMEI → base64 外发：令牌 = digit15_shape:h16(解码后的原值)。"""
+        payload = "d=" + base64.b64encode(self.IMEI.encode()).decode()
+        labels, tokens = tm.tag_sensitive(payload)
+        self.assertIn(f"digit15_shape:{h16(self.IMEI)}", tokens)
+        self.assertIn("derived_b64", labels)
+        # 解码产物不给形态级标签：形态结论只来自报文原文。
+        self.assertNotIn("digit15_shape", labels)
+
+    def test_urlencoded_json_body_yields_value_token(self):
+        """URL 编码的 JSON 体：原文扫描看不到数字（全是 %XX），解码后命中手机号。"""
+        import urllib.parse
+        phone = "13800138000"
+        body = '{"tel":"%s"}' % phone
+        payload = urllib.parse.quote(body)
+        labels, tokens = tm.tag_sensitive(payload)
+        self.assertNotIn("phone_cn_shape", labels)          # 原文扫描无形态结论
+        self.assertIn("derived_url", labels)                # 但有派生标记
+        self.assertIn(f"phone_cn_shape:{h16(phone)}", tokens)  # 解码后值级命中
+
+    def test_gzip_b64_value_token(self):
+        gz = base64.b64encode(gzip.compress(self.IMEI.encode())).decode()
+        _, tokens = tm.tag_sensitive("blob=" + gz)
+        self.assertIn(f"digit15_shape:{h16(self.IMEI)}", tokens)
+
+    def test_md5_hex_shape_token(self):
+        """单向摘要：报文侧只给 `md5_hex_shape:hash16(摘要串)`，与读取侧候选配对。"""
+        digest = hashlib.md5(self.IMEI.encode()).hexdigest()
+        _, tokens = tm.tag_sensitive("sig=" + digest)
+        self.assertIn(f"md5_hex_shape:{h16(digest)}", tokens)
+
+    def test_sha1_and_sha256_hex_shapes(self):
+        s1 = hashlib.sha1(b"x").hexdigest()
+        s256 = hashlib.sha256(b"x").hexdigest()
+        labels, tokens = tm.tag_sensitive(f"{s1} {s256}")
+        self.assertIn("sha1_hex_shape", labels)
+        self.assertIn("sha256_hex_shape", labels)
+        self.assertIn(f"sha1_hex_shape:{h16(s1)}", tokens)
+        self.assertIn(f"sha256_hex_shape:{h16(s256)}", tokens)
+
+    def test_digest_labels_never_map_to_a_category(self):
+        """摘要/编码形态一律不定类别——32 位 hex 可能是任何东西的哈希。"""
+        for label in ("md5_hex_shape", "sha1_hex_shape", "sha256_hex_shape",
+                      "derived_b64", "derived_hex", "derived_url", "derived_gzip"):
+            dt, strength = tm.TYPE_BY_LABEL[label]
+            self.assertIsNone(dt, label)
+            self.assertIn(strength, ("hash", "derived"))
+
+    def test_other_15digit_number_does_not_match(self):
+        """**反例**（C1 验收判据）：别的 15 位数字不得产出该 IMEI 的值级命中。"""
+        other = "123456789012345"
+        payload = "d=" + base64.b64encode(self.IMEI.encode()).decode()  # 发的是 IMEI
+        _, tokens = tm.tag_sensitive(payload)
+        self.assertNotIn(f"digit15_shape:{h16(other)}", tokens)
+        # 摘要候选同理：别的值的 md5 串不会命中本 IMEI 的候选。
+        other_md5 = hashlib.md5(other.encode()).hexdigest()
+        _, tokens2 = tm.tag_sensitive("sig=" + other_md5)
+        self.assertNotIn(f"md5_hex_shape:{h16(hashlib.md5(self.IMEI.encode()).hexdigest())}",
+                         tokens2)
+
+    def test_raw_behavior_unchanged_for_plain_payload(self):
+        """原有行为不回归：明文敏感值的标签与令牌与扩展前一致。"""
+        raw = "861234567890123"
+        labels, tokens = tm.tag_sensitive('{"d":"%s"}' % raw)
+        self.assertIn("digit15_shape", labels)
+        self.assertIn(f"digit15_shape:{h16(raw)}", tokens)
+        self.assertNotIn("derived_b64", labels)
 
 
 if __name__ == "__main__":

@@ -22,6 +22,26 @@ def _save(path: Path, payload) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+# summary["decompile"] 只放前端要的这几个字段（decompile.json 里还有 log_tail 等无关项）。
+_DECOMPILE_FIELDS = ("returncode", "errors", "classes_written", "cancelled", "files", "gap")
+
+
+def existing_decompile(out: Path) -> dict | None:
+    """缓存命中（不重跑反编译）时，从磁盘上的 decompile.json 回填反编译结论。
+
+    首次分析时 `decompile()` 已把 `decompile.json` 写到 `out/`，缓存命中只重跑
+    静态规则、**不再重跑 jadx**；此时 summary.decompile 若不回填而清成 None，
+    前端 AI 报告会把它读成「反编译 0 个类」，与源码树（几万个文件）自相矛盾
+    （2026-10-15 契约审计 P1）。读不到（半成品 / 老缓存没这个文件）就如实返回 None。
+    """
+    path = out / "decompile.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return {key: data[key] for key in _DECOMPILE_FIELDS if key in data}
+
+
 def scan_static(apk: Path, rules_db: Path, android_version: str, out: Path,
                 facts_cache: Path | None = None) -> dict:
     """静态事实 + 规则匹配。**秒级**，不依赖 jadx。"""
@@ -87,11 +107,11 @@ def analyze(apk: Path, digest: str, rules_db: Path, android_version: str, out: P
                "caveat": static.get("caveat")}
     if decompile_source:
         dec = decompile(apk, out, job, threads=threads)
-        summary["decompile"] = {k: dec[k] for k in
-                                ("returncode", "errors", "classes_written", "cancelled",
-                                 "files", "gap")}
+        summary["decompile"] = {k: dec[k] for k in _DECOMPILE_FIELDS}
     else:
-        summary["decompile"] = None
+        # 缓存命中：不重跑 jadx，但必须从磁盘回填反编译结论，
+        # 否则 summary.json 会把「反编译产物还在」覆盖成 null（契约审计 P1）。
+        summary["decompile"] = existing_decompile(out)
     _save(out / "summary.json", summary)
     return summary
 
