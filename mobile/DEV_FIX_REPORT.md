@@ -3,7 +3,8 @@
 > 任务书：[`mobile/RESEARCH_OUTLOOK.md` §八](RESEARCH_OUTLOOK.md)「工程缺陷与修复清单」。
 > 执行方式：按 §8.5 的分批计划 1 → 2 → 3 → 4；**每批改完跑两条离线回归**。
 > 批次 4 的第一轮**只写方案、未动一行代码**；第二轮（2026-10-14 晚）落地了其中**纯离线可写**的三项
-> （A1 的分档/缓存预备、A3 的夹具阳性对照、B-2 的钩子一致性守卫），**A1 本体仍未修**——见 §5。
+> （A1 的分档/缓存预备、A3 的夹具阳性对照、B-2 的钩子一致性守卫）——当时 A1 本体未修，
+> **已于 2026-10-16 修复**（执行记录见 §5.1 / §5.8 / §5.9）。
 > 遵守 §8.6 六条红线；`core` 未出现任何 `import vehicle` / `import mobile`。
 
 ---
@@ -17,7 +18,7 @@
 | 移动侧回归 | `mobile/tools/run_mobile_checks.py` → **23/23 passed，failed=[]**（批次 5 终态） |
 | 根回归 | `tools/run_regressions.py` → **13 组全 0 失败**（批次 5 终态） |
 | 回归次数 | 基线 1 次 + 批次 1/2/3 各 1 次 + 批次 3 收尾 2 次 + 批次 4-B 2 次 + 批次 5 至少 4 次，**中间出现过一次回归失败并已修**（见 §3.4） |
-| 未执行条目 | **A1 本体**（需设备）、A4、A5、B-2 的中期共享化、剩余 6 个超 300 行文件的拆分、`run_regressions.py --mobile` 开关，见 §6 |
+| 未执行条目 | ~~A1 本体（需设备）~~ **2026-10-16 已修复**（见 §5.1/§5.8/§5.9）、A4、A5、B-2 的中期共享化、剩余 6 个超 300 行文件的拆分、`run_regressions.py --mobile` 开关，见 §6 |
 
 两条回归命令（纯离线、不需要设备）：
 
@@ -297,15 +298,16 @@ workbench 0     hook-bundles 0      frida-bundle-config 0
 
 ---
 
-## 5. 批次 4 与批次 5：方案与执行（A1 本体仍未修）
+## 5. 批次 4 与批次 5：方案与执行（**A1 已于 2026-10-16 修复**，见 §5.8/§5.9）
 
 > 批次 4-B（2026-10-14 第二批）只做**纯离线可写**的三件事：A1 的分档/缓存预备（§5.1）、
-> A3 的夹具阳性对照（§5.2）、B-2 的钩子一致性守卫（§5.4）。**A1 本体没修**——
+> A3 的夹具阳性对照（§5.2）、B-2 的钩子一致性守卫（§5.4）。**当时 A1 本体没修**——
 > 按 §8.6 第 6 条与 §5.1 的验收判据，A1 必须设备上跑夹具出真实事件才算修好。
 >
 > 批次 5（本轮的复核轮）在那一轮之上：补 H5 的 `--args-only` 开关与分档扫描器、
 > 落地 §5.6 的 `extended_rglob`、按"只拆低风险那批"拆掉 5 个超 300 行文件、给 `uid_sampler`
-> 与字体表补兜底。**A1 本体依然没修**——所有运行时结论仍然为空。
+> 与字体表补兜底。**当时 A1 本体依然没修**——所有运行时结论为空；
+> **该状态已于 2026-10-16 终结**（bridge 补丁 + 单 agent，执行记录 §5.8，复证与抓包链路修复 §5.9）。
 
 ### 5.0 执行摘要
 
@@ -318,9 +320,38 @@ workbench 0     hook-bundles 0      frida-bundle-config 0
 | **5.6 `extended_rglob`** | **已落地并复现原缺陷** | `core/static/winpath.py::extended_rglob()`；5 个调用点改完 | 目录自身 310 字符时 `rglob` → `[]`、`extended_rglob` → `['Deep.java']`；`test_jobs.ExtendedRglobTest` 3 例 | —（纯离线，已完） |
 | **5.3 / 5.7** | 未做（仍为方案） | — | — | 见各自小节 |
 
-### 5.1 A1 · 插桩把应用打死（P0，最高优先级）
+### 5.1 A1 · 插桩把应用打死（P0，最高优先级）—— **已修复（2026-10-16），执行记录见 §5.8**
 
-**现状事实**（M029/M030 已取证，本轮未变）：挂全套钩子时应用非确定地死（SIGABRT/SIGSEGV），同 UI 序列一死一活；不挂钩子对照全程存活；崩点是"某个静态方法的 ArtMethod 入口失效导致主线程取指到未映射页"，发生在**第一次被监视 API 被调用附近**，崩前的事件一条也发不出来。
+> **修复摘要（2026-10-16）**：A1 由**三层独立缺陷**叠加而成（"原分析"段只描述了其中
+> 第 3 层的表象），全部定位并修复。验收判据（§8.1：`reads.jsonl` 出现 ≥1 条非
+> START/ARMED 真实事件 **且进程存活**）达成：夹具 `hook_all` 单 agent **5/5 通过**、
+> 真实样本（voicerecorder）端到端通过。
+>
+> | 层 | 根因 | 关键证据 | 修复 |
+> |---|---|---|---|
+> | 1 | **JIT 编译线程 × ArtMethod 替换竞态**（Jit thread pool SIGSEGV） | 分档实验：46 档（不含触发 API）不崩 / 49 档（含 getImei）崩；崩溃线程 = Jit thread pool | **关闭 JIT**（`setprop dalvik.vm.usejit false` + `stop/start`） |
+> | 2 | **JNI transition frame reference**：Android 14+ ART 把 `this`/对象参数以 transition ref 传给 native；CheckJNI（userdebug 强制开启）穿不过 Frida trampoline 帧做栈遍历 → "jobject is an invalid JNI transition frame reference" | 上游已知 bug（frida#3700/#3745，**未修**）+ 本机 tombstone 逐帧一致 | **bridge 补丁**：`mobile/hooks/patches/02-class-factory-transition-ref.patch`（transition ref 解码 + `AddGlobalRef` 提升为真全局引用；参考 MaYiFei1995/Camille_Android16；`build.mjs` 构建前幂等重放，`npm install` 后不丢） |
+> | 3 | **多脚本（多 agent）各自替换不被 bridge 支持**：被 hook 方法调用时触发 `ArtMethod::GetOatQuickMethodHeader` 的 debug FATAL（主线程 SIGABRT；tombstone 显示 `#17 GetOatQuickMethodHeader ← #18 <anonymous>`——调用者正是 Frida） | **bridge 源码注释原文** "we don't support replacing methods from multiple scripts"；对照实验：双脚本 ~50% 崩 vs 单脚本 **5/5** | **单 agent 合并**：新 `hook_all` bundle（privacy+consent+egress_tp+ssl_pinning_tp 在同一个 JS 上下文装配），挂载清单 5→1 |
+>
+> 同批附带修复（详见 §5.8）：**拆钩噪声隔离**（哨兵优雅停止 `stop_hook`；窗口证据
+> 【reads 读取 / alive / 死亡取证】全部前移到拆钩之前）；**死亡取证对齐被挂钩 pid**
+> （`/proc/<pid>` 判活，防"崩溃后自动重启"把死亡伪装成存活）；**event 分流器**
+> `split_events.py`（单文件产物 → consent/egress/tls 独立文件，下游零改动）；
+> vehicle 版 egress/pinning 从 mobile 链路退役（含已实证会炸 ART 的 HttpsURLConnection
+> 手法）。deopt 路线已证伪（deopt=1 引出 JNI 副作用新崩溃、deopt=2 无效——均为实测）。
+>
+> **修正（2026-10-16 晚，复证 + 诚实性补丁）**：上表第 1 行"**关闭 JIT**"**并未真正生效，
+> 也不再是修复的必要环节**。复证证据：① `setprop dalvik.vm.usejit false` + `stop/start`
+> 后，夹具进程**仍有** `Jit thread pool` 线程与 `dalvik-jit-code-cache` 映射（与 M029 旧结论
+> 一致，双向实测：usejit=true 与 false 的进程形态相同）；② `-prop dalvik.vm.usejit=false`
+> 被 emulator 37.1.11 直接拒绝（启动日志：only 'qemu.*' properties are supported）。
+> 因此此前全部"修复后验证"（fix ×3 / single ×5 / hook_all ×5 / e2e）实际都在 **JIT 开启**
+> 状态下完成——修复的实质是**第 2 层（bridge 补丁）+ 第 3 层（单 agent）**；JIT-SEGV
+> 是同一根因的另一种随机落点形态，不构成独立的"层"。JIT 开启下 hook_all 49 档复跑
+> **2/2 干净通过**（`jiton-49-r2/r3`；r1 为自检工具的点击时序假阴性，已修 harness，
+> 见 §5.9）。`_ensure_jit_off` 机制与 `-prop` 参数已**整体清退**。
+
+**原分析（M029/M030 取证，保留留痕）**：挂全套钩子时应用非确定地死（SIGABRT/SIGSEGV），同 UI 序列一死一活；不挂钩子对照全程存活；崩点是"某个静态方法的 ArtMethod 入口失效导致主线程取指到未映射页"，发生在**第一次被监视 API 被调用附近**，崩前的事件一条也发不出来。
 
 #### 待验证假设（离线读代码得出，**未经设备验证，不作为结论**）
 
@@ -451,11 +482,135 @@ workbench 0     hook-bundles 0      frida-bundle-config 0
 - **已在批次 2 一并做了**（`core/collector/uid_sampler.py` 带 pid 后缀，见 §2）。
 - 剩余：`mobile/tools/conn_probe.py` 的 `DEVICE_LOG = "/data/local/tmp/vscan_conn_all.log"`（第 57 行）仍是固定路径，同一个并发问题。建议同样加 pid 后缀（`conn_probe` 与 `uid_sampler` 会在同一轮里同时跑，两者**互相不构成冲突**因为文件名不同，但两个 conn_probe 实例会冲突）。本轮**未改**（规格只点名 `vscan_conn.log`）。
 
+### 5.8 A1 修复执行记录（2026-10-16）
+
+**设备/环境**：VScan_Phone（API 37、userdebug【CheckJNI 强制开】、16KB 页）；
+frida-server 17.18.0；frida-java-bridge 7.0.13；模拟器 `-http-proxy` 强制抓包。
+
+**定位实验矩阵**（全部实机，产物 `D:/vscanner-tp/a1-scan/`）：
+
+| 实验 | 配置 | 结果 | 结论 |
+|---|---|---|---|
+| 基线 | 58 档全量 | 崩（Jit thread pool SIGSEGV） | 复现 A1（修复前近 100% 崩） |
+| 分档 | 1 / 46 档（不含 getImei） | 存活、零事件 | **非规模问题**；崩点在"被 hook 方法被调用" |
+| 分档 | 49 / 58 档（含 getImei） | 崩 | 触发即崩、崩前零事件（与 M029 一致） |
+| deopt=1 | 49 档 | 崩溃形态改变：主线程 `JNI invalid jobject` | 全文去优化引出 JNI 副作用；**证伪** |
+| deopt=2 | 49 档 ×3 | 与基线同型 | boot image 去优化无效；**证伪** |
+| JIT-off | 49 档 | JIT 线程崩溃消失，暴露 `GetOatQuickMethodHeader` FATAL | 第 1 层被消除；第 3 层暴露 |
+| bridge 补丁 | 49/58 档 | 事件首次捕获成功（2 条 PRIVACY_READ + 完整调用栈）但 ~50% 仍崩 | 第 2 层修复；第 3 层残留 |
+| 样本对照 | 单脚本 ×5 vs 双脚本 ~19 轮 | **5/5 vs ~50%** | **第 3 层 = 多 agent**（命中 bridge 注释的限制） |
+| 合并验证 | `hook_all` ×5 | **5/5 通过（零 fatal）** | 修复达成（判据：≥1 真实事件 + 进程存活） |
+
+**关键取证**（`/data/tombstones/tombstone_39`）：一级 FATAL 栈——
+`#17 ArtMethod::GetOatQuickMethodHeader ← #18 <anonymous>`（Frida 代码），
+dump 的方法为 getImei（`pc=0, entrypoint= 71524030, ...`）；ART 在 debug 构建下对
+"无法解析的 pc"直接 FATAL，而 bridge 的防护（`ensureArtKnowsHowToHandleReplacementMethods`
+里"替换该函数"的路线）因 **libart.so 被 strip** 装不上——实测 `findSymbolByName`
+返回 null、`enumerateSymbols()` 的 12872 个 `.gnu_debugdata` 符号里也查无此符号，
+且 x64 分支被 bridge 作者标注"Not needed on x86 and x64"（内联副本拦截直接跳过）。
+即 **x64 + API 37 恰好命中 bridge 的未覆盖区**——这是第 3 层的放大条件，
+"单 agent"把触发路径（多脚本各自替换的清理/交互）整体移除，从而绕开。
+
+**改动清单**（本批）：
+- `mobile/hooks/patches/02-class-factory-transition-ref.patch` + `build.mjs`（补丁幂等重放 + BUNDLES 薄入口体系 + `hook_all`）
+- `mobile/hooks/runtime.js`（`deoptimizeBeforeArm` + `VSCAN_DEOPTIMIZE` 开关——**默认关**，保留 A/B 对照能力）+ `hook_privacy.js`（START 事件留痕 `deoptimize`）
+- `mobile/hooks/{hook_privacy,hook_consent,hook_egress_tp,ssl_pinning_tp}.js`（导出 `main`，摘除顶层自执行）
+- `core/frida_host/bundle_config.py`（第五占位符 `__VSCAN_DEOPTIMIZE__`）+ `run.py`（`--deoptimize`、`--stop-file` 优雅停止）
+- `mobile/tools/thirdparty_env.py`（`start_hook` 哨兵路径 + `stop_hook`）
+- `mobile/tools/{fixture_selftest,device_run_thirdparty,device_run}.py`（单 agent 切换 + 证据时序前移 + 被挂钩 pid 对齐）
+- `mobile/tools/split_events.py` + `test_split_events.py`（事件分流器，6 例）
+- `mobile/tools/hooks_parity_whitelist.json`（+3 条：导出化 sub/drop、deoptimize 豁免，均带 reason/date）
+
+**验证**：夹具 `hook_all` ×5 全绿（`D:/vscanner-tp/a1-scan/all-49-r*`）；真实样本端到端
+（`D:/vscanner-tp/a1-scan/e2e-1/`）；`test_hooks_parity` 7 对全过；`test_bundle_config` 6 例；
+`test_split_events` 6 例；`run_regressions` / `run_mobile_checks`（回归结果见 §3）。
+
+**遗留边界（如实）**：a) `-prop dalvik.vm.usejit=false` 启动参数方式待验证（当前用
+setprop + stop/start）；b) 双脚本拆钩仍会产生一次工具侧 abort（已隔离出取证窗口，
+不影响结论）；c) 若未来必须多脚本，需等 frida-java-bridge 上游修复（#3700/#3745）；
+d) x64 `GetOatQuickMethodHeader` 符号定位（版本偏移表/指纹）属 bridge 上游问题，
+本仓库以"单 agent 规避"绕开，未改 bridge 本体。
+
+### 5.9 A1 复证 + 抓包链路修复（2026-10-16 晚）
+
+**① JIT-off 复证（修正 §5.1/§5.8 的"第 1 层"）**：
+
+- 线程级裁决实验：`setprop dalvik.vm.usejit false` + `stop/start` 之后，夹具进程
+  （`com.vscanner.privacydemo`）`/proc/<pid>/task/*/comm` 里**仍有 `Jit thread pool`**，
+  `/proc/<pid>/maps` 里仍有 `dalvik-jit-code-cache` / `dalvik-zygote-jit-code-cache`
+  映射——**JIT 没有被关掉**（与 M029 的旧结论互相印证）。`-prop` 路径同时被
+  emulator 37.1.11 拒绝（"only 'qemu.*' properties are supported"）。
+- 结论：修复实质 = bridge 补丁 + 单 agent；JIT 开启下复跑 hook_all 49 档 **2/2 干净
+  通过**（`D:/vscanner-tp/a1-scan/jiton-49-r2/r3`：各 2 条 PRIVACY_READ、alive=true、
+  fatal 空）。r1 的"点击成功但零事件"经取证（无 tombstone、trigger 结果正常、日志
+  顺序）判为**自检工具点击时序假阴性**（钩子未挂妥就点击），已修：`fixture_selftest`
+  改为**轮询 hook 日志的 armed+collecting 标记**（≤90s，等不到即失败退出），替换
+  原来的固定 `sleep(8)`。
+- **清退**：`pipeline/runner.py` 的 `_ensure_jit_off`（含 stop/start + CA 重装的整套
+  动作）整体删除；`transparent.emulator_capture_args` 移除 `-prop` 参数。
+
+**② 抓包链路修复（本晚最重要的发现，SLIRP 强制代理此前一直是失效的）**：
+
+- **现象**：模拟器启动日志固定出现
+  `WARNING | Could not connect to proxy at 10.0.2.2:8888: timed out !` +
+  `WARNING | Proxy will be ignored !`。
+- **取证链**（guest 原始 socket 实测，用 `nc` 直连做判别，绕开所有应用层代理设置）：
+  - 代理在线/离线两种启动次序下，guest 直连任意 IP 均**超时**、mitmproxy 侧
+    **零连接记录** → SLIRP 重定向**关闭**；
+  - 此前 e2e 里"系统连通性检查"能进 mitmproxy，是**设备侧 http_proxy 设置**的功劳
+    （NetworkMonitor 显式连 10.0.2.2:8888），**不是** SLIRP 重定向——即：**不读系统
+    代理的直连流量一直在漏**，与"SLIRP 层强制"的文档承诺不符。
+- **根因**：emulator 37.x 启动时从**宿主进程**对 `-http-proxy` 地址做一次性可达性
+  探测；传 guest 侧别名 `10.0.2.2` 在宿主上不可路由 → 必超时 → 重定向整条被关。
+- **修复**（两件套，缺一不可）：
+  1. `transparent.emulator_capture_args` 的 `-http-proxy` 地址改为**宿主侧回环**
+     `127.0.0.1`（新增 `PROXY_ARG_HOST` 常量；设备侧 `settings put global http_proxy`
+     仍是 guest 侧 `10.0.2.2`，两个地址空间各自的语义不变）；
+  2. `pipeline/runner.py` 新增 `_start_early_mitm`：**冷启动模拟器之前**先把
+     mitmproxy 拉起来（该探测只在模拟器启动那一刻做、失败不重试）；device_run 以
+     `--reuse-mitm` 复用（端口探活、死了自动回退自起）；生命周期到 `finalize` 统一收。
+- **验证（铁证）**：同一模拟器（修复后配置）上
+  - `nc` 直连 `example.com:80` 拿到**经代理的真实 200**（cloudflare）；
+  - `nc` 直连任意 dummy IP 收到 **`Server: mitmproxy 12.2.3` 的 400 报错页**——
+    连 raw socket 都被重定向，证明不依赖应用配合；
+  - mitmproxy 日志完整记录以上连接（`server connect example.com:80` / `200 OK`）。
+- **配套加固**：`start_mitm` 增加"端口被占预检 + 启动后监听校验"（原先 mitmdump
+  抢不到端口会静默退出、采集带着"没有代理"跑完——把静默错变成响亮报错）；
+  `app_death_reason` 抗 adb 超时（pidof/logcat 超时 → `alive_at_end=None` 如实降级，
+  不再掀翻整轮）；模拟器 stdout/stderr 落 `emulator.log`（"Proxy will be ignored"
+  这类只出现在启动日志里的关键警告不再随 DEVNULL 消失）。
+- **复现/回退**：若换 emulator 版本，先核对启动日志里有**无**"Proxy will be ignored"；
+  出现即意味着重定向失效、只剩设备侧代理路径。
+- **现场复验（2026-10-16 下午，M033）**：M032 修复另做了**独立于端到端**的现场复验，
+  已固化成可重复工具 `mobile/tools/verify_force_proxy.py`：前置 mitmdump → 冷启动
+  （启动参数与流水线同源 `tp.emulator_capture_args`）→ 等 boot → **等多目标 TCP
+  探测通过**（对齐 `ensure_wifi`）→ `settings put global http_proxy :0` 把系统代理
+  **彻底禁用** → raw socket 三测。工具化复跑（2026-10-16 15:45，全绿，七项判据
+  `D:/vscanner-tp/verify-force-proxy/20261016-154525/verdict.json`）：
+  - 前置：模拟器日志无 "Proxy will be ignored"、`settings get` 实测 `':0'`；
+  - **A**：raw socket 直连 `example.com:80` 被捕获（mitm.log 有
+    `GET http://example.com/ HTTP/1.0` 的 flow）；
+  - **B（铁证）**：raw socket 直连 TEST-NET-3 不可达 IP `203.0.113.7:80`，guest
+    收到 `HTTP/1.1 400 Bad Request` + `Server: mitmproxy 12.2.3` +
+    "HTTP request has no host header, destination unknown."——不可达地址不可能有
+    真实服务，此响应只能来自本机代理 = 直连被强制劫持；
+  - **C**：UDP 到宿主 listener **直出**（`-http-proxy` 只重定向 TCP）——QUIC/HTTP3
+    属已声明边界，报告如实引用（不解码）。
+- **复验固化出的两个排障点**：① **boot 完成 ≠ 网络就绪**——冷启动后 eth0 的 DHCP
+  还要等（两轮实测 36s / 106s），过早测试全是 "Network is unreachable"（假阴性，
+  会误判成"代理没抓"；工具内置网络等待）；② mitmproxy 对**无 Host 的畸形请求**
+  （如直连 IP 不带 Host）直接回 400，但**不产生 flow 日志行、也不进 flows.jsonl**
+  （本地隔离实验复现：日志为空）——判断该类直连是否被劫持要看连接增量或客户端
+  实际收到的响应，不能查 flow 日志，否则漏判。
+
 ---
 
 ## 6. 遗留问题与建议下一步
 
-1. **A1 未修，是全部运行时结论为空的根因——但工具已就位，下一步就是接设备跑。**
+1. ~~**A1 未修，是全部运行时结论为空的根因——但工具已就位，下一步就是接设备跑。**~~
+   **→ A1 已修（2026-10-16，见 §5.8）**：三层根因全部定位并修复，验收判据达成
+   （夹具 hook_all 5/5、真实样本端到端通过）。以下原文与分档判据保留——对未来的
+   同类回归排查仍有价值：
    三个开关（`--watch-limit` / `--no-stack` / `--args-only`，§5.1 第 2、3 步 + 批次 5 补的 H5 开关）
    已经能用，夹具阳性对照（§5.2）会自动告诉你哪一档活着，分档扫描器 `mobile/tools/a1_tier_scan.py`
    直接把结果出成表。建议按 §5.1 的 H1 → H2 → H5 顺序做分档实验——这张"崩溃率 × 钩子档位"表本身
