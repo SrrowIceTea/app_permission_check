@@ -19,6 +19,7 @@ CHECKS = [
     ("fixture_packaging", "mobile/fixture-app", [PY, "-m", "unittest", "test_gadget_prepare"]),
     ("hook_compiler", ".", [PY, "-m", "unittest", "core.frida_host.test_build"]),
     ("read_semantics", "mobile/analyze", [PY, "-m", "unittest", "test_observation_semantics", "test_client_tls"]),
+    ("risk_score", "mobile/analyze", [PY, "-m", "unittest", "test_risk_score"]),
     ("ai_gates", "mobile/ai", [PY, "-m", "unittest", "test_ai_gates"]),
     ("report_gates", "mobile/report", [PY, "-m", "unittest", "test_report_gates", "test_report_health"]),
     ("hook_values", "mobile/analyze", ["node", "test_values.mjs"]),
