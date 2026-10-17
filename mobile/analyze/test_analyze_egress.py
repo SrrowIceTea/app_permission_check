@@ -41,6 +41,33 @@ class EgressTest(unittest.TestCase):
         self.assertEqual(f["content_match_basis"], "value_hash_in_payload")
         self.assertEqual(f["pairs"][0]["matched_token"], "digit15_shape:abc123")
 
+    def test_top_level_value_match_form_raw(self):
+        """值级命中时，顶层 finding 必须带出 value_match_form=raw（risk_score 依赖它）。
+
+        这是 v1.2 修复 P0-1 的关键路径：评分层读的是顶层字段，不是 pairs[]. 字段。
+        此前该字段只在 pairs 里、顶层缺失，导致评分层拿不到形态、只能兜底。
+        """
+        flows = [{"evt_id": 2, "host": "h", "method": "POST", "host_received_ts": 200, "ts": 200,
+                  "request_tags": ["digit15_shape"],
+                  "request_tokens": ["digit15_shape:abc123"], "intercepted_tls": False}]
+        f = ev.evaluate(self.R, ctx(reads=[read(1, "imei", 100, value_hash="abc123")],
+                                    flows=flows))
+        self.assertIsNotNone(f)
+        self.assertEqual(f["value_match_form"], "raw")
+
+    def test_top_level_value_match_form_none_for_shape_tag(self):
+        """仅形态匹配时，顶层 value_match_form 应为 None（无值级形态可报）。"""
+        R = rule("data_egress", "read_before_egress_within_window", "mac_address",
+                 content_match="required")
+        flows = [{"evt_id": 2, "host": "h", "method": "POST", "host_received_ts": 200, "ts": 200,
+                  "request_tags": ["mac_shape"], "request_tokens": ["mac_shape:zzz"],
+                  "intercepted_tls": True}]
+        f = ev.evaluate(R, ctx(reads=[read(1, "mac_address", 100, value_hash="abc123")],
+                               flows=flows))
+        self.assertIsNotNone(f)
+        self.assertEqual(f["content_match_basis"], "shape_tag")
+        self.assertIsNone(f["value_match_form"])
+
     def test_shape_only_match_is_labeled_weaker(self):
         """MAC 的形态唯一（冒号分组），所以形态级匹配可以定到类别，但依据更弱。"""
         R = rule("data_egress", "read_before_egress_within_window", "mac_address",

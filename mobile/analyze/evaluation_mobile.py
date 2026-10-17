@@ -118,9 +118,6 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
                     # C1 溯源：raw=原值哈希命中；md5/sha1/sha256=原值的摘要形态命中
                     #（报文里是摘要串，不是原值本身——如实区分，不许混称）。
                     "value_match_form": value_match_form(token),
-                    # C1 溯源：raw=原值哈希命中；md5/sha1/sha256=原值的摘要形态命中
-                    #（报文里是摘要串，不是原值本身——如实区分，不许混称）。
-                    "value_match_form": value_match_form(token),
                     "flow_host": f.get("host"), "flow_path": f.get("path"),
                     "flow_method": f.get("method"), "client_tls": f.get("intercepted_tls"),
                     # 归因置信信息（D414）：让"这条配对建立在多紧的归因上"可见。
@@ -136,13 +133,18 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
         forms = {p.get("value_match_form") for p in pairs
                  if p["content_match_basis"] == "value_hash_in_payload"}
         derived = forms - {"raw"}
+        # 顶层带出值级命中的形态（C1），供 risk_score 按「原值/摘要」区分加成：
+        # raw 优先（只要有一条原值哈希命中就按最强证据计），否则取摘要形态。
+        top_form = ("raw" if "raw" in forms
+                    else (sorted(derived)[0] if derived else None)) if strong else None
         extra = {"package": ctx["package"], "pair_count": len(pairs),
                  "pairs": pairs, "window_ms": window,
                  "window_declared_ms": rule.get("window_ms"),
                  "window_overridden": window != rule.get("window_ms"),
                  "content_match": True,
                  "content_match_basis": ("value_hash_in_payload" if strong
-                                         else "shape_tag")}
+                                         else "shape_tag"),
+                 "value_match_form": top_form}
         # 值级命中的表述按实际形态如实区分（C1）：摘要命中 ≠ 原值明文出现。
         # 三种情形统一在此成形，避免归因偏松分支与正常分支给出不一致的说法。
         if strong:

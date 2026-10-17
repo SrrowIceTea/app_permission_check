@@ -2,9 +2,17 @@
 
 仅用于授权测试（已获授权的样本与设备）。
 
-> 状态：v1.1 已实现并通过 25 项离线回归；已接入 `tools/check_mobile_branch.py`。
+> 状态：v1.3 已实现并通过 34 项离线回归；已接入 `tools/check_mobile_branch.py`。
 > 代码：`mobile/analyze/risk_score.py`　测试：`mobile/analyze/test_risk_score.py`
 >
+> v1.3 变更：修复衰减分组键——`data_type=None` 的 over_permission 结论不再坍缩成一个
+> 组被错误衰减（8 个不同权限是 8 个独立事实，依据聚合权限研究的「权限越具体、独立，
+> PII 暴露越多」）；`aggregate`/CLI 接受 `--calibrate-from` 把 `calibrate_bands` 的
+> 自适应阈值真正接入评分路径（此前只定义未调用）。
+> v1.2 变更：移除 `severity_weight`（与 sensitivity 同源、双重计数，对齐 Zhu 四参数）；
+> 值级加成正确读取 `value_match_form` 且缺失保守计；移除 `children` 死档（PIPL 第 28 条
+> 需数据主体年龄，动态分析不产出）；`calibrate_bands` 分位点修正为高尾分位
+> [P99, P93, P80, P60]；补全 `map_navigation` 必要数据的 `precise_location` 映射。
 > v1.1 变更：新增 necessity 维度（越权收集加成）、单调性保证、阈值标定函数；
 > 方法论对齐四篇论文（见 §二）。
 
@@ -88,7 +96,16 @@ PrivacyGrade（USENIX SOUPS 2014 等）给 100 万+ Android App 打 A+~D 分，�
 分布的分位数决定，而非拍脑袋定死。本模型的 `calibrate_bands()` 落地这一思路
 （见 §3.4）。
 
-### 2.5 有意**不**引入的方法（并说明理由）
+### 2.5 聚合权限研究 —— 每条权限是独立风险项
+
+《Personal Information Classification on Aggregated Android Application's
+Permissions》（Applied Sciences, 2019）在聚合多个 App 的权限做 PII 暴露分类时指出：
+「权限越具体、越独立，PII 暴露越多」——`READ_CONTACTS`、`ACCESS_FINE_LOCATION`、
+`READ_PHONE_STATE` 是三个互不隶属的权限，各自对应不同的 PII 暴露面。这条结论直接
+支撑 v1.3 的衰减分组修正：`data_type=None` 的 over_permission 结论必须按 `permission`
+区分「不同事实」，不能因为 `data_type` 缺失而坍缩成一个组被当成「同一权限重复声明」。
+
+### 2.6 有意**不**引入的方法（并说明理由）
 
 - **概率生成模型（Peng）**：本模型是确定性证据评分，不是概率模型。概率模型需要
   大量标注样本训练，且其输出是「风险概率」而非「已证实的证据强度」——与工具
@@ -104,7 +121,7 @@ PrivacyGrade（USENIX SOUPS 2014 等）给 100 万+ Android App 打 A+~D 分，�
 ### 3.1 单条 finding 的条目分
 
 ```
-item_score = data_weight × path_weight × evidence_weight × severity_weight
+item_score = data_weight × path_weight × evidence_weight
              × necessity_weight × value_bonus
 ```
 
@@ -117,10 +134,13 @@ item_score = data_weight × path_weight × evidence_weight × severity_weight
 
 | 取值 | 权重 | 含义 |
 | --- | --- | --- |
-| `children` | 4.0 | 14 岁以下儿童信息，单独加档 |
 | `sensitive_personal` | 3.0 | 泄露可危害人身/财产安全 |
 | `unknown` | 2.0 | 类别未标，取中值，**不假设安全** |
 | `personal` | 1.0 | 一般个人信息 |
+
+> v1.2 移除 `children` 档：PIPL 第 28 条虽将「不满十四周岁未成年人信息」列为敏感信息，
+> 但那是**数据主体年龄**属性，动态分析观测的是 App 行为、无法判断数据是否属于儿童；
+> 设一个永不命中的档等于虚假承诺，故从数据敏感度维度移除（见 §八.5）。
 
 **危害路径**（依据 M011 值级匹配三重要求）
 
@@ -143,14 +163,20 @@ item_score = data_weight × path_weight × evidence_weight × severity_weight
 
 | 情形 | 加成 |
 | --- | --- |
-| 原值哈希命中 | ×1.3 |
+| 原值哈希命中（`value_match_form=raw`） | ×1.3 |
 | 摘要形态命中（md5/sha1/sha256） | ×1.2 |
-| 仅形态标签匹配 | ×0.7 |
+| `value_match_form` 缺失 | ×1.2（保守，不假设原值） |
+| 仅形态标签匹配（`shape_tag`） | ×0.7 |
 
 摘要命中的加成低于原值，是因为报文里出现摘要而非明文，直接可读性弱一档；
 但它仍属值级证据（摘要可由原值算出），所以**高于**纯形态匹配。
 
-**severity 乘数**：`info 0.2 / low 0.5 / medium 1.0 / high 1.5 / critical 2.0`
+**severity**（v1.2 起不再是乘数）：规则库的 severity 与 sensitivity 同源（都来自
+`sensitive_data_types` 同一行，见 `rule_gen.py`），乘进公式会把「敏感度」这一个信号
+计两遍。对齐 Zhu et al. 四参数模型——敏感度是**单一维度**，不存在独立的 severity 乘数。
+仅当 `data_type` 缺失（`over_permission` 等无数据类别的规则）时，severity 才作为数据
+敏感度的替代映射进 `data_weight`（`info 0.5 / low 1.0 / medium 1.5 / high 2.0 /
+critical 3.0`），保住「这个权限本身多危险」的信息。
 
 **必要性（越权）加成**（依据 Zhu 异常度 + PrivacyGrade 期望 gap）
 
@@ -175,13 +201,22 @@ item_score = data_weight × path_weight × evidence_weight × severity_weight
 ### 3.3 聚合：为什么不能简单求和
 
 18 条结论直接相加会得出荒谬的结论——8 条"声明了权限"能顶上半条真实外发。
-所以同一处重复命中必须衰减：
+所以**同一处重复命中**必须衰减：
 
 ```
 total = Σ item_score_i × decay(k_i)
 decay(k) = 1 / (1 + α·(k-1))，α = 1.0 → decay(k) = 1/k
-k = 该 (数据类别, 危害路径) 组内第几条
+k = 该「底层事实」组内第几条
 ```
+
+关键在「底层事实」怎么定义（`_decay_key`）：
+
+- **有 `data_type`**：按 `(数据类别, 危害路径)` 分组。同一个 IMEI 被读多次、或
+  多条规则都指向"读到 IMEI"这同一事实时收敛。
+- **无 `data_type`**（over_permission 等）：每条对应一个**不同的权限**，是独立事实，
+  按 `permission` 分组，**不互相衰减**。v1.2 曾把这里坍缩成 `(None, manifest_permission)`
+  一组，导致 8 个不同权限被当成"同一权限重复声明 8 次"、贡献被打到 0.47——这是
+  把「不同事实」误当「重复事实」，v1.3 修正。
 
 取 `α=1.0` 不是随手定的：它使 `decay(k)=1/k`，即第 k 次命中只贡献 1/k，是
 **边际信息量递减**的标准形式。同一个 IMEI 被读 5 次，新信息远少于第 1 次。
@@ -195,6 +230,7 @@ k = 该 (数据类别, 危害路径) 组内第几条
 原条目 s_j），新增贡献 s_new/j 减去原条目整体右移的损失 Σ_{i≥j} s_i/(i(i+1))。
 因 s_new ≥ s_j 且 Σ_{i≥j} 1/(i(i+1)) = 1/j（望远镜级数），差值
 (s_new − s_j)/j ≥ 0。故单调性严格成立，由 `test_monotonicity` 锁死。
+（分组键怎么改都不影响单调性——它是逐组的性质，任何一致的分组都保持它。）
 
 ### 3.4 风险档位（仅用于排序与展示）
 
@@ -213,22 +249,29 @@ k = 该 (数据类别, 危害路径) 组内第几条
 
 **阈值依据**：一条敏感数据被关联级发出的典型分值是
 `3.0 × 3.0 × 1.5 × 1.5 × 1.3 ≈ 26`，单条即进入 high 档——这与"存在可关联的
-敏感信息外发证据"的实际严重程度相符。而一条 `over_permission` 约 0.23 分，
-需要堆到 100 条才能进 medium，配合衰减后几乎不可能。
+敏感信息外发证据"的实际严重程度相符。而一条 `over_permission` 约 0.05~0.2 分
+（路径 0.2 × 证据 0.5 本就压得很低），8 条合计约 1.15，依然远低于一条真实外发——
+「条数与风险脱钩」靠的是**路径/证据的低权重**，不需要靠衰减去压 over_permission。
 
 > ⚠️ 这套阈值是**工程设定，未经真实样本统计校准**。跨 App 比较时必须同时看
 > confidence，否则会把"没查到"读成"安全"。necessity 维度加入后，总分普遍抬升，
 > 旧阈值更需重新标定——这正是下面 `calibrate_bands` 存在的意义。
 
 **阈值标定**（CNKI 自适应阈值思路）：`calibrate_bands(scores, labels)` 用一组样本
-的分数的分位数（默认 P60/P80/P93/P99）自动生成档位阈值，替代拍脑袋定死的 BANDS。
-用法：
+的分数的高尾分位数（默认 5 档取 **P99/P93/P80/P60**，降序对应 critical/high/medium/low
+门槛）自动生成档位阈值，替代拍脑袋定死的 BANDS——「告警」应只挑落在样本极端尾部的
+少数，而不是让四成样本都进 high 以上。v1.3 起可直接从 CLI 接入，不必再手动改代码：
 
-```python
-# 攒一批真实样本的总分后，重新标定阈值
-risk_score.BANDS = risk_score.calibrate_bands(sample_totals)
+```bash
+# 攒一批真实样本的总分后，用 --calibrate-from 重新标定阈值（scores.json 为总分数组）
+"$PY" mobile/analyze/risk_score.py \
+      --findings output/xxx/e2e/findings.jsonl \
+      --summary  output/xxx/e2e/summary.json \
+      --calibrate-from scores.json \
+      --out      output/xxx/e2e/risk_score.json
 ```
 
+也可在代码里手动标定：`risk_score.BANDS = risk_score.calibrate_bands(sample_totals)`。
 这比固定阈值更可信：阈值落在样本分布的真实分界上，而不是恰好卡在分布最密集处。
 
 ### 3.5 置信度：与分数正交，不乘进分数
@@ -249,43 +292,48 @@ confidence = 0.5 × 输入完整度 + 0.5 × √(数据类别覆盖率)
 
 ## 四、实测结果
 
-在仓库已有的真实回归产物上验证（`output/mobile-regression-20261016-221127/e2e/`，
+在仓库已有的真实回归产物上验证（`output/mobile-regression-20261017-162715/e2e/`，
 18 条结论，App 类别 map_navigation）：
 
 ```
-总分 75.48 ｜ 档位 critical ｜ 置信度 medium (0.689) ｜ necessity 已启用
-说明：多项敏感信息存在可关联的外发证据
+总分 48.20 ｜ 档位 high ｜ 置信度 medium (0.689) ｜ necessity 已启用
+说明：存在敏感信息外发或明文传输的可关联证据
 ```
 
 | 数据类别 | 贡献 | 条数 | 最高等级 |
 | --- | --- | --- | --- |
-| IMEI | 49.05 | 4 | correlated |
-| Android ID | 16.88 | 2 | observed |
-| 精确定位 | 6.75 | 1 | candidate |
-| 应用安装列表 | 2.12 | 3 | observed |
-| （无类别，权限声明） | 0.68 | 8 | candidate |
+| IMEI | 30.68 | 4 | correlated |
+| Android ID | 11.25 | 2 | observed |
+| 精确定位 | 3.00 | 1 | candidate |
+| 应用安装列表 | 2.13 | 3 | observed |
+| （无类别，权限声明） | 1.15 | 8 | candidate |
 
 | 规则类型 | 条数 | 贡献 |
 | --- | --- | --- |
-| data_egress | 1 | 39.49 |
-| plaintext_transmission | 1 | 13.50 |
-| third_party_share | 2 | 10.13 |
-| sensitive_read | 2 | 8.25 |
-| policy_mismatch | 2 | 2.06 |
-| over_collection | 2 | 1.37 |
-| over_permission | **8** | **0.68** |
+| data_egress | 1 | 24.30 |
+| plaintext_transmission | 1 | 9.00 |
+| sensitive_read | 2 | 6.00 |
+| third_party_share | 2 | 5.25 |
+| policy_mismatch | 2 | 1.50 |
+| over_collection | 2 | 1.00 |
+| over_permission | **8** | **1.15** |
 
-**这张表就是模型的价值**：8 条权限声明合计 0.68 分，1 条 IMEI 外发证据 39.49 分。
-条数与风险完全脱钩，排序直接可用。
+**这张表就是模型的价值**：8 条权限声明合计 1.15 分，1 条 IMEI 外发证据 24.30 分。
+条数与风险完全脱钩，排序直接可用。v1.3 前 over_permission 因衰减分组键错误被压到
+0.47（8 个不同权限被当成同一权限重复声明 8 次），修正后恢复为 1.15——仍是 IMEI
+外发的 1/20，但不再系统性低估权限过度声明的风险。
 
-**necessity 维度的效果**：与 v1（无 necessity，总分 50.54）相比，总分抬升到
-75.48。这是因为导航类 App 的必要数据只有「位置信息」，而它读了 IMEI、Android ID、
-精确定位等越权数据，necessity 把它们各 ×1.5。这个涨幅是**真实信息增量**——
-它反映的正是「导航 App 本不该碰这些数据」的越权事实。
+**necessity 维度的效果**：与 v1（无 necessity，总分 50.54）相比，v1.1 曾因 necessity
+抬升到 75.48，但那是**双重计数**——severity 与 sensitivity 同源也被乘了进去。v1.2
+移除 severity 乘数后，总分回到 47.52（high 档），反映的是「一条 IMEI 外发证据 +
+若干越权读取」的真实量级。v1.3 修正衰减分组后总分微升到 48.20（over_permission
+不再被错误衰减），档位仍为 high。necessity 仍在起作用：导航类 App 读了 IMEI、Android ID
+等越权数据各 ×1.5，而精确定位经映射补全后不再误判（见 §八.4）。
 
-> ⚠️ 但请注意：档位从 high 跳到 critical，暴露了固定阈值的脆弱性——加一个新维度
-> 就跨越档位，说明 60/25 这套阈值是拍脑袋的，必须用 `calibrate_bands` 在攒够样本
-> 后重新标定。这也正是 CNKI 论文主张「自适应阈值」的原因。
+> ⚠️ 但请注意：v1.1 曾出现「加一个维度就跨档位」的现象（high→critical），这暴露了
+> 固定阈值的脆弱性。v1.2 移除冗余乘数后阈值与分数重新对齐，但 60/25 这套阈值仍是
+> 工程设定，必须用 `calibrate_bands` 在攒够样本后重新标定。这也正是 CNKI 论文主张
+> 「自适应阈值」的原因。
 
 ---
 
@@ -331,29 +379,49 @@ PY="C:/Users/OneKyubey/.workbuddy/binaries/python/envs/default/Scripts/python.ex
 | 无必要数据定义不启用 | M009 | `test_none_necessary_data_disables_dimension` |
 | 追加 finding 不降分（单调性） | Peng'12 | `test_adding_finding_never_lowers_total` |
 | 阈值标定有序且覆盖零分 | CNKI'26 | `test_calibrate_bands_are_ordered_and_cover_zero` |
+| 值级形态缺失保守计（不默认原值） | M009 | `test_value_match_form_missing_is_conservative` |
+| severity 不二次计权（data_type 存在时） | Zhu'21 | `test_severity_not_double_counted` |
+| 无 data_type 时 severity 映射进 data_weight | — | `test_over_permission_severity_maps_to_data_weight` |
+| 阈值标定取高尾分位（非 40% 进 high） | CNKI'26 | `test_calibrate_bands_uses_high_tail_percentiles` |
 
 ---
 
 ## 七、落地路径
 
-### 已完成（v1.1）
+### 已完成（v1.3）
 
 - [x] `risk_score.py`：评分核心 + CLI
-- [x] `test_risk_score.py`：25 项回归
+- [x] `test_risk_score.py`：34 项回归
 - [x] 接入 `tools/check_mobile_branch.py`（检查组 `risk_score`）
 - [x] 真实样本验证
 - [x] necessity 维度（Zhu 异常度 + PrivacyGrade 期望 gap）
 - [x] 单调性保证（Peng desiderata）
 - [x] `calibrate_bands` 阈值标定函数（CNKI 自适应阈值）
+- [x] **v1.2** 移除 severity_weight 双重计数（对齐 Zhu 四参数）
+- [x] **v1.2** 值级加成正确读取 value_match_form、缺失保守计（M009）
+- [x] **v1.2** 移除 children 死档（PIPL 第 28 条能力边界）
+- [x] **v1.2** calibrate_bands 分位点修正为 [P99, P93, P80, P60]
+- [x] **v1.2** 补全 map_navigation 必要数据的 precise_location 映射
+- [x] **v1.3** 衰减分组键区分「不同事实」——over_permission 按 permission 分组，不再坍缩
+- [x] **v1.3** `--calibrate-from` 把自适应阈值接入 CLI/aggregate，结束「只定义未调用」
+- [x] **v1.3** `calibrate_risk_bands.py` 一键标定工具（扫样本→总分→标定→Spearman 自检）
+- [x] **v1.3** 重跑关联引擎验证顶层 `value_match_form` 端到端流动（`raw` → 值级加成 1.3）
 
 ### 建议后续（按优先级）
 
 **P0 — 校准阈值（最有价值的一步，necessity 加入后更紧迫）**
 
 当前阈值是工程设定，necessity 维度加入后总分普遍抬升，档位已不可靠。应攒
-5–10 个真实样本的总分，用 `calibrate_bands` 重新标定，再人工核对排序
+5–10 个真实样本的总分，用 `calibrate_risk_bands.py` 一键标定，再人工核对排序
 （Spearman 秩相关）。这能把"我说它 critical"变成"它在 8 个样本中的排序与
 人工判断一致"。
+
+> ⚠️ **当前数据前提不满足**：仓库 `output/` 下所有 e2e 样本都是 `make_demo_session.py`
+> 生成的**合成数据**（SYNTHETIC_DEMO）；5 个真实第三方样本（Fossify Camera 等）因
+> 插桩 bug 运行时数据为零（见 `SAMPLE_RUN_5APPS.md` P0-1）。所以「真实样本统计标定」
+> 现在**做不了**，不是模型代码能修的，必须先修插桩、重新采集。工具已就绪：
+> `python mobile/analyze/calibrate_risk_bands.py --samples output/*/e2e`
+> 会自动标注「真实样本 N 个」并在 <5 时输出演示性警告。
 
 **P0.5 — 补全必要数据映射粒度**
 
@@ -387,7 +455,10 @@ PY="C:/Users/OneKyubey/.workbuddy/binaries/python/envs/default/Scripts/python.ex
    路径权重 0.2 已是最低档，不会虚高，但也无法体现"这个权限本身多危险"
    （规则库 `permission_protection_level` 尚未断言，见 `rules_mobile.summary.json`）。
 4. **necessity 粒度受必要数据定义约束**——`necessary_data_json` 的映射粒度
-   可能粗于数据类别（如 coarse/precise 位置），导致边界误判。已在 §3.2 说明，
-   需 P0.5 补全映射。
-5. **不覆盖未观测维度**——加固壳、QUIC 等能力边界（见 `CLAUDE.md`）造成的盲区，
+   可能粗于数据类别（如 coarse/precise 位置），导致边界误判。v1.2 已补全
+   `map_navigation` 的 `precise_location`，其余类别若发现同类错配需继续补全。
+5. **儿童信息不评分**——PIPL 第 28 条将「不满十四周岁未成年人信息」列为敏感信息，
+   但判定它需要**数据主体年龄**，动态分析观测不到，故 v1.2 移除 `children` 档、
+   如实声明为能力边界。若要支持，需外部输入「该 App 是否面向儿童」的标注。
+6. **不覆盖未观测维度**——加固壳、QUIC 等能力边界（见 `CLAUDE.md`）造成的盲区，
    模型看不到，只能由 `gaps` 与 `confidence` 间接反映。
