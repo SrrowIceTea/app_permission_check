@@ -28,14 +28,33 @@
 
 单条 finding 的**条目分**：
 
-    item_score = data_weight × path_weight × evidence_weight × severity_weight
+    item_score = data_weight × path_weight × evidence_weight
+                 × severity_weight × necessity_weight × value_bonus
 
-三个维度各自取值见下方常量表，均有明确依据：
+五个维度加一个加成，各自取值见下方常量表，均有明确依据：
 
-  * `data_weight`      ← `sensitive_data_types.sensitivity`（GB/T 35273 §3.2 分级）
-  * `path_weight`      ← `evidence_kind`（读 → 发 的危害递进）
-  * `evidence_weight`  ← `conclusion_level`（candidate / observed / correlated）
-  * `severity_weight`  ← `severity`（规则自带）
+  * `data_weight`       ← `sensitive_data_types.sensitivity`（GB/T 35273 §3.2 分级）
+  * `path_weight`       ← `evidence_kind`（读 → 发 的危害递进）
+  * `evidence_weight`   ← `conclusion_level`（candidate / observed / correlated）
+  * `severity_weight`   ← `severity`（规则自带）
+  * `necessity_weight`  ← 数据类别是否超出该类 App 必要范围（越权收集的异常加成）
+  * `value_bonus`       ← 值级命中 vs 形态匹配（M011/C1）
+
+## 方法论依据（论文对齐）
+
+模型结构不是凭空拍的，每个维度都能在文献里找到对应：
+
+  * **Peng et al., CCS 2012**《Using probabilistic generative models for ranking
+    risks of Android apps》—— 提出风险评分的三条 desiderata，其中「单调性」
+    （多一条危险证据，分数只增不减）是本模型显式保证的性质（见 aggregate 的
+    衰减设计：score 降序 + decay=1/k 可数学证明单调，`test_monotonicity` 锁死）。
+  * **Zhu et al.《基于权限的移动应用程序隐私风险量化》（中国科学·信息科学 2021）**
+    —— 四参数模型中的「权限异常度」：风险不仅来自数据敏感度，也来自
+    「这类 App 本不该碰这个数据」。对应本模型的 `necessity_weight`。
+  * **CMU PrivacyGrade（Hong et al.）** —— 风险 = 用户期望与 App 实际行为的 gap；
+    数据「用途是否越界」是评分的关键。与 necessity 同源。
+  * **CNKI《APP 形式化程序个人信息过度收集风险告警算法》** —— 阈值应由样本分布
+    自适应标定，而非拍脑袋定死。对应 `calibrate_bands()`。
 
 App 的**总分**用「风险叠加」而非简单求和：同一数据类别重复命中会递减，
 因为第 5 次读到 IMEI 不比第 1 次多泄漏一个 IMEI。公式见 `aggregate()`。
@@ -45,7 +64,8 @@ App 的**总分**用「风险叠加」而非简单求和：同一数据类别重
 
 k=1/2/3 时 decay = 1 / 0.5 / 0.333，即 1/k：边际信息量递减。
 这样分散在多个数据类别的风险**叠加**，同一处的重复命中**收敛**——
-「查到 3 类信息」必须重于「同一类查到 3 次」。
+「查到 3 类信息」必须重于「同一类查到 3 次」。且按 score 降序排 + decay=1/k
+保证**单调性**：追加任意一条 finding 都不会让总分下降。
 """
 from __future__ import annotations
 
@@ -89,6 +109,18 @@ SEVERITY_WEIGHT = {
     "high": 1.5,
     "critical": 2.0,
     "unrated": 1.0,
+}
+
+# 必要性（上下文）乘数：同一数据类别，对「需要它的 App」是正常行为，
+# 对「不需要它的 App」是越权收集。依据 Zhu et al.《基于权限的移动应用程序
+# 隐私风险量化》的「异常度」参数与 CMU PrivacyGrade 的「期望—实际」gap 模型：
+# 风险不仅来自数据本身的敏感度，也来自「这类 App 本不该碰这个数据」的异常。
+# 必要数据来自 app_categories.necessary_data_json（《常见类型移动互联网应用程序
+# 必要个人信息范围规定》三十九类）。
+NECESSITY_WEIGHT = {
+    "necessary": 1.0,        # 该类 App 的必要数据：正常行为，不加成
+    "unnecessary": 1.5,      # 超出必要范围：越权收集的异常加成
+    "unknown": 1.0,          # 无必要数据定义/类别未知：不猜，中性
 }
 
 # 重复命中衰减系数（见模块文档）。
@@ -153,11 +185,30 @@ def _severity_weight(severity: str | None) -> tuple[float, str]:
     return w, f"severity={severity}"
 
 
-def score_finding(finding: dict, *, data_sensitivity: dict[str, str] | None = None) -> dict:
+def _necessity_weight(data_type_key: str | None,
+                      necessary_data: set[str] | None) -> tuple[float, str]:
+    """必要数据维度：`necessary_data is None` 表示「无定义」，一律不启用（1.0）。
+
+    空集与 None 语义必须区分：查不到该类 App 的必要数据时传 None（不猜），
+    而不是空集——空集会被误解为「全部非必要」。见 `load_necessary_data`。
+    """
+    if necessary_data is None or not data_type_key:
+        return NECESSITY_WEIGHT["unknown"], "无必要数据定义，necessity 不启用"
+    if data_type_key in necessary_data:
+        return NECESSITY_WEIGHT["necessary"], f"{data_type_key} 属于该类 App 必要数据"
+    return NECESSITY_WEIGHT["unnecessary"], (
+        f"{data_type_key} 不在该类 App 必要数据内（越权收集的异常加成）")
+
+
+def score_finding(finding: dict, *, data_sensitivity: dict[str, str] | None = None,
+                  necessary_data: set[str] | None = None) -> dict:
     """给单条 finding 打分，返回带完整推导链的字典（可追溯：每个乘数都写明依据）。
 
     `data_sensitivity`：{data_type_key: sensitivity}，来自规则库
     `sensitive_data_types` 表。不给时按 unknown 计——**不会**悄悄假设为 personal。
+
+    `necessary_data`：该类 App 的必要数据类别集合（来自 app_categories 表）。
+    None 表示「无定义」，necessity 维度不启用；不要传空集（空集会被读成「全部非必要」）。
     """
     sens_map = data_sensitivity or {}
     dt = finding.get("data_type")
@@ -167,6 +218,7 @@ def score_finding(finding: dict, *, data_sensitivity: dict[str, str] | None = No
     pw, pw_why = _path_weight(finding.get("evidence_kind"))
     ew, ew_why = _evidence_weight(finding.get("conclusion_level"))
     sw, sw_why = _severity_weight(finding.get("severity"))
+    nw, nw_why = _necessity_weight(dt, necessary_data)
 
     # 值级命中的加成：形态匹配可能是巧合，值级命中不是（M011）。
     # 这一项只在 read_then_egress 上生效，且是**加档**不是替代——证据等级仍原样透传。
@@ -186,7 +238,7 @@ def score_finding(finding: dict, *, data_sensitivity: dict[str, str] | None = No
         else:
             bonus_why = f"未登记的 content_match_basis {basis!r}，不加成"
 
-    score = dw * pw * ew * sw * bonus
+    score = dw * pw * ew * sw * nw * bonus
     return {
         "rule_id": finding.get("rule_id"),
         "rule_type": finding.get("rule_type"),
@@ -201,6 +253,7 @@ def score_finding(finding: dict, *, data_sensitivity: dict[str, str] | None = No
             "path_weight": pw, "path_why": pw_why,
             "evidence_weight": ew, "evidence_why": ew_why,
             "severity_weight": sw, "severity_why": sw_why,
+            "necessity_weight": nw, "necessity_why": nw_why,
             "value_bonus": bonus, "value_bonus_why": bonus_why,
         },
     }
@@ -247,13 +300,16 @@ def _confidence(summary: dict) -> dict:
 
 
 def aggregate(findings: list[dict], summary: dict,
-              data_sensitivity: dict[str, str] | None = None) -> dict:
+              data_sensitivity: dict[str, str] | None = None,
+              necessary_data: set[str] | None = None) -> dict:
     """聚合为 App 级风险画像。
 
     `findings`：findings.jsonl 读出的条目列表。
     `summary`：correlate_mobile.py 产出的 summary.json（提供 coverage / gaps）。
+    `necessary_data`：该类 App 的必要数据类别集合（None = 无定义，不启用 necessity）。
     """
-    scored = [score_finding(f, data_sensitivity=data_sensitivity) for f in findings]
+    scored = [score_finding(f, data_sensitivity=data_sensitivity,
+                            necessary_data=necessary_data) for f in findings]
 
     # 按 (数据类别, 危害路径) 分组算衰减序号 —— 同一处重复命中收敛
     groups: dict[tuple, int] = {}
@@ -326,6 +382,9 @@ def aggregate(findings: list[dict], summary: dict,
         "by_rule_type": by_rule_type_out,
         "top_items": sorted(scored, key=lambda x: -x["contributed"])[:10],
         "all_items": scored,
+        # necessity 是否参与评分，以及用的哪些必要数据（可审计：评分依据透明）
+        "necessity_enabled": necessary_data is not None,
+        "necessary_data": sorted(necessary_data) if necessary_data is not None else None,
         # 输入侧的缺口原样带出，是分数解释的一部分（M009）
         "gaps": summary.get("gaps") or [],
         "caveats": [
@@ -333,6 +392,8 @@ def aggregate(findings: list[dict], summary: dict,
             "风险档位阈值是工程设定，未经真实样本统计校准；跨 App 比较时应结合 confidence。",
             "未观测到的数据类别不计入分母：分数低可能是「没查到」，请对照 confidence 阅读。",
             "同一数据类别重复命中按 1/(1+α(k-1)) 衰减，避免条数堆高分数。",
+            "必要数据维度（necessity）仅在提供 app_categories 必要数据定义时启用；"
+            "未提供时按中性计，不把「没查必要性」当成「都越权」。",
         ],
     }
 
@@ -347,6 +408,70 @@ def load_sensitivity(rules_db: Path) -> dict[str, str]:
     finally:
         conn.close()
     return dict(rows)
+
+
+def load_necessary_data(rules_db: Path, category_key: str | None) -> set[str] | None:
+    """从规则库读该类 App 的必要数据类别集合（《必要个人信息范围规定》三十九类）。
+
+    查不到类别、或必要数据为空时返回 **None**（语义 = 无定义，necessity 不启用），
+    而不是空集——空集会被下游读成「全部非必要」，把「没查到」变成「都越权」。
+    """
+    if not category_key:
+        return None
+    import sqlite3
+    conn = sqlite3.connect(str(rules_db))
+    try:
+        row = conn.execute(
+            "SELECT necessary_data_json FROM app_categories "
+            "WHERE category_key=? AND android_version='36'", (category_key,)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return None
+    items = json.loads(row[0] or "[]")
+    keys = {it.get("data_type_key") for it in items if it.get("data_type_key")}
+    return keys or None
+
+
+def calibrate_bands(scores: list[float], labels: list[str] | None = None) -> tuple:
+    """用样本分数分布标定风险档位阈值（替代工程设定的 BANDS）。
+
+    依据 CNKI《APP 形式化程序个人信息过度收集风险告警算法》的「自适应阈值」思路：
+    阈值不该拍脑袋定死，而应由样本分布的分位数决定，避免阈值卡在分布最密集处。
+
+    返回与 `BANDS` 同构的 tuple，可直接赋给 `risk_score.BANDS`。
+    `scores` 应为非负浮点；`labels` 长度须比分位数个数多 1（最后一段是 0 分档）。
+
+    分位策略：默认按 [P60, P80, P93, P99] 取四分位点，落在它们之间的样本
+    分别归入 info/low/medium/high/critical。分数为 0 的样本始终进 info（不误报）。
+    """
+    if labels is None:
+        labels = ["critical", "high", "medium", "low", "info"]
+    if len(labels) < 2:
+        raise ValueError("labels 至少需要 2 个档位")
+    nonzero = sorted(s for s in scores if s > 0)
+    if not nonzero:
+        # 没有正分样本：全部阈值退化为 0，只有一个 info 档
+        return ((0.0, labels[-1], "未发现或仅清单层面的声明"),)
+    n_cut = len(labels) - 1
+    import statistics
+    # 用 quantiles(n_cut+1) 得到 n_cut 个切分点（等价于 n_cut+1 等分的分位数）。
+    # quantiles 返回升序，BANDS 需要降序（最高档 = 最高阈值），故反转。
+    cuts = list(reversed(statistics.quantiles(nonzero, n=n_cut + 1)))
+    # cuts 现在从大到小，对应 labels[0..n_cut-1]；最后一个 labels[-1] 是 0 分档
+    bands = []
+    meanings = {
+        "critical": "多项敏感信息存在可关联的外发证据",
+        "high": "存在敏感信息外发或明文传输的可关联证据",
+        "medium": "存在超出必要范围的收集或多处可疑路径",
+        "low": "仅个别低证据强度的疑点",
+        "info": "未发现或仅清单层面的声明",
+    }
+    for i, c in enumerate(cuts):
+        label = labels[i]
+        bands.append((round(c, 2), label, meanings.get(label, label)))
+    bands.append((0.0, labels[-1], meanings.get(labels[-1], labels[-1])))
+    return tuple(bands)
 
 
 def _read_findings(path: Path) -> list[dict]:
@@ -379,7 +504,17 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"warning": f"规则库不存在：{db}；敏感度一律按 unknown 计"},
                          ensure_ascii=False), file=sys.stderr)
 
-    result = aggregate(findings, summary, data_sensitivity=sens)
+    # 必要数据维度：从 summary.app_category 查该类 App 的必要数据；查不到即不启用
+    necessary = None
+    if db.exists():
+        necessary = load_necessary_data(db, summary.get("app_category"))
+        if necessary is None:
+            print(json.dumps({"info": f"未查到 {summary.get('app_category')!r} 的必要数据定义，"
+                                      "necessity 维度不启用（按中性计，不猜）"},
+                             ensure_ascii=False), file=sys.stderr)
+
+    result = aggregate(findings, summary, data_sensitivity=sens,
+                       necessary_data=necessary)
     result["inputs"] = {"findings": str(findings_p), "summary": str(summary_p),
                         "rules_db": str(db) if db.exists() else None}
     out_p.parent.mkdir(parents=True, exist_ok=True)

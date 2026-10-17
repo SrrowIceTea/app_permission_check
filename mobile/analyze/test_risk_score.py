@@ -207,8 +207,106 @@ class AggregationTest(unittest.TestCase):
         """每个乘数都必须带依据，否则分数不可审。"""
         item = rs.score_finding(finding(), data_sensitivity=SENS)
         for key in ("data_why", "path_why", "evidence_why", "severity_why",
-                    "value_bonus_why"):
+                    "necessity_why", "value_bonus_why"):
             self.assertTrue(item["score_derivation"][key], f"{key} 不得为空")
+
+
+class NecessityTest(unittest.TestCase):
+    """必要数据维度（Zhu 异常度 + PrivacyGrade 期望 gap）。
+
+    同一数据类别，对「需要它的 App」是正常行为，对「不需要它的 App」是越权收集。
+    """
+
+    def test_unnecessary_data_gets_higher_score(self):
+        """导航类 App 读 IMEI（非必要）应比读 coarse_location（必要）更高分。"""
+        # 控制变量：同样的敏感度、路径、证据、severity，只改 necessity
+        necessary = rs.score_finding(
+            finding(data_type="coarse_location", data_type_zh="粗略定位"),
+            data_sensitivity={"coarse_location": "personal"},
+            necessary_data={"coarse_location"})
+        unnecessary = rs.score_finding(
+            finding(data_type="imei", data_type_zh="IMEI"),
+            data_sensitivity={"imei": "personal"},  # 同样 personal，排除敏感度差异
+            necessary_data={"coarse_location"})
+        self.assertGreater(unnecessary["score"], necessary["score"])
+        self.assertEqual(necessary["score_derivation"]["necessity_weight"], 1.0)
+        self.assertEqual(unnecessary["score_derivation"]["necessity_weight"],
+                         rs.NECESSITY_WEIGHT["unnecessary"])
+
+    def test_none_necessary_data_disables_dimension(self):
+        """无必要数据定义（None）时，necessity 不启用，分数等于中性。"""
+        with_def = rs.score_finding(
+            finding(data_type="imei"), data_sensitivity=SENS,
+            necessary_data={"coarse_location"})
+        without_def = rs.score_finding(
+            finding(data_type="imei"), data_sensitivity=SENS, necessary_data=None)
+        self.assertGreater(with_def["score"], without_def["score"])
+        self.assertEqual(without_def["score_derivation"]["necessity_weight"],
+                         rs.NECESSITY_WEIGHT["unknown"])
+        self.assertIn("不启用", without_def["score_derivation"]["necessity_why"])
+
+    def test_aggregate_reports_necessity_state(self):
+        """聚合结果必须写明 necessity 是否启用、用的哪些必要数据（可审计）。"""
+        on = rs.aggregate([finding()], summary(), data_sensitivity=SENS,
+                          necessary_data={"coarse_location"})
+        off = rs.aggregate([finding()], summary(), data_sensitivity=SENS,
+                           necessary_data=None)
+        self.assertTrue(on["necessity_enabled"])
+        self.assertEqual(on["necessary_data"], ["coarse_location"])
+        self.assertFalse(off["necessity_enabled"])
+        self.assertIsNone(off["necessary_data"])
+
+
+class MonotonicityTest(unittest.TestCase):
+    """单调性（Peng et al. CCS 2012 的 desiderata）：追加 finding 不降总分。"""
+
+    def test_adding_finding_never_lowers_total(self):
+        base = [finding(rule_id=f"r{i}", data_type="imei") for i in range(3)]
+        base_score = rs.aggregate(base, summary(), data_sensitivity=SENS)["total_score"]
+        for extra in (
+            finding(rule_id="x", data_type="imei"),                      # 同组追加
+            finding(rule_id="y", data_type="imsi"),                      # 新类别
+            finding(rule_id="z", data_type=None, evidence_kind="manifest_permission",
+                    conclusion_level="candidate", severity="low"),       # 极低分
+        ):
+            added = rs.aggregate(base + [extra], summary(),
+                                 data_sensitivity={**SENS, "imsi": "sensitive_personal"})
+            self.assertGreaterEqual(added["total_score"], base_score,
+                                    f"追加 {extra['rule_id']} 不得降低总分")
+
+    def test_decay_sort_preserves_monotonicity(self):
+        """追加一条高分同组条目，重排序后总分仍不减（decay=1/k 的数学保证）。"""
+        base = [finding(rule_id="a", data_type="imei", severity="low"),
+                finding(rule_id="b", data_type="imei", severity="low")]
+        low = rs.aggregate(base, summary(), data_sensitivity=SENS)["total_score"]
+        # 追加一条同组但 severity 更高的条目，会挤到 decay 序号最前
+        high_extra = finding(rule_id="c", data_type="imei", severity="critical")
+        high = rs.aggregate(base + [high_extra], summary(),
+                            data_sensitivity=SENS)["total_score"]
+        self.assertGreaterEqual(high, low)
+
+
+class CalibrationTest(unittest.TestCase):
+    """阈值标定（CNKI 自适应阈值思路）：阈值来自样本分布，非拍脑袋。"""
+
+    def test_calibrate_bands_are_ordered_and_cover_zero(self):
+        scores = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0, 40.0, 80.0]
+        bands = rs.calibrate_bands(scores)
+        thresholds = [t for t, _, _ in bands]
+        self.assertEqual(thresholds, sorted(thresholds, reverse=True))
+        self.assertEqual(thresholds[-1], 0.0, "最低档必须从 0 分起，覆盖零分样本")
+
+    def test_calibrate_bands_empty_nonzero_is_single_info(self):
+        """没有正分样本时，退化为单一 info 档。"""
+        bands = rs.calibrate_bands([0, 0, 0])
+        self.assertEqual(len(bands), 1)
+        self.assertEqual(bands[0][1], "info")
+
+    def test_calibrate_bands_label_count(self):
+        """labels 长度决定档位个数。"""
+        bands = rs.calibrate_bands([1, 2, 3, 4, 5, 6, 7, 8],
+                                  labels=["critical", "high", "low", "info"])
+        self.assertEqual(len(bands), 4)
 
 
 if __name__ == "__main__":

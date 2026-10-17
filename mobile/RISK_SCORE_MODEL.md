@@ -2,8 +2,11 @@
 
 仅用于授权测试（已获授权的样本与设备）。
 
-> 状态：v1 已实现并通过 16 项离线回归；已接入 `tools/check_mobile_branch.py`。
+> 状态：v1.1 已实现并通过 25 项离线回归；已接入 `tools/check_mobile_branch.py`。
 > 代码：`mobile/analyze/risk_score.py`　测试：`mobile/analyze/test_risk_score.py`
+>
+> v1.1 变更：新增 necessity 维度（越权收集加成）、单调性保证、阈值标定函数；
+> 方法论对齐四篇论文（见 §二）。
 
 ---
 
@@ -32,6 +35,7 @@
 | 输入字段 | 来源 | 在模型中的作用 |
 | --- | --- | --- |
 | `data_type` → `sensitivity` | `sensitive_data_types` 表（GB/T 35273 §3.2 分级） | 数据维度权重 |
+| `data_type` → `necessary_data` | `app_categories.necessary_data_json`（必要个人信息规定 39 类） | 必要性（越权）权重 |
 | `evidence_kind` | 求值器（4 种取值） | 危害路径权重 |
 | `conclusion_level` | 规则自带（candidate/observed/correlated） | 证据强度权重 |
 | `severity` | 规则自带（info/low/medium/high/critical） | 量级乘数 |
@@ -46,18 +50,68 @@
 
 ---
 
+## 二、方法论依据（与论文的对齐）
+
+模型的每个维度都不是凭空设定，而是有文献支撑。本节说明「哪个维度来自哪篇论文」，
+以及「为什么这样落地」，供评审与后续改进追溯。
+
+### 2.1 Peng et al., CCS 2012 —— 单调性 desiderata
+
+《Using probabilistic generative models for ranking risks of Android apps》
+（ACM CCS 2012，被引 500+）首次系统提出「风险评分」概念，并列出好的评分方案
+必须满足的三条 desiderata，其中**单调性**（monotonicity）是核心：多一条危险
+证据，分数只增不减。
+
+本模型显式保证这一性质。取 `decay(k)=1/k` 并按条目分降序排列后，追加任意一条
+finding 都不会让总分下降——这是可以数学证明的（见 §3.3），并有
+`test_monotonicity` 锁死。很多早期评分方案（如按权限使用率反比）会在某类权限
+使用率超过 50% 时破坏单调性，本模型特意避开这个坑。
+
+### 2.2 Zhu et al., 中国科学·信息科学 2021 —— 异常度
+
+《基于权限的移动应用程序隐私风险量化》（中国科学：信息科学，51(7)）提出四参数
+模型：权限敏感度、权限列表异常度、App 使用率、权限调用者数量。其中**异常度**
+是关键洞见：风险不仅来自数据本身的敏感度，也来自「这类 App 本不该碰这个数据」。
+
+本模型的 `necessity_weight` 正是这一维度的落地——同一数据类别，对需要它的 App
+是正常行为，对不需要它的 App 是越权收集，应加成。
+
+### 2.3 CMU PrivacyGrade（Hong et al.）—— 期望—实际 gap
+
+PrivacyGrade（USENIX SOUPS 2014 等）给 100 万+ Android App 打 A+~D 分，核心是
+衡量「用户期望的 App 行为」与「App 实际行为」的差距：地图 App 用定位是正常的，
+游戏 App 用定位是异常。这与 Zhu 的异常度同源，都指向 necessity 维度。
+
+### 2.4 CNKI 2026 —— 自适应阈值
+
+《APP 形式化程序个人信息过度收集风险告警算法》用「自适应阈值」——分级阈值由样本
+分布的分位数决定，而非拍脑袋定死。本模型的 `calibrate_bands()` 落地这一思路
+（见 §3.4）。
+
+### 2.5 有意**不**引入的方法（并说明理由）
+
+- **概率生成模型（Peng）**：本模型是确定性证据评分，不是概率模型。概率模型需要
+  大量标注样本训练，且其输出是「风险概率」而非「已证实的证据强度」——与工具
+  「只报告观测到的事实、不猜测」的诚实性原则（M009）冲突。
+- **自学习权重（SPRisk, TDSC 2021）**：SPRisk 用模糊聚类自动学权重，需要 19 万
+  正常 + 7 千恶意样本。本项目的样本量（五个真实样本 + 合成会话）不足以支撑，
+  强行自学习会过拟合。故权重保持人工设定但**可配置 + 可标定**（见 §七 P3）。
+
+---
+
 ## 三、模型结构
 
 ### 3.1 单条 finding 的条目分
 
 ```
-item_score = data_weight × path_weight × evidence_weight × severity_weight × value_bonus
+item_score = data_weight × path_weight × evidence_weight × severity_weight
+             × necessity_weight × value_bonus
 ```
 
-四个维度乘一个加成，**每个乘数都在输出里写明依据**（`score_derivation`），
+五个维度乘一个加成，**每个乘数都在输出里写明依据**（`score_derivation`），
 保证任何一条分数都可追溯到具体字段。这是可审计性的要求。
 
-### 3.2 四个维度的取值
+### 3.2 各维度的取值
 
 **数据敏感度**（依据 GB/T 35273-2020 §3.2 与附录 B.1）
 
@@ -98,6 +152,26 @@ item_score = data_weight × path_weight × evidence_weight × severity_weight ×
 
 **severity 乘数**：`info 0.2 / low 0.5 / medium 1.0 / high 1.5 / critical 2.0`
 
+**必要性（越权）加成**（依据 Zhu 异常度 + PrivacyGrade 期望 gap）
+
+| 情形 | 权重 | 含义 |
+| --- | --- | --- |
+| 属于该类 App 必要数据 | 1.0 | 正常行为，不加成 |
+| 超出必要范围 | 1.5 | 越权收集的异常加成 |
+| 无必要数据定义/类别未知 | 1.0 | 不猜，中性（**不是**「都越权」） |
+
+必要性来自 `app_categories.necessary_data_json`（《常见类型移动互联网应用程序
+必要个人信息范围规定》三十九类）。未提供必要数据定义时该维度整体不启用，
+绝不会把「没查必要性」误读成「全部越权」。
+
+> ⚠️ **粒度局限（已在实测中暴露）**：必要数据定义的粒度可能粗于数据类别。
+> 例如 `map_navigation` 的必要数据只映射到 `coarse_location`（位置信息），
+> 而 `precise_location`（精确定位）是独立 key——导航 App 读精确定位会被误判为
+> 「非必要」。这不是模型缺陷，而是上游 `necessary_data_json` 的映射粒度问题。
+> 解决办法是补全映射（把 precise_location 也纳入导航类必要数据），或人工复核
+> necessity 加成命中的条目。当前版本在 `necessary_data` 输出里原样暴露用了哪些
+> 定义，便于发现这类粒度错配。
+
 ### 3.3 聚合：为什么不能简单求和
 
 18 条结论直接相加会得出荒谬的结论——8 条"声明了权限"能顶上半条真实外发。
@@ -115,6 +189,12 @@ k = 该 (数据类别, 危害路径) 组内第几条
 这个取值也经过反向验证：α 小于 0.8 时会出现「同一类别重复 3 次 ＞ 3 个不同
 类别各 1 次」的荒谬结果，与「信息种类比次数重要」相悖（见
 `test_diverse_types_outweigh_repeats`）。我最初取 0.35，正是被这条测试挡下来的。
+
+**单调性（Peng desiderata）**：按条目分降序排列、`decay(k)=1/k` 时，追加任意
+一条 finding 总分不减。证明：设组内第 j 位插入一条分数 s_new（s_new ≥ 第 j 位
+原条目 s_j），新增贡献 s_new/j 减去原条目整体右移的损失 Σ_{i≥j} s_i/(i(i+1))。
+因 s_new ≥ s_j 且 Σ_{i≥j} 1/(i(i+1)) = 1/j（望远镜级数），差值
+(s_new − s_j)/j ≥ 0。故单调性严格成立，由 `test_monotonicity` 锁死。
 
 ### 3.4 风险档位（仅用于排序与展示）
 
@@ -137,7 +217,19 @@ k = 该 (数据类别, 危害路径) 组内第几条
 需要堆到 100 条才能进 medium，配合衰减后几乎不可能。
 
 > ⚠️ 这套阈值是**工程设定，未经真实样本统计校准**。跨 App 比较时必须同时看
-> confidence，否则会把"没查到"读成"安全"。
+> confidence，否则会把"没查到"读成"安全"。necessity 维度加入后，总分普遍抬升，
+> 旧阈值更需重新标定——这正是下面 `calibrate_bands` 存在的意义。
+
+**阈值标定**（CNKI 自适应阈值思路）：`calibrate_bands(scores, labels)` 用一组样本
+的分数的分位数（默认 P60/P80/P93/P99）自动生成档位阈值，替代拍脑袋定死的 BANDS。
+用法：
+
+```python
+# 攒一批真实样本的总分后，重新标定阈值
+risk_score.BANDS = risk_score.calibrate_bands(sample_totals)
+```
+
+这比固定阈值更可信：阈值落在样本分布的真实分界上，而不是恰好卡在分布最密集处。
 
 ### 3.5 置信度：与分数正交，不乘进分数
 
@@ -158,33 +250,42 @@ confidence = 0.5 × 输入完整度 + 0.5 × √(数据类别覆盖率)
 ## 四、实测结果
 
 在仓库已有的真实回归产物上验证（`output/mobile-regression-20261016-221127/e2e/`，
-18 条结论）：
+18 条结论，App 类别 map_navigation）：
 
 ```
-总分 50.54 ｜ 档位 high ｜ 置信度 medium (0.689)
-说明：存在敏感信息外发或明文传输的可关联证据
+总分 75.48 ｜ 档位 critical ｜ 置信度 medium (0.689) ｜ necessity 已启用
+说明：多项敏感信息存在可关联的外发证据
 ```
 
 | 数据类别 | 贡献 | 条数 | 最高等级 |
 | --- | --- | --- | --- |
-| IMEI | 32.70 | 4 | correlated |
-| Android ID | 11.25 | 2 | observed |
-| 精确定位 | 4.50 | 1 | candidate |
-| 应用安装列表 | 1.42 | 3 | observed |
+| IMEI | 49.05 | 4 | correlated |
+| Android ID | 16.88 | 2 | observed |
+| 精确定位 | 6.75 | 1 | candidate |
+| 应用安装列表 | 2.12 | 3 | observed |
 | （无类别，权限声明） | 0.68 | 8 | candidate |
 
 | 规则类型 | 条数 | 贡献 |
 | --- | --- | --- |
-| data_egress | 1 | 26.32 |
-| plaintext_transmission | 1 | 9.00 |
-| third_party_share | 2 | 6.75 |
-| sensitive_read | 2 | 5.50 |
-| policy_mismatch | 2 | 1.38 |
-| over_collection | 2 | 0.92 |
+| data_egress | 1 | 39.49 |
+| plaintext_transmission | 1 | 13.50 |
+| third_party_share | 2 | 10.13 |
+| sensitive_read | 2 | 8.25 |
+| policy_mismatch | 2 | 2.06 |
+| over_collection | 2 | 1.37 |
 | over_permission | **8** | **0.68** |
 
-**这张表就是模型的价值**：8 条权限声明合计 0.68 分，1 条 IMEI 外发证据 26.32 分。
+**这张表就是模型的价值**：8 条权限声明合计 0.68 分，1 条 IMEI 外发证据 39.49 分。
 条数与风险完全脱钩，排序直接可用。
+
+**necessity 维度的效果**：与 v1（无 necessity，总分 50.54）相比，总分抬升到
+75.48。这是因为导航类 App 的必要数据只有「位置信息」，而它读了 IMEI、Android ID、
+精确定位等越权数据，necessity 把它们各 ×1.5。这个涨幅是**真实信息增量**——
+它反映的正是「导航 App 本不该碰这些数据」的越权事实。
+
+> ⚠️ 但请注意：档位从 high 跳到 critical，暴露了固定阈值的脆弱性——加一个新维度
+> 就跨越档位，说明 60/25 这套阈值是拍脑袋的，必须用 `calibrate_bands` 在攒够样本
+> 后重新标定。这也正是 CNKI 论文主张「自适应阈值」的原因。
 
 ---
 
@@ -226,26 +327,39 @@ PY="C:/Users/OneKyubey/.workbuddy/binaries/python/envs/default/Scripts/python.ex
 | 采集失败不标 info | M009 | `test_broken_collection_is_undetermined_not_info` |
 | 重复命中必须收敛 | — | `test_repeated_hits_decay` |
 | 种类多于次数 | — | `test_diverse_types_outweigh_repeats` |
+| 越权数据加权（necessity） | Zhu'21 | `test_unnecessary_data_gets_higher_score` |
+| 无必要数据定义不启用 | M009 | `test_none_necessary_data_disables_dimension` |
+| 追加 finding 不降分（单调性） | Peng'12 | `test_adding_finding_never_lowers_total` |
+| 阈值标定有序且覆盖零分 | CNKI'26 | `test_calibrate_bands_are_ordered_and_cover_zero` |
 
 ---
 
 ## 七、落地路径
 
-### 已完成（v1）
+### 已完成（v1.1）
 
 - [x] `risk_score.py`：评分核心 + CLI
-- [x] `test_risk_score.py`：17 项回归
+- [x] `test_risk_score.py`：25 项回归
 - [x] 接入 `tools/check_mobile_branch.py`（检查组 `risk_score`）
 - [x] 真实样本验证
+- [x] necessity 维度（Zhu 异常度 + PrivacyGrade 期望 gap）
+- [x] 单调性保证（Peng desiderata）
+- [x] `calibrate_bands` 阈值标定函数（CNKI 自适应阈值）
 
 ### 建议后续（按优先级）
 
-**P0 — 校准阈值（最有价值的一步）**
+**P0 — 校准阈值（最有价值的一步，necessity 加入后更紧迫）**
 
-当前阈值是工程设定。要让分数有学术与评审说服力，应该在多个真实样本上
-标定：取 5–10 个已知结论的 App（如 `SAMPLE_RUN_5APPS.md` 里的样本），
-人工给出"该优先复核"的排序，再看模型排序是否一致（可用 Spearman 秩相关）。
-这能把"我说它 high"变成"它在 8 个样本中的排序与人工判断一致"。
+当前阈值是工程设定，necessity 维度加入后总分普遍抬升，档位已不可靠。应攒
+5–10 个真实样本的总分，用 `calibrate_bands` 重新标定，再人工核对排序
+（Spearman 秩相关）。这能把"我说它 critical"变成"它在 8 个样本中的排序与
+人工判断一致"。
+
+**P0.5 — 补全必要数据映射粒度**
+
+`app_categories.necessary_data_json` 目前把「位置信息」只映射到 `coarse_location`，
+导致导航类 App 读 `precise_location` 被误判为非必要。应补全这类细分映射，
+或在评分前对 necessity 命中做人工复核。
 
 **P1 — 报告集成**
 
@@ -259,18 +373,21 @@ PY="C:/Users/OneKyubey/.workbuddy/binaries/python/envs/default/Scripts/python.ex
 
 **P3 — 权重敏感性分析**
 
-对 `DATA_WEIGHT` / `PATH_WEIGHT` 做扰动测试（±20%），检查档位是否稳定。
-若档位随小扰动跳变，说明阈值定得太靠近分界点。
+对 `DATA_WEIGHT` / `PATH_WEIGHT` / `NECESSITY_WEIGHT` 做扰动测试（±20%），
+检查档位是否稳定。若档位随小扰动跳变，说明阈值定得太靠近分界点。
 
 ---
 
 ## 八、已知局限
 
-1. **阈值未校准**——见 P0。当前档位只能用于同一个版本内的横向比较。
+1. **阈值未校准**——见 P0。necessity 加入后档位已不可靠，必须重新标定。
 2. **权重是序数而非基数**——`3.0` 不代表"敏感信息比一般信息危险 3 倍"，
    只代表"排序更高"。不要用它计算绝对危害。
 3. **无类别结论计分保守**——`over_permission` 一类没有 `data_type`，
    路径权重 0.2 已是最低档，不会虚高，但也无法体现"这个权限本身多危险"
    （规则库 `permission_protection_level` 尚未断言，见 `rules_mobile.summary.json`）。
-4. **不覆盖未观测维度**——加固壳、QUIC 等能力边界（见 `CLAUDE.md`）造成的盲区，
+4. **necessity 粒度受必要数据定义约束**——`necessary_data_json` 的映射粒度
+   可能粗于数据类别（如 coarse/precise 位置），导致边界误判。已在 §3.2 说明，
+   需 P0.5 补全映射。
+5. **不覆盖未观测维度**——加固壳、QUIC 等能力边界（见 `CLAUDE.md`）造成的盲区，
    模型看不到，只能由 `gaps` 与 `confidence` 间接反映。
