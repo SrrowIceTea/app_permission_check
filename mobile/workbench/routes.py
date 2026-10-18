@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from core.static import jadx, jobs
-from mobile.workbench import evidence_adapter, health, reports, static_adapter
+from mobile.workbench import benchmarks, evidence_adapter, health, reports, static_adapter
 
 MAX_JSON_BYTES = 16 * 1024 * 1024
 
@@ -40,7 +40,14 @@ def get(handler) -> None:
     if path == "/api/reports":
         values = reports.catalog(runtime.store)
         return handler.json({"reports": values, "count": len(values)})
+    if path == "/api/benchmarks":
+        return handler.json(benchmarks.catalog())
     parts = path.strip("/").split("/")
+    if len(parts) == 5 and parts[:2] == ["api", "benchmarks"] and parts[4] == "evidence":
+        value = benchmarks.evidence(parts[2], parts[3])
+        return handler.json(value if value is not None else {
+            "error": "没有这个样本的证据", "code": "benchmark_evidence_not_found"},
+            200 if value is not None else 404)
     if len(parts) == 3 and parts[:2] == ["api", "jobs"]:
         job = runtime.job(parts[2])
         return handler.json(job or {"error": "没有这个任务", "code": "job_not_found"},
@@ -105,6 +112,18 @@ def length(handler, maximum: int) -> int | None:
     return size
 
 
+
+def reject_content_type(handler, size: int, message: str):
+    # Windows may reset a connection closed with unread POST bytes, hiding its 415.
+    # size has passed length(); never drain an oversized or unbounded upload.
+    if 0 < size <= MAX_JSON_BYTES:
+        try:
+            handler.connection.settimeout(2)
+            handler.rfile.read(size)
+        except OSError:
+            pass
+    return handler.json({"error": message, "code": "content_type"}, 415)
+
 def post(handler) -> None:
     runtime = handler.server.runtime
     parsed = urlsplit(handler.path)
@@ -114,7 +133,7 @@ def post(handler) -> None:
         accepted = runtime.cancel(parts[2])
         return handler.json({"cancelled": accepted, "cancellation_requested": accepted,
                              "note": "请求已接收不等于停止；当前命令结束后停止后续动作并清理，请轮询终止状态"})
-    if len(parts) == 4 and parts[:2] == ["api", "tasks"] and parts[3] in ("capture", "report"):
+    if len(parts) == 4 and parts[:2] == ["api", "tasks"] and parts[3] in ("capture", "report", "audit"):
         if _task(handler, parts[2]) is None:
             return
         payload = read_payload(handler)
@@ -145,7 +164,7 @@ def post(handler) -> None:
             return
         content = handler.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
         if content != "application/json":
-            return handler.json({"error": "证据导入需要 application/json", "code": "content_type"}, 415)
+            return reject_content_type(handler, size, "证据导入需要 application/json")
         raw = handler.rfile.read(size)
         if len(raw) != size:
             raise ValueError("证据上传不完整")
@@ -165,7 +184,7 @@ def read_payload(handler):
         return None
     content = handler.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
     if content != "application/json":
-        handler.json({"error": "操作需要 application/json", "code": "content_type"}, 415)
+        reject_content_type(handler, size, "操作需要 application/json")
         return None
     raw = handler.rfile.read(size)
     if len(raw) != size:

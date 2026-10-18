@@ -40,3 +40,28 @@ API 契约与后端测试见 `mobile/workbench/README.md`。
 运行产物默认保存在 `output/mobile-workbench/`，不提交至 Git。
 
 前端离线检查：`node mobile/workbench/frontend/test_workflow_model.mjs`、`node mobile/workbench/frontend/test_job_model.mjs`；浏览器验收需使用移动端同源服务。
+
+## 基准实验概览
+
+导航“基准实验”是独立只读视图（`app.html#benchmarks`），与某个上传任务的上下文分离。
+数据来自同源 `GET /api/benchmarks`；仅展示服务发现的真实批次，没有批次时显示空状态。
+
+- 展示批次环境、样本数、静态/安装/启动/触发/采集完成数、已报告事件数量。
+- 阶段图和运行结果分布按 `samples` 重新计算，不使用批次自报汇总或论文标签。
+- `observed` 表示目标事件已观察，不代表违规；`not_observed`、`unsupported`、`failed`、`not_run` 分开显示。
+- 缺失事件数显示“—”，未知阶段显示未执行；不生成准确率或安全率。
+- 样本支持搜索、结果筛选和证据 JSON 链接。原论文标签保留在明细，独立于运行结果。
+
+前端契约回归：`node mobile/workbench/frontend/test_benchmark_model.mjs`。
+
+## 风险与 AI 图表
+
+基准实验页增加每 APK 风险分、五维覆盖、证据强度、风险分布和 AI 状态筛选。
+AI 摘要仅在样本 status=ok 且 validation.passed=true 时显示；调用来源区分在线与导入。
+图表按样本计数，不把 10 个样本的一次批量请求显示为 10 次模型调用。
+未知维度采用未测试状态，不用零分补图。详细方法及复跑入口见 `mobile/lab/README.risk.md`。
+
+国内真实应用静态批次与论文运行基准共用只读视图，但尚未执行的阶段仍显示未执行。
+Web 页面本身不发起在线模型调用；此处展示通过命令行显式调用后保存并校验的真实结果。
+
+前端风险契约检查：`node mobile/workbench/frontend/test_risk_model.mjs`。

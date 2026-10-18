@@ -1,0 +1,45 @@
+.benchmark-selector{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px;font-size:11px}
+.benchmark-selector label{display:flex;align-items:center;gap:12px;color:#65756a;min-width:0}
+.benchmark-selector select{max-width:560px;overflow:hidden;text-overflow:ellipsis}
+.benchmark-environment{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:23px 27px;margin-bottom:20px;border:1px solid #dce5e1;border-radius:12px;background:linear-gradient(118deg,#edf4ef,#f8faf7)}
+.benchmark-environment strong{font-size:19px;font-weight:550;letter-spacing:-.3px}
+.benchmark-environment p{font-size:11px;color:#6e847a;margin-top:8px}
+.benchmark-batch-meta{display:grid;gap:4px;text-align:right;overflow-wrap:anywhere}
+.benchmark-batch-meta .mono{font-size:11px;color:#5d786c}
+.benchmark-batch-meta small{font-size:10px}
+.benchmark-chart{padding:24px}
+.benchmark-stage+.benchmark-stage{margin-top:17px}
+.benchmark-stage-label{display:flex;justify-content:space-between;font-size:11px;margin-bottom:7px;color:#5d7368}
+.benchmark-stage-label strong{font-size:12px;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.benchmark-stage-label small{font-size:10px;font-weight:400;color:#96a39c}
+.benchmark-stage-track{height:8px;background:#eef2ed;border-radius:4px;overflow:hidden}
+.benchmark-stage-track>span{height:100%;display:block;background:linear-gradient(90deg,#248b75,#77b09a);border-radius:4px;min-width:0}
+.benchmark-stage-note{font-size:10px;color:#91a096;margin-top:4px}
+.benchmark-distribution{display:flex;height:20px;border-radius:6px;overflow:hidden;background:#eff3ef;margin:5px 0 24px;gap:2px}
+.benchmark-distribution>span{height:100%;min-width:3px}
+.benchmark-legend{display:grid;gap:13px}
+.benchmark-legend>div{display:flex;align-items:center;gap:10px;font-size:11px;color:#657b70}
+.benchmark-legend strong{margin-left:auto;font-size:14px;color:var(--ink);font-weight:550;font-variant-numeric:tabular-nums}
+.benchmark-dot{display:inline-block;width:8px;height:8px;border-radius:2px}
+.benchmark-tone-teal{background:#288c76}.benchmark-tone-blue{background:#7393a7}.benchmark-tone-amber{background:#d4ac63}.benchmark-tone-red{background:#bd7168}.benchmark-tone-gray{background:#cbd4cc}
+.benchmark-ink-teal{color:#287f69;background:#edf6f0}.benchmark-ink-blue{color:#577b92;background:#edf2f6}.benchmark-ink-amber{color:#9b783e;background:#faf4e8}.benchmark-ink-red{color:#a95c53;background:#fbefed}.benchmark-ink-gray{color:#839187;background:#f0f3ef}
+.benchmark-footnote{font-size:10px;color:#8b9c91;line-height:1.8;margin-top:19px}
+.benchmark-stage-chips{display:flex;gap:4px;flex-wrap:wrap;max-width:260px}
+.benchmark-stage-chips .badge{font-size:9px;padding:3px 5px}
+.benchmark-verdict{display:inline-block;padding:4px 8px;border-radius:4px;white-space:nowrap;font-size:10px}
+.benchmark-event-cell{font-variant-numeric:tabular-nums;font-size:16px;color:#466657}
+.benchmark-result-count{font-size:10px;color:#8b9b91;white-space:nowrap}
+.benchmark-details{min-width:110px;max-width:360px}
+.benchmark-details summary{font-size:11px;color:var(--teal);cursor:pointer;white-space:nowrap}
+.benchmark-details[open]{min-width:280px}
+.benchmark-details .keyvalues{font-size:10px;grid-template-columns:75px 1fr;gap:8px;margin-top:15px}
+.benchmark-details .json-block{margin-top:15px;max-height:300px;font-size:10px}
+.benchmark-details .button{margin-top:13px;font-size:10px}
+.benchmark-details .button .icon{width:14px}
+.benchmark-provenance{display:flex;justify-content:space-between;gap:15px;font-size:10px;color:#8c9e92;margin-top:16px;overflow-wrap:anywhere}
+.benchmark-provenance .mono{font-size:10px;max-width:70%;text-align:right}
+@media(max-width:900px){.benchmark-selector{align-items:flex-start;flex-direction:column;gap:8px}.benchmark-selector select{max-width:min(550px,65vw)}.benchmark-environment{padding:20px;align-items:flex-start}.benchmark-batch-meta{max-width:42%}}
+@media(max-width:560px){.benchmark-environment{flex-direction:column;gap:15px}.benchmark-batch-meta{max-width:100%;text-align:left}.benchmark-chart{padding:19px}.benchmark-provenance{flex-direction:column;gap:6px}.benchmark-provenance .mono{max-width:100%;text-align:left}}
+
+.benchmark-environment .eyebrow{display:block}.benchmark-batch-meta .badge{justify-self:end}
+@media(max-width:560px){.benchmark-batch-meta .badge{justify-self:start}}

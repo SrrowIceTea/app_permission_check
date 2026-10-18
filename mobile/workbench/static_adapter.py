@@ -7,12 +7,13 @@ from pathlib import Path
 from core.static import analysis, static_rules, toolchain
 from mobile.tools.static_scan_thirdparty import supplement
 from mobile.workbench.health import rules_info, tool_selection
+from mobile.workbench import local_policy
 from mobile.workbench.store import now, read_json, write_json
 
 
 def result(store, task: dict) -> dict:
     cache = store.cache_dir(task)
-    payload = read_json(cache / "workbench-static.json") if cache else None
+    payload = read_json(cache / "workbench-static.json") if cache else read_json(store.task_dir(task["id"]) / "workbench-static.json")
     if payload:
         return {**payload, "status": task["state"], "cached": task.get("cache_hit", False)}
     return {"available": False, "status": task["stages"]["static"]["state"],
@@ -52,6 +53,7 @@ def work(runtime, task_id: str, job, out: Path) -> dict:
         payload = {**cached, "cached": True}
         store.patch(task_id, state=payload["status"], cache_hit=True, apk=payload["apk"], gaps=payload["gaps"],
                     counts={**task["counts"], "findings": len(payload["findings"])})
+        local_policy.bind(runtime, task_id)
         return {"task_id": task_id, "static_url": task["artifact_urls"]["static"], "cached": True}
     missing = [name for name in ("aapt2", "dexdump") if not tools.get(name)]
     if not runtime.rules.is_file():
@@ -96,6 +98,7 @@ def work(runtime, task_id: str, job, out: Path) -> dict:
         write_json(out / "workbench-static.json", payload)
         store.patch(task_id, apk=apk, gaps=gaps,
                     counts={**task["counts"], "findings": len(payload["findings"])})
+        local_policy.bind(runtime, task_id)
         if job.cancelled:
             store.stage(task_id, "decompile", "cancelled", "用户取消")
             store.patch(task_id, state="cancelled")

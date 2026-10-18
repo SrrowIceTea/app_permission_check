@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {workflowState,captureValidation,operationLabel} from './js/workflow-model.js';
+import {workflowState,captureValidation,operationLabel,taskModeLabel} from './js/workflow-model.js';
 const health={capabilities:{device_capture:{available:true},report_generation:{available:true}}};
 const task={state:'partial',workflow:{can_capture:true,can_report:true}};
 assert.equal(workflowState(task,health).canCapture,true);
@@ -25,3 +25,24 @@ assert.equal(operationLabel('capture'),'设备采集');
 assert.equal(operationLabel('report'),'报告生成');
 assert.equal(operationLabel(undefined),'静态分析');
 console.log('PASS 20 workflow assertions (offline UI eligibility and exact authorization).');
+
+assert.equal(taskModeLabel({mode:'core_audit'}),'完整审计');
+assert.equal(taskModeLabel({mode:'core_audit'},'identity'),'完整审计');
+assert.equal(taskModeLabel({mode:'static',operation:{kind:'audit',state:'running'}}),'完整审计');
+assert.equal(taskModeLabel({mode:'static',operation:{kind:'audit',state:'failed'}},'identity'),'完整审计');
+assert.equal(taskModeLabel({mode:'static',operation:{kind:'audit',state:'cancelled'}}),'完整审计');
+assert.equal(taskModeLabel({mode:'static'}),'APK 静态分析');
+assert.equal(taskModeLabel({mode:'static'},'identity'),'静态任务');
+assert.equal(taskModeLabel({mode:'static',stages:{dynamic:{state:'done'}}}),'静态 + 设备证据');
+assert.equal(taskModeLabel({mode:'static',operation:{kind:'capture'}}),'APK 静态分析');
+assert.equal(taskModeLabel({origin:'device_capture'}),'自有夹具采集');
+assert.equal(taskModeLabel({origin:'device_capture'},'identity'),'夹具采集');
+assert.equal(taskModeLabel({mode:'evidence',origin:'imported_bundle'}),'证据包导入');
+assert.equal(taskModeLabel({mode:'evidence',origin:'imported_bundle'},'identity'),'证据导入');
+console.log('PASS 13 task-mode assertions (full audits and unchanged static/fixture/import meanings).');
+
+assert.equal(taskModeLabel({mode:'static',operation:{kind:'report'},core_run:{state:'done'}},'identity'),'完整审计');
+assert.equal(taskModeLabel({mode:'static',core_run:{state:'failed'}}),'APK 静态分析');
+assert.equal(taskModeLabel({mode:'static',core_run:{state:'queued'}}),'APK 静态分析');
+assert.equal(taskModeLabel({origin:'device_capture',core_run:{state:'not_requested'}}),'自有夹具采集');
+console.log('PASS 4 historical-core-mode assertions (report rebuild does not relabel an audit as static).');

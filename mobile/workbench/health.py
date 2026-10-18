@@ -59,6 +59,6 @@ def describe(rules: Path, version: str) -> dict:
                 "device_capture": {"available": True, "explicit_authorization_required": True,
                                    "scope": "fixed-self-owned-gadget-fixture", "requires_root": False},
                 "report_generation": {"available": reportlab, "dependency_available": reportlab,
-                                      "reason": "显式请求后基于当前任务证据生成，不调用 AI"}},
+                                      "reason": "显式请求后基于当前任务证据生成；已有真实 AI 须重验后复用，不新增模型调用"}},
             "device": {"state": "not_probed", "reason": "启动/健康检查不探测设备；仅显式操作时枚举或授权采集"},
-            "ai": {"state": "not_run", "reason": "仅支持导入并重新校验已有 AI 产物，不联网调用模型"}}
+            "ai": {"state": "not_run", "reason": "启动与健康检查不调用模型；显式完整检测在服务配置模型及真实正控后联网运行三阶段 AI，导入产物仍重新校验"}}

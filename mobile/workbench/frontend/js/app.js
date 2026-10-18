@@ -2,18 +2,20 @@ import {get,post,upload} from './api.js';
 import {state,update,selectedTask,navigate} from './state.js';
 import {h,icon,badge,empty,toast} from './ui.js';
 import {renderTasks} from './tasks.js';
+import {renderBenchmarks} from './benchmarks.js';
 import {renderStatic} from './static.js';
 import {renderEvidence} from './evidence.js';
 import {renderPolicy} from './policy-ai.js';
 import {renderReports} from './reports.js';
-import {captureValidation,operationLabel} from './workflow-model.js';
-const views={tasks:['任务总览','grid',renderTasks],static:['静态发现','scan',renderStatic],evidence:['动态证据','pulse',renderEvidence],policy:['政策与研判','book',renderPolicy],reports:['报告中心','report',renderReports]};
+import {auditValidation} from './audit-model.js';
+import {captureValidation,operationLabel,taskModeLabel} from './workflow-model.js';
+const views={tasks:['任务总览','grid',renderTasks],benchmarks:['基准实验','scan',renderBenchmarks],static:['静态发现','scan',renderStatic],evidence:['动态证据','pulse',renderEvidence],policy:['政策与研判','book',renderPolicy],reports:['报告中心','report',renderReports]};
 let renderSequence=0,pollTimer=null;
 function identity(){
- const node=document.querySelector('#identity');const task=selectedTask();if(!task){node.replaceChildren();return;}
+ const node=document.querySelector('#identity');if(state.view==='benchmarks'){node.replaceChildren();return;}const task=selectedTask();if(!task){node.replaceChildren();return;}
  const select=h('select',{class:'identity-select','aria-label':'选择当前检测任务',onchange:e=>update({selected:e.target.value})},state.tasks.map(t=>h('option',{value:t.id,selected:t.id===task.id},t.name||t.id)));
- const apk=task.apk||{};const digest=apk.sha256||apk.apk_sha256;
- node.replaceChildren(h('div',{class:'identity'},icon('file'),h('strong',{},task.name||apk.name||task.id),badge(task.mode==='static'?'neutral':'partial',task.mode==='static'?'静态任务':task.origin==='device_capture'?'夹具采集':'证据导入'),h('span',{class:'mono'},digest?`SHA256 ${digest.slice(0,16)}…`:'APK 摘要未提供'),h('span',{class:'muted'},`规则 ${task.rules?.version||'未提供'}`),select),h('div',{class:'context-stages'},[['static','静态扫描'],['decompile','源码反编译'],['dynamic','动态证据'],['ai','AI 研判'],['report','报告']].map(([key,label])=>h('div',{class:'stage-pill',title:task.stages?.[key]?.reason||''},label,badge(task.stages?.[key]?.state||'not_requested')))));
+ const apk=task.apk||{};const digest=apk.sha256||apk.apk_sha256;const modeLabel=taskModeLabel(task,'identity');
+ node.replaceChildren(h('div',{class:'identity'},icon('file'),h('strong',{},task.name||apk.name||task.id),badge(modeLabel==='静态任务'?'neutral':'partial',modeLabel),h('span',{class:'mono'},digest?`SHA256 ${digest.slice(0,16)}…`:'APK 摘要未提供'),h('span',{class:'muted'},`规则 ${task.rules?.version||'未提供'}`),select),h('div',{class:'context-stages'},[['static','静态扫描'],['decompile','源码反编译'],['dynamic','动态证据'],['ai','AI 研判'],['report','报告']].map(([key,label])=>h('div',{class:'stage-pill',title:task.stages?.[key]?.reason||''},label,badge(task.stages?.[key]?.state||'not_requested')))));
 }
 async function render(){
  const token=++renderSequence;
@@ -51,7 +53,7 @@ async function poll(id){
   if(['queued','running'].includes(job.state)){pollTimer=setTimeout(()=>poll(id),1500);}else{if(job.state==='failed')toast(job.error||'任务失败，原始产物已保留。',true);else if(job.state==='done'){
    toast(`${operationLabel(job.operation)}处理完成，请查看本轮结果与覆盖缺口。`);
    if(state.selected===job.task_id&&job.operation==='capture')navigate(selectedTask()?.stages?.report?.state==='done'?'reports':'evidence');
-   if(state.selected===job.task_id&&job.operation==='report')navigate('reports');
+   if(state.selected===job.task_id&&['report','audit'].includes(job.operation))navigate('reports');
   }}
  }catch(error){toast(`任务状态读取失败：${error.message}`,true);}
 }
@@ -61,17 +63,18 @@ async function probeDevices(){
  try{const result=await get('/api/devices');const devices=Array.isArray(result.devices)?result.devices:[];
   if(!devices.some(d=>d.serial===state.captureOptions.serial&&d.state==='device'))state.captureOptions.serial='';
   state.captureOptions.authorized=false;
+  if(state.auditOptions){state.auditOptions.authorized=false;if(!devices.some(d=>d.serial===state.auditOptions.serial&&d.state==='device'))state.auditOptions.serial='';}
   update({devices,devicesObservedAt:result.observed_at,deviceReason:result.reason||null});
  }catch(error){update({devices:[],deviceReason:error.message,workflowError:error.message});}
  finally{update({deviceProbeBusy:false});}
 }
 async function runOperation(operation,options={}){
  const task=selectedTask();if(!task||state.busy)return;
- const error=operation==='capture'?captureValidation(options,state.devices):null;
+ const error=operation==='capture'?captureValidation(options,state.devices):operation==='audit'?auditValidation(options,state.devices,task):null;
  if(error){update({workflowError:error});return;}
  update({busy:true,workflowError:null,job:null});
  try{const result=await post(`/api/tasks/${encodeURIComponent(task.id)}/${operation}`,options);
-  await refresh();toast(operation==='capture'?'已开始自有夹具采集，原始会话将保存在当前任务。':'报告生成已开始。');
+  await refresh();toast(operation==='audit'?'已开始当前 APK 的完整检测；采集、三阶段 AI 与报告按真实状态更新。':operation==='capture'?'已开始自有夹具采集，原始会话将保存在当前任务。':'报告生成已开始。');
   await poll(result.job_id);
  }catch(error){update({workflowError:error.message});toast(error.message,true);}
  finally{update({busy:false});}
@@ -82,6 +85,7 @@ window.addEventListener('hashchange',render);window.addEventListener('lab:change
 window.addEventListener('lab:upload',e=>acceptApk(e.detail));window.addEventListener('lab:import',e=>importBundle(e.detail));
 window.addEventListener('lab:devices',probeDevices);
 window.addEventListener('lab:capture',e=>runOperation('capture',e.detail));
+window.addEventListener('lab:audit',e=>runOperation('audit',e.detail));
 window.addEventListener('lab:report',()=>runOperation('report'));
 window.addEventListener('lab:cancel',async()=>{if(!state.job)return;try{const result=await post(`/api/jobs/${state.job.id}/cancel`,{});if(result.cancelled){update({job:{...state.job,cancellation_requested:true}});toast(result.note||'已请求取消，当前步骤结束后清理并停止。');}else toast('任务已结束或无法取消。',true);}catch(error){toast(error.message,true);}});
 for(const [id,handler] of [['apk-input',acceptApk],['bundle-input',importBundle]])document.querySelector(`#${id}`).addEventListener('change',e=>{const file=e.target.files[0];e.target.value='';if(file)handler(file);});

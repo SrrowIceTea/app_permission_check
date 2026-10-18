@@ -1,0 +1,3 @@
+# Compiler output embeds the separately installed Java bridge; rebuild from source.
+*.bundle.js
+*.bak

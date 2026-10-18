@@ -97,6 +97,12 @@ class HttpTest(unittest.TestCase):
         code, _, _ = self.request("POST", "/api/evidence/import", bundle(),
                                  {"Content-Type": "text/plain"})
         self.assertEqual(code, 415)
+        task = self.runtime.import_evidence(bundle())["task"]
+        code, body, _ = self.request("POST", f'/api/tasks/{task["id"]}/report', {},
+                                     {"Content-Type": "text/plain"})
+        self.assertEqual(code, 415)
+        self.assertEqual(body["code"], "content_type")
+        self.assertEqual(list(self.runtime.operations.directory.glob("*.json")), [])
         code, _, _ = self.request("POST", "/api/apk", headers={"Content-Length": str(513 << 20)})
         self.assertEqual(code, 413)
 

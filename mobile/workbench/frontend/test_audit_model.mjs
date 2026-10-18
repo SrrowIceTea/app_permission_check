@@ -1,0 +1,57 @@
+import assert from 'node:assert/strict';
+import {auditState,auditDefaults,auditDevices,auditValidation,auditStages,defaultScenario} from './js/audit-model.js';
+import {operationLabel} from './js/workflow-model.js';
+let checks=0;
+function equal(actual,expected){assert.deepEqual(actual,expected);checks++;}
+function match(actual,pattern){assert.match(actual,pattern);checks++;}
+const task={id:'offline-task',state:'partial',apk:{package:'com.absinthe.libchecker'},
+ stages:{static:{state:'done'},dynamic:{state:'failed',reason:'real captured failure'},ai:{state:'not_requested'},report:{state:'not_requested'}},
+ workflow:{can_audit:true,audit_reason:'configured offline contract',audit_modes:['nonroot-gadget'],audit_serial:'emulator-5560',audit_scenarios:['launch','libchecker','readyou','ghera-ecb','ghera-cbc']}};
+const devices=[{serial:'emulator-5560',state:'device'},{serial:'emulator-5562',state:'device'},{serial:'physical-phone',state:'device'}];
+const options={...auditDefaults(task),authorized:true,serial:'emulator-5560'};
+equal(auditState(task).canAudit,true);
+equal(auditState(task,true).canAudit,false);
+equal(auditState({...task,state:'running'}).canAudit,false);
+equal(auditState(null).canAudit,false);
+equal(auditState({...task,workflow:{can_audit:'true'}}).canAudit,false);
+equal(auditState({...task,workflow:{audit_modes:'root',audit_scenarios:'launch'}}).modes,[]);
+equal(auditState({...task,workflow:{audit_modes:['bad','root-emulator']}}).modes,['root-emulator']);
+equal(auditState({...task,workflow:{audit_reason:'specific missing selftest'}}).reason,'specific missing selftest');
+equal(auditDefaults(task).authorized,false);
+equal(auditDefaults(task).serial,'');
+equal(auditDefaults(task).consent_timeout,180);
+equal(defaultScenario(task),'libchecker');
+equal(defaultScenario({...task,apk:{package:'me.ash.reader'}}),'readyou');
+equal(defaultScenario({...task,apk:{package:'edu.ksu.cs.benign'}}),'launch');
+equal(defaultScenario({...task,apk:{package:'cn.example.app'}}),'launch');
+equal(defaultScenario({...task,workflow:{audit_scenarios:['readyou']}}),'readyou');
+equal(auditDevices(task,devices).map(d=>d.serial),['emulator-5560']);
+equal(auditDevices(task,[{serial:'emulator-5560',state:'offline'}]),[]);
+equal(auditDevices(task,null),[]);
+equal(auditValidation(options,devices,task),null);
+for(const authorized of [false,'true',null,1])match(auditValidation({...options,authorized},devices,task),/授权/);
+for(const extra of ['api_key','config','apk','command','capture_source'])match(auditValidation({...options,[extra]:'forbidden'},devices,task),/额外字段/);
+for(const input of [null,[],true])match(auditValidation(input,devices,task),/额外字段/);
+match(auditValidation(options,devices,{...task,workflow:{can_audit:false,audit_reason:'本机配置缺失'}}),/本机配置缺失/);
+match(auditValidation(options,devices,task,true),/运行/);
+match(auditValidation({...options,mode:'root-emulator'},devices,task),/检测模式/);
+match(auditValidation({...options,mode:'unknown'},devices,task),/检测模式/);
+match(auditValidation({...options,serial:''},devices,task),/选择/);
+for(const serial of ['emulator-5562','physical-phone','emulator-12;whoami','emulator-123456',42])match(auditValidation({...options,serial},devices,task),/设备必须/);
+match(auditValidation(options,[],task),/未在线/);
+match(auditValidation(options,[{serial:'emulator-5560',state:'unauthorized'}],task),/未在线/);
+match(auditValidation({...options,scenario:'fake'},devices,task),/场景/);
+for(const scenario of ['ghera-ecb','ghera-cbc'])equal(auditValidation({...options,scenario},devices,task),null);
+for(const seconds of [4,181,20.5,'20',true,NaN])match(auditValidation({...options,seconds},devices,task),/观察时长/);
+for(const seconds of [5,180])equal(auditValidation({...options,seconds},devices,task),null);
+match(auditValidation({...options,pcap_sidecar:'true'},devices,task),/VPN/);
+equal(auditValidation({...options,pcap_sidecar:true},devices,task),null);
+const rootTask={...task,workflow:{...task.workflow,audit_modes:['root-emulator']}};
+equal(auditValidation({...options,mode:'root-emulator'},devices,rootTask),null);
+match(auditValidation({...options,mode:'root-emulator',pcap_sidecar:true},devices,rootTask),/VPN/);
+match(auditValidation({...options,consent_timeout:0},devices,task),/180/);
+equal(auditStages(task).map(s=>s.state),['done','failed','not_requested','not_requested']);
+equal(auditStages(task)[1].reason,'real captured failure');
+equal(auditStages(null).map(s=>s.state),['not_requested','not_requested','not_requested','not_requested']);
+equal(operationLabel('audit'),'完整检测（含 AI）');
+console.log(`PASS ${checks} audit assertions (offline inputs, authorization, trusted-device and real-stage contracts).`);

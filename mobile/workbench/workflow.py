@@ -4,7 +4,8 @@ import shutil
 import subprocess
 import sys
 import time
-from mobile.workbench import device_bridge, evidence_adapter, report_generation
+from pathlib import Path
+from mobile.workbench import audit_inputs, device_bridge, evidence_adapter, report_generation
 from mobile.workbench.store import read_json, write_json
 
 
@@ -24,7 +25,8 @@ def capabilities(runtime, task):
     if busy:
         capture_reason = report_reason = "当前任务尚在运行，请等待终止状态"
     return {"can_capture": can_capture, "capture_reason": capture_reason,
-            "can_report": can_report, "report_reason": report_reason}
+            "can_report": can_report, "report_reason": report_reason,
+            **audit_inputs.capabilities(runtime, task)}
 
 
 def submit(runtime, task_id, kind, payload):
@@ -58,6 +60,7 @@ def submit(runtime, task_id, kind, payload):
         directory = runtime.store.task_dir(task_id)
         attempt = directory / "attempts" / job.id
         attempt.mkdir(parents=True, exist_ok=False)
+        write_json(attempt / "operation-context.json", {"previous_task_state": task["state"]})
         if kind == "capture":
             (attempt / "session").mkdir()
             shutil.copyfile(device_bridge.APK_ROOT / "gadget/app-gadget.apk", attempt / "captured.apk")
@@ -114,6 +117,21 @@ def capture(attempt, binding, payload, job):
     return verification
 
 
+
+def completed_report_is_partial(task, attempt):
+    """Rendering changes the PDF, not the completeness of its bound evidence."""
+    if read_json(attempt / "operation-context.json", {}).get("previous_task_state") == "partial":
+        return True
+    if any(stage.get("state") == "partial" for stage in task["stages"].values()):
+        return True
+    core = task.get("core_run") or {}
+    if core.get("state") != "done" or not isinstance(core.get("source_run"), str):
+        return False
+    verification = read_json(Path(core["source_run"]) / "verification.json", {})
+    return (verification.get("passed") is True and verification.get("task_id") == task["id"] and
+            verification.get("apk_sha256") == task["apk"].get("sha256") and
+            isinstance(verification.get("quality_gaps"), list) and bool(verification["quality_gaps"]))
+
 def run(runtime, task_id, kind, payload, job):
     store = runtime.store
     attempt = store.task_dir(task_id) / "attempts" / job.id
@@ -153,6 +171,8 @@ def run(runtime, task_id, kind, payload, job):
         task = store.get(task_id)
         state = "cancelled" if job.cancelled else (
             "failed" if any(task["stages"][s]["state"] == "failed" for s in ("dynamic", "report")) else "done")
+        if state == "done" and kind == "report" and completed_report_is_partial(task, attempt):
+            state = "partial"
         if job.cancelled:
             for stage in ("dynamic", "report"):
                 if task["stages"][stage]["state"] in ("queued", "running"):
@@ -164,4 +184,5 @@ def run(runtime, task_id, kind, payload, job):
                     store.stage(task_id, stage, "blocked", "前序阶段失败，未运行下游操作")
         if kind == "capture" and task["stages"]["dynamic"]["state"] != "done":
             store.patch(task_id, capture={**task.get("capture", {}), "state": state})
-        store.patch(task_id, state=state, operation={"kind": kind, "job_id": job.id, "state": state})
+        store.patch(task_id, state=state, operation={"kind": kind, "job_id": job.id,
+                                                     "state": "done" if state == "partial" else state})

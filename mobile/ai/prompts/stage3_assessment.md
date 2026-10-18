@@ -1,6 +1,6 @@
 # 阶段三：综合合规研判与整改建议
 
-> version: 1.1
+> version: 1.2
 > 输入：阶段二输出 + 工具规则结论 + 政策条款判定 + 证据包元信息（gaps/规则版本/提示词版本）
 > 输出：分项研判 + 整改建议 + 不确定性清单
 
@@ -55,6 +55,16 @@
 
 - **`category` 取值**：证据包 `rules.regulations` 中列出的条款号（如 `C3.1`、`C4.1`、`51`）。
   同一类别有多个条目时分成多条 `items`（例如 C3.1 与 C4.1 各一条）。
+  额外技术类别只有三种：`technical_storage_crypto`（SC/SCF）、`technical_static`（ST）、`technical_network`（N），均不是法规条款。
+  三种各用独立 item，regulation_refs=[]、basis_refs=[]，conclusion 只能 observed_but_inconclusive 或 insufficient_evidence。
+- **先选事实，再决定是否创建 item**：每个 item 必须引用能支持其主题的实际 evidence_refs。
+  没有读取、同意、流量或政策正文时，相应法规类别的缺口写入 uncertainties，**不要为凑类别创建空证据 item**。
+  禁止把 SC/SCF/ST/N 填进任何法规 item（包括 conclusion=insufficient_evidence 的 C4.1 等条目）当占位证据。
+  法规 item 只能用实际相关 R/C/F、已产生的普通工具规则 ID 或政策依据；不能因同名权限/方法就混入 ST。
+  若需说明清单/DEX 候选，将其移到独立 technical_static；若类别范围未知且没有独立依据，只写 uncertainties。
+- **SC/SCF 专用 item 示例**（ID 仅示范，必须替换为输入实际 ID；无需重复没有实据的法规类别）：
+  `{"assessment_id":"A1","category":"technical_storage_crypto","category_title":"存储/加密技术观察","conclusion":"observed_but_inconclusive","summary":"仅陈述输入中已观测的 API 事实及边界；不证明个人数据泄露或磁盘持久化。","evidence_refs":["SCF1","SC1"],"regulation_refs":[],"basis_refs":[],"severity":"low","confidence":"medium","needs_human_review":true}`
+  若同一条 SCF 还依赖其他 SC，必须把全部实际依据 ID 一并引用。
 - **只要有一条 high/critical 的 suspected_noncompliant，`overall_risk` 不得低于 high。**
   反之，没有实质性发现时必须如实给 low——**不要为了让报告显得有内容而拔高风险等级**。
 - `summary` 里禁止出现"可能存在""疑似存在"这类模糊叠加——

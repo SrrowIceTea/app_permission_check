@@ -47,8 +47,8 @@ TIMEOUT_S = 25
 POLICY_HINTS = ["privacy", "policy", "yinsi", "zhengce", "agreement", "terms",
                 "隐私", "政策", "协议", "个人信息保护"]
 
-APK_CANDIDATE_RE = re.compile(r"\.(html?|txt|md|json)$", re.IGNORECASE)
-APK_POLICY_WORDS = ["隐私政策", "隐私保护", "个人信息保护", "privacy policy", "用户协议"]
+APK_CANDIDATE_RE = re.compile(r"\.(html?|txt|md)$", re.IGNORECASE)
+APK_POLICY_WORDS = ["隐私政策", "隐私保护指引", "个人信息保护政策", "privacy policy"]
 
 
 def sha256(b: bytes) -> str:
@@ -111,7 +111,11 @@ def discover_policy_links(html: str, base_url: str, *, limit: int = 5) -> list[d
 
 
 def extract_from_apk(apk: Path, *, limit: int = 5) -> list[dict]:
-    """从 APK 内部找政策文本。离线可用，通常是**最可靠的来源**。"""
+    """Find document candidates, not JSON settings, word dictionaries or service agreements.
+
+    A keyword hit is still a candidate requiring provenance review before registration.
+    JSON privacy pop-up summaries are not accepted as a full privacy policy.
+    """
     if not apk.exists():
         return []
     found = []
@@ -144,10 +148,11 @@ def extract_from_apk(apk: Path, *, limit: int = 5) -> list[dict]:
 def save(store_dir: Path, *, raw: bytes, extract: dict, meta: dict, tag: str) -> dict:
     store_dir.mkdir(parents=True, exist_ok=True)
     (store_dir / f"policy-{tag}.raw").write_bytes(raw)
-    (store_dir / f"policy-{tag}.txt").write_text(extract["text"], encoding="utf-8")
+    # Hash exactly the UTF-8 bytes persisted; write_text translated LF to CRLF on Windows.
+    text_bytes = extract["text"].encode("utf-8")
+    (store_dir / f"policy-{tag}.txt").write_bytes(text_bytes)
     record = {**meta, "tag": tag, "raw_sha256": sha256(raw),
-              "text_chars": extract["chars"], "text_sha256": sha256(
-                  extract["text"].encode("utf-8")),
+              "text_chars": extract["chars"], "text_sha256": sha256(text_bytes),
               "extract_status": extract["status"], "extract_path": extract.get("path"),
               "cjk_ratio": extract.get("cjk_ratio"), "title": extract.get("title"),
               "raw_file": f"policy-{tag}.raw", "text_file": f"policy-{tag}.txt",

@@ -123,6 +123,8 @@ def main() -> int:
     ap.add_argument("--egress", default=None)
     ap.add_argument("--permissions", default=None, help="清单权限列表（每行一个）")
     ap.add_argument("--policy-store", default=None)
+    ap.add_argument("--version-code", default=None, help="APK versionCode, for local policy association")
+    ap.add_argument("--apk-sha256", default=None, help="Full APK SHA-256, for exact local policy association")
     ap.add_argument("--package", required=True)
     ap.add_argument("--app-category", default=None)
     ap.add_argument("--window-override-ms", type=int, default=None)
@@ -168,24 +170,17 @@ def main() -> int:
     else:
         gaps.append("未提供清单权限列表：over_permission 类结论不可判定")
 
-    policy = {"available": False}
-    if args.policy_store:
-        store = Path(args.policy_store)
-        metas = sorted(store.glob("policy-*.meta.json"))
-        if metas:
-            meta = json.loads(metas[-1].read_text(encoding="utf-8"))
-            text_file = store / meta["text_file"]
-            text = text_file.read_text(encoding="utf-8") if text_file.exists() else ""
-            sys.path.insert(0, str(ROOT / "mobile" / "policy"))
-            import policy_lint
-            policy = {"available": True, "raw_sha256": meta.get("raw_sha256"),
-                      "extract_status": meta.get("extract_status"),
-                      "disclosure_scan": policy_lint.disclosure_scan(
-                          text, policy_lint.load_keywords())}
-        else:
-            gaps.append("policy store 为空：policy_mismatch 类结论不可判定")
+    sys.path.insert(0, str(ROOT / "mobile" / "policy"))
+    import policy_lint
+    from policy_library import load_policy
+    policy = load_policy(Path(args.policy_store) if args.policy_store else None,
+        package=args.package, version_code=args.version_code, apk_sha256=args.apk_sha256,
+        allow_legacy=bool(args.policy_store and args.package == "com.vscanner.privacydemo"))
+    gaps.extend(policy.get("gaps", []))
+    if policy["available"]:
+        policy["disclosure_scan"] = policy_lint.disclosure_scan(policy["text"], policy_lint.load_keywords())
     else:
-        gaps.append("未提供 policy store：policy_mismatch 类结论不可判定")
+        gaps.append("未取得匹配且校验通过的本地应用政策：policy_mismatch 类结论不可判定")
 
     ctx = {"package": args.package, "reads": reads, "consent": consent, "flows": flows,
            "permissions": permissions, "category": load_category(Path(args.rules),
@@ -274,6 +269,7 @@ def main() -> int:
         "coverage": coverage,
         "code_locs": codeloc.summarize(findings),
         "app_category": ctx["category"].get("key"),
+        "policy": {k: v for k, v in policy.items() if k not in ("text", "disclosure_scan")},
         "window_override_ms": args.window_override_ms,
         "gaps": gaps, "policy_consent_state": "unknown",
         "rules_sha256": hashlib.sha256(Path(args.rules).read_bytes()).hexdigest(),

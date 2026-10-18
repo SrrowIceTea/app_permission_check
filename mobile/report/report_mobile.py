@@ -38,6 +38,9 @@ import report_ai_sections as ai_sec  # noqa: E402
 import report_common as rc  # noqa: E402
 from report_common import Paragraph  # noqa: E402
 import report_sections as sec  # noqa: E402
+from report_storage import section_storage
+from report_supplemental import section_supplemental
+from report_risk import section_risk
 sys.path.insert(0, str(HERE.parents[1]))
 from mobile.ai.review_gates import load_checked_stages
 
@@ -86,7 +89,7 @@ def ai_meta(ai_dir: Path | None) -> tuple[str, str]:
     return "、".join(sorted(models)), (
         f"模型 {'、'.join(sorted(models))}，共 {n} 次调用；"
         "输入为脱敏后的证据包（标识符只含长度、哈希与前 6 字符预览）；"
-        "提示词与原始响应随交付目录提供，结论可复现。")
+        "提示词与原始响应随交付目录提供，可追溯该次结论。")
 
 
 def build_story(bundle: dict, ai_dir: Path | None, meta: dict) -> list:
@@ -108,8 +111,11 @@ def build_story(bundle: dict, ai_dir: Path | None, meta: dict) -> list:
     story.append(Spacer(1, 6))
 
     story += sec.section_overview(bundle, st, font, meta)
+    story += section_risk(bundle, st, font)
     story += sec.section_basis(bundle, st, font)
     story += sec.section_evidence(bundle, st, font)
+    story += section_storage(bundle, st, font)
+    story += section_supplemental(bundle, st, font)
     story += sec.section_findings(bundle, st, font)
     story += ai_sec.section_ai_assessment(stage3, st, font, meta)
     story += ai_sec.section_consistency(stage2, st, font)
@@ -168,10 +174,12 @@ def main() -> int:
     doc.report_font = font
     doc.build(build_story(bundle, ai_dir, meta),
               onFirstPage=rc.footer, onLaterPages=rc.footer)
+    accepted, validation = load_checked_stages(ai_dir, bundle)
     print(json.dumps({
         "status": "ok", "out": str(out), "bytes": out.stat().st_size,
-        "font": font, "ai_stages": sorted(p.stem for p in (ai_dir.glob("stage*.json")
-                                                           if ai_dir else [])),
+        "font": font, "ai_stages": sorted(accepted),
+        "ai_complete": set(accepted) == {"stage1", "stage2", "stage3"},
+        "ai_validation_problems": sum(len(v["problems"]) for v in validation.values()),
         "gaps": len(bundle.get("gaps") or []),
         "note": None if ai_dir else "未提供 --ai-out-dir：报告只含工具规则结论。",
     }, ensure_ascii=False, indent=2))

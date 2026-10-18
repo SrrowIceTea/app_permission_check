@@ -18,9 +18,11 @@ STAGE1 = {"stage": "policy_extract", "declared_collection": [],
           "requirement_answers": [{"req_id": "PP-04", "verdict": "unclear"}]}
 STAGE2 = {"stage": "consistency", "per_data_type": [{
     "data_type": "imei", "assessment": "plaintext_transmission", "observed_collection": True,
-    "read_evidence_refs": ["R1"], "policy_consent_state": "unknown"}]}
+    "read_evidence_refs": ["R1"], "plaintext_flow_refs": ["F1"],
+    "policy_consent_state": "unknown"}], "insufficient": []}
 STAGE3 = {"stage": "assessment", "overall_risk": "insufficient_evidence", "items": [],
-          "recommendations": []}
+          "recommendations": [], "uncertainties": [],
+          "overall_risk_reason": "本轮仅观测测试事实", "coverage_note": "测试输入"}
 
 
 def write(path, value):

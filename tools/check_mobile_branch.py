@@ -19,11 +19,16 @@ CHECKS = [
     ("fixture_packaging", "mobile/fixture-app", [PY, "-m", "unittest", "test_gadget_prepare"]),
     ("hook_compiler", ".", [PY, "-m", "unittest", "core.frida_host.test_build"]),
     ("read_semantics", "mobile/analyze", [PY, "-m", "unittest", "test_observation_semantics", "test_client_tls"]),
-    ("ai_gates", "mobile/ai", [PY, "-m", "unittest", "test_ai_gates"]),
+    ("ai_gates", "mobile/ai", [PY, "-m", "unittest", "test_ai_gates", "test_llm_transport", "test_formal_contract", "test_policy_sources", "test_storage_context", "test_validation_repair", "test_storage_observations", "test_storage_prompt_contract", "test_supplemental_observations", "test_benchmark_review", "test_benchmark_review_attach"]),
+    ("policy_library", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/policy", "-p", "test_policy*.py"]),
+    ("mobile_lab", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/lab", "-p", "test_*.py"]),
+    ("mobile_repack", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/repack", "-p", "test_*.py"]),
+    ("mobile_audit", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/audit", "-p", "test_*.py"]),
+    ("risk_rating", ".", [PY, "-m", "unittest", "mobile.analyze.test_risk_rating", "mobile.analyze.test_bundle_risk", "mobile.lab.domestic.test_fetch"]),
     ("report_gates", "mobile/report", [PY, "-m", "unittest", "test_report_gates", "test_report_health"]),
     ("hook_values", "mobile/analyze", ["node", "test_values.mjs"]),
     *[(f"ui_{name}", "mobile/workbench/frontend", ["node", f"test_{name}_model.mjs"])
-      for name in ("evidence", "job", "runtime", "workflow")],
+      for name in ("evidence", "job", "runtime", "workflow", "audit", "benchmark", "risk")],
 ]
 
 

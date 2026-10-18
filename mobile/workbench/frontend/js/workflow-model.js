@@ -15,4 +15,12 @@ export function captureValidation(options,devices){
  if(typeof options.generate_report!=='boolean')return '请选择是否在采集成功后生成报告。';
  return null;
 }
-export function operationLabel(operation){return operation==='capture'?'设备采集':operation==='report'?'报告生成':'静态分析';}
+export function operationLabel(operation){return operation==='audit'?'完整检测（含 AI）':operation==='capture'?'设备采集':operation==='report'?'报告生成':'静态分析';}
+
+// Audit mode remains an audit on failure/cancel; stage badges carry completion state.
+export function taskModeLabel(task,context='list'){
+ if(task?.mode==='core_audit'||task?.operation?.kind==='audit'||task?.core_run?.state==='done')return '完整审计';
+ if(task?.origin==='device_capture')return context==='identity'?'夹具采集':'自有夹具采集';
+ if(task?.mode==='static')return context==='identity'?'静态任务':task?.stages?.dynamic?.state==='done'?'静态 + 设备证据':'APK 静态分析';
+ return context==='identity'?'证据导入':'证据包导入';
+}

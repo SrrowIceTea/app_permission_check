@@ -5,5 +5,8 @@
     <application
         android:name="com.vscanner.privacydemo.AuditApplication"
         android:extractNativeLibs="true"
-        tools:replace="android:extractNativeLibs" />
+        tools:replace="android:extractNativeLibs">
+        <activity android:name=".AuditProbeActivity" android:exported="true"
+            android:theme="@android:style/Theme.Material.Light" />
+    </application>
 </manifest>

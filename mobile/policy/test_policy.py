@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -150,6 +151,18 @@ class FetchFromFileTest(unittest.TestCase):
 
 
 class FetchFromApkTest(unittest.TestCase):
+    def test_json_settings_dictionary_and_service_agreement_are_not_policy(self):
+        import policy_fetch
+        with tempfile.TemporaryDirectory() as tmp:
+            apk = Path(tmp) / "sample.apk"
+            with zipfile.ZipFile(apk, "w") as zf:
+                zf.writestr("assets/words-zh.json", json.dumps({"privacy": "隐私政策" * 200}))
+                zf.writestr("assets/setting.json", json.dumps({"privacy": "隐私政策" * 200}))
+                zf.writestr("assets/protocol.txt", "用户协议及使用说明。" * 100)
+                zf.writestr("assets/privacy.html", FIXTURE.read_bytes())
+            found = policy_fetch.extract_from_apk(apk)
+            self.assertEqual([i["entry"] for i in found], ["assets/privacy.html"])
+
     def test_missing_apk_reports_not_found_not_crash(self):
         with tempfile.TemporaryDirectory() as tmp:
             proc = subprocess.run(

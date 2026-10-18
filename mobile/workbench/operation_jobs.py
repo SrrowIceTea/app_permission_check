@@ -5,6 +5,7 @@ import re
 import time
 from core.static.jobs import Job
 from mobile.workbench.store import now, read_json, write_json
+from mobile.workbench import audit_recovery
 
 
 class Operations:
@@ -17,6 +18,8 @@ class Operations:
         for path in self.directory.glob("*.json"):
             data = read_json(path, {})
             if data.get("state") in ("queued", "running"):
+                if audit_recovery.reconcile(store, data) is not None:
+                    continue
                 data.update(state="failed", error="服务重启，操作中断；遗留采集子进程可能仍在清理，不证明已停止")
                 write_json(path, data)
 
@@ -39,7 +42,12 @@ class Operations:
         if not re.fullmatch(r"[0-9a-f]{12}", job_id):
             return None
         job = self.jobs.get(job_id)
-        return self.snapshot(job) if job else read_json(self.directory / (job_id + ".json"))
+        if job:
+            return self.snapshot(job)
+        data = read_json(self.directory / (job_id + ".json"))
+        if isinstance(data, dict) and data.get("recovery_wait") is True:
+            return audit_recovery.reconcile(self.store, data)
+        return data
 
     def submit(self, task_id, kind, prepare, work):
         with self.lock:
@@ -88,6 +96,16 @@ class Operations:
     def cancel(self, job_id):
         with self.lock:
             job = self.jobs.get(job_id)
+            if job is None:
+                recovered = self.get(job_id)
+                if not isinstance(recovered, dict) or recovered.get("recovery_wait") is not True:
+                    return False
+                attempt = self.store.task_dir(recovered["task_id"]) / "attempts" / job_id
+                (attempt / "cancel-requested").touch()
+                self.store.patch(recovered["task_id"], cancellation_requested=True)
+                recovered.update(cancellation_requested=True, updated_at=now())
+                write_json(self.directory / (job_id + ".json"), recovered)
+                return True
             if not job or job.state in ("done", "failed", "cancelled"):
                 return False
             job.cancelled = True

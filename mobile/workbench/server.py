@@ -117,15 +117,19 @@ def main() -> int:
     parser.add_argument("--sdk", type=Path, help="覆盖 ANDROID_SDK_ROOT")
     parser.add_argument("--jadx", type=Path, help="覆盖 VSCAN_JADX")
     parser.add_argument("--java-home", type=Path, help="覆盖 JAVA_HOME")
+    parser.add_argument("--audit-config", type=Path, help="本机可信 AI 配置；只在显式授权 audit 时联网")
+    parser.add_argument("--audit-selftest", type=Path, help="同模式/设备的真实夹具正控 verification.json")
     args = parser.parse_args()
     for value, key in ((args.sdk, "ANDROID_SDK_ROOT"), (args.jadx, "VSCAN_JADX"),
                        (args.java_home, "JAVA_HOME")):
         if value:
             os.environ[key] = str(value.resolve())
-    runtime = Runtime(args.storage, args.rules, args.version, args.threads)
+    runtime = Runtime(args.storage, args.rules, args.version, args.threads,
+                      audit_config=args.audit_config, audit_selftest=args.audit_selftest)
     server = create_server(runtime, args.port)
     print(f"移动审计工作台：http://127.0.0.1:{server.server_port}/app.html", flush=True)
-    print("设备默认未探测；显式授权采集仅固定自有 Gadget 夹具；AI 不联网；报告按任务生成。", flush=True)
+    print("设备默认未探测；capture 为固定夹具，audit 为显式授权上传 APK 的完整检测。", flush=True)
+    print("audit 配置" + ("已指定；授权后调用真实模型。" if args.audit_config else "未指定；完整审计不可用。"), flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

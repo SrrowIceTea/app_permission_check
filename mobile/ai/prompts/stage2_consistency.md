@@ -1,6 +1,6 @@
 # 阶段二：行为—政策一致性比对
 
-> version: 1.2
+> version: 1.4
 > 输入：阶段一输出 + 动态读取/同意时序 + 网络流 + 工具规则结论 + 类目必要范围
 > 输出：逐数据类别、逐同意链路的比对结论
 
@@ -24,8 +24,8 @@
   形如 `digit15_shape:9f2c…`）。令牌与读取事件的 `value_hash` 相同 ⇒ **值级匹配**。
   `scheme` 是代理上游协议，不能代替客户端 TLS 状态；`intercepted_tls=true` 是客户端 TLS，
   `false` 是客户端明文；缺失、null 或非布尔值为未知，不能判明文传输。
-- `tool_findings`：工具规则已有结论（含 rule_id 与结论等级）。**它们是事实，不是你的判断对象**；
-  你可以引用它们，不要推翻，也不要重复计算。
+- `tool_findings`：工具规则已有结论（含 rule_id 与结论等级）。它们是可追溯的规则输出，不是最终事实。
+  可以引用，但必须结合 collection_state、证据强度和 gaps 复核，不能把工具候选结论升级为确定结论。
 - `app_category.necessary_data`：该 App 类目的「必要个人信息」范围（可能为 null）。
 
 ## 判定口径
@@ -34,7 +34,7 @@
 
 | assessment | 条件 |
 | --- | --- |
-| `undisclosed_collection` | 观察到读取，且政策**未声明**该类别（阶段一 verdict 为 not_met/unclear 或未出现在 declared_collection），且该类别不属于该类目必要范围 |
+| `undisclosed_collection` | 观察到读取，且政策**未声明**该类别（阶段一对完整取得的政策确定为未声明；unclear 或未取得政策必须证据不足），且该类别不属于该类目必要范围 |
 | `over_collection` | 观察到读取，政策有声明，但该类目**不属于** `app_category.necessary_data`，且该类目必要范围已知 |
 | `read_before_consent` | 当前输入不支持此判定，禁止输出；政策同意时序只能标记未知 |
 | `plaintext_transmission` | 该类别出现在 `flows` 的敏感标签中，且该流明确 `intercepted_tls=false`（客户端未使用 TLS） |
@@ -42,7 +42,7 @@
 | `insufficient_evidence` | 关键输入缺失（见 `gaps`），无法判断 |
 
 一条数据类别可以同时满足多条时，**按上表从上到下取第一条命中的**，
-其余写进 `also_applicable`（例如同时是未声明且同意前读取）。
+其余写进 `also_applicable`（例如同时是未声明且存在明文传输）。
 
 ## 输出 schema（严格 JSON）
 
@@ -76,6 +76,13 @@
   "policy_only_declared": [
     {"data_type": "sms", "note": "政策声明收集短信，但本轮未观察到读取——不构成违规，仅记录差异"}
   ],
+  "storage_crypto_review": [
+    {"finding_ref": "SCF1 或 null（没有技术观察时）",
+     "assessment": "configuration_risk|provider_default_unknown|encrypted_write_observed|api_observed_no_sensitive_binding|insufficient_evidence",
+     "evidence_refs": ["SCF1", "SC1"],
+     "disk_persistence_proven": false, "plaintext_leak_proven": false,
+     "personal_data_binding": "not_established", "reason": "具体 API 边界、风险或未知及其限制"}
+  ],
   "requirement_followups": [
     {"req_id": "PP-06", "verdict_from_stage1": "unclear",
      "observed_relevant": true,
@@ -96,3 +103,17 @@
    不应写进 `per_data_type` 的违规判定。
 4. 只要 `gaps` 里存在影响本项判定的缺项，相关条目必须走 `insufficient_evidence`
    或写进 `insufficient`，不得硬判。
+5. available=true 时，`storage_crypto_review` 必须为非空列表，并逐条覆盖全部 SCF。
+   每条 finding_ref 只能是该 SCF 原 ID，evidence_refs 包含该 SCF 和它所有 SC 依据。
+   explicit_weak_configuration/repeated_iv_fingerprint 对应 configuration_risk，
+   provider_default_mode_unresolved 对应 provider_default_unknown，
+   encrypted_stream_write_relation 对应 encrypted_write_observed；证据受限也可用 insufficient_evidence。
+   无 SCF 但有 SC 时用 api_observed_no_sensitive_binding 并引用实际 SC；无 SC 时写不足。
+   这些不是个人信息收集类别，不要把它们塞进 per_data_type；不凭文件头、任意字符串或算法名造泄露。
+
+
+## 补充告知来源
+阶段一带 `policy_document_ref=SUP-...` 的条目仅为独立补充文档声明，受其功能/平台范围限定。
+引用这类 `policy_quote` 时保留相同 `policy_document_ref` 以及
+`supplementary_scope: "document_scope_only"`，逐字引用同一份文档；不当作 SDK 使用、
+实际收集或同意证据。没有可用主政策时仍不得判断整体政策一致性。

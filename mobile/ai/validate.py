@@ -30,6 +30,9 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from mobile.analyze.read_semantics import read_state
+from mobile.ai.storage_review_contract import observation_refs
+from mobile.ai.supplemental_contract import supplemental_refs
+from mobile.ai.policy_sources import quote_problems
 
 
 def _normalize(text: str) -> str:
@@ -41,6 +44,11 @@ def _normalize(text: str) -> str:
 def allowed_refs(bundle: dict) -> tuple[set[str], set[tuple[str, str]]]:
     """证据包里真实存在的引用集合。"""
     refs: set[str] = set()
+    refs.update(observation_refs(bundle))
+    refs.update(supplemental_refs(bundle))
+    refs.add("primary")
+    refs.update(d["document_id"] for d in (bundle.get("policy") or {}).get("supporting_documents", [])
+                if d.get("available") is True)
     for r in bundle.get("dynamic", {}).get("reads", []):
         refs.add(r["evidence_id"])
     for c in bundle.get("dynamic", {}).get("consent_timeline", []):
@@ -79,20 +87,20 @@ def _collect_refs(obj, path: str = "") -> list[tuple[str, str]]:
     return found
 
 
-def validate_stage1(out: dict, *, req_ids: list[str], policy_text: str) -> dict:
+def validate_stage1(out: dict, *, req_ids: list[str], policy_text: str, policy: dict | None = None) -> dict:
     problems, warnings = [], []
     if out.get("stage") != "policy_extract":
         # **自标识字段不匹配只算提示**：它不是编造，把它判成硬伤会让整阶段
         # 被标成"未通过校验"——那是另一种失真（实测模型写过 consistency_check）。
         warnings.append(f"stage 字段写成 {out.get('stage')!r}（期望 policy_extract）")
 
-    norm_policy = _normalize(policy_text)
+    policy = policy if policy is not None else {"text": policy_text}
     for i, item in enumerate(out.get("declared_collection") or []):
         q = item.get("quote")
         if not q:
             warnings.append(f"declared_collection[{i}] 无 quote：声明项应有原文片段")
-        elif _normalize(q) not in norm_policy:
-            problems.append(f"declared_collection[{i}] 的 quote 在政策正文里找不到：{q[:40]!r}")
+        else:
+            problems.extend(quote_problems(q, item, policy, f"declared_collection[{i}]"))
 
     answered = [a.get("req_id") for a in (out.get("requirement_answers") or [])]
     missing = [r for r in req_ids if r not in answered]
@@ -108,8 +116,8 @@ def validate_stage1(out: dict, *, req_ids: list[str], policy_text: str) -> dict:
             q = a.get("quote") or ""
             if not q:
                 warnings.append(f"{a.get('req_id')} 判 met 但无 quote")
-            elif _normalize(q) not in norm_policy:
-                problems.append(f"{a.get('req_id')} 的 quote 在正文里找不到：{q[:40]!r}")
+            else:
+                problems.extend(quote_problems(q, a, policy, str(a.get("req_id"))))
     return {"ok": not problems, "problems": problems, "warnings": warnings}
 
 

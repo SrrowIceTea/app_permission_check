@@ -1,3 +1,4 @@
+import {auditPanel} from './audit-view.js';
 import {state,selectedTask,navigate} from './state.js';
 import {h,icon,panel,button,badge,date,keyvalues} from './ui.js';
 import {workflowState,captureValidation} from './workflow-model.js';
@@ -44,5 +45,6 @@ export function workflowPanel(){
   ['设备',capture.serial],['采集尝试',capture.attempt_id],['上传 APK SHA256',capture.source_apk_sha256],['采集 APK SHA256',capture.capture_apk_sha256],['字节是否相同',capture.same_apk_bytes===true?'是':capture.same_apk_bytes===false?'否':'未提供'],['关系声明',capture.relation_note]])));
  sync();
  const errors=state.workflowError?h('div',{class:'notice error',role:'alert'},icon('close'),state.workflowError):null;
- return panel('检测执行','选择任务 → 授权采集 → 生成本轮报告',h('div',{},steps,h('div',{class:'workflow-grid'},device,report),errors));
+ const fixturePanel=panel('检测执行','选择任务 → 授权采集 → 生成本轮报告',h('div',{},steps,h('div',{class:'workflow-grid'},device,report),errors));
+ return h('div',{},h('div',{class:'section-gap'},auditPanel()),fixturePanel);
 }

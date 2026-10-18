@@ -18,6 +18,11 @@ from __future__ import annotations
 import re
 import unicodedata
 
+try:
+    from .policy_formats import document_html
+except ImportError:
+    from policy_formats import document_html
+
 # 整块丢弃：脚本、样式、注释、模板。政策正文不会在这些里面。
 _DROP_BLOCKS = [
     re.compile(r"<script\b[^>]*>.*?</script>", re.IGNORECASE | re.DOTALL),
@@ -89,6 +94,16 @@ def cjk_ratio(text: str) -> float:
 
 def extract(raw: bytes, *, content_type: str = "", source: str = "") -> dict:
     """字节 → {text, title, status, ...}。status 说明这次抽取到底发生了什么。"""
+    try:
+        structured = document_html(raw, content_type)
+    except (ValueError, KeyError, TypeError, UnicodeDecodeError) as exc:
+        return {"text": "", "title": None, "status": "document_format_error",
+                "path": "structured", "chars": 0, "cjk_ratio": 0.0,
+                "source": source, "error": str(exc)}
+    if structured:
+        value, format_path = structured
+        result = extract(value.encode("utf-8"), content_type="text/html", source=source)
+        return {**result, "path": format_path, "raw_bytes": len(raw)}
     text_raw = None
     decode_error = None
     for enc in ("utf-8", "utf-8-sig", "gb18030", "big5", "latin-1"):
