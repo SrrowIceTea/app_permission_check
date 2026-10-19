@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="workspace.css">
 </head>
 <body>
 
@@ -79,6 +80,7 @@
       <select class="apk-switch" id="apk-switch" style="display:none" aria-label="切换历史样本"></select>
     </div>
     <div class="topbar-right">
+      <button type="button" class="pl-btn" id="new-audit">新建审计</button>
       <span class="service-addr mono">127.0.0.1:8771</span>
       <span class="status-dot" aria-hidden="true"></span>
     </div>
@@ -235,7 +237,7 @@
     <!-- ============ 历史报告 · 扇形书架 ============ -->
     <section class="page" id="page-pdf-report" data-state="browse">
       <header class="page-head">
-        <h2>历史报告</h2>
+        <h2>报告库</h2>
         <div class="page-meta">
           <span class="shelf-count" id="shelf-count" aria-hidden="true"></span>
           <button type="button" class="shelf-back" id="shelf-back">← 返回封面</button>
@@ -271,9 +273,9 @@
 
       <select id="pdf-select" class="sr-only" aria-hidden="true" tabindex="-1">
         <option value="">选择报告...</option>
-        <option value="pdfs/mobile-device-latest.pdf">移动端设备审计（最新）</option>
-        <option value="pdfs/mobile-regression-latest.pdf">移动端回归测试（最新）</option>
-        <option value="pdfs/thirdparty-latest.pdf">第三方 APK 审计（最新）</option>
+        <option value="pdfs/mobile-device-latest.pdf">移动端设备审计 · 历史快照</option>
+        <option value="pdfs/mobile-regression-latest.pdf">移动端回归测试 · 历史快照</option>
+        <option value="pdfs/thirdparty-latest.pdf">第三方 APK 审计 · 历史快照</option>
       </select>
     </section>
 
@@ -281,6 +283,7 @@
 </main>
 
 <script src="highlight.js"></script>
+<script src="audit-results.js"></script>
 <script src="app.js"></script>
 <script src="library.js"></script>
 </body>

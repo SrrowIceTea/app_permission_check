@@ -41,29 +41,36 @@ _LOCAL_ORIGIN = re.compile(r"https?://(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)
 
 
 class Registry:
-    def __init__(self, workdir: Path):
+    def __init__(self, workdir: Path, runtime=None):
+        self.runtime = runtime
         self.workdir = workdir
         self.workdir.mkdir(parents=True, exist_ok=True)
         self._jobs: dict[str, PipelineJob] = {}
         self._lock = threading.Lock()
 
     def submit(self, apk: Path, name: str, seconds: int, category: str) -> PipelineJob:
+        if self.runtime and any(j.state in ("queued", "running") for j in self._jobs.values()):
+            raise ValueError("已有检测任务运行中，请等待当前任务完成")
         job = PipelineJob(apk, self.workdir / "job", name=name, seconds=seconds,
                           category=category)
         # 目录名用 job.id，短且无包名（规避 Windows 260 路径）。
         job.out = self.workdir / job.id
+        job.formal_runtime = self.runtime
         job.out.mkdir(parents=True, exist_ok=True)
         job.events = job.out / "events.jsonl"
         job.apk = job.out / "uploaded.apk"
         shutil.move(str(apk), str(job.apk))
         with self._lock:
             self._jobs[job.id] = job
+        from mobile.pipeline.history import remember
+        remember(job)
         threading.Thread(target=run_pipeline, args=(job,), daemon=True,
                          name=f"pipeline-{job.id}").start()
         return job
 
     def get(self, job_id: str) -> PipelineJob | None:
-        return self._jobs.get(job_id)
+        from mobile.pipeline.history import lookup
+        return lookup(self, job_id)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -114,6 +121,9 @@ class Handler(BaseHTTPRequestHandler):
         parts = urlsplit(self.path)
         path = parts.path
         try:
+            if path == "/api/pipeline":
+                from mobile.pipeline.history import catalog
+                return self._json(catalog(self.registry))
             if path == "/api/stages":
                 return self._json([{"id": sid, "label": label}
                                    for sid, label in stages.STAGES])
@@ -184,16 +194,22 @@ class Handler(BaseHTTPRequestHandler):
         if action == "events":
             return self._sse(job)
         if action == "report":
+            if self.registry.runtime and job.state != "done": return self._json({"error":"本轮未通过完整检测"},409)
             return self._file(job.out / "out" / "mobile-report.pdf", "application/pdf")
         if action == "bundle":
             return self._file(job.out / "out" / "bundle.json", "application/json; charset=utf-8")
         # static.json 带 findings 明细（MOB-*），前端静态审计结果页直接渲染；
         # static-manifest.json 只有计数，给需要汇总的调用方（_pipeline_get 不再用它）。
+        if action == "ai":
+            if job.state != "done": return self._json({"error": "本轮 AI 尚未通过"}, 409)
+            return self._file(job.out / "out" / "ai.json", "application/json; charset=utf-8")
+        static_root = getattr(job, "static_dir", job.out / "static")
         if action == "static":
-            return self._file(job.out / "static" / "static.json",
+            name = "workbench-static.json" if self.registry.runtime else "static.json"
+            return self._file(static_root / name,
                               "application/json; charset=utf-8")
         if action == "tree":
-            return self._file(job.out / "static" / "phase7-tree.json",
+            return self._file(static_root / "phase7-tree.json",
                               "application/json; charset=utf-8")
         if action == "source":
             return self._pipeline_source(job, (query or {}).get("path", [""])[0])
@@ -204,7 +220,7 @@ class Handler(BaseHTTPRequestHandler):
         """读反编译源码。**路径穿越防护**：解析后必须仍在 sources/ 目录内。"""
         if not rel:
             return self._send_error(400, "缺少 path 参数")
-        base = (job.out / "static" / "sources").resolve()
+        base = (getattr(job, "static_dir", job.out / "static") / "sources").resolve()
         target = (base / rel).resolve()
         if target != base and base not in target.parents:
             return self._send_error(403, "非法路径")
@@ -229,6 +245,7 @@ class Handler(BaseHTTPRequestHandler):
         ended = False
         try:
             while True:
+                job = self.registry.get(job.id) or job
                 events, offset = stages.read_events(job.events, offset)
                 for ev in events:
                     self.wfile.write(("data: " + json.dumps(ev, ensure_ascii=False) +
@@ -248,32 +265,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--port", type=int, default=8771)
-    ap.add_argument("--workdir", default=DEFAULT_WORKDIR)
-    ap.add_argument("--seconds", type=int, default=150,
-                    help="默认钩子会话时长（秒）；上传时可用 ?seconds= 覆盖")
-    ap.add_argument("--category", default="utility", help="默认类目 key")
-    args = ap.parse_args()
-
-    registry = Registry(Path(args.workdir))
-    Handler.registry = registry
-    # 默认参数挂到 handler，供 _upload 在未显式指定时回退
-    Handler.defaults = {"seconds": args.seconds, "category": args.category}
-
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    server.daemon_threads = True
-    print(f"一键审计流水线: http://127.0.0.1:{args.port}  （仅授权测试）")
-    print(f"  产物目录: {registry.workdir}")
-    print(f"  阶段数: {len(stages.STAGES)}；前端订阅 /api/pipeline/<id>/events")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\n停止")
-    finally:
-        server.server_close()
-    return 0
-
+    from mobile.pipeline.service import main as serve
+    return serve()
 
 if __name__ == "__main__":
     raise SystemExit(main())

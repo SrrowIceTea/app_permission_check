@@ -32,6 +32,34 @@
     es: null
   };
 
+  function loadCheckedAI(entry) {
+    if(entry && entry.fin && entry.fin.state === 'done' && !entry.bundleOutput) {
+      fetch(PIPELINE_API_BASE+'/api/pipeline/'+entry.id+'/bundle').then(function(r){if(!r.ok)throw new Error('证据未就绪');return r.json();})
+        .then(function(b){entry.bundleOutput=b;if(state.current===entry)updateCurrentPage();}).catch(function(){});
+    }
+    if (!entry || entry.aiOutput || !entry.fin || entry.fin.state !== 'done') return;
+    fetch(PIPELINE_API_BASE + '/api/pipeline/' + entry.id + '/ai').then(function(r) {
+      if (!r.ok) throw new Error('AI 尚不可用'); return r.json();
+    }).then(function(data) { entry.aiOutput = data; if(state.current === entry) updateCurrentPage(); }).catch(function(){});
+  }
+  function restoreHistory() {
+    fetch(PIPELINE_API_BASE + '/api/pipeline').then(function(r) { if(!r.ok) throw new Error('任务列表不可用');return r.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows)) return;
+        rows.forEach(function(row) {
+          if (!state.history.some(function(e){return e.id === row.id;})) state.history.push({id:row.id,name:row.name,
+            staticData:null,tree:null,fin:{state:row.state,error:row.error,result:row.result}});
+        });
+        if (!state.current && state.history.length) {
+          state.current=state.history[0];loadPipelineArtifacts(state.current.id);loadCheckedAI(state.current);
+          if (state.current.fin.state === 'queued' || state.current.fin.state === 'running') {
+            pipelineState.jobId=state.current.id;subscribePipeline(state.current.id);
+          } else showPipelineResult(state.current,state.current.fin);
+        }
+        renderCurrentApkBar();updateCurrentPage();
+      }).catch(function(){});
+  }
+
   // ---------- 工具 ----------
   function el(tag, cls, text) {
     var n = document.createElement(tag);
@@ -71,7 +99,16 @@
     initPdf();
     initApkSwitch();
     initPipeline();
+    document.getElementById('new-audit').addEventListener('click', function() {
+      if(state.history.some(function(e){return !e.fin || ['queued','running'].includes(e.fin.state);})) {
+        alert('当前检测仍在运行，请等待完成。');return;
+      }
+      state.current=null;resetPipelineResult();setPipelineJob('');
+      pipelineState.stages.forEach(function(s){pipelineState.status[s.id]={status:'pending',message:''};});
+      renderPipelineTimeline();renderCurrentApkBar();switchPage('pipeline');
+    });
     renderCurrentApkBar();
+    restoreHistory();
     if (location.hash) {
       var target = location.hash.replace('#', '');
       if (target && document.getElementById('page-' + target)) switchPage(target);
@@ -91,6 +128,7 @@
 
   function switchPage(page) {
     state.currentPage = page;
+    document.querySelector('.page-container').scrollTop = 0;
     document.querySelectorAll('.nav-item').forEach(function (item) {
       item.classList.toggle('active', item.dataset.page === page);
     });
@@ -103,6 +141,7 @@
       loadPipelineArtifacts(state.current.id);
     }
     updateCurrentPage();
+    if (page === "pdf-report" && window.VScanResults) window.VScanResults.renderLibrary(document.getElementById("page-pdf-report"),state.history,PIPELINE_API_BASE);
   }
 
   function updateCurrentPage() {
@@ -122,7 +161,7 @@
     var sel = document.getElementById('apk-switch');
     if (!state.current) {
       nameEl.textContent = '尚未拖入';
-      sel.style.display = 'none';
+      if(state.history.length){fillApkSwitch(sel);sel.style.display='';sel.selectedIndex=-1;} else sel.style.display='none';
       return;
     }
     nameEl.textContent = state.current.name;
@@ -135,12 +174,12 @@
   }
 
   function fillApkSwitch(sel) {
-    var current = state.current.id;
+    var current = state.current ? state.current.id : null;
     sel.textContent = '';
     state.history.forEach(function (a) {
       var opt = el('option');
       opt.value = a.id;
-      opt.textContent = a.name;
+      opt.textContent = a.name + " · " + ((a.fin && a.fin.result && a.fin.result.mode) || "检测中") + " · " + a.id.slice(-4);
       if (a.id === current) opt.selected = true;
       sel.appendChild(opt);
     });
@@ -152,6 +191,9 @@
       var entry = state.history.find(function (a) { return a.id === sel.value; });
       if (!entry) return;
       state.current = entry;
+      if (!entry.staticData) loadPipelineArtifacts(entry.id);
+      loadCheckedAI(entry);
+      if (entry.fin && ["done","failed","static_only"].includes(entry.fin.state)) showPipelineResult(entry,entry.fin);
       renderCurrentApkBar();
       updateCurrentPage();
     });
@@ -354,6 +396,7 @@
   // ---------- 动态审计页（流水线动态阶段 + 判据 + 报告） ----------
   function renderDynamicView() {
     var host = document.getElementById('dynamic-results');
+    if(state.current && state.current.bundleOutput && window.VScanResults) {window.VScanResults.renderDynamic(host,state.current);return;}
     clear(host);
     if (!state.current) {
       host.appendChild(emptyState(EMPTY_SVGS.clock, '在一键审计页拖入 APK 后查看动态审计结果'));
@@ -477,6 +520,7 @@
   // ---------- AI 报告页（静态综合 + 动态判据摘要） ----------
   function renderAiReport() {
     var host = document.getElementById('ai-report');
+    if (window.VScanResults && state.current) { window.VScanResults.renderAI(host, state.current); return; }
     clear(host);
     if (!state.current || !state.current.staticData) {
       host.appendChild(emptyState(EMPTY_SVGS.table, '在一键审计页拖入 APK 后查看综合审计报告'));
@@ -619,13 +663,16 @@
     fetch(PIPELINE_API_BASE + '/api/stages')
       .then(function (r) { return r.json(); })
       .then(function (list) {
-        pipelineState.stages = list || [];
+        if(!Array.isArray(list)) throw new Error("不是流水线服务");
+        var addr=document.querySelector(".service-addr");if(addr)addr.textContent="已连接 · 127.0.0.1:8771";
+        document.querySelector(".status-dot").dataset.online="true";
+        pipelineState.stages = list;
         pipelineState.stages.forEach(function (s) {
           pipelineState.status[s.id] = { status: 'pending', message: '' };
         });
         renderPipelineTimeline();
       })
-      .catch(function () { /* 后端未启动，拖入时会再报错 */ });
+      .catch(function () { var addr=document.querySelector('.service-addr');if(addr)addr.textContent='检测服务未连接';document.querySelector('.status-dot').dataset.online='false'; });
   }
 
   function uploadPipeline(file) {
@@ -701,9 +748,11 @@
     if (!entry) return;
     entry.fin = fin;
     entry.stageStatus = JSON.parse(JSON.stringify(pipelineState.status));
+    loadCheckedAI(entry);
     // 兜底：万一 static done 事件先于订阅到达，这里再拉一次
     if (!entry.staticData) loadPipelineArtifacts(id);
     showPipelineResult(entry, fin);
+    renderCurrentApkBar();
     if (state.current && state.current.id === id) updateCurrentPage();
   }
 
@@ -769,7 +818,7 @@
     var st = result.static || {};
     var dl = el('dl', 'pl-kv');
     plKv(dl, '包名', st.package || '—');
-    plKv(dl, '应用名', st.app_label || '—');
+    if (st.app_label) plKv(dl, '应用名', st.app_label);
     plKv(dl, '静态命中', (st.findings_total != null ? st.findings_total : '—') + ' 条'
       + (st.supplement_findings != null ? '（补充扫描 ' + st.supplement_findings + ' 条）' : ''));
     plKv(dl, '求值规则', st.rules_evaluated != null ? st.rules_evaluated + ' 条' : '—');
@@ -829,7 +878,9 @@
   function sync() {
     if (stage && prog && res) {
       var running = prog.style.display !== 'none' && jobEl && jobEl.textContent.trim() !== '', done = res.style.display !== 'none' && res.children.length > 0;
+      var failed = !!res.querySelector('.pl-status.failed');
       stage.dataset.state = jobEl && /^上传失败/.test(jobEl.textContent) ? 'idle' : (done ? 'done' : (running ? 'running' : 'idle'));
+      var label = stage.querySelector('.done-only'); if(label) label.textContent = failed ? 'AUDIT FAILED' : 'AUDIT COMPLETE';
       if (errEl) errEl.textContent = jobEl && /^上传失败/.test(jobEl.textContent) ? jobEl.textContent : '';
     }
     if (rail && list) {

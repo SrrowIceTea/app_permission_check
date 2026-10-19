@@ -60,24 +60,7 @@ class PipelineJob:
         self.result: dict = {}
 
 
-def _run(cmd: list[str], log: Path, timeout: int) -> int:
-    """跑一个子进程，stdout/stderr 落 log。显式 utf-8 + errors=replace（GBK 字节防御）。"""
-    child_env = dict(os.environ)
-    child_env["PYTHONUNBUFFERED"] = "1"   # 见 thirdparty_env：taskkill 会丢块缓冲
-    try:
-        proc = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True,
-                              encoding="utf-8", errors="replace", timeout=timeout,
-                              env=child_env)
-        rc, out_text, err_text = proc.returncode, proc.stdout, proc.stderr
-    except subprocess.TimeoutExpired as exc:
-        rc = 124
-        out_text = (exc.stdout or b"")
-        err_text = f"TIMEOUT after {timeout}s"
-        if isinstance(out_text, bytes):
-            out_text = out_text.decode("utf-8", "replace")
-    log.write_text(f"$ {' '.join(cmd)}\n\n{out_text}\n--- stderr ---\n{err_text}",
-                   encoding="utf-8")
-    return rc
+from mobile.pipeline.legacy_command import _run
 
 
 def _has_emulator_process() -> bool:
@@ -196,6 +179,7 @@ def ensure_device(events: Path, out: Path) -> tuple[bool, str]:
 def finalize(job: PipelineJob, state: str, error: str | None = None) -> None:
     job.state = state
     job.error = error
+    if error: job.result["error"] = error
     (job.out / "pipeline.json").write_text(json.dumps(
         {"id": job.id, "state": job.state, "error": job.error, "name": job.name,
          "apk": str(job.apk), "result": job.result},
@@ -213,6 +197,9 @@ def finalize(job: PipelineJob, state: str, error: str | None = None) -> None:
 
 def run_pipeline(job: PipelineJob) -> None:
     """在后台线程执行整条流水线。任何异常都收敛为 failed，不把线程带崩。"""
+    if getattr(job, "formal_runtime", None) is not None:
+        from mobile.pipeline.formal_runner import run
+        return run(job, job.formal_runtime, finalize)
     events, out = job.events, job.out
     try:
         stages.emit_events(events, "prepare", "running", f"样本 {job.name}")

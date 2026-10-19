@@ -27,22 +27,25 @@ def compile_session(cache, *, android_jar=None, android_api=None):
                 return "./" + path.name
         bootstrap = stage("import Java from './node_modules/frida-java-bridge/index.js'; globalThis.Java=Java;\n")
         imports = [bootstrap]
+        calls = []
         scoped_targets = None
         if android_jar:
             from mobile.lab.sdk_hook_scope import prepare
             text, _scope = prepare(Path(android_jar), str(android_api), cache)
             scoped_targets = stage(text)
-        for name in MODULES.values():
+        for index, name in enumerate(MODULES.values()):
+            hook_path = "./" + name + ".js"
             if scoped_targets and name in {"hook_privacy", "hook_consent"}:
                 source = (hooks / (name + ".js")).read_text(encoding="utf-8")
-                imports.append(stage(source.replace("'./targets.generated.js'", "'" + scoped_targets + "'")))
-            else:
-                imports.append("./" + name + ".js")
+                hook_path = stage(source.replace("'./targets.generated.js'", "'" + scoped_targets + "'"))
+            imports.append("import { main as hook%d } from %s;" % (index, json.dumps(hook_path)))
+            calls.append("hook%d();" % index)
         audit = (ROOT / "mobile/audit/storage_crypto.js").read_text(encoding="utf-8")
         audit = audit.replace("import Java from 'frida-java-bridge';",
                               "import Java from './node_modules/frida-java-bridge/index.js';")
-        imports.append(stage(audit))
-        entry_name = stage("\n".join("import '" + path + "';" for path in imports))
+        imports.append("import " + json.dumps(stage(audit)) + ";")
+        imports[0] = "import '" + bootstrap + "';"
+        entry_name = stage("\n".join(imports) + "\nJava.perform(function () {" + "".join(calls) + "});")
         body = frida.Compiler().build(str(hooks / entry_name[2:]), project_root=str(ROOT),
                                      compression="none", source_maps="omitted", bundle_format="iife")
         (cache / "core-session.js").write_text(body, encoding="utf-8")

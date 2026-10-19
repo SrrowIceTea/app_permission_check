@@ -22,6 +22,8 @@ CHECKS = [
     ("risk_score", "mobile/analyze", [PY, "-m", "unittest", "test_risk_score"]),
     ("ai_gates", "mobile/ai", [PY, "-m", "unittest", "test_ai_gates", "test_llm_transport", "test_formal_contract", "test_policy_sources", "test_storage_context", "test_validation_repair", "test_storage_observations", "test_storage_prompt_contract", "test_supplemental_observations", "test_benchmark_review", "test_benchmark_review_attach"]),
     ("policy_library", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/policy", "-p", "test_policy*.py"]),
+    ("pipeline_api", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/pipeline", "-p", "test_*.py"]),
+    ("new_frontend_models", "frontend", ["node", "test_audit_results.mjs"]),
     ("mobile_lab", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/lab", "-p", "test_*.py"]),
     ("mobile_repack", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/repack", "-p", "test_*.py"]),
     ("mobile_audit", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/audit", "-p", "test_*.py"]),
