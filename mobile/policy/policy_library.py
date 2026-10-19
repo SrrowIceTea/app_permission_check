@@ -52,8 +52,8 @@ def register_policy(store: Path, *, raw: bytes, package: str, version_code: str,
         raise ValueError("A package and version_code are required")
     if not re.fullmatch(r"[0-9a-f]{64}", apk_sha256):
         raise ValueError("A complete APK sha256 is required")
-    if document_kind != "app_policy":
-        raise ValueError("Only confirmed app policies belong in this library")
+    if document_kind not in ("app_policy", "app_agreement"):
+        raise ValueError("document_kind must be app_policy or app_agreement")
     if effective_date:
         date.fromisoformat(effective_date)
     ex = policy_extract.extract(raw, content_type=content_type, source=source)
@@ -89,16 +89,29 @@ def register_policy(store: Path, *, raw: bytes, package: str, version_code: str,
     return record
 
 
+class NotAPolicy(ValueError):
+    """记录本身合法，但不是隐私政策（例如《用户协议》）——不算库损坏。"""
+
+
 def _read_record(store: Path, meta_path: Path, *, package: str,
                  version_code: str | None, apk_sha256: str | None,
-                 allow_legacy: bool) -> dict:
+                 allow_legacy: bool, expect_kind: str = "app_policy") -> dict:
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    kind = meta.get("document_kind")
+    # 协议永不当主政策：主政策路径遇到 app_agreement 直接拒绝（legacy 模式也不例外，
+    # 否则 --allow-legacy-policy 下协议会被当成"政策"去做披露比对）。
+    # 反过来，协议路径也只认 app_agreement，legacy 的旧记录（无 kind）不得混进来。
+    if expect_kind == "app_agreement":
+        if kind != "app_agreement":
+            raise ValueError(f"not an application agreement: {kind}")
+    elif kind == "app_agreement":
+        raise NotAPolicy("application agreement, not a privacy policy")
     legacy = not meta.get("package")
     if legacy and not allow_legacy:
         raise ValueError("metadata has no package binding")
     if not legacy and meta.get("package") != package:
         raise ValueError("package mismatch")
-    if not legacy and meta.get("document_kind") != "app_policy":
+    if not legacy and kind != expect_kind:
         raise ValueError("not an application privacy policy")
     if not legacy:
         same_apk = bool(apk_sha256 and meta.get("apk_sha256") == apk_sha256)
@@ -142,7 +155,7 @@ def _load_primary_policy(store: Path | None = None, *, package: str,
     missing = {"available": False, "status": "not_found", "gaps": []}
     if not store.is_dir():
         return {**missing, "gaps": ["No local application policy library supplied or present"]}
-    errors, candidates = [], []
+    errors, skipped, candidates = [], [], []
     catalog_path = store / "catalog.json"
     try:
         if catalog_path.exists():
@@ -156,13 +169,18 @@ def _load_primary_policy(store: Path | None = None, *, package: str,
             try:
                 candidates.append(_read_record(store, path, package=package,
                     version_code=version_code, apk_sha256=apk_sha256, allow_legacy=allow_legacy))
+            except NotAPolicy as exc:
+                # 用户协议不是"库损坏"，单独记一笔，不污染 invalid 判定。
+                skipped.append(f"{path.name}: {exc}")
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 errors.append(f"{path.name}: {exc}")
     except (OSError, ValueError, KeyError, TypeError) as exc:
         errors.append(f"Invalid local policy catalog: {exc}")
     if not candidates:
-        return {**missing, "status": "invalid" if errors else "not_found", "gaps": errors or [
-            f"No matching local policy for {package} / version {version_code}"]}
+        note = [f"另有 {len(skipped)} 份非隐私政策文档（用户协议/服务协议）未计入主政策"] if skipped else []
+        return {**missing, "status": "invalid" if errors else "not_found",
+                "gaps": errors + note or
+                [f"No matching local policy for {package} / version {version_code}"]}
     # Ambiguous revisions require explicit snapshot selection, never an arbitrary last file.
     active = [c for c in candidates if c["available"]]
     if not active:
@@ -170,6 +188,44 @@ def _load_primary_policy(store: Path | None = None, *, package: str,
     if len({c["text_sha256"] for c in active}) > 1:
         return {**missing, "status": "ambiguous", "gaps": ["Multiple matching policy revisions"]}
     return active[0]
+
+
+def load_app_agreements(store: Path | None = None, *, package: str,
+                        version_code: str | None = None, apk_sha256: str | None = None,
+                        allow_legacy: bool = False) -> list[dict]:
+    """与主政策同一 APK 绑定的《用户协议》/《服务协议》，**独立引用，不替代政策**。
+
+    2026-10-19 起用户协议不再被丢弃：很多 App 把数据条款写在协议里，审计要看。
+    但披露比对、过度 consent 判定只认 `app_policy`，这里返回的文档不进入主政策路径。
+    """
+    store = Path(store or DEFAULT_STORE).resolve()
+    if not store.is_dir():
+        return []
+    paths = []
+    catalog_path = store / "catalog.json"
+    try:
+        if catalog_path.exists():
+            catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+            entries = [e for e in catalog["entries"] if e.get("package") == package]
+            paths = [_inside(store, e["meta_file"]) for e in entries]
+        else:
+            paths = sorted(store.glob("policy-*.meta.json"))
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    found = []
+    for path in paths:
+        try:
+            record = _read_record(store, path, package=package, version_code=version_code,
+                                  apk_sha256=apk_sha256, allow_legacy=allow_legacy,
+                                  expect_kind="app_agreement")
+        except (OSError, ValueError, KeyError, TypeError):
+            continue  # 非协议记录（主政策、无关包）静默跳过，交给主政策路径报
+        if not record.get("available"):
+            continue
+        found.append({**record, "document_id": "AGR-" + str(record["text_sha256"])[:16],
+                      "association_verified": bool(record.get("package")),
+                      "supplementary_scope": "independent_agreement"})
+    return found
 
 
 def load_policy(store: Path | None = None, *, package: str,
@@ -185,5 +241,11 @@ def load_policy(store: Path | None = None, *, package: str,
                                   apk_sha256=apk_sha256, allow_legacy=allow_legacy)
     documents, gaps = load_supporting_documents(store, package=package, version_code=version_code,
                                                apk_sha256=apk_sha256, primary=policy)
-    return {**policy, "supporting_documents": documents, "supplementary_scope": SUPPLEMENTARY_SCOPE,
+    agreements = load_app_agreements(store, package=package, version_code=version_code,
+                                     apk_sha256=apk_sha256, allow_legacy=allow_legacy)
+    if agreements:
+        gaps.append(f"应用协议 {len(agreements)} 份（用户协议/服务协议）：独立引用，"
+                    "不参与隐私政策披露比对与过度收集判定")
+    return {**policy, "supporting_documents": documents, "app_agreements": agreements,
+            "supplementary_scope": SUPPLEMENTARY_SCOPE,
             "gaps": list(dict.fromkeys([*(policy.get("gaps") or []), *gaps]))}

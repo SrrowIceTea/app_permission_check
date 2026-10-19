@@ -952,6 +952,48 @@ h2c 明文 + 跨 TCP 段的 gzip DATA——正是因为两个方向用同一个 
 - 因此本轮只证明到"定位准确 + 补丁生效"，**没有** Flutter 明文样本。
 - 加固/改名 `libflutter.so` 时扫不到（会记 `FLUTTER_SCAN_MISS`，带模块列表）。
 
+## M040 《用户协议》收进资料库：可引用、独立 scope、绝不替代隐私政策（2026-10-19）
+
+**背景**：合并 ch 时按对方契约把「用户协议」从嗅探词里剔除了（`AGREEMENT_WORDS` 为空），
+结果「数据条款只写在用户协议里」的样本什么都拿不到。用户明确要求收「用户协议」，
+但**不能**让它冒充隐私政策，否则披露比对会被服务协议稀释成"好像提到了"。
+
+**做法：两段式归类，而不是加回词表**：
+
+1. **发现**（`policy_discover.classify()`）：隐私词优先 → `privacy`；否则协议词 →
+   `agreement`；都没有 → 丢弃。一份文档同时写"隐私政策"和"用户协议"时算 **privacy**
+   （合并版文档本来就是政策）。`find_in_apk` 两类都返回，带 `doc_kind`，
+   排序固定 privacy 在前（`score` 加权 20），`extract_from_apk` 再按
+   `(doc_kind, -chars)` 排一次——**协议再长也抢不到主政策前面**。
+2. **落盘/入库**：`policy_fetch.save()` 的 meta 增加 `document_kind`
+   （`app_policy` / `app_agreement`）；`--from-apk` 只有协议时报 `agreement_only`
+   （退出码仍 0：文本可用，但状态不许写成 ok）。
+3. **取用**：`policy_library` 新增 `load_app_agreements()`，记录带
+   `document_id=AGR-<text_sha256[:16]>`、`supplementary_scope=independent_agreement`；
+   `load_policy()` 把它挂到 `app_agreements`，并写一条 gap 说明"不参与披露比对"。
+4. **AI/引用**：`stage1_user.md` 增加 `policy.app_agreements` 段；`policy_sources.policy_source()`
+   能在 `supporting_documents` 和 `app_agreements` 两处解析 `document_id`；
+   `quote_problems` 的 scope 校验改成**按文档自带的 scope**要求（补充告知 =
+   `document_scope_only`，协议 = `independent_agreement`），旧文档没声明时仍退回
+   `document_scope_only`，不放宽既有约束。
+
+**关键防线（三条都不能松）**：
+
+- `_read_record(expect_kind="app_policy")` 遇到 `app_agreement` 抛 `NotAPolicy`——
+  **`--allow-legacy-policy` 下也一样**，否则 legacy 模式会把协议当政策。
+- 只有协议时主政策状态是 `not_found`（不是 `invalid`）：`NotAPolicy` 单独收集成 gap，
+  不污染"库损坏"判定。
+- 主政策 `available=False` 时，协议引文**不能**把条款判成 `met`（复用原有
+  "缺少可用主政策不能仅凭附录判 met" 的规则，协议同样适用）。
+
+**代价/已知限制**：`policy_fetch --from-apk` 的 store 没有 package/version 绑定，
+入库后 `association_verified=False`（legacy 语义）；要严格绑定仍需走
+`prepare_local_policies.py`，其 sources 配置新增可选 `document_kind` 字段。
+
+**测试**：`mobile/policy` 46 项（新增协议入库/只有协议/不触发 ambiguous 三条）、
+`mobile/ai/test_policy_sources.py` 10 项（新增协议可引用、scope 不匹配拒绝、
+协议不能单独判 met 三条）。
+
 ## 待办（已想清楚要做什么，尚未做）
 
 - ~~**P0 · 修`hook_privacy` 打死应用**（M030 的结论）~~ **→ 已修（2026-10-16，见 M031

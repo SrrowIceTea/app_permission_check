@@ -77,6 +77,40 @@ class LocalPolicyTest(unittest.TestCase):
                 apk_sha256="a" * 64, source="https://example.test/law", source_kind="official_url",
                 document_kind="regulation")
 
+    def _register_agreement(self, store: Path, raw: bytes) -> dict:
+        return register_policy(store, raw=raw, package="example.app", version_code="5",
+            apk_sha256="a" * 64, source="https://example.test/agreement",
+            source_kind="apk_asset", applicability="apk_asset",
+            document_kind="app_agreement")
+
+    def test_agreement_is_readable_but_never_replaces_primary_policy(self):
+        """用户协议入库可读，但主政策仍是 policy 正文——两者不能互相顶替。"""
+        agreement = ("用户协议：本协议说明服务条款、账号规则与责任限制。" * 30).encode()
+        self._register_agreement(self.store, agreement)
+        out = self.load(apk_sha256="a" * 64)
+        self.assertTrue(out["available"])
+        self.assertEqual(out["text"], self.raw.decode().strip(), "主政策不得被协议替换")
+        self.assertEqual(len(out["app_agreements"]), 1)
+        self.assertEqual(out["app_agreements"][0]["document_kind"], "app_agreement")
+        self.assertTrue(any("应用协议 1 份" in g for g in out["gaps"]),
+                        "协议的存在必须写进 gaps，避免被当成政策语料")
+
+    def test_agreement_alone_is_not_a_policy(self):
+        """只有协议时主政策 must be unavailable，但协议本身要取得到。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            self._register_agreement(store, ("用户协议：本协议说明服务条款。" * 40).encode())
+            out = load_policy(store, package="example.app", version_code="5",
+                              apk_sha256="a" * 64)
+            self.assertFalse(out["available"])
+            self.assertEqual(out["status"], "not_found", "协议不能被报成 invalid，那会掩盖真实的 not_found")
+            self.assertEqual(len(out["app_agreements"]), 1)
+
+    def test_agreement_does_not_cause_ambiguous_policy(self):
+        """协议与政策同包时，主政策路径不能因"两份不同正文"报 ambiguous。"""
+        self._register_agreement(self.store, ("用户协议：服务条款。" * 40).encode())
+        self.assertEqual(self.load(apk_sha256="a" * 64)["status"], "ok")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

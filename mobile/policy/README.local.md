@@ -70,6 +70,25 @@ policy = load_policy(package=package, version_code=version_code, apk_sha256=apk_
 具体映射与缺口见本地库 `catalog.json`、`coverage.json` 及每份 `policy-local.meta.json`。
 不存在本地完整政策时，关联和 AI 必须标记缺证据，不能将空文本解释成“政策未声明”。
 
+## 应用协议（用户协议/服务协议）的接入状态
+
+2026-10-19 起《用户协议》《服务协议》不再被丢弃——很多 App 把数据条款写在协议里，
+审计需要它；但它**不替代隐私政策**（见 `DECISIONS.md` M040）。
+
+- **发现**：`policy_discover.classify()` 按正文归类，隐私词优先，其次协议词。
+  `find_in_apk()` 返回的每条都带 `doc_kind`（`privacy` / `agreement`），主政策固定排前。
+- **落盘**：`policy_fetch --from-apk` 的 meta 带 `document_kind`；
+  APK 里只有协议时状态是 `agreement_only`，**不许写成 `ok`**。
+- **库**：`load_policy()` 把协议挂在 `policy.app_agreements`，每份带
+  `document_id: "AGR-…"`、`supplementary_scope: "independent_agreement"`，
+  并在 `gaps` 里注明"不参与披露比对与过度收集判定"。主政策 `text`/`available` 不受影响；
+  只有协议时主政策仍是 `not_found`，不是 `invalid`。
+- **AI**：阶段一可引用协议正文，`policy_document_ref` 写 `AGR-…`、
+  `supplementary_scope` 写 `independent_agreement`；主政策不可用时**不得**仅凭协议判 `met`。
+- **限制**：`policy_fetch` 的 store 没有包名/版本绑定，入库后 `association_verified=false`；
+  需要严格绑定时走 `prepare_local_policies.py`，sources 配置里的 `document_kind`
+  可选 `app_agreement`。
+
 ## 正式关联入口
 
 `correlate_mobile.py` 支持 `--version-code`、`--apk-sha256` 和可选 `--policy-store`，

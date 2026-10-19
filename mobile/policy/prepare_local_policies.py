@@ -30,11 +30,24 @@ def main() -> int:
         result = {"sample_id": row["sample_id"], "package": row["package"],
                   "version_code": row["version_code"], "source": source["source"]}
         try:
+            want_agreement = source.get("document_kind", "app_policy") == "app_agreement"
             cached = load_policy(args.store, package=row["package"],
                 version_code=str(row["version_code"]), apk_sha256=row["sha256"])
-            if cached["available"] or cached["status"] == "not_effective":
-                result.update(status=cached["status"], cache_hit=True, text_chars=cached["chars"],
-                    text_sha256=cached["text_sha256"], gaps=cached["gaps"])
+            # 协议的"已存在"要看 app_agreements：主政策可用不代表这份协议已经收过。
+            if want_agreement:
+                already = any(a.get("source") == source["source"]
+                              for a in cached.get("app_agreements") or [])
+            else:
+                already = cached["available"] or cached["status"] == "not_effective"
+            if already:
+                result.update(status="ok" if want_agreement else cached["status"],
+                    cache_hit=True,
+                    text_chars=(cached.get("chars") if not want_agreement
+                                else len(cached["app_agreements"][0]["text"])),
+                    text_sha256=(cached.get("text_sha256") if not want_agreement else
+                                 next(a["text_sha256"] for a in cached["app_agreements"]
+                                      if a.get("source") == source["source"])),
+                    gaps=cached["gaps"])
                 results.append(result)
                 print(json.dumps(result, ensure_ascii=False), flush=True)
                 continue
@@ -54,11 +67,19 @@ def main() -> int:
                 content_type=source.get("content_type", "text/plain"),
                 source_version=source.get("source_version"),
                 applicability=source.get("applicability", "current_official_snapshot"),
+                # app_agreement：用户协议/服务协议，独立引用，不替代主政策（默认 app_policy）
+                document_kind=source.get("document_kind", "app_policy"),
                 notes=source.get("notes"), effective_date=source.get("effective_date"),
                 retrieval_url=source.get("retrieval_url"))
             loaded = load_policy(args.store, package=row["package"],
                 version_code=str(row["version_code"]), apk_sha256=row["sha256"])
-            result.update(status=loaded["status"], text_chars=meta["text_chars"],
+            status = loaded["status"]
+            if want_agreement:
+                # 协议登记成功与否只看 app_agreements，不能拿主政策状态冒充。
+                status = ("ok" if any(a.get("text_sha256") == meta["text_sha256"]
+                                      for a in loaded.get("app_agreements") or [])
+                          else "agreement_not_registered")
+            result.update(status=status, text_chars=meta["text_chars"],
                           text_sha256=meta["text_sha256"], gaps=loaded["gaps"])
         except (OSError, ValueError, KeyError, zipfile.BadZipFile) as exc:
             result.update(status="failed", error=str(exc))

@@ -168,10 +168,9 @@ def extract_from_apk(apk: Path, *, limit: int = 5) -> list[dict]:
     2026-10-19 起改用 `policy_discover`：不再靠扩展名（`res/raw/privacy` 没有扩展名），
     改为目录白名单 + 内容嗅探；否则 4/60 个内嵌政策的样本会被误报 not_found。
 
-    只认**隐私政策正文**，不认 JSON 设置/词库/服务协议（`用户协议`、`terms` 单独出现不算），
-    JSON 形式的隐私弹窗摘要也不算完整政策。关键词命中只是"候选"，登记前仍需溯源复核。
-    上述排除规则由 `policy_discover.POLICY_WORDS` 与 `_SKIP` 落地（本文件里的
-    `APK_CANDIDATE_RE` / `APK_POLICY_WORDS` 是旧扩展名路径的遗留常量，当前不再参与筛选）。
+    返回的每条都带 `doc_kind`：`"privacy"`（主政策）或 `"agreement"`（用户协议/服务协议）。
+    两类都收，但顺序固定为**主政策在前**；只有 `doc_kind == "privacy"` 的条目才能当隐私政策用。
+    JSON 设置、词库、许可证仍一律排除（由 `policy_discover` 的 `_SKIP` 与内容嗅探落地）。
     """
     if not apk.exists():
         return []
@@ -182,10 +181,10 @@ def extract_from_apk(apk: Path, *, limit: int = 5) -> list[dict]:
         if ex["chars"] < policy_extract.MIN_USEFUL_CHARS:
             continue
         found.append({**item, "extract": ex})
-        if len(found) >= limit:
-            break
-    found.sort(key=lambda x: -x["extract"]["chars"])
-    return found
+    # 先按 doc_kind（privacy=0 < agreement=1），再按正文长度：协议再长也不能抢到主政策前面。
+    found.sort(key=lambda x: (0 if x.get("doc_kind") == "privacy" else 1,
+                              -x["extract"]["chars"]))
+    return found[:limit]
 
 
 def save(store_dir: Path, *, raw: bytes, extract: dict, meta: dict, tag: str) -> dict:
@@ -264,6 +263,7 @@ def main() -> int:
             urls = policy_discover.mine_policy_urls(apk_path, args.aapt2)
             result["candidates"] = urls
             result["tried"] = {"apk_assets": "no_match", "resource_urls": len(urls)}
+            privacy_ref = False
             for ui, u in enumerate(urls[:2], 1):
                 got = fetch_url(u)
                 if not got["ok"]:
@@ -272,6 +272,8 @@ def main() -> int:
                 ex = policy_extract.extract(got["bytes"],
                                             content_type=got["content_type"],
                                             source=got["final_url"])
+                # 资源表里的链接可能是《用户协议》——同样归类，不直接当政策。
+                kind = policy_discover.classify(ex.get("text") or "") or "privacy"
                 rec = save(store_dir, raw=got["bytes"], extract=ex,
                            tag=f"{args.tag or 'apk'}-ref{ui}",
                            meta={"source_kind": "apk_referenced_url",
@@ -279,25 +281,45 @@ def main() -> int:
                                  "referenced_from": str(apk_path),
                                  "http_status": got["status"],
                                  "content_type": got["content_type"],
-                                 "truncated": got["truncated"]})
+                                 "truncated": got["truncated"],
+                                 "document_kind": ("app_policy" if kind == "privacy"
+                                                   else "app_agreement")})
                 result["records"].append(rec)
-                if ex["status"] == "ok":
+                if ex["status"] == "ok" and kind == "privacy":
+                    privacy_ref = True
                     break
             if not result["records"]:
                 result["status"] = "not_found"
                 result["errors"].append(
                     "APK 内未找到政策正文，资源表里也没有可抓取的政策链接"
                     "（这不等于该应用没有政策；政策可能只在启动页动态下发）")
+            elif not privacy_ref:
+                result["status"] = "agreement_only"
+                result["errors"].append(
+                    "资源表里只抓到用户协议/服务协议，没有隐私政策："
+                    "协议不能替代隐私政策（已入库为 document_kind=app_agreement）")
         if found:
-            result.setdefault("tried", {})["apk_assets"] = f"{len(found)} 条"
+            kinds = [i.get("doc_kind") or "privacy" for i in found]
+            result.setdefault("tried", {})["apk_assets"] = (
+                f"{len(found)} 条（privacy {kinds.count('privacy')} / "
+                f"agreement {kinds.count('agreement')}）")
         for i, item in enumerate(found, 1):
+            kind = item.get("doc_kind") or "privacy"
             rec = save(store_dir, raw=item["bytes"], extract=item["extract"],
                        tag=args.tag or f"apk{i}",
                        meta={"source_kind": "apk_asset", "source": args.from_apk,
-                             "apk_entry": item["entry"], "url": None})
+                             "apk_entry": item["entry"], "url": None,
+                             "document_kind": ("app_policy" if kind == "privacy"
+                                               else "app_agreement")})
             result["records"].append(rec)
-        if found:
+        if any((i.get("doc_kind") or "privacy") == "privacy" for i in found):
             result["status"] = "ok"
+        elif found:
+            # 只有协议：如实报 agreement_only，不冒充"已有隐私政策"。
+            result["status"] = "agreement_only"
+            result["errors"].append(
+                "APK 内只有用户协议/服务协议，没有隐私政策正文：协议不能替代隐私政策，"
+                "披露比对与过度收集判定仍不可用（协议已入库，document_kind=app_agreement）")
 
     else:
         first = fetch_url(args.url)

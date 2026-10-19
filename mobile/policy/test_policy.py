@@ -151,17 +151,46 @@ class FetchFromFileTest(unittest.TestCase):
 
 
 class FetchFromApkTest(unittest.TestCase):
-    def test_json_settings_dictionary_and_service_agreement_are_not_policy(self):
+    def _apk(self, tmp: Path, entries: dict[str, bytes | str]) -> Path:
+        apk = tmp / "sample.apk"
+        with zipfile.ZipFile(apk, "w") as zf:
+            for name, body in entries.items():
+                zf.writestr(name, body)
+        return apk
+
+    def test_json_settings_and_dictionary_are_not_policy_but_agreement_is_kept(self):
+        """JSON 设置/词库仍排除；《用户协议》收下但归为 agreement，不冒充隐私政策。
+
+        2026-10-19 调整：原断言要求协议一律丢掉，导致「数据条款写在用户协议里」的样本
+        拿不到任何材料。现在两类都收，靠 doc_kind 区分，主政策固定排第一。
+        """
         import policy_fetch
         with tempfile.TemporaryDirectory() as tmp:
-            apk = Path(tmp) / "sample.apk"
-            with zipfile.ZipFile(apk, "w") as zf:
-                zf.writestr("assets/words-zh.json", json.dumps({"privacy": "隐私政策" * 200}))
-                zf.writestr("assets/setting.json", json.dumps({"privacy": "隐私政策" * 200}))
-                zf.writestr("assets/protocol.txt", "用户协议及使用说明。" * 100)
-                zf.writestr("assets/privacy.html", FIXTURE.read_bytes())
+            apk = self._apk(Path(tmp), {
+                "assets/words-zh.json": json.dumps({"privacy": "隐私政策" * 200}),
+                "assets/setting.json": json.dumps({"privacy": "隐私政策" * 200}),
+                "assets/protocol.txt": "用户协议及使用说明。" * 100,
+                "assets/privacy.html": FIXTURE.read_bytes(),
+            })
             found = policy_fetch.extract_from_apk(apk)
-            self.assertEqual([i["entry"] for i in found], ["assets/privacy.html"])
+            self.assertEqual([i["entry"] for i in found],
+                             ["assets/privacy.html", "assets/protocol.txt"],
+                             "JSON 设置/词库不得入选；协议与主政策都要收")
+            self.assertEqual(found[0]["doc_kind"], "privacy")
+            self.assertEqual(found[1]["doc_kind"], "agreement")
+
+    def test_agreement_only_apk_reports_agreement_only_not_ok(self):
+        """只有协议时状态必须是 agreement_only，不能报成「已有隐私政策」。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            apk = self._apk(Path(tmp), {"assets/protocol.txt": "用户协议及使用说明。" * 100})
+            proc = subprocess.run(
+                [sys.executable, str(HERE / "policy_fetch.py"),
+                 "--from-apk", str(apk), "--store", str(Path(tmp) / "store")],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            result = json.loads(proc.stdout)
+            self.assertEqual(result["status"], "agreement_only")
+            self.assertEqual(result["records"][0]["document_kind"], "app_agreement")
 
     def test_missing_apk_reports_not_found_not_crash(self):
         with tempfile.TemporaryDirectory() as tmp:

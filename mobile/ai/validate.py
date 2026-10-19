@@ -49,6 +49,9 @@ def allowed_refs(bundle: dict) -> tuple[set[str], set[tuple[str, str]]]:
     refs.add("primary")
     refs.update(d["document_id"] for d in (bundle.get("policy") or {}).get("supporting_documents", [])
                 if d.get("available") is True)
+    # 《用户协议》/《服务协议》可被引用，但只作为独立文档，不能顶替主政策（见 stage1 提示词）。
+    refs.update(d["document_id"] for d in (bundle.get("policy") or {}).get("app_agreements") or []
+                if d.get("available") is True)
     for r in bundle.get("dynamic", {}).get("reads", []):
         refs.add(r["evidence_id"])
     for c in bundle.get("dynamic", {}).get("consent_timeline", []):

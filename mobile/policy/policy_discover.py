@@ -32,14 +32,22 @@ from pathlib import Path
 
 MAX_BYTES = 4 * 1024 * 1024
 
-# 内容嗅探词：中英为主，兼顾德/法/西（F-Droid 样本大量是欧洲应用）。
-# 不含「用户协议」：服务协议/使用条款不等于隐私政策（ch 分支 test_policy 的契约就是
-# `test_json_settings_dictionary_and_service_agreement_are_not_policy`）。
-# 一份文档既写"用户协议"又写"隐私政策"时，仍会被下面的隐私词命中，不受影响。
+# 隐私政策词：命中即归为**主政策**（primary）候选。
+# 中英为主，兼顾德/法/西（F-Droid 样本大量是欧洲应用）。
 POLICY_WORDS = (
     "隐私政策", "隐私保护", "隐私保护指引", "个人信息保护", "个人信息保护政策",
     "privacy policy", "privacy notice", "data protection",
     "datenschutz", "politique de confidentialité", "política de privacidad",
+)
+
+# 协议/条款词：命中即归为**应用协议**（app_agreement）候选。
+# 2026-10-19 起不再丢弃——很多 App 把数据条款写在《用户协议》里，审计需要它，
+# 但它**不能替代隐私政策**：披露比对、过度收集判定仍只认主政策。
+# 归类规则见 `classify()`：同时含隐私词时算主政策（合并版文档就是政策）。
+AGREEMENT_WORDS = (
+    "用户协议", "服务协议", "使用协议", "用户服务协议", "软件许可及服务协议",
+    "个人信息授权协议", "terms of service", "terms of use", "user agreement",
+    "end user license agreement", "eula",
 )
 
 # URL 关键词：命中任一即视为"像政策页面"。
@@ -53,9 +61,21 @@ _SKIP = re.compile(r"(^|/)(LICENSE|NOTICE|COPYING|COPYRIGHT|AUTHORS?)(\.|$)|"
                    r"^META-INF/|\.(so|dex|png|jpe?g|webp|ttf|otf|zip|gz|mp3|mp4)$", re.I)
 
 
-def _looks_like_policy(head: str) -> bool:
+def classify(head: str) -> str | None:
+    """按正文判断文档类型：`"privacy"` / `"agreement"` / `None`。
+
+    隐私词优先：一份文档既写"隐私政策"又写"用户协议"时按主政策处理（合并版文档）。
+    """
     low = head.lower()
-    return any(w.lower() in low for w in POLICY_WORDS)
+    if any(w.lower() in low for w in POLICY_WORDS):
+        return "privacy"
+    if any(w.lower() in low for w in AGREEMENT_WORDS):
+        return "agreement"
+    return None
+
+
+def _looks_like_policy(head: str) -> bool:
+    return classify(head) is not None
 
 
 def iter_text_entries(apk: Path):
@@ -82,23 +102,31 @@ def iter_text_entries(apk: Path):
             yield name, raw
 
 
-def find_in_apk(apk: Path) -> list[dict]:
-    """内嵌政策正文候选，按文件名相关度排序（privacy/policy 优先）。"""
+def find_in_apk(apk: Path, *, include_agreements: bool = True) -> list[dict]:
+    """内嵌文档候选，按「隐私政策优先、正文更长优先」排序。
+
+    每条带 `doc_kind`：`"privacy"`（主政策）或 `"agreement"`（用户协议/服务协议）。
+    调用方必须按 `doc_kind` 分开处理——协议能入库，但不能当主政策用。
+    """
     out = []
     for name, raw in iter_text_entries(apk):
         head = raw[:4000].decode("utf-8", errors="ignore")
         # 扩展名不可信：先按内容嗅探，再要求不是二进制
         if not head.strip() or "\x00" in head[:200]:
             continue
-        if not _looks_like_policy(head):
+        kind = classify(head)
+        if kind is None or (kind == "agreement" and not include_agreements):
             continue
-        score = 0
+        # 主政策永远排在协议前面：后续消费方按顺序取第一条当时不能因此拿错。
+        score = 20 if kind == "privacy" else 0
         if re.search(r"privacy|policy|隐私|datenschutz", name, re.I):
             score += 10
+        if re.search(r"agreement|terms|protocol|eula|协议", name, re.I) and kind == "agreement":
+            score += 5
         if name.lower().startswith("assets/"):
             score += 2
         out.append({"entry": name, "bytes": raw, "score": score,
-                    "source_kind": "apk_asset"})
+                    "doc_kind": kind, "source_kind": "apk_asset"})
     out.sort(key=lambda x: (-x["score"], -len(x["bytes"])))
     return out
 

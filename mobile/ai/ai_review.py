@@ -87,9 +87,12 @@ def fence_untrusted(text: str, kind: str) -> str:
 
 def policy_context(bundle: dict) -> str:
     policy = bundle.get("policy") or {}
-    return dump({key: policy.get(key) for key in
-                 ("available", "status", "package", "version_code", "apk_sha256",
-                  "text_sha256", "applicability", "association_verified", "gaps")})
+    context = {key: policy.get(key) for key in
+               ("available", "status", "package", "version_code", "apk_sha256",
+                "text_sha256", "applicability", "association_verified", "gaps")}
+    # 协议数量单独给出：模型需要知道"另有几份协议"，但不能把它当政策可用性。
+    context["app_agreements"] = len(policy.get("app_agreements") or [])
+    return dump(context)
 
 
 def build_stage1_user(bundle: dict) -> str:
@@ -101,6 +104,8 @@ def build_stage1_user(bundle: dict) -> str:
         "POLICY_CONTEXT": policy_context(bundle),
         "SUPPORTING_DOCUMENTS": fence_untrusted(dump(policy.get("supporting_documents") or []),
                                                 "policy.supporting_documents"),
+        "APP_AGREEMENTS": fence_untrusted(dump(policy.get("app_agreements") or []),
+                                          "policy.app_agreements"),
         "POLICY_TEXT": (fence_untrusted(policy.get("text"), "policy.text")
                         if policy.get("text") else "（未取得政策正文）"),
         "DISCLOSURE_SCAN": dump(policy.get("disclosure_scan") or {}),

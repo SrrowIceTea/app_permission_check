@@ -15,10 +15,15 @@ def _norm(text):
 
 
 def policy_source(policy: dict, reference="primary") -> dict | None:
+    """按 document_id 找到正文来源：主政策 / 补充告知 / 应用协议（AGR-…）。"""
     if reference in (None, "primary"):
         return policy
-    return next((d for d in policy.get("supporting_documents") or []
-                 if d.get("document_id") == reference and d.get("available") is True), None)
+    for key in ("supporting_documents", "app_agreements"):
+        hit = next((d for d in policy.get(key) or []
+                    if d.get("document_id") == reference and d.get("available") is True), None)
+        if hit is not None:
+            return hit
+    return None
 
 
 def _source_context(quote, text) -> str:
@@ -53,8 +58,11 @@ def quote_problems(quote, item: dict, policy: dict, path: str, reference=None) -
         problems.append(f"{path} 的 quote 在所引政策正文里找不到: {reference}"
                         + _source_context(quote, source.get("text")))
     if reference != "primary":
-        if item.get("supplementary_scope") != "document_scope_only":
-            problems.append(f"{path} 附录引文必须注明 supplementary_scope=document_scope_only")
+        # 文档自带 scope 时按它校验：补充告知=document_scope_only，应用协议=independent_agreement；
+        # 没声明就退回旧默认，避免放宽既有约束。
+        expected_scope = source.get("supplementary_scope") or "document_scope_only"
+        if item.get("supplementary_scope") != expected_scope:
+            problems.append(f"{path} 附录引文必须注明 supplementary_scope={expected_scope}")
         if policy.get("available") is not True and item.get("verdict") == "met":
             problems.append(f"{path} 缺少可用主政策，不能仅凭附录判定整体条款 met")
     return problems

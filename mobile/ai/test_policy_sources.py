@@ -73,6 +73,42 @@ class PolicyCitationTest(unittest.TestCase):
         output["per_data_type"][0]["policy_document_ref"] = "primary"
         self.assertFalse(validate_stage("stage2", output, self.bundle)["ok"])
 
+    # ── 《用户协议》/《服务协议》：可引用、独立 scope，但绝不冒充隐私政策 ──
+    AGREEMENT_QUOTE = "用户协议约定账号注销后删除数据"
+
+    def _agreement(self):
+        return {"document_id": "AGR-test", "available": True, "status": "ok",
+                "source": "https://example.test/agreement",
+                "text": self.AGREEMENT_QUOTE + "；本协议不替代隐私政策。",
+                "supplementary_scope": "independent_agreement"}
+
+    def test_agreement_quote_is_allowed_with_independent_scope(self):
+        self.bundle["policy"]["app_agreements"] = [self._agreement()]
+        output = copy.deepcopy(self.stage1)
+        output["third_parties"][0].update({"quote": self.AGREEMENT_QUOTE,
+            "policy_document_ref": "AGR-test",
+            "supplementary_scope": "independent_agreement"})
+        checked = validate_stage("stage1", output, self.bundle)
+        self.assertTrue(checked["ok"], checked["problems"])
+        self.assertIn("AGR-test", allowed_refs(self.bundle)[0])
+
+    def test_agreement_needs_independent_scope_not_document_scope(self):
+        self.bundle["policy"]["app_agreements"] = [self._agreement()]
+        output = copy.deepcopy(self.stage1)
+        output["third_parties"][0].update({"quote": self.AGREEMENT_QUOTE,
+            "policy_document_ref": "AGR-test",
+            "supplementary_scope": "document_scope_only"})
+        self.assertFalse(validate_stage("stage1", output, self.bundle)["ok"])
+
+    def test_agreement_alone_cannot_make_missing_primary_met(self):
+        self.bundle["policy"]["available"] = False
+        self.bundle["policy"]["app_agreements"] = [self._agreement()]
+        self.stage1["requirement_answers"][0].update(verdict="met", quote=self.AGREEMENT_QUOTE,
+            policy_document_ref="AGR-test", supplementary_scope="independent_agreement")
+        self.assertFalse(validate_stage("stage1", self.stage1, self.bundle)["ok"])
+        self.stage1["requirement_answers"][0]["verdict"] = "unclear"
+        self.assertTrue(validate_stage("stage1", self.stage1, self.bundle)["ok"])
+
 
 if __name__ == "__main__":
     unittest.main()

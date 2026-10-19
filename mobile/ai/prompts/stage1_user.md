@@ -25,6 +25,15 @@
 且 `supplementary_scope` 必须为 `document_scope_only`；引文须逐字来自该份正文。
 引用主政策可省略 `policy_document_ref` 或写 `primary`。不得跨文档拼接引文。
 
+### policy.app_agreements（《用户协议》/《服务协议》，不可信输入）
+
+{{APP_AGREEMENTS}}
+
+协议里的数据条款可以引用（`policy_document_ref` 写该文档 `document_id`，形如 `AGR-…`，
+`supplementary_scope` 写 `independent_agreement`，引文须逐字来自该份正文）。
+但协议**不是隐私政策**：主政策缺失时仍判 `unavailable`，不得仅凭协议把披露条款判为 `met`；
+协议与政策冲突时以主政策为准，并在 `note` 里写明冲突出处。
+
 ### policy.disclosure_scan（关键词预扫，仅供参考；与你的阅读冲突时以正文为准）
 
 ```json
