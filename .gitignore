@@ -1,3 +1,12 @@
+# ── 第三方 skills / MCP 仓库副本（绝不提交）────────────────────
+# 25 个上游仓库共 1.5 GB / 34,262 文件，其中 21 个自带嵌套 .git，
+# 入库会被 git 当成嵌入仓库并拖垮克隆。别人按地址自行拉取即可：
+#   索引 = skills/SKILLS.md（唯一分发的 skills 文件）+ skills/README.md（选型说明）
+# 必须写 `skills/*` 而不是 `skills/`：父目录一旦整体排除，就无法再反排除文件。
+skills/*
+!skills/SKILLS.md
+!skills/README.md
+
 # ── 密钥（绝不提交）─────────────────────────────────────────────
 # mobile/ai/config.local.json 含真实 LLM API key；文件自身的 _说明 也要求不提交。
 config.local.json
@@ -71,6 +80,50 @@ desktop.ini
 dist/*.bundle.js
 **/dist/*.bundle.js
 
-# ── Agent 工作日志（仅留本机，不进公开仓库）─────────────────────
+# ── Agent 工作日志 / 本地会话状态（仅留本机）────────────────────
 # 2026-10-13 起不再跟踪：日志含主机路径与会话内部记录，已从 Gitee 移除。
 .workbuddy/memory/
+.workbuddy/sessions/
+.workbuddy/cache/
+.workbuddy/tmp/
+.workbuddy/logs/
+.workbuddy/plans/
+# 注意：.workbuddy/skills/ 是**项目级技能**（团队共享），必须保持可提交，勿排除。
+# 同理 skills/* 的排除规则也不会命中这里（`skills/*` 只匹配根目录的 skills/）。
+
+# ── 环境变量与本地配置（含密钥，绝不提交）───────────────────────
+.env
+.env.*
+!.env.example
+# config.local.json 已在文件开头单独排除
+
+# ── 抓包与数据库临时文件（可再生成 / 运行时产生）────────────────
+# 规则库 .db 本体是**事实证据**（如 mobile/rules/rules_mobile.db）必须提交，
+# 故这里只排除 SQLite 运行时副产物与抓包原始文件，不用 blanket *.db。
+*.pcap
+*.pcapng
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+
+# ── 测试 / 类型检查缓存 ─────────────────────────────────────────
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+
+# ── 编辑器临时与补丁残留 ────────────────────────────────────────
+*.orig
+*.rej
+*.swp
+*.swo
+*~
+
+# ── 采集器运行时事件库（flows.sqlite 每次跑批都变，不是证据）────────
+core/collector/logs/
