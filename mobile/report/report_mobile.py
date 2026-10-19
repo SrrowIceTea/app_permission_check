@@ -32,11 +32,12 @@ sys.path.insert(0, str(HERE))
 
 from reportlab.lib.pagesizes import A4  # noqa: E402
 from reportlab.lib.units import mm  # noqa: E402
-from reportlab.platypus import SimpleDocTemplate, Spacer  # noqa: E402
+from reportlab.platypus import PageBreak, SimpleDocTemplate, Spacer  # noqa: E402
 
 import report_ai_sections as ai_sec  # noqa: E402
 import report_common as rc  # noqa: E402
 from report_common import Paragraph  # noqa: E402
+import report_executive as exec_  # noqa: E402
 import report_sections as sec  # noqa: E402
 from report_storage import section_storage
 from report_supplemental import section_supplemental
@@ -109,6 +110,10 @@ def build_story(bundle: dict, ai_dir: Path | None, meta: dict) -> list:
         "第五至八章为 AI 辅助研判，**供人工复核**，不构成法律意见。"
         "本工具不产出「违规成立」的定性。", st["small"]))
     story.append(Spacer(1, 6))
+
+    story += exec_.section_executive(bundle, st, font, meta, stage3)
+    story += exec_.section_risk_overview(bundle, st, font)
+    story.append(PageBreak())
 
     story += sec.section_overview(bundle, st, font, meta)
     story += section_risk(bundle, st, font)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.platypus import KeepTogether, PageBreak, Spacer
 
@@ -201,22 +202,103 @@ def section_findings(bundle: dict, st: dict, font: str) -> list:
     if not findings:
         out.append(Paragraph("本轮无规则结论。见缺口说明——**无结论不等于合规**。", st["warn"]))
         return out
-    out.append(grid_table(
-        ["规则", "类型", "等级", "严重度", "数据类别/权限", "依据条款"],
-        [[esc(f.get("rule_id")), esc(TYPE_ZH.get(f.get("rule_type"), f.get("rule_type"))),
-          esc(LEVEL_ZH.get(f.get("conclusion_level"), f.get("conclusion_level"))),
-          esc(f.get("severity")), esc(f.get("data_type") or _perm_of(f) or "—"),
-          esc("、".join(f"{b.get('doc')}:{b.get('clause')}"
-                        for b in (f.get("basis_refs") or []) if isinstance(b, dict)))]
-         for f in findings],
-        st, font, widths=[20 * mm, 30 * mm, 26 * mm, 16 * mm, 34 * mm, 44 * mm]))
-    out.append(Spacer(1, 5))
-    for f in findings:
-        if f.get("note"):
-            out.append(Paragraph(
-                f"<b>{esc(f.get('rule_id'))}</b>　{esc(f.get('title'))}：{esc(f.get('note'))}",
-                st["small"]))
+    out.append(Paragraph(
+        "逐条展开：等级徽章 / 事实 / 证据 / 依据条款 / 影响 / 整改与复测。"
+        "一页概览见「风险总览」章的发现矩阵。", st["small"]))
+    out.append(Spacer(1, 4))
+    for f in sorted(findings, key=_sev_sort_key):
+        out += _finding_block(f, st, font)
     return out
+
+
+def _sev_sort_key(f: dict) -> tuple:
+    lvl_order = {"correlated": 0, "observed": 1, "candidate": 2, "policy_violation": 3}
+    sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4, "unrated": 5}
+    return (sev_order.get(f.get("severity"), 5),
+            lvl_order.get(f.get("conclusion_level"), 3))
+
+
+def _finding_block(f: dict, st: dict, font: str) -> list:
+    sev = f.get("severity") or "unrated"
+    sev_zh = {"critical": "严重", "high": "高", "medium": "中", "low": "低",
+              "info": "信息", "unrated": "未评级"}.get(sev, sev)
+    sev_color = SEVERITY_COLORS.get(sev, colors.HexColor("#5f6b7a"))
+    hexc = "#" + (sev_color.hexval()[2:] if sev_color.hexval().startswith("0x")
+                  else sev_color.hexval())
+
+    head = Paragraph(
+        f'<font color="{hexc}"><b>[{esc(sev_zh)}]</b></font>　'
+        f'<b>{esc(f.get("rule_id") or "—")}</b>　{esc(f.get("title") or "")}',
+        st["h2"])
+
+    rows = [
+        ("结论等级", esc(LEVEL_ZH.get(f.get("conclusion_level"),
+                                     f.get("conclusion_level")))),
+        ("规则类型", esc(TYPE_ZH.get(f.get("rule_type"), f.get("rule_type")))),
+        ("数据类别/权限", esc(f.get("data_type") or _perm_of(f) or "—")),
+        ("事实与说明", esc(f.get("note") or "—")),
+        ("证据", esc(_evidence_of(f))),
+        ("依据条款", esc("、".join(f"{b.get('doc')}:{b.get('clause')}"
+                                  for b in (f.get("basis_refs") or [])
+                                  if isinstance(b, dict)) or "—")),
+        ("影响", esc(_impact_of(f))),
+        ("整改与复测", esc(_remediation_of(f))),
+    ]
+    block = [head, kv_table(rows, st, font, col1=30 * mm), Spacer(1, 6)]
+    return block
+
+
+def _evidence_of(f: dict) -> str:
+    """证据描述：优先外发流（读→发配对），否则退回读取事件索引。"""
+    pairs = f.get("pairs") or []
+    if pairs:
+        parts = []
+        for p in pairs[:3]:
+            host = p.get("flow_host") or "?"
+            method = p.get("flow_method") or "?"
+            path = (p.get("flow_path") or "")[:40]
+            delta = p.get("delta_ms")
+            match = "值级匹配" if p.get("content_match") else "未做值级匹配"
+            parts.append(
+                f"读取事件#{p.get('read_event_id')} → 流#{p.get('flow_event_id')}"
+                f"（{method} {host}{path}"
+                + (f"，Δ{delta}ms" if delta is not None else "")
+                + f"，{match}）")
+        return "；".join(parts)
+    ids = f.get("event_ids") or []
+    return "读取事件索引：" + "、".join(str(i) for i in ids) if ids else "—"
+
+
+_IMPACT = {
+    "sensitive_read": "应用读取了用户敏感数据；若超出功能必要或未经同意，涉嫌过度收集。",
+    "over_permission": "申请或使用了超出功能必要的权限，扩大数据暴露面。",
+    "over_collection": "收集超出功能必要的个人信息，涉嫌违反最小必要原则。",
+    "policy_mismatch": "隐私政策未声明即收集，用户无从知情与同意。",
+    "third_party_share": "数据向第三方外发，接收方与用途不明，存在扩散风险。",
+    "data_egress": "敏感数据被外发至网络，存在泄露与跨域传输风险。",
+    "plaintext_transmission": "数据未加密传输，可被中间人截获。",
+    "no_consent_read": "在同意状态未知情况下读取，无法证明已取得同意。",
+}
+_REMEDIATION = {
+    "sensitive_read": "核对收集必要性，删除超出功能必要的数据项；确需收集则明示并取得同意。",
+    "over_permission": "删除超出必要的权限声明与调用；按需授权、即用即请求。",
+    "over_collection": "裁剪到功能最小必要范围，并在隐私政策中列明收集项与目的。",
+    "policy_mismatch": "在隐私政策中补充该数据项的收集目的、方式与范围，收集前告知。",
+    "third_party_share": "在政策中披露 SDK/接收方与用途；评估能否本地处理替代外发。",
+    "data_egress": "外发通道改用 HTTPS/TLS；停止传输设备标识等敏感值，确需传输则脱敏。",
+    "plaintext_transmission": "全链路启用 TLS，禁用明文回退。",
+    "no_consent_read": "补齐同意时序证据；确认权限弹窗与实际调用顺序后再判定。",
+}
+_RETEST = "复测：按规则 ID 重放同一路径，确认该数据项不再被读取/外发，"
+"或政策已声明并取得同意后重新评估。"
+
+
+def _impact_of(f: dict) -> str:
+    return _IMPACT.get(f.get("rule_type"), "见规则说明与事实描述。")
+
+
+def _remediation_of(f: dict) -> str:
+    return _REMEDIATION.get(f.get("rule_type"), "据事实与依据条款人工评估整改方案。") + _RETEST
 
 
 def _perm_of(f: dict) -> str | None:

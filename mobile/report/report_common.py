@@ -13,6 +13,7 @@ import re
 import os
 
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
@@ -82,6 +83,11 @@ def styles(font: str) -> dict[str, ParagraphStyle]:
                                spaceAfter=4, **base),
         "cell": ParagraphStyle("cell", fontSize=8, leading=11, **base),
         "cellh": ParagraphStyle("cellh", fontSize=8, leading=11, textColor=colors.white, **base),
+        # 执行摘要专用：色块内的大字与计数
+        "exec_level": ParagraphStyle("exec_level", fontSize=13, leading=17,
+                                     alignment=TA_CENTER, **base),
+        "exec_count": ParagraphStyle("exec_count", fontSize=9.5, leading=14,
+                                     alignment=TA_CENTER, **base),
     }
 
 
@@ -103,13 +109,34 @@ def table_style(font: str, *, widths=None) -> "object":
     return TableStyle(cmds)
 
 
+def _footer_style(font: str, align=0) -> ParagraphStyle:
+    return ParagraphStyle("footer", fontName=font, fontSize=7.5, leading=9,
+                          alignment=align, textColor=colors.HexColor("#666666"),
+                          wordWrap="CJK")
+
+
+def _footer_paras(font: str, page: int) -> tuple[Paragraph, Paragraph]:
+    """页脚两段：左产品声明、右页码。
+
+    用 Paragraph 渲染而非 canvas.drawString：CID 字体的 drawString 路径不写
+    ToUnicode CMap，抽取出来是「■」，正文的 Paragraph 路径则正常。这里与正文
+    走同一条渲染路径，保证页脚可复制、可检索。
+    """
+    left = Paragraph("V-Scanner Mobile | 仅用于授权测试（已获授权的样本与设备）",
+                     _footer_style(font))
+    right = Paragraph(f"第 {page} 页", _footer_style(font, TA_RIGHT))
+    return left, right
+
+
 def footer(canvas, doc) -> None:
+    font = getattr(doc, "report_font", "Helvetica")
+    page = getattr(doc, "page", 1)
+    left, right = _footer_paras(font, page)
     canvas.saveState()
-    canvas.setFont(getattr(doc, "report_font", "Helvetica"), 7.5)
-    canvas.setFillColor(colors.HexColor("#666666"))
-    canvas.drawString(18 * mm, 10 * mm,
-                      "V-Scanner Mobile | 仅用于授权测试（已获授权的样本与设备）")
-    canvas.drawRightString(192 * mm, 10 * mm, f"第 {doc.page} 页")
+    left.wrap(174 * mm, 12 * mm)
+    left.drawOn(canvas, 18 * mm, 10 * mm)
+    right.wrap(24 * mm, 12 * mm)
+    right.drawOn(canvas, 168 * mm, 10 * mm)
     canvas.restoreState()
 
 
