@@ -214,13 +214,13 @@ class ReportFormatTest(unittest.TestCase):
         self.assertTrue(all(isinstance(part, rc.Paragraph) for part in pieces))
 
     def test_footer_uses_the_document_selected_font(self):
-        canvas, doc = Mock(), Mock(page=3, report_font="Selected-CJK")
-        rc.footer(canvas, doc)
-        canvas.setFont.assert_called_once_with("Selected-CJK", 7.5)
-        self.assertIn("仅用于授权测试", canvas.drawString.call_args.args[2])
-        self.assertEqual(canvas.drawRightString.call_args.args[2], "第 3 页")
-        canvas.saveState.assert_called_once_with()
-        canvas.restoreState.assert_called_once_with()
+        # Helvetica 是 reportlab 内置可解析字体，用于验证页脚走 Paragraph 渲染路径
+        # （生产环境 report_font 为已注册的 CJK 字体，同样可解析）。
+        left, right = rc._footer_paras("Helvetica", 3)
+        self.assertIn("仅用于授权测试", left.getPlainText())
+        self.assertEqual(left.style.fontName, "Helvetica")
+        self.assertEqual(right.getPlainText(), "第 3 页")
+        self.assertEqual(right.style.fontName, "Helvetica")
 
 
 if __name__ == "__main__":
