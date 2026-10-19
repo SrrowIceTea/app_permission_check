@@ -120,7 +120,69 @@ def summarize(session: Path, out_dir: Path, package: str, app_uid: int | None = 
             "限流，缓存还新鲜时就不取数）；请求可能落在采样窗之外；应用在采样窗内重启过，"
             "而重启瞬间的 socket 会漏（pid 每 PIDOF_EVERY 轮才重解一次）。")
 
-    # 5) UI 动作：说明探索到了哪些界面路径（没触达的路径就不可能产生事件）。
+    # 5) pcap → 完整 HTTP 报文（2026-10-18）：hook 给的是 SSL_read/write 分片，
+    #    这一路是**消息级**的真相（tshark 重组 + 解 gzip/chunked）。不进 bundle，
+    #    但必须在索引里出现——不出现就等于报告里不存在。
+    hm = read_jsonl(out_dir / "http_messages.jsonl")
+    if hm or (out_dir / "http-stats.json").exists():
+        st = {}
+        if (out_dir / "http-stats.json").exists():
+            try:
+                st = json.loads((out_dir / "http-stats.json").read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                st = {}
+        reqs = [m for m in hm if m.get("kind") == "request"]
+        bodies = [m for m in hm if (m.get("body") or {}).get("len")]
+        sources["http_messages"] = {
+            "file": "http_messages.jsonl",
+            "messages": len(hm), "requests": len(reqs), "with_body": len(bodies),
+            "by_proto": dict(sorted(collections.Counter(
+                m.get("proto") or "h1" for m in hm).items())),
+            "truncated": sum(1 for m in hm
+                             if any(g.endswith("_truncated") for g in (m.get("gaps") or []))),
+            "stats": st,
+            "urls": sorted({m.get("url") or (str(m.get("host") or "") + str(m.get("uri") or ""))
+                            for m in reqs if m.get("url") or m.get("host")})[:200],
+            "note": "由 capture.pcap + NSS keylog 经 tshark 解出：TCP 重组、TLS 解密、"
+                    "chunked 分帧、gzip 解压都是 tshark 做的；body 原文在 bodies/ 下。"
+                    "h1 与 h2 各解一趟（h2 的头在 http2.header.* 里，不是 http.request.*）。"
+                    "带 *_truncated 的 body 是抓包在流中途结束，明文是**部分**的，不要当完整正文用。"
+                    "零报文时先看 stats.error（多为 keylog 没装上）",
+        }
+
+    # 6) 代理看见但归因不到应用的流（2026-10-19）：区分"应用没外发"与
+    #    "外发了但 egress 钩子没覆盖"。旧实现把这类流直接丢弃，交付物上两者同形。
+    ua = read_jsonl(session / "flows-unattributed.jsonl")
+    if ua:
+        sources["flows_unattributed"] = {
+            "file": "session/flows-unattributed.jsonl", "flows": len(ua),
+            "hosts": dict(sorted(collections.Counter(
+                str(f.get("host")) for f in ua).most_common(20))),
+            "note": "代理确凿收到了这些请求，但 egress 钩子没有对应事件（覆盖缺口）。"
+                    "它们**不进** flows.jsonl，避免被误当成已归因证据；"
+                    "条数 > 0 时不能写「应用未外发」。",
+        }
+
+    # 6b) 有请求但没拿到响应（2026-10-19 加分类）：`failure` 是原始异常串，
+    #     光看它会把「上游黑洞」读成「应用主动断开」——实测两者都写成 "client disconnected"。
+    #     分类口径见 core/collector/addon.classify_upstream_failure。
+    un = read_jsonl(session / "flows-unanswered.jsonl")
+    if un:
+        kinds = collections.Counter(str(f.get("failure_kind") or "unclassified") for f in un)
+        sources["flows_unanswered"] = {
+            "file": "session/flows-unanswered.jsonl", "flows": len(un),
+            "by_kind": dict(sorted(kinds.items())),
+            "hosts": dict(sorted(collections.Counter(
+                str(f.get("host")) for f in un).most_common(20))),
+            "slowest_connect_ms": max(
+                [f["connect_ms"] for f in un if isinstance(f.get("connect_ms"), int)] or [0]),
+            "note": "应用确实发出了请求，但没拿到响应——这些**不能**写成「没有外发」。"
+                    "upstream_timeout/upstream_refused 是环境侧不可达（多为目标被封或丢包），"
+                    "不是应用行为；client_abort 才是应用自己中途放弃。"
+                    "两类都不能推出「数据没发出去」：字节可能已经发到对端。",
+        }
+
+    # 7) UI 动作：说明探索到了哪些界面路径（没触达的路径就不可能产生事件）。
     ui_path = out_dir / "ui-actions.json"
     if ui_path.exists():
         try:
@@ -141,7 +203,7 @@ def summarize(session: Path, out_dir: Path, package: str, app_uid: int | None = 
         "package": package,
         "warning": "本文件是索引，不是证据本体。证据本体是 session/ 下的原始 JSONL。",
         "not_in_bundle": ["egress_tp", "tls", "device_conns", "ui_actions",
-                          "egress_vehicle/hooks"],
+                          "http_messages", "egress_vehicle/hooks"],
         "sources": sources,
     }
 

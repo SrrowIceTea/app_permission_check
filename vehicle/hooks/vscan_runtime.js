@@ -80,6 +80,34 @@ export function tryUse(name) {
 //   2) system_server 等系统进程里它是 null（Phase 0 实测），退回 /proc/self/cmdline。
 // 调用方若还要 system_server 的 Context，得自己再走一次 systemMain().getSystemContext()——
 // 那是各脚本自己的事（见 hook_vhal.js 的 detect()），不放在这里。
+// ---- 明文预览：字节 → 真 UTF-8 字符串 ----
+// **不能**用 String.fromCharCode(b) 逐字节拼：那得到的是 Latin-1，一个汉字 3 字节会
+// 变成 3 个乱码字符，中文响应在 utf8 字段里不可读（hex 对、人读不了）。
+// 预览上限可能把多字节序列切在中间：截断处给替换符，不抛、不错位。
+export function decodeUtf8(u8) {
+  var s = '', i = 0, n = u8.length;
+  while (i < n) {
+    var b = u8[i], cp = 0, extra = 0;
+    if (b < 0x80) { cp = b; extra = 0; }
+    else if ((b & 0xE0) === 0xC0) { cp = b & 0x1F; extra = 1; }
+    else if ((b & 0xF0) === 0xE0) { cp = b & 0x0F; extra = 2; }
+    else if ((b & 0xF8) === 0xF0) { cp = b & 0x07; extra = 3; }
+    else { s += '\uFFFD'; i++; continue; }
+    if (i + extra >= n) { s += '\uFFFD'; break; }
+    var ok = true;
+    for (var k = 1; k <= extra; k++) {
+      var c = u8[i + k];
+      if ((c & 0xC0) !== 0x80) { ok = false; break; }
+      cp = (cp << 6) | (c & 0x3F);
+    }
+    if (!ok) { s += '\uFFFD'; i++; continue; }
+    s += (typeof String.fromCodePoint === 'function')
+      ? String.fromCodePoint(cp) : String.fromCharCode(cp);
+    i += extra + 1;
+  }
+  return s;
+}
+
 export function procName() {
   try {
     var app = Java.use('android.app.ActivityThread').currentApplication();

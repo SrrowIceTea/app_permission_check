@@ -60,6 +60,11 @@ def main() -> int:
         ("report", MOBILE / "report", [PY, "-m", "unittest", "test_report"]),
         ("apk_packer", MOBILE / "tools", [PY, "-m", "unittest", "test_apk_packer"]),
         ("app_death", MOBILE / "tools", [PY, "-m", "unittest", "test_app_death"]),
+        # UI 探索的两个纯函数守卫（2026-10-19）：Compose 容器继承文案的深度/长度/面积
+        # 三档护栏，以及"上游不可达"与"客户端主动断开"的分类。前者错了会静默点屏幕中心
+        # （taps 仍然通过，检查项看不出来），后者错了会把环境故障记成应用行为。
+        ("ui_flow_label", MOBILE / "tools",
+         [PY, "-m", "unittest", "test_ui_flow_label"]),
         ("launcher_activity", MOBILE / "tools",
          [PY, "-m", "unittest", "test_launcher_activity"]),
     ]

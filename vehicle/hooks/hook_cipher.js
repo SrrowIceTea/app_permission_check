@@ -3,11 +3,11 @@
 // V-Scanner Phase 3 — hook_cipher.js：JCE 自绘加密的明文截获钩子
 //
 // 为什么需要它：申报书的「内存 Hook」方案——在数据进入加密函数之前，直接截获内存里的
-// 明文 Buffer，绕开「协议逆向」。对走 JCE（javax.crypto.Cipher）自绘加密的应用，
-// 明文出现在 Cipher.update / doFinal 的入参里（encrypt 方向），或 doFinal 的返回值里
-// （decrypt 方向）。这里挂钩这两个方法把它读出来，事件 src=cipher。
+// 对走 JCE（javax.crypto.Cipher）自绘加密的应用，明文出现在 Cipher.update / doFinal 的入参里
+// （encrypt 方向），或 doFinal 的返回值里（decrypt 方向）。这里挂钩这两个方法把它读出来，
+// 事件 src=cipher。
 //
-// 覆盖：应用自己用 Cipher（AES 等）加密后再外发的路径（本夹具的 CipherSender）。
+// 覆盖：应用自己用 Cipher（AES 等）加密后再外发的路径。
 // 不覆盖：native 加密（BoringSSL 的 SSL_write，见 hook_native_ssl.js）、
 //         手工 XOR / 直接操作 byte[] 等不经过 JCE 的路径。
 //
@@ -16,7 +16,7 @@
 'use strict';
 import { packages } from './scope.js';
 
-import { makeLogger, procName } from './vscan_runtime.js';
+import { makeLogger, procName, decodeUtf8 } from './vscan_runtime.js';
 import { withStack } from './stack_capture.js';
 
 var vlog = makeLogger('cipher', '/data/local/tmp/vscan.log');
@@ -46,14 +46,15 @@ function describeBytes(buf) {
   try { arr = Java.array('byte', buf); } catch (e) {}
   if (arr === null) return { byte_len: -1, note: 'not byte[]' };
   var n = Math.min(arr.length, CFG.maxPlainBytes);
-  var hex = '', ascii = '', utf8 = '';
+  var hex = '', ascii = '';
+  var u8 = new Uint8Array(n);
   for (var i = 0; i < n; i++) {
     var b = arr[i] & 0xff;
+    u8[i] = b;
     hex += ('0' + b.toString(16)).slice(-2);
     ascii += (b >= 32 && b < 127) ? String.fromCharCode(b) : '.';
-    utf8 += String.fromCharCode(b);
   }
-  var out = { byte_len: arr.length, hex: hex, ascii: ascii, utf8: utf8 };
+  var out = { byte_len: arr.length, hex: hex, ascii: ascii, utf8: decodeUtf8(u8) };
   if (arr.length > CFG.maxPlainBytes) out.truncated = true;
   return out;
 }
@@ -147,7 +148,9 @@ function hookCipher() {
 
 var PKG = null;
 
-Java.perform(function () {
+// 不自执行：单独运行用 dist/hook_cipher.bundle.js；合并运行由 hook_all 调用 main。
+// （ESM import 提升会早于入口的 globalThis.Java 赋值，side-effect import 会 ReferenceError）
+export function main() {
   try {
     PKG = procName();
     if (CFG.whitelist.length > 0 && CFG.whitelist.indexOf(PKG) < 0) {
@@ -161,4 +164,4 @@ Java.perform(function () {
   } catch (e) {
     vlog('ERROR', { where: 'main', msg: String(e && e.stack ? e.stack : e) });
   }
-});
+}

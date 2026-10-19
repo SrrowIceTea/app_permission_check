@@ -95,18 +95,27 @@ def answered(flow, found, ts_ms: int, session: str, tags: dict, scans: dict) -> 
     return entry
 
 
-def unanswered(flow, found, ts_ms: int, session: str, failure: str) -> dict:
+def unanswered(flow, found, ts_ms: int, session: str, failure: str,
+               failure_kind: str | None = None,
+               connect_ms: int | None = None) -> dict:
     """一次**没拿到响应**的尝试（上游连接失败 / 超时 / 协议错误）。
 
     `request_tokens` / `response_tags` 一律为空：`vehicle/analyze/evaluation.py` 的外发判定
     **不看 `status_code`**，只要 tokens 里有属性名就会生成 `content_match=True` 的
     外发结论——那等于把一次失败的上传写成了"确实发出了这个数据"。
+
+    `failure_kind`（2026-10-19 新增）把原始的 `failure` 字符串**归成类别**。原因：
+    实测「上游黑洞 + 客户端等不住先断」时 mitmproxy 报的是 `client disconnected`，
+    与"客户端自己取消"字面完全相同；不分类就会把"上游不可达"记成"应用主动放弃"，
+    报告据此会写"应用没打算外发"。类别见 `addon.classify_upstream_failure`。
     """
     entry = _common(flow, found, ts_ms, session)
     entry.update({
         "terminal": "error",   # addon._emit 按它选文件；成功记录不带这个键
         "status_code": None,
         "failure": failure,
+        "failure_kind": failure_kind,
+        "connect_ms": connect_ms,
         "request_tags": [], "request_tokens": [],
         "response_tags": [], "response_tokens": [],
         "request_scan": None, "response_scan": None,

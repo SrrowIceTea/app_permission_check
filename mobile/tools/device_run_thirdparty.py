@@ -30,6 +30,8 @@ ROOT = HERE.parent.parent
 sys.path.insert(0, str(HERE))
 import thirdparty_env as env      # noqa: E402
 import thirdparty_ui_flow as flow  # noqa: E402  UI 探索（dump 驱动，不写死坐标）
+import pcap_capture               # noqa: E402  设备端抓包（P0，2026-10-18）
+import pcap_http                  # noqa: E402  pcap → 完整 HTTP 报文（复用 tshark）
 sys.path.insert(0, str(ROOT))
 from core import sdk_paths  # noqa: E402   SDK 路径统一解析（§8.2 B-4）
 
@@ -108,6 +110,10 @@ def main() -> int:
                     help="复用编排层预启动的 mitmproxy（端口已监听则直接用；未监听则"
                          "回退为自行启动）。冷启动前置的原因见 pipeline/runner 的 "
                          "_start_early_mitm 注释")
+    ap.add_argument("--no-pcap", action="store_true",
+                    help="关闭设备端 pcap 采集（默认开）。关掉后不再产出完整 HTTP 报文，"
+                         "只有 hook 的 SSL_read/write 分片——gzip/chunked/h2 都读不到，"
+                         "报告会把这条记成缺口")
     args = ap.parse_args()
 
     # 多设备且未指定 ANDROID_SERIAL → 启动前就停。理由见 thirdparty_env.device_guard：
@@ -170,6 +176,20 @@ def main() -> int:
                "default 在 per-network 表里，`ip route` 看不到")
     emit("network", "done" if net_ok else "failed", "外网连通" if net_ok else "外网不通")
 
+    # QUIC 压制（2026-10-18 起）：代理只接管 TCP，客户端一旦协商到 HTTP/3 就整条
+    # 绕过 mitmproxy。在设备内核层丢弃 UDP/443，逼它按规范回退 TCP/443。
+    # **必须在 am start 之前**：外发就发生在启动那一刻（见 conn_probe 注释）。
+    # 失败不阻断：只记成缺口——"没拦住"不能写成"没流量"。
+    emit("quic", "running", "压制 QUIC（设备侧 DROP UDP/443，逼 HTTP/3 回退 TCP）")
+    quic_blocked = env.block_quic(out / "quic-block.log")
+    check("quic_blocked", 0 if quic_blocked else 1, optional=True,
+          note=("设备 OUTPUT 链首条为 `-p udp --dport 443 -j DROP`，QUIC 将回退 TCP"
+                if quic_blocked else
+                "未能插入规则（无 root / 内核缺 netfilter）——QUIC 流量仍绕过代理，"
+                "报告须按「QUIC 不在覆盖内」标注"))
+    emit("quic", "done" if quic_blocked else "failed",
+         "UDP/443 已丢弃" if quic_blocked else "QUIC 压制失败，回落为声明边界")
+
     prev_proxy = env.get_proxy()
     setattr(main, "_prev_proxy", prev_proxy)
 
@@ -216,34 +236,37 @@ def main() -> int:
     uid = env.app_uid(args.package)
     emit("conn_probe", "running", f"开启设备侧连接采样（package={args.package}）")
     collector = env.start_conn_probe(session, out / "conn-probe.log",
-                                     args.package, args.seconds)
+                                     args.package, args.seconds, uid=uid)
     check("conn_probe_started", 0, optional=True,
           note=f"package={args.package} app_uid={uid}（设备端每轮重解 pid，不过滤 uid）")
     emit("conn_probe", "done", f"app_uid={uid}")
 
-    # 冷启动竞争：先 am start，等到 pid 再挂钩子（钩子是 attach 模式）
-    emit("launch", "running", f"启动应用 {main_activity}")
-    env.adb("shell", "am", "start", "-W", "-n",
-            f"{args.package}/{main_activity}", timeout=150)
-    pid = env.wait_for_app(args.package)
-    check("app_started", 0 if pid else 1,
-          note=(f"pid={pid}" if pid else "应用未在超时内出现（冷启动竞争或启动崩溃）")
-               + f"；activity={main_activity}"
-               + ("" if resolved_activity else "（回退值：设备解析为空）"))
-    emit("launch", "done" if pid else "failed", f"pid={pid}" if pid else "应用未启动")
-    if not pid:
-        env.kill_tree(collector, out / "kill-conn.log")   # 早退也不能留孤儿
-        (out / "verification.json").write_text(json.dumps(
-            {"passed": False, "checks": checks, "failed": ["app_started"],
-             "package": args.package}, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(json.dumps({"status": "failed", "reason": "app_started"}, ensure_ascii=False))
-        return 1
+    # 设备端 pcap（P0，2026-10-18）：**必须在 am start 之前**起，和 conn_probe 同一个
+    # 理由——外发就在启动那一刻。它解决的是 hook 结构性给不出的东西：hook 拿到的是
+    # SSL_read/write 的分片（无连接标识、无边界），而 pcap 里 TCP 流 + TLS 记录层 +
+    # HTTP 分帧齐全，交给 tshark 一条命令就能解出**完整报文并自动解 gzip/chunked**。
+    # 失败不阻断采集：只记缺口——"没抓到"和"没有流量"必须能区分。
+    pcap_rec = None
+    if args.no_pcap:
+        check("pcap_captured", 0, optional=True, note="--no-pcap：本轮不做 pcap 采集")
+        emit("pcap", "skipped", "--no-pcap：不抓包，完整报文不可得")
+    else:
+        emit("pcap", "running", "设备端 pcap 采集（tcpdump）")
+        pcap_rec = pcap_capture.PcapRecorder()
+        pcap_ok, pcap_note = pcap_rec.start(out / "pcap-start.log", args.seconds + 120)
+        check("pcap_started", 0 if pcap_ok else 1, optional=True, note=pcap_note)
+        emit("pcap", "done" if pcap_ok else "failed", pcap_note)
 
     # 代理：常规模式下让设备把 HTTP(S) 交给宿主 mitmproxy。
     # **--reuse-mitm**（编排层路径）：模拟器冷启动前编排层已把代理拉起来——必须
     # 先于模拟器，因为 emulator 37.x 启动时探测代理可达性，不可达会把 SLIRP 强制
     # 重定向整条关掉（2026-10-16 实测 "Proxy will be ignored!"）。这里先探端口：
     # 活着直接复用；死了回退自行启动，不把"代理没了"静默带进采集。
+    #
+    # **2026-10-19：整块挪到 am start 之前**。原顺序是"先启动应用、再起代理、
+    # 再设 http_proxy"，而应用启动那一秒就在发请求（实测 02-asmat-foggymaps：
+    # 01:08:11 已经 GET /planet，代理 01:08:1x 才就绪）——首启流量整段落在覆盖外，
+    # 报告里表现为"应用没有任何外发"，实际是采集窗口比应用晚开。
     emit("mitm", "running", "启动 mitmproxy 中间人代理（常规模式）")
     mitm = None
     mitm_error = None
@@ -261,8 +284,31 @@ def main() -> int:
     env.set_proxy(f"{env.GUEST_HOST}:{env.MITM_PORT}", out / "proxy-set.log")
     proxy_now = env.get_proxy()
     check("proxy_set_for_capture", 0 if str(env.MITM_PORT) in proxy_now else 1,
-          note=f"http_proxy={proxy_now!r} (原值 {prev_proxy!r})")
-    emit("mitm", "done", f"代理已就绪，设备 http_proxy={proxy_now!r}")
+          note=f"http_proxy={proxy_now!r} (原值 {prev_proxy!r})；在 am start 之前设置")
+    emit("mitm", "done", f"代理已就绪，设备 http_proxy={proxy_now!r}（早于启动应用）")
+
+    # 冷启动竞争：先 am start，等到 pid 再挂钩子（钩子是 attach 模式）
+    emit("launch", "running", f"启动应用 {main_activity}")
+    env.adb("shell", "am", "start", "-W", "-n",
+            f"{args.package}/{main_activity}", timeout=150)
+    pid = env.wait_for_app(args.package)
+    check("app_started", 0 if pid else 1,
+          note=(f"pid={pid}" if pid else "应用未在超时内出现（冷启动竞争或启动崩溃）")
+               + f"；activity={main_activity}"
+               + ("" if resolved_activity else "（回退值：设备解析为空）"))
+    emit("launch", "done" if pid else "failed", f"pid={pid}" if pid else "应用未启动")
+    if not pid:
+        env.kill_tree(collector, out / "kill-conn.log")   # 早退也不能留孤儿
+        env.unblock_quic(out / "quic-unblock.log")        # 同理：不能把 DROP 规则留在设备上
+        if pcap_rec is not None:                          # 抓包进程同样不能留在设备上
+            pcap_rec.stop(out / "capture.pcap", out / "pcap-stop.log")
+        (out / "verification.json").write_text(json.dumps(
+            {"passed": False, "checks": checks, "failed": ["app_started"],
+             "package": args.package}, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(json.dumps({"status": "failed", "reason": "app_started"}, ensure_ascii=False))
+        return 1
+
+    # （代理已在 am start 之前就绪并设置，见上面 "启动 mitmproxy" 一段。）
 
     if args.no_hooks:
         # 对照实验：同一 App、同一流程，只少"挂钩子"这一项。用于判定应用死亡
@@ -300,7 +346,21 @@ def main() -> int:
     check("ui_taps_made", 0 if taps else 1, note=f"完成 {len(taps)} 次点击")
     emit("explore", "done", f"完成 {len(taps)} 次点击")
 
+    # 采集窗口结束就停抓包（放在改回代理之前：代理切换本身也会产生流量，
+    # 混进来只会让"哪些是被测应用发的"更难判）。
+    pcap_path = None
+    if pcap_rec is not None:
+        pcap_path = pcap_rec.stop(out / "capture.pcap", out / "pcap-stop.log")
+        check("pcap_captured", 0 if pcap_path else 1, optional=True,
+              note=(f"{pcap_path.name} ({pcap_path.stat().st_size} bytes)" if pcap_path
+                    else f"未产出 pcap：{pcap_rec.error or '未知'}"))
+        emit("pcap", "done" if pcap_path else "failed",
+             "已产出 capture.pcap" if pcap_path else "未产出 pcap")
+
     env.set_proxy(prev_proxy if prev_proxy not in ("", "null") else ":0", out / "proxy-restore.log")
+    # 采集窗口结束立刻撤规则：DROP 留在设备上会污染后续轮次（尤其 --reuse-mitm
+    # 的编排层多轮跑同一台模拟器时），排查别的网络问题也会被它误导。
+    env.unblock_quic(out / "quic-unblock.log")
     # 应用是否在窗口内死亡，以及死于什么。"窗口后半段没事件"有两种含义：应用没做，
     # 还是应用已经死了——只看事件文件分不出来，所以必须单独取证。
     # **必须在拆钩之前取证**（2026-10-16）：拆钩动作（无论优雅 detach 还是强杀）
@@ -371,6 +431,38 @@ def main() -> int:
         out / "split.log"), optional=True,
         note="reads.jsonl 按 src 分流回 consent/egress/tls（合并模式分流；独立模式 no-op）")
     emit("split", "done", "分流完成")
+
+    # ---- pcap → 完整 HTTP 报文（P0，2026-10-18）----
+    # 这一步是"gzip body 读不到"那个缺口的正解：重组/解压/分帧全部交给 tshark，
+    # 我们只负责把 keylog 从事件里抽出来喂给它（`hook_tls_meta.js` 已经在装回调）。
+    # 必须在 split 之后跑：keylog 事件分流到 tls_meta.jsonl，这里两份都读。
+    if pcap_path is not None:
+        emit("http_msgs", "running", "pcap → 完整 HTTP 报文（tshark 解密 + 重组）")
+        keys = out / "keys.log"
+        nk, labels = pcap_http.keylog_from_events(session, keys)
+        stats = pcap_http.decode(pcap_path, out / "http_messages.jsonl",
+                                 out / "bodies", keys if nk else None)
+        stats["keylog_labels"] = labels
+        (out / "http-stats.json").write_text(
+            json.dumps(stats, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        undecoded = stats.get("tls_undecrypted_app_data") or 0
+        note = (f"{stats['messages']} 条报文（req={stats['requests']} resp={stats['responses']}）"
+                f"，h1={stats.get('h1_messages', 0)} h2={stats.get('h2_messages', 0)}"
+                f"，body={stats['bodies']}（截断 {stats.get('bodies_truncated', 0)}）"
+                f"，keylog={nk} 行") if stats["ok"] else \
+               f"0 条报文：{stats.get('error') or '未知'}"
+        if nk == 0 and undecoded:
+            # "只有明文那几条"和"没流量"在计数上长得一样。App 的 TLS 连接若在
+            # tls_meta 装钩子之前就建好（实测整轮 HTTPS 全是这种），SSL_CTX_new /
+            # SSL_new 都已经错过，keylog 一行也拿不到——此时 pcap 里的 TLS
+            # 解不开，报文明细必然只剩零头。这种情况**不能判通过**。
+            note += (f"；⚠ 有 {undecoded} 帧 TLS 应用数据未解密（keylog 未装上），"
+                     f"上面这些不是全部外发内容")
+            check("http_messages_extracted", 1, optional=True, note=note)
+            emit("http_msgs", "partial", note)
+        else:
+            check("http_messages_extracted", 0 if stats["ok"] else 1, optional=True, note=note)
+            emit("http_msgs", "done" if stats["ok"] else "failed", note)
 
     # 收尾：把样本强制停掉。**必须放在死亡取证之后**（在跑就杀会让 alive 永远为 false，
     # 那是自己制造假结论）；不停掉的话，样本会带着残留状态活到下一样本的窗口里——

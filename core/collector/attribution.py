@@ -192,7 +192,23 @@ class TimeAttribution:
         for path in self.paths:
             if not path.exists():
                 continue
-            source = "egress_hook" if "egress" in path.name else "uid_sampler"
+            # 来源判定（2026-10-19）：`reads.jsonl` 是钩子**边跑边写**的唯一文件，
+            # 而 split_events 要到收尾才拆出 egress.jsonl / egress_tp.jsonl。
+            # 旧配置只读后两者 → 整场归因在运行期间永远是 unresolved，
+            # 代理流被 response() 当成"归因不到"丢掉（02-asmat-foggymaps 实测：
+            # 代理拿到 `GET /planet` 200，flows.jsonl 空）。所以 live 来源必须算
+            # egress 钩子，且只认 src=egress/egress_tp 的记录（同一文件里还有
+            # privacy/consent/tls 的噪声）。
+            name = path.name.lower()
+            if name == "reads.jsonl":
+                source = "egress_hook"
+                live = True
+            elif "egress" in name:
+                source = "egress_hook"
+                live = False
+            else:
+                source = "uid_sampler"
+                live = False
             with path.open(encoding="utf-8") as handle:
                 consumed = self._offsets[path]
                 handle.seek(consumed)
@@ -213,11 +229,13 @@ class TimeAttribution:
                     session = os.environ.get('VSCAN_SESSION')
                     if session and record.get('session_id') != session:
                         continue
+                    if live and record.get("src") not in ("egress", "egress_tp"):
+                        continue
                     if source == 'egress_hook' and not is_egress_connect(record):
                         continue
                     if not is_ok_outcome(record):
                         continue
-                    package = record.get("package")
+                    package = record.get("package") or record.get("pkg")
                     # 优先主机落盘时刻；uid_sampler 的 ts 已做过设备时钟标定。
                     #
                     # **必须显式判空，不能写 `record.get("host_received_ts", record["ts"])`**：

@@ -38,8 +38,16 @@ globalThis.Java = Java;
 
 DEFAULT_SCRIPTS = (
     "recon_cpm.js", "hook_vhal.js", "ssl_pinning_bypass.js", "hook_egress.js",
-    "hook_cipher.js", "hook_native_ssl.js",
+    "hook_cipher.js", "hook_native_ssl.js", "hook_native_crypto.js", "hook_tls_meta.js",
 )
+
+# 只导出 main() 的模块（不自执行）。入口必须替它们调一次，否则 bundle 挂上后什么都不做。
+# 为什么不让它们顶层自执行：ESM 的 import 会被提升到入口 `globalThis.Java = Java` 之前，
+# 想用 side-effect import 合并进单 agent 时会直接 `ReferenceError: 'Java' is not defined`
+# （2026-10-18 实测，与 mobile/hooks/build.mjs 同一结论）。
+MAIN_ONLY_SCRIPTS = ("hook_cipher.js", "hook_native_ssl.js",
+                     "hook_native_crypto.js", "hook_tls_meta.js",
+                     "hook_flutter_ssl.js")
 
 # 平台无关的成品 bundle：移动端设备脚本直接复用 core/frida_host/dist/ 下的这两个，
 # 因此重建时也要输出到那边，避免 core 与 vehicle/hooks 各存一份漂移的 bundle。
@@ -78,8 +86,11 @@ def build_one(script: Path, out_dir: Path, compiler: str) -> Path:
     # (frida-compile also refuses entrypoints outside its project root, so the system
     # temp dir is not an option either.)
     entry = HERE / ("." + script.stem + ".entry.js")
+    # 只导出 main 的模块由入口显式装配（见 MAIN_ONLY_SCRIPTS 注释）。
+    # 放在文件末尾：`export function main` 已声明，行序上没有问题。
+    tail = "\nJava.perform(main);\n" if script.name in MAIN_ONLY_SCRIPTS else ""
     try:
-        entry.write_text(PRELUDE + body, encoding="utf-8")
+        entry.write_text(PRELUDE + body + tail, encoding="utf-8")
         result = subprocess.run(
             (["node", compiler] if compiler.endswith(".js") else [compiler]) + [str(entry), "-o", str(target)],
             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600,

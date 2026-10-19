@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -179,6 +180,54 @@ def set_proxy(value: str, log: Path) -> None:
     log.write_text(f"http_proxy set -> {value!r}; now={get_proxy()!r}\n", encoding="utf-8")
 
 
+# --- QUIC（HTTP/3，走 UDP/443）压制 ------------------------------------------
+# 代理只接管 TCP：一旦客户端协商到 HTTP/3，整条业务就绕开 mitmproxy，flows 里
+# 什么也看不到——这是「QUIC 不在覆盖内」的由来。但「覆盖外」不是物理限制：
+# 设备的 netfilter **在模拟器上可用**（2026-10-18 实测：插入
+# `-p udp --dport 443 -j DROP` 后，OUTPUT 链首条规则的 pkts 随发包增长）。
+# 早先 verify_force_proxy 的"UDP 直出"只证明 `-http-proxy` 这个参数不管 UDP，
+# **不等于**内核层丢不掉。丢掉 UDP/443 后客户端按 QUIC 规范回退 TCP/443
+# （Alt-Svc 失效，Happy Eyeballs 走 TCP），流量就重新落回代理。
+QUIC_RULE = ("-p", "udp", "--dport", "443", "-j", "DROP")
+
+
+def block_quic(log: Path) -> bool:
+    """丢弃设备发出的 UDP/443，逼 HTTP/3 回退到 TCP。返回**是否真的生效**。
+
+    失败不抛：没有 root、内核缺 netfilter、ROM 禁用 iptables 都可能失败。
+    这时采集照常跑，只是回到"QUIC 盲区"——由调用方记成能力缺口。
+    **绝不能静默当成功**：报告里"没拦到"和"没流量"长得一模一样。
+    """
+    # 先去重：上一轮异常退出可能留下同名规则，重复插入会让 -D 只删掉一条。
+    for _ in range(3):
+        r = adb("shell", "iptables", "-D", "OUTPUT", *QUIC_RULE, timeout=30)
+        if (r.stderr or "").strip() and "does a matching rule exist" not in (r.stderr or ""):
+            break
+    ins = adb("shell", "iptables", "-I", "OUTPUT", "1", *QUIC_RULE, timeout=30)
+    listed = (adb("shell", "iptables", "-L", "OUTPUT", "1", "-n", timeout=30).stdout or "")
+    # 三个词都要有：只判 "443" 会把已有的 tcp/443 规则当成我们这条（假阳性）。
+    ok = all(tok in listed for tok in ("DROP", "udp", "443"))
+    log.write_text(
+        f"block_quic: insert rc={ins.returncode} out={(ins.stdout or '').strip()!r} "
+        f"err={(ins.stderr or '').strip()!r}\n"
+        f"rule#1: {listed.strip().splitlines()[-1] if listed.strip() else '(empty)'}\n"
+        f"effective={ok}\n", encoding="utf-8")
+    return ok
+
+
+def unblock_quic(log: Path) -> None:
+    """撤掉 block_quic 插的规则。多删几次以清理历史遗留的重复项。"""
+    lines = []
+    for _ in range(4):
+        r = adb("shell", "iptables", "-D", "OUTPUT", *QUIC_RULE, timeout=30)
+        lines.append(f"-D rc={r.returncode} err={(r.stderr or '').strip()!r}")
+        if r.returncode != 0:
+            break
+    left = (adb("shell", "iptables", "-L", "OUTPUT", "-n", timeout=30).stdout or "")
+    still = any("443" in ln and "DROP" in ln for ln in left.splitlines())
+    log.write_text("\n".join(lines) + f"\nstill_present={still}\n", encoding="utf-8")
+
+
 def kill_tree(proc: subprocess.Popen | None, log: Path | None = None) -> None:
     """终止**整棵进程树**，不是只杀直接子进程。
 
@@ -209,6 +258,24 @@ def kill_tree(proc: subprocess.Popen | None, log: Path | None = None) -> None:
         lines.append("wait timed out")
     if log:
         log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def kill_pid_tree(pid: int) -> None:
+    """按 PID 收整棵进程树——手里只有 pid、没有 Popen 句柄时用（回收残留代理）。
+
+    与 `kill_tree` 同样必须 `/T`：mitmdump 的 launcher 会再起一个 python 子进程，
+    只杀 launcher 的话端口照样被占着，等于没回收。
+    """
+    if not pid:
+        return
+    try:
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                           capture_output=True, text=True, errors="replace", timeout=30)
+        else:
+            subprocess.run(["kill", "-TERM", str(pid)], capture_output=True, timeout=30)
+    except Exception:  # noqa: BLE001 —— 收不掉就让后面的端口探测去报错，不在这里炸
+        pass
 
 
 def orchestrator_notes(death: dict) -> list[str]:
@@ -251,6 +318,107 @@ def tcp_open(host: str, port: int, timeout: float = 1.5) -> bool:
         return False
 
 
+def port_owner(port: int) -> tuple[int | None, str]:
+    """谁在 LISTEN 这个端口 → (pid, 进程名)。取不到就给 (None, "")，不猜。"""
+    try:
+        if sys.platform == "win32":
+            out = subprocess.run(["netstat", "-ano", "-p", "TCP"],
+                                 capture_output=True, text=True, errors="replace",
+                                 timeout=20).stdout
+            pid = None
+            for line in out.splitlines():
+                parts = line.split()
+                if len(parts) >= 5 and parts[0] == "TCP" \
+                        and parts[1].endswith(f":{port}") and parts[3] == "LISTENING":
+                    pid = int(parts[4])
+                    break
+            if pid is None:
+                return None, ""
+            tl = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                                capture_output=True, text=True, errors="replace",
+                                timeout=20).stdout.strip()
+            name = tl.split('","')[0].strip('"') if tl else ""
+            return pid, name
+        out = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+                             capture_output=True, text=True, errors="replace",
+                             timeout=20).stdout.strip()
+        if out.isdigit():
+            return int(out), ""
+    except Exception:  # noqa: BLE001 —— 探测失败不影响主流程，按"未知占用"处理
+        pass
+    return None, ""
+
+
+STALE_MITM_NAMES = ("mitmdump", "mitmproxy")
+# 真正 LISTEN 的往往不是 mitmdump.exe 本身，而是它拉起的 python.exe 子进程
+# （实测：owner 报 python.exe，按进程名判断会把自家残留当成"别人的进程"而拒收）。
+# 所以还要看命令行里有没有这些特征。
+STALE_MITM_CMDLINE = ("mitmdump", "mitmproxy", "addon_mobile", "collector\\addon", "collector/addon")
+
+
+def proc_cmdline(pid: int) -> str:
+    """取进程命令行。取不到返回 ""，调用方据此保持"不动它"。
+
+    **不能只靠 wmic**：Windows 11 起 wmic 默认已移除（本机实测 `wmic: command not found`），
+    而且它的 FileNotFoundError 会直接把整个取值流程打断——所以两条路各自 try，
+    前一条失败要继续走后面那条，不能让异常短路。
+    """
+    if sys.platform != "win32":
+        try:
+            raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+            return raw.replace(b"\x00", b" ").decode("utf-8", "replace").strip()
+        except Exception:  # noqa: BLE001
+            return ""
+    try:
+        r = subprocess.run(["wmic", "process", "where", f"processid={pid}",
+                            "get", "commandline", "/format:list"],
+                           capture_output=True, text=True, errors="replace", timeout=25)
+        for line in (r.stdout or "").splitlines():
+            if line.strip().startswith("CommandLine="):
+                val = line.split("=", 1)[1].strip()
+                if val:
+                    return val
+    except Exception:  # noqa: BLE001 —— 没有 wmic 是常态，继续走 PowerShell
+        pass
+    try:
+        ps = f'(Get-CimInstance Win32_Process -Filter "ProcessId={pid}").CommandLine'
+        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                           capture_output=True, text=True, errors="replace", timeout=30)
+        return (r.stdout or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def reclaim_port(port: int) -> tuple[bool, str]:
+    """端口被占时，**只回收自己的残留 mitmproxy**，别人的进程一律不动。
+
+    为什么需要（2026-10-19 实测）：长批次跑到中途，某一轮的 mitmdump 会变成孤儿
+    （样本超时被杀、编排进程被回收都会留下）。此后**每一个**样本都在 `mitm_ready`
+    上判红——批次看着还在跑，其实整段没有代理，样本全是零流量。
+    实测已经发生过一次（批次第 1 个样本因端口占用判红）。
+    原来只提示"先排查 netstat 再重跑"，那是把自动化的事推给人；几小时的批次里没人盯。
+
+    判定"是不是自己的"必须看**命令行**：mitmdump.exe 是个 launcher，真正监听的是它
+    拉起的 python.exe（实测 owner=python.exe）。只看进程名会把自家残留当外人。
+    """
+    if not tcp_open("127.0.0.1", port):
+        return True, "free"
+    pid, name = port_owner(port)
+    if not pid:
+        return False, "端口被占用，但取不到占用进程（权限不足？）——不动它"
+    cmd = proc_cmdline(pid)
+    ours = (name or "").lower().startswith(STALE_MITM_NAMES) or \
+           any(tok in cmd.lower() for tok in STALE_MITM_CMDLINE)
+    if not ours:
+        return False, f"被其它进程占用（pid={pid} name={name or '未知'}）——不动它"
+    kill_pid_tree(pid)
+    for _ in range(20):
+        if not tcp_open("127.0.0.1", port):
+            return True, f"已回收残留 mitmproxy（pid={pid} {name}）"
+        time.sleep(0.25)
+    return False, f"残留 mitmproxy（pid={pid} {name}）回收后端口仍被占用"
+
+
 def start_mitm(session: Path, log: Path, package: str) -> subprocess.Popen:
     """**常规代理模式**（不是 reverse）——第三方样本要访问它自己的服务端。
 
@@ -259,16 +427,26 @@ def start_mitm(session: Path, log: Path, package: str) -> subprocess.Popen:
          睡 7 秒后照常返回——采集带着"没有代理"静默跑完，报告漏掉全部网络证据，
          事后完全看不出来。
       ② 启动后确认真的在监听；没监听就把死进程收了再报错（同上，防静默）。
+    2026-10-19：① 之前先尝试回收**自己的**残留 mitmproxy（见 reclaim_port），
+    别人的进程仍然拒绝启动，不误杀。
     """
     if tcp_open("127.0.0.1", MITM_PORT):
-        raise RuntimeError(
-            f"端口 {MITM_PORT} 已被占用——可能是上一轮残留的 mitmproxy（未清理）或"
-            f"其它进程。先排查：netstat -ano | findstr :{MITM_PORT}，再重跑。")
+        ok, why = reclaim_port(MITM_PORT)
+        if not ok:
+            raise RuntimeError(
+                f"端口 {MITM_PORT} {why}。先排查：netstat -ano | findstr :{MITM_PORT}，再重跑。")
+        log.write_text(f"[start_mitm] 端口 {MITM_PORT}：{why}\n", encoding="utf-8")
     env = dict(os.environ)
     env.update({
         "VSCAN_FLOW_LOG": str(session / "flows.jsonl"),
         "VSCAN_UNANSWERED_LOG": str(session / "flows-unanswered.jsonl"),
+        "VSCAN_UNATTRIBUTED_LOG": str(session / "flows-unattributed.jsonl"),
         "VSCAN_ATTRIB_SOURCES": os.pathsep.join([
+            # **必须把 reads.jsonl 放第一位**（2026-10-19）：钩子边跑边写的就是它，
+            # 而 egress.jsonl / egress_tp.jsonl 要到 split_events 收尾才存在。
+            # 只读后两者 → 整场归因 unresolved → 代理流被当成"归因不到"丢弃，
+            # 表现就是"代理明明拿到了 200，flows.jsonl 却是空的"。
+            str(session / "reads.jsonl"),
             str(session / "egress.jsonl"), str(session / "egress_tp.jsonl")]),
         "VSCAN_PACKAGES": package,
         "VSCAN_SESSION": session.name,
@@ -278,6 +456,27 @@ def start_mitm(session: Path, log: Path, package: str) -> subprocess.Popen:
         # 整场归因静默变 unresolved——reverse 路径（device_run.py）不设此变量。
         "VSCAN_ATTRIB_TARGET_CHECK": "1",
     })
+    # 上游可达性（2026-10-19）：本机到 Google 系域名不通（IPv6 与直连都超时），
+    # mitmproxy 会对每条 CONNECT 干等 ~20s 再回 502（`WinError 121 信号灯超时`），
+    # 把采集窗口和 CPU 全耗在系统自检流量上。这些 host 不可能承载被测应用证据，
+    # 直接按"不拦截、原样转发"处理；其余 host 照常解密。
+    # 忽略表只放"与本应用数据外发无关的系统噪声"，**不要**往里塞业务域名：
+    # 被忽略的主机不做中间人，报告里也就看不见它。2026-10-19 实机补了
+    # `android.googleapis.com`——GMS 用它做检查，客户端不信任我们的 CA，
+    # 每次都在日志里打一条 "client does not trust the proxy's certificate"，
+    # 淹掉真正的失败信息；它对隐私结论没有价值。
+    # 注意：ignore_hosts **不省掉上游连接**，只是不拦截。目标本身不可达时照样会失败，
+    # 别指望它解决超时——超时的归类见 core/collector/addon.classify_upstream_failure。
+    ignore = os.environ.get("VSCAN_MITM_IGNORE_HOSTS") or (
+        r"connectivitycheck\.gstatic\.com|clients3\.google\.com|mtalk\.google\.com|"
+        r"android\.clients\.google\.com|android\.googleapis\.com|play\.googleapis\.com|"
+        r"firebaseinstallations\.googleapis\.com|www\.gstatic\.com|www\.google\.com")
+    mitm_args = ["mitmdump", "-s", str(MOBILE / "traffic" / "addon_mobile.py"),
+                 "--listen-host", "0.0.0.0", "--listen-port", str(MITM_PORT),
+                 # lazy：先建客户端连接、真收到请求字节再连上游。eager 会在
+                 # CONNECT 一到达就连上游，对不可达 host 白白阻塞。
+                 "--set", "connection_strategy=lazy",
+                 "--set", f"ignore_hosts={ignore}"]
     # **必须关掉子进程的 stdout 块缓冲**：管道/文件重定向下 Python 默认 8KB 块缓冲，
     # 而收尾一律 `taskkill /T /F`（见 kill_tree）——缓冲里没落盘的内容直接蒸发。
     # 实测：breezy 那一轮的 mitm.log 最终 0 字节（连启动横幅都没有），事后无法诊断
@@ -287,8 +486,7 @@ def start_mitm(session: Path, log: Path, package: str) -> subprocess.Popen:
     env["PYTHONUNBUFFERED"] = "1"
     # stdin=DEVNULL：不让子进程继承标准句柄，否则下游攥住句柄会让编排层 subprocess.run 阻塞。
     proc = subprocess.Popen(
-        ["mitmdump", "-s", str(MOBILE / "traffic" / "addon_mobile.py"),
-         "--listen-host", "0.0.0.0", "--listen-port", str(MITM_PORT)],
+        mitm_args,
         stdin=subprocess.DEVNULL, stdout=open(log, "w", encoding="utf-8"),
         stderr=subprocess.STDOUT, env=env)
     # mitmproxy 启动要几秒；等不够会"应用连不上代理"而非"代理没起来"。
@@ -308,8 +506,51 @@ def start_mitm(session: Path, log: Path, package: str) -> subprocess.Popen:
                        f"启动日志见 {log}")
 
 
+_FRIDA_PY_CACHE: str | None = None
+
+
+def frida_python() -> str:
+    """挑一个**确实装了 frida** 的解释器来跑 `core/frida_host/run.py`。
+
+    为什么需要：`start_hook` 原先直接用 `sys.executable`。当前解释器若没装 frida，
+    run.py 只在 hook 日志里印一行 `frida module missing` 就退出，**主流程照常往下跑**，
+    最终表现是"整轮零事件"——和"应用什么都没做"完全一样，是最坏的一种静默失败。
+    实测踩过：managed 3.13.12 没装 frida，而系统 Python313 装了（还带 reportlab）。
+
+    探测顺序：当前解释器 → 环境变量 VSCAN_PY → 常见安装位置 → PATH 上的 python。
+    都探不到就返回当前解释器（保持原行为，由下游的 `hook_*_armed` 判据把它判红）。
+    """
+    global _FRIDA_PY_CACHE
+    if _FRIDA_PY_CACHE:
+        return _FRIDA_PY_CACHE
+    cands = [sys.executable]
+    if os.environ.get("VSCAN_PY"):
+        cands.append(os.environ["VSCAN_PY"])
+    import glob
+    local = os.environ.get("LOCALAPPDATA") or ""
+    if local:
+        cands += sorted(glob.glob(os.path.join(local, "Programs", "Python", "Python3*",
+                                               "python.exe")), reverse=True)
+    for c in (shutil.which("python"), shutil.which("python3")):
+        if c:
+            cands.append(c)
+    seen = set()
+    for c in cands:
+        if not c or c in seen:
+            continue
+        seen.add(c)
+        try:
+            r = subprocess.run([c, "-c", "import frida"], capture_output=True, timeout=60)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if r.returncode == 0:
+            _FRIDA_PY_CACHE = c
+            return c
+    return sys.executable
+
+
 def start_hook(script: Path, session: Path, out_name: str, log: Path,
-               seconds: int, package: str) -> subprocess.Popen:
+               seconds: int, package: str, spawn: bool = False) -> subprocess.Popen:
     env = dict(os.environ)
     env["VSCAN_SESSION"] = session.name
     env["PYTHONUNBUFFERED"] = "1"   # 见 start_mitm 的注释：杀掉子进程时缓冲内容会丢
@@ -324,10 +565,12 @@ def start_hook(script: Path, session: Path, out_name: str, log: Path,
     except OSError:
         pass
     proc = subprocess.Popen(
-        [PY, str(ROOT / "core" / "frida_host" / "run.py"), "--package", package,
+        [frida_python(), str(ROOT / "core" / "frida_host" / "run.py"),
+         "--package", package,
          "--script", str(script), "--seconds", str(seconds),
          "--allow-package", package, "--session", session.name,
-         "--out", str(session / out_name), "--stop-file", str(stop_file)],
+         "--out", str(session / out_name), "--stop-file", str(stop_file)]
+        + (["--spawn"] if spawn else []),
         stdin=subprocess.DEVNULL, stdout=open(log, "w", encoding="utf-8"),
         stderr=subprocess.STDOUT, env=env)
     proc.stop_file = stop_file  # type: ignore[attr-defined]
@@ -370,10 +613,30 @@ def stop_hook(proc: subprocess.Popen | None, log: Path | None = None,
 
 def app_uid(package: str) -> int | None:
     """应用 uid（不是 pid）。取不到返回 None——调用方据此跳过采样，
-    绝不用一个猜的 uid 去采样然后报"零外发"。"""
-    for args in (("shell", "stat", "-c", "%u", f"/data/data/{package}"),
-                 ("shell", "dumpsys", "package", package)):
+    绝不用一个猜的 uid 去采样然后报"零外发"。
+
+    顺序（2026-10-19 调整）：`pm list packages -U` 是 PackageManager 的权威回答，
+    带 user 维度（本机应用装在 user 10，`dumpsys package` 的 userId 曾与运行期
+    socket 的 uid 对不上，导致"应用有外发"被判成"没采到"）。
+    `stat /data/data/<pkg>` 只能兜底：Android 15 上它是符号链接，且卸载重装后会变。
+    """
+    probes = (
+        ("shell", "pm", "list", "packages", "--user", "0", "-U"),
+        ("shell", "stat", "-L", "-c", "%u", f"/data/user/0/{package}"),
+        ("shell", "dumpsys", "package", package),
+    )
+    for args in probes:
         out = adb(*args, timeout=45).stdout
+        if not out.strip():
+            continue
+        if args[1] == "pm":
+            # 形如 "package:com.foo uid:10237"（-U 选项）；只认本包的 uid
+            for line in out.splitlines():
+                if f"package:{package}" in line:
+                    m = re.search(r"uid:(\d+)", line)
+                    if m:
+                        return int(m.group(1))
+            continue
         m = re.search(r"userId=(\d+)", out)
         if m:
             return int(m.group(1))
@@ -383,7 +646,7 @@ def app_uid(package: str) -> int | None:
 
 
 def start_conn_probe(session: Path, log: Path, package: str,
-                     seconds: int) -> subprocess.Popen:
+                     seconds: int, uid: int | None = None) -> subprocess.Popen:
     """设备侧连接采样。
 
     这是**与客户端库无关**的外发地面真相：钩子只能证明"被挂钩的那层被走到了"，
@@ -398,6 +661,11 @@ def start_conn_probe(session: Path, log: Path, package: str,
     cmd = [PY, str(Path(__file__).resolve().parent / "conn_probe.py"),
            "--package", package, "--seconds", str(seconds),
            "--out", str(session / "conns.jsonl")]
+    # uid 给了就在解析阶段过滤（2026-10-19）：应用共享同一个网络命名空间，
+    # `/proc/<app pid>/net/tcp` 里混着 system(0)/network_stack(1073)/历史 uid 的
+    # socket，不过滤会把"别的进程在联网"读成"应用在联网"。
+    if uid is not None:
+        cmd += ["--uid", str(uid)]
     child_env = dict(os.environ)
     child_env["PYTHONUNBUFFERED"] = "1"   # 见 start_mitm 的注释：杀掉子进程时缓冲内容会丢
     proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL,

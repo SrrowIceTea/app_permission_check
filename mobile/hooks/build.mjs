@@ -26,20 +26,48 @@ const BUNDLES = [
   ['hook_egress_tp', "import { main } from './hook_egress_tp.js';\nJava.perform(main);"],
   ['ssl_pinning_tp', "import { main } from './ssl_pinning_tp.js';\nJava.perform(main);"],
   ['hook_all', [
+    // 内存 Hook（native TLS 明文 / JCE 明文）并入同一 agent（2026-10-18 接线）。
+    // **必须显式调 main()，不能用 side-effect import**：ESM 的 import 会被提升到
+    // 入口 `globalThis.Java = Java` 之前，实测直接 `ReferenceError: 'Java' is not defined`。
+    "import { main as nativeSslMain } from './hook_native_ssl.js';",
+    "import { main as nativeCryptoMain } from './hook_native_crypto.js';",
+    "import { main as tlsMetaMain } from './hook_tls_meta.js';",
+    "import { main as cipherMain } from './hook_cipher.js';",
+    "import { main as flutterSslMain } from './hook_flutter_ssl.js';",
     "import { main as privacyMain } from './hook_privacy.js';",
     "import { main as consentMain } from './hook_consent.js';",
     "import { main as egressMain } from './hook_egress_tp.js';",
     "import { main as tlsMain } from './ssl_pinning_tp.js';",
     "Java.perform(function () {",
+    // tls_meta 排第一：它装 keylog 回调，而回调必须在握手**之前**装上才记得到密钥。
+    // 它前面原本有 privacyMain（58 个 Java API，要几秒），实测日志里
+    // `SSL_READ_PLAINTEXT` 早于 `tls_meta ARMED`，握手已经跑完了。
+    // **诚实交代**：改序后覆盖率并没有可测量的提升（改序前后各 2 轮，都是 1 轮拿到
+    // keylog、1 轮为 0）。根因不在顺序，而在"应用在我们装载 agent 之前就把连接建好了"，
+    // 之后只是在旧连接上 SSL_read——那时 SSL_CTX_new / SSL_new 早已过去，任何后装都无从补。
+    // 真正能解的是 spawn（第一条指令前就位），但本机 AVD 上 spawn 不可用
+    // （实测 pid 在第 5s 消失并被重启，见 DECISIONS M038 / exp_spawn_keylog.py）。
+    // 保留改序的理由是它仍然更正确：privacyMain 若抛异常，keylog 已经装好了。
+    "  tlsMetaMain();",
     "  privacyMain();",
     "  consentMain();",
     "  egressMain();",
     "  tlsMain();",
+    "  nativeSslMain();",
+    // 应用层加密（EVP/AES）与 TLS 元数据（SNI/keylog）：与 nativeSsl 同层，
+    // 都是纯 native attach，不替换 Java 方法（A1 单 agent 约束只约束 ArtMethod 替换）。
+    "  nativeCryptoMain();",
+    "  cipherMain();",
+    // Flutter（静态剥符号 BoringSSL）：没有库就静默返回，扫到就替一条 0x50 锚点。
+    "  flutterSslMain();",
     "});"
   ].join('\n')],
-  // 遗留入口（文件自含 Java.perform，未参与合并）：保持旧行为。
-  ['hook_cipher', null],
-  ['hook_native_ssl', null]
+  // 单模块入口：供单独挂载/排障（模块本身不自执行，装配写在这里）。
+  ['hook_cipher', "import { main } from './hook_cipher.js';\nJava.perform(main);"],
+  ['hook_native_ssl', "import { main } from './hook_native_ssl.js';\nJava.perform(main);"],
+  ['hook_native_crypto', "import { main } from './hook_native_crypto.js';\nJava.perform(main);"],
+  ['hook_tls_meta', "import { main } from './hook_tls_meta.js';\nJava.perform(main);"],
+  ['hook_flutter_ssl', "import { main } from './hook_flutter_ssl.js';\nJava.perform(main);"]
 ];
 
 const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));

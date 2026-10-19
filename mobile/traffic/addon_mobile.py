@@ -41,3 +41,11 @@ request = addon.request
 response = addon.response
 error = addon.error
 done = addon.done
+
+# 上游连接三件套（2026-10-19）。**必须在这里再导出**：本文件是 mitmproxy 实际加载的
+# 模块，`core/collector/addon.py` 里的钩子只有在被显式挂到本命名空间后才会被调用。
+# 少这一段的后果是静默的——`flows-unanswered.jsonl` 里 `failure_kind` 恒为 None，
+# 看起来像"没有失败"，实际是钩子根本没跑。
+server_connect = addon.server_connect
+server_connected = addon.server_connected
+server_connect_error = addon.server_connect_error

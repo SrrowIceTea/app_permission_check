@@ -204,8 +204,13 @@ def main() -> int:
             pass
 
     threading.Thread(target=watchdog, daemon=True).start()
-    print(f"[conn_probe] package={args.package} pid={args.pid} uid={args.uid} guest={guest} "
+    print(f"[conn_probe] package={args.package} pid={args.pid} "
+          f"target_uid={args.uid} guest={guest} "
           f"sampling {args.interval*1000:.0f}ms for {args.seconds:.0f}s -> {args.out}", flush=True)
+    if args.package and args.uid is None:
+        print("[conn_probe] 未给 --uid：本轮会落盘**整个网络命名空间**的 socket，"
+              "`uid` 字段才是归属依据；只看 pid 会把他进程的连接算到应用头上。",
+              flush=True)
 
     seen: dict[tuple, dict] = {}
     rows = 0
@@ -251,6 +256,11 @@ def main() -> int:
                 "v": "1", "src": "conn_probe", "ev": "DEVICE_CONN",
                 "ts": int(t[0]) // 1_000_000,
                 "pid": row_pid, "uid": uid, "family": family,
+                # pid 是**读取路径**里的 pid（应用进程），uid 是**socket 属主**。
+                # Android 的应用共享同一个网络命名空间，所以这个文件里会混入
+                # system(0)/network_stack(1073)/历史 uid 的 socket —— 归属看 uid，
+                # 不要看 pid（2026-10-19：曾据此误判"应用有连接"）。
+                "pid_is_owner": args.uid is not None and uid == args.uid,
                 "remote_ip": remote_ip, "remote_port": rport_i,
                 "state": STATES.get(t[5], t[5]),
                 "local_port": int(lport, 16), "local_ip": parse_hex_ip(lip), "hits": 1,

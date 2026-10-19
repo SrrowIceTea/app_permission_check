@@ -30,6 +30,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -84,6 +85,13 @@ FLOW_LOG = Path(os.environ.get("VSCAN_FLOW_LOG") or (HERE / "logs" / "flows.json
 # 后者是"一次尝试"。混在一起会让"没收到响应"与"没有发送请求"这两种情况互相掩盖。
 UNANSWERED_LOG = Path(os.environ.get("VSCAN_UNANSWERED_LOG")
                       or FLOW_LOG.with_name(FLOW_LOG.stem + "-unanswered.jsonl"))
+# 代理看见了、但**归因不到被测应用**的流（2026-10-19）。旧行为是直接丢弃：
+# 于是"应用确实外发了、只是 egress 钩子没覆盖到"与"应用没有外发"在交付物里
+# 长得一模一样（实测 02-asmat-foggymaps：设备侧 ESTABLISHED、代理拿到
+# `GET https://104.26.6.23/planet` 200，flows.jsonl 却是空的）。
+# 现在改成单独落盘：不进 flows.jsonl（不污染归因结论），但**留下有人看得到的痕迹**。
+UNATTRIBUTED_LOG = Path(os.environ.get("VSCAN_UNATTRIBUTED_LOG")
+                        or FLOW_LOG.with_name(FLOW_LOG.stem + "-unattributed.jsonl"))
 
 # 白名单**没有默认值**（§8.2 B-1）。平台无关内核曾把车载夹具包名
 # `com.vscanner.targetapp{,2}` 当默认，于是移动端会话漏设 VSCAN_PACKAGES 时
@@ -119,6 +127,69 @@ _LOCK = threading.Lock()
 _STOP = threading.Event()
 TICK_S = 0.5
 
+# 上游连接失败的分类（2026-10-19）。实测依据（mitmproxy 12.2.3，常规代理模式）：
+#   * 上游拒绝连接：`request` → `server_connect` → `server_connect_error` → `error`，
+#     **`response` 不触发**，客户端收到 mitmproxy 合成的 502。所以 502 不会污染 flows.jsonl。
+#   * 上游黑洞（连不通、也不拒）：连接一直挂着，客户端等不住先断 → `server_connect_error`
+#     的 msg 是 "client disconnected"。**和"客户端自己取消"字面完全一样**，
+#     只能靠"挂了多久"区分：挂满阈值才断 ⇒ 上游问题，不是应用主动放弃。
+# 不分类的后果：报告会把"上游不可达"写成"应用自己撤了请求"，也就是把环境故障记成应用行为。
+REFUSED_PAT = re.compile(r"refused|10061|1225|拒绝网络连接|连接被拒绝", re.I)
+TIMEOUT_PAT = re.compile(r"\btimed? ?out\b|timeout|\b121\b|unreachable|信号灯|不可达|超时", re.I)
+SLOW_CONNECT_MS = 5000      # 超过这个时长还没连上，视为上游黑洞而非客户端主动取消
+
+_CONNECT_START: dict[int, float] = {}
+_UPSTREAM_FAIL: dict[int, dict] = {}
+
+
+def classify_upstream_failure(msg: str | None, connect_ms: int | None,
+                              slow_ms: int = SLOW_CONNECT_MS) -> str:
+    """把上游失败的原始字符串归成可统计的类别。
+
+    `upstream_refused`  —— 对端明确拒绝（端口没开、被防火墙 REJECT）
+    `upstream_timeout`  —— 连不上也不拒，或连了很久才被放弃（黑洞/丢包/被 DROP）
+    `client_abort`      —— 短时间就断：应用自己取消（用户杀进程、OkHttp 主动放弃）
+    `other`             —— 没归类，保留原文给人工看
+    """
+    m = msg or ""
+    if REFUSED_PAT.search(m):
+        return "upstream_refused"
+    if TIMEOUT_PAT.search(m):
+        return "upstream_timeout"
+    low = m.lower()
+    if "disconnect" in low or "断开" in m:
+        if connect_ms is not None and connect_ms >= slow_ms:
+            return "upstream_timeout"
+        return "client_abort"
+    return "other"
+
+
+def server_connect(data) -> None:
+    """记录上游开始连接的时刻。`timestamp_end` 在成功连接后通常仍是 None，
+    不能靠它算耗时，所以在钩子里自己打点。"""
+    if len(_CONNECT_START) > 1000:   # server_connected 没跟上的异常路径，别无限长
+        _CONNECT_START.clear()
+    _CONNECT_START[id(data.server)] = time.time()
+
+
+def server_connected(data) -> None:
+    _CONNECT_START.pop(id(data.server), None)
+
+
+def server_connect_error(data) -> None:
+    """上游连接失败。**这是 `error()` 之外唯一能看见"连不上"的地方**：
+    连接被拒时 `error()` 会来，但黑洞超时时只靠它才能拿到耗时。"""
+    started = _CONNECT_START.pop(id(data.server), None)
+    connect_ms = int((time.time() - started) * 1000) if started else None
+    err = getattr(data.server, "error", None)
+    msg = getattr(err, "msg", None) or str(err or "")
+    _UPSTREAM_FAIL[id(data.server)] = {
+        "failure_kind": classify_upstream_failure(msg, connect_ms),
+        "connect_ms": connect_ms,
+    }
+    if len(_UPSTREAM_FAIL) > 1000:   # error() 没跟上的情况（load-only），别无限长
+        _UPSTREAM_FAIL.clear()
+
 
 def _flow_target(flow) -> dict:
     """从一条流里取目标地址，供目标校验用。
@@ -145,7 +216,12 @@ def _emit(entry: dict) -> None:
     global FLOW_SEQ
     FLOW_SEQ += 1
     entry["evt_id"] = FLOW_SEQ
-    path = UNANSWERED_LOG if entry.get("terminal") == "error" else FLOW_LOG
+    if entry.get("terminal") == "error":
+        path = UNANSWERED_LOG
+    elif entry.get("unattributed"):
+        path = UNATTRIBUTED_LOG
+    else:
+        path = FLOW_LOG
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -154,6 +230,10 @@ def _emit(entry: dict) -> None:
     if entry.get("terminal") == "error":
         ctx.log.info(f"[vscan] {entry['package']} {entry['method']} "
                      f"{entry['host']}{entry['path']} -> 无响应（{entry.get('failure')}）")
+        return
+    if entry.get("unattributed"):
+        ctx.log.info(f"[vscan] (未归因) {entry['method']} {entry['host']}{entry['path']} -> "
+                     f"{entry['status_code']}（egress 钩子未覆盖，已记入 unattributed）")
         return
     tags = set(entry["request_tags"]) | set(entry["response_tags"])
     ctx.log.info(
@@ -272,6 +352,11 @@ def response(flow: http.HTTPFlow) -> None:
     if found.package in WHITELIST or (not found.resolved and all_tags):
         with _LOCK:
             PENDING.append(entry)
+    elif not found.resolved:
+        # 归因不到就**单独留痕**，不丢：这是"代理看到了但钩子没覆盖"的唯一证据。
+        entry["unattributed"] = True
+        with _LOCK:
+            _emit(entry)
 
 
 def error(flow: http.HTTPFlow) -> None:
@@ -309,9 +394,15 @@ def error(flow: http.HTTPFlow) -> None:
     if found.package not in WHITELIST:
         return   # 白名单外的失败记下来只会淹没真正要看的（D403 的边界）
 
+    # `server_connect_error` 先于 `error` 触发（实测），失败分类与耗时由它带过来；
+    # 没走到那个钩子的情况（协议错误等）在这里就地补一次分类，保证字段不缺席。
+    msg = getattr(flow.error, "msg", None) or "unknown"
+    upstream = _UPSTREAM_FAIL.pop(id(flow.server_conn), None) or {}
+    if "failure_kind" not in upstream:
+        upstream["failure_kind"] = classify_upstream_failure(msg, None)
+
     entry = flow_entry.unanswered(
-        flow, found, ts_ms, SESSION,
-        failure=getattr(flow.error, "msg", None) or "unknown")
+        flow, found, ts_ms, SESSION, failure=msg, **upstream)
     with _LOCK:
         PENDING.append(entry)
 

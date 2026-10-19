@@ -31,6 +31,9 @@ WHITELIST = Path(__file__).resolve().parent / "hooks_parity_whitelist.json"
 PAIRS = [
     ("hook_cipher", "hook_cipher.js", "hook_cipher.js"),
     ("hook_native_ssl", "hook_native_ssl.js", "hook_native_ssl.js"),
+    ("hook_native_crypto", "hook_native_crypto.js", "hook_native_crypto.js"),
+    ("hook_tls_meta", "hook_tls_meta.js", "hook_tls_meta.js"),
+    ("hook_flutter_ssl", "hook_flutter_ssl.js", "hook_flutter_ssl.js"),
     ("stack_capture", "stack_capture.js", "stack_capture.js"),
     ("scope", "scope.js", "scope.js"),
     ("ssl_pinning", "ssl_pinning_tp.js", "ssl_pinning_bypass.js"),

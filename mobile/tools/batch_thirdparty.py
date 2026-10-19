@@ -66,6 +66,13 @@ def main() -> int:
                          "用错类目会让 over_collection 的判定整体偏移——"
                          "例：--category com.ximalaya.ting.android.car=online_video")
     ap.add_argument("--static-only", action="store_true")
+    ap.add_argument("--resume", action="store_true",
+                    help="断点续跑：已有「verification.json passed + 报告 PDF」的样本直接跳过。"
+                         "用于模拟器中途崩溃后接着跑，不必重跑已完成的样本。")
+    ap.add_argument("--static-reuse", default=None,
+                    help="已有逐包静态产物目录（<包名>/static-manifest.json）。命中则跳过"
+                         "静态分析、直接用它当 --static-dir；未命中照常跑静态。"
+                         "用途：数据集已产出静态结果时省掉每包 1–2 分钟的 jadx。")
     ap.add_argument("--skip-ai", action="store_true")
     ap.add_argument("--seconds", type=int, default=150)
     ap.add_argument("--build-tools",
@@ -161,6 +168,36 @@ def main() -> int:
             rec["note"] = f"文件名 {apk.stem!r} 与包名 {pkg!r} 不一致（按包名建档）"
 
         app_dir = batch / f"{idx:02d}-{short_slug(pkg)}"
+
+        # `--resume`：断点续跑。模拟器是外挂资源，跑批中途崩掉（本机实测约 20 分钟
+        # 一次）不该让前 30 个样本的结果白丢。判据取「verification.json 通过 + 报告
+        # 文件在」——只看目录存在会把上次半途死掉的样本当成已完成（该目录里同样有
+        # run.log 和 static/，长得一模一样）。
+        if args.resume:
+            vf = app_dir / "verification.json"
+            rep = app_dir / "out" / "mobile-report.pdf"
+            done = False
+            if vf.exists() and rep.exists():
+                try:
+                    done = json.loads(vf.read_text(encoding="utf-8")).get("passed") is True
+                except json.JSONDecodeError:
+                    done = False
+            if done:
+                rec["status"] = "resumed"
+                rec["dir"] = str(app_dir)
+                rec["report"] = str(rep)
+                sp = app_dir / "out" / "summary.json"
+                if sp.exists():
+                    try:
+                        s = json.loads(sp.read_text(encoding="utf-8"))
+                        rec["findings_total"] = s.get("findings_total")
+                        rec["findings_by_type"] = s.get("findings_by_rule_type")
+                    except json.JSONDecodeError:
+                        pass
+                results.append(rec)
+                print(f"  [已完成·跳过] {pkg}  结论 {rec.get('findings_total', '?')} 条")
+                continue
+
         app_dir.mkdir(parents=True, exist_ok=True)
         rec["dir"] = str(app_dir)
         log = app_dir / "run.log"
@@ -170,21 +207,34 @@ def main() -> int:
                        f"对应完整包名见本行上面的「包名」。\n",
                        encoding="utf-8")
 
-        # 1) 静态分析
+        # 1) 静态分析（或复用已有逐包静态产物，见 --static-reuse）
         #
         # **静态产物必须放在 `--out` 之外**：device_run_thirdparty 会把
         # `--static-dir` 拷成 `<out>/static`，而拷贝前先 `rmtree(<out>/static)`。
         # 若 static_dir 就在 out 里面，它删掉的正是源，紧接着的 copytree 必然
         # 报 `FileNotFoundError`——看起来像"静态分析没产出"，实则是自己删了自己。
-        static_dir = batch / "_static" / f"{idx:02d}-{short_slug(pkg)}"
-        rc = run([PY, str(HERE / "static_scan_thirdparty.py"), "--apk", str(apk),
-                  "--out", str(static_dir), "--version", "36"], log, timeout=1800)
-        rec["steps"]["static"] = rc
-        if rc != 0:
-            rec["status"] = "static_failed"
-            results.append(rec)
-            print(f"  [静态失败 rc={rc}] {pkg}")
-            continue
+        reuse = None
+        if args.static_reuse:
+            cand = Path(args.static_reuse) / pkg
+            if (cand / "static-manifest.json").exists():
+                reuse = cand
+        if reuse is not None:
+            # 复用的判据不是"目录存在"，而是 `static-manifest.json` 存在——它是
+            # static_scan_thirdparty 的完成标记，缺了它说明上一轮没跑完（半成品与
+            # 成功产物在文件系统上长得一模一样）。
+            static_dir = reuse
+            rec["steps"]["static"] = 0
+            rec["static_reused_from"] = str(reuse)
+        else:
+            static_dir = batch / "_static" / f"{idx:02d}-{short_slug(pkg)}"
+            rc = run([PY, str(HERE / "static_scan_thirdparty.py"), "--apk", str(apk),
+                      "--out", str(static_dir), "--version", "36"], log, timeout=1800)
+            rec["steps"]["static"] = rc
+            if rc != 0:
+                rec["status"] = "static_failed"
+                results.append(rec)
+                print(f"  [静态失败 rc={rc}] {pkg}")
+                continue
         if args.static_only:
             rec["status"] = "static_ok"
             rec["static_dir"] = str(static_dir)
@@ -209,11 +259,30 @@ def main() -> int:
         if pkg not in cat_map:
             rec["note"] = ((rec.get("note", "") +
                             f" 类目未逐样本指定，按默认 {category!r}（可能不准确）").strip())
+        # **按样本前置 mitmproxy（2026-10-19 修）**：模拟器以 `-http-proxy 127.0.0.1:8888`
+        # 冷启动后，SLIRP 把 guest 的**所有 TCP** 改写投给宿主 8888。批处理原先等
+        # device_run 的「流量镜像」阶段（`am start` **之后**）才起代理，后果有两条：
+        #   ① 安装/启动瞬间的外发连不上（实测应用首次运行的外发恰好就发生在这一刻）；
+        #   ② 早于代理的 `network_up` 判据必然红 → 整批样本被标成 device_failed。
+        # 这是判据假阴性，不是样本行为。修法：在 device_run **之前**起一份绑本样本
+        # session 的代理（归因不串台），由 device_run 以 `--reuse-mitm` 复用，跑完
+        # 立即按树收掉——绝不把 8888 泄漏给下一样本（泄漏会让下一轮 start_mitm 报占用）。
+        proxy = None
+        sess_dir = app_dir / "session"
+        sess_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            proxy = thirdparty_env.start_mitm(sess_dir, app_dir / "mitm-early.log", pkg)
+        except RuntimeError as exc:
+            rec["early_mitm_error"] = str(exc)
+            print(f"  [代理前置失败] {pkg}：{exc}（本轮启动期流量可能漏采）")
+
         cmd = [PY, str(HERE / "device_run_thirdparty.py"), "--apk", str(apk),
                "--package", pkg, "--main-activity", activity,
                "--out", str(app_dir), "--app-category", category,
                "--seconds", str(args.seconds),
                "--static-dir", str(static_dir), "--build-tools", args.build_tools]
+        if proxy is not None:
+            cmd.append("--reuse-mitm")
         if prov.exists():
             cmd += ["--provenance", str(prov)]
         else:
@@ -221,7 +290,16 @@ def main() -> int:
                            " 无 provenance.json：报告里样本来源会标为未记录").strip()
         if args.skip_ai:
             cmd += ["--skip-ai"]
-        rc = run(cmd, log, timeout=3600)
+        try:
+            rc = run(cmd, log, timeout=3600)
+        finally:
+            # 前置代理的生命周期终点：无论 device_run 正常结束、失败还是被超时打断，
+            # 都要把整棵进程树收掉（孤儿 mitmdump 会占着 8888，让下一样本的前置失败）。
+            if proxy is not None:
+                try:
+                    thirdparty_env.kill_tree(proxy, app_dir / "kill-early-mitm.log")
+                except Exception:  # noqa: BLE001  收尾失败不掩盖本轮主结论
+                    pass
         rec["steps"]["device"] = rc
         rec["status"] = "ok" if rc == 0 else "device_failed"
         # 把该样本的结论规模摘进汇总，便于一眼看出哪个样本有东西
@@ -240,7 +318,7 @@ def main() -> int:
         print(f"  [{rec['status']}] {pkg}  结论 {rec.get('findings_total', '?')} 条"
               + ("  报告已生成" if rec.get("report") else ""))
 
-    ok = [r for r in results if r["status"] in ("ok", "static_ok")]
+    ok = [r for r in results if r["status"] in ("ok", "static_ok", "resumed")]
     (batch / "batch-summary.json").write_text(json.dumps(
         {"status": "ok" if len(ok) == len(results) else "partial",
          "batch_dir": str(batch), "samples": len(results), "succeeded": len(ok),

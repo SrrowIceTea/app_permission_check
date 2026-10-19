@@ -37,7 +37,15 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parents[1]))
 import policy_extract  # noqa: E402
+import policy_discover  # noqa: E402
+
+try:      # aapt2 用来从资源表挖政策 URL；SDK 不在就退化为"只找内嵌正文"
+    from core import sdk_paths  # noqa: E402
+    _AAPT2 = str(sdk_paths.sdk_dir("build-tools", "36.1.0") / "aapt2.exe")
+except Exception:  # noqa: BLE001
+    _AAPT2 = "aapt2"
 
 UA = ("Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) "
       "Chrome/120.0 Mobile Safari/537.36 VScannerMobile/1.0 (authorized-testing)")
@@ -47,6 +55,9 @@ TIMEOUT_S = 25
 POLICY_HINTS = ["privacy", "policy", "yinsi", "zhengce", "agreement", "terms",
                 "隐私", "政策", "协议", "个人信息保护"]
 
+# 旧「按扩展名筛选」路径的常量：extract_from_apk 改用 policy_discover 后**不再引用**，
+# 保留是为了让退回旧实现的人拿到收紧后的正确取值（去掉 .json、去掉「用户协议」）。
+# 新的筛选规则在 policy_discover.POLICY_WORDS / _SKIP / iter_text_entries，改那边才生效。
 APK_CANDIDATE_RE = re.compile(r"\.(html?|txt|md)$", re.IGNORECASE)
 APK_POLICY_WORDS = ["隐私政策", "隐私保护指引", "个人信息保护政策", "privacy policy"]
 
@@ -55,28 +66,69 @@ def sha256(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
+def raw_code_url(url: str) -> str:
+    """把「代码托管站的网页浏览地址」换成**直接取正文**的地址（2026-10-19）。
+
+    实测：securecamera 的资源表里写的是
+    `https://github.com/<owner>/<repo>/blob/main/PRIVACY.md`，抓回来是 GitHub 的
+    浏览页——正文之外还裹着 "Skip to content / Navigation Menu / Sign in / Platform"
+    这些导航文案（4766 字里大半是壳）。这些噪声会混进 `policy_mismatch` 的披露比对，
+    把"没写在政策里"稀释成"好像提到了"。换 raw 地址后拿到的才是文件本身。
+
+    只改 URL 形状，不改抓取逻辑；不是 GitHub/GitLab 的地址原样返回。
+    """
+    p = urllib.parse.urlsplit(url)
+    host = p.netloc.lower()
+    seg = [s for s in p.path.split("/") if s]
+    if host in ("github.com", "www.github.com") and len(seg) >= 5 and seg[2] == "blob":
+        # /<owner>/<repo>/blob/<ref>/<path...> -> raw.githubusercontent.com/<owner>/<repo>/<ref>/<path...>
+        return urllib.parse.urlunsplit(("https", "raw.githubusercontent.com",
+                                        "/" + "/".join(seg[:2] + seg[3:]), "", ""))
+    if host in ("gitlab.com", "www.gitlab.com") and "-" in seg and "blob" in seg:
+        i = seg.index("-")
+        if seg[i + 1:i + 2] == ["blob"]:
+            return urllib.parse.urlunsplit(("https", "gitlab.com",
+                                            "/" + "/".join(seg[:i] + ["raw"] + seg[i + 2:]), "", ""))
+    return url
+
+
 def fetch_url(url: str, *, timeout: int = TIMEOUT_S) -> dict:
-    """抓一个 URL。**失败如实返回状态，不抛异常吞掉细节。**"""
-    req = urllib.request.Request(url, headers={"User-Agent": UA,
-                                               "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"})
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read(MAX_BYTES + 1)
-            truncated = len(raw) > MAX_BYTES
-            raw = raw[:MAX_BYTES]
-            return {"ok": True, "url": url, "final_url": resp.geturl(),
-                    "status": getattr(resp, "status", None),
-                    "content_type": resp.headers.get("Content-Type", ""),
-                    "bytes": raw, "byte_count": len(raw), "truncated": truncated,
-                    "error": None}
-    except urllib.error.HTTPError as e:
-        return {"ok": False, "url": url, "final_url": url, "status": e.code,
-                "content_type": "", "bytes": b"", "byte_count": 0, "truncated": False,
-                "error": f"HTTP {e.code} {e.reason}"}
-    except Exception as e:  # noqa: BLE001 —— 网络异常种类多，如实记录即可
-        return {"ok": False, "url": url, "final_url": url, "status": None,
-                "content_type": "", "bytes": b"", "byte_count": 0, "truncated": False,
-                "error": f"{e.__class__.__name__}: {e}"}
+    """抓一个 URL。**失败如实返回状态，不抛异常吞掉细节。**
+
+    先走环境里的代理（若有），失败再**直连**重试一次（2026-10-19）：
+    开发机/CI 常注入 `http_proxy=127.0.0.1:xxxx` 的转发代理，它对本机可达、
+    对公网域名却经常直接断连（`RemoteDisconnected`）——一次失败就报"抓不到政策"
+    会把代理的环境问题记成样本问题。直连也不通时，错误信息里两类原因都保留。
+    """
+    fetch_from = raw_code_url(url)
+    req = urllib.request.Request(fetch_from, headers={"User-Agent": UA,
+                                                      "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"})
+    errors = []
+    for direct in (False, True):
+        if direct:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            do = lambda: opener.open(req, timeout=timeout)   # noqa: E731
+        else:
+            do = lambda: urllib.request.urlopen(req, timeout=timeout)   # noqa: E731
+        try:
+            with do() as resp:
+                raw = resp.read(MAX_BYTES + 1)
+                truncated = len(raw) > MAX_BYTES
+                raw = raw[:MAX_BYTES]
+                return {"ok": True, "url": url, "final_url": resp.geturl(),
+                        "status": getattr(resp, "status", None),
+                        "content_type": resp.headers.get("Content-Type", ""),
+                        "bytes": raw, "byte_count": len(raw), "truncated": truncated,
+                        "error": None, "via": "direct" if direct else "env-proxy"}
+        except urllib.error.HTTPError as e:
+            return {"ok": False, "url": url, "final_url": url, "status": e.code,
+                    "content_type": "", "bytes": b"", "byte_count": 0, "truncated": False,
+                    "error": f"HTTP {e.code} {e.reason}"}
+        except Exception as e:  # noqa: BLE001 —— 网络异常种类多，如实记录即可
+            errors.append(f"{'直连' if direct else '代理'}: {e.__class__.__name__}: {e}")
+    return {"ok": False, "url": url, "final_url": url, "status": None,
+            "content_type": "", "bytes": b"", "byte_count": 0, "truncated": False,
+            "error": "; ".join(errors)}
 
 
 def score_link(text: str, href: str) -> int:
@@ -111,36 +163,27 @@ def discover_policy_links(html: str, base_url: str, *, limit: int = 5) -> list[d
 
 
 def extract_from_apk(apk: Path, *, limit: int = 5) -> list[dict]:
-    """Find document candidates, not JSON settings, word dictionaries or service agreements.
+    """从 APK 内部找政策正文。离线可用，通常是**最可靠的来源**。
 
-    A keyword hit is still a candidate requiring provenance review before registration.
-    JSON privacy pop-up summaries are not accepted as a full privacy policy.
+    2026-10-19 起改用 `policy_discover`：不再靠扩展名（`res/raw/privacy` 没有扩展名），
+    改为目录白名单 + 内容嗅探；否则 4/60 个内嵌政策的样本会被误报 not_found。
+
+    只认**隐私政策正文**，不认 JSON 设置/词库/服务协议（`用户协议`、`terms` 单独出现不算），
+    JSON 形式的隐私弹窗摘要也不算完整政策。关键词命中只是"候选"，登记前仍需溯源复核。
+    上述排除规则由 `policy_discover.POLICY_WORDS` 与 `_SKIP` 落地（本文件里的
+    `APK_CANDIDATE_RE` / `APK_POLICY_WORDS` 是旧扩展名路径的遗留常量，当前不再参与筛选）。
     """
     if not apk.exists():
         return []
     found = []
-    with zipfile.ZipFile(apk) as zf:
-        for info in zf.infolist():
-            name = info.filename
-            if info.file_size == 0 or info.file_size > MAX_BYTES:
-                continue
-            if not APK_CANDIDATE_RE.search(name):
-                continue
-            try:
-                raw = zf.read(info)
-            except Exception:  # noqa: BLE001
-                continue
-            head = raw[:4000].decode("utf-8", errors="ignore")
-            if not any(w in head for w in APK_POLICY_WORDS) and \
-               not any(w.lower() in head.lower() for w in ("privacy policy",)):
-                continue
-            ex = policy_extract.extract(raw, content_type="text/html", source=f"apk:{name}")
-            if ex["chars"] < policy_extract.MIN_USEFUL_CHARS:
-                continue
-            found.append({"entry": name, "bytes": raw, "extract": ex,
-                          "source_kind": "apk_asset"})
-            if len(found) >= limit:
-                break
+    for item in policy_discover.find_in_apk(apk):
+        ex = policy_extract.extract(item["bytes"], content_type="text/html",
+                                    source=f"apk:{item['entry']}")
+        if ex["chars"] < policy_extract.MIN_USEFUL_CHARS:
+            continue
+        found.append({**item, "extract": ex})
+        if len(found) >= limit:
+            break
     found.sort(key=lambda x: -x["extract"]["chars"])
     return found
 
@@ -184,6 +227,8 @@ def main() -> int:
     ap.add_argument("--sources", default=None, help="包名→政策 URL 的映射表 JSON")
     ap.add_argument("--store", default="policy-store")
     ap.add_argument("--tag", default=None)
+    ap.add_argument("--aapt2", default=_AAPT2,
+                    help="aapt2 可执行文件；用于从资源表挖政策 URL（缺省走 SDK 路径）")
     ap.add_argument("--follow-discovered", action="store_true",
                     help="在给定页面上发现政策链接并跟进抓取（商店详情页用）")
     args = ap.parse_args()
@@ -210,12 +255,41 @@ def main() -> int:
         result["records"].append(rec)
 
     elif args.from_apk:
-        found = extract_from_apk(Path(args.from_apk))
+        apk_path = Path(args.from_apk)
+        found = extract_from_apk(apk_path)
         if not found:
-            result["status"] = "not_found"
-            result["errors"].append(
-                "APK 内未找到符合特征的政策文本（这不等于该应用没有政策；"
-                "政策可能只存在于网络端或动态下发）")
+            # 第二步：APK 不内嵌正文时，从资源表挖"应用自己的政策链接"再抓。
+            # 这是 2026-10-19 之前完全没有的路径——14 个样本 100% not_found，
+            # 而其中好几个的资源里明明写着政策地址。
+            urls = policy_discover.mine_policy_urls(apk_path, args.aapt2)
+            result["candidates"] = urls
+            result["tried"] = {"apk_assets": "no_match", "resource_urls": len(urls)}
+            for ui, u in enumerate(urls[:2], 1):
+                got = fetch_url(u)
+                if not got["ok"]:
+                    result["errors"].append(f"抓取 {u} 失败：{got['error']}")
+                    continue
+                ex = policy_extract.extract(got["bytes"],
+                                            content_type=got["content_type"],
+                                            source=got["final_url"])
+                rec = save(store_dir, raw=got["bytes"], extract=ex,
+                           tag=f"{args.tag or 'apk'}-ref{ui}",
+                           meta={"source_kind": "apk_referenced_url",
+                                 "source": got["final_url"], "url": got["final_url"],
+                                 "referenced_from": str(apk_path),
+                                 "http_status": got["status"],
+                                 "content_type": got["content_type"],
+                                 "truncated": got["truncated"]})
+                result["records"].append(rec)
+                if ex["status"] == "ok":
+                    break
+            if not result["records"]:
+                result["status"] = "not_found"
+                result["errors"].append(
+                    "APK 内未找到政策正文，资源表里也没有可抓取的政策链接"
+                    "（这不等于该应用没有政策；政策可能只在启动页动态下发）")
+        if found:
+            result.setdefault("tried", {})["apk_assets"] = f"{len(found)} 条"
         for i, item in enumerate(found, 1):
             rec = save(store_dir, raw=item["bytes"], extract=item["extract"],
                        tag=args.tag or f"apk{i}",

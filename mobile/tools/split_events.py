@@ -14,7 +14,9 @@ build_delivery）按固定文件名读 consent/egress/tls。本工具把合并�
     consent → consent.jsonl
     egress  → egress.jsonl
     tls     → tls.jsonl
-    其余（privacy 等）留在 reads.jsonl（仅在"确有分流"时过滤重写主文件）
+    native_crypto → native_crypto.jsonl（EVP/AES 明文）
+    tls_meta      → tls_meta.jsonl（SNI / keylog）
+    其余（privacy / native_ssl 等）留在 reads.jsonl（仅在"确有分流"时过滤重写主文件）
 
 **幂等**：仅当主文件里确实存在可分流事件时才动手；独立脚本模式下主文件只有
 privacy 事件 → 本步为 no-op。无法解析的坏行在重写主文件时**原样保留**（不静默丢）。
@@ -31,6 +33,11 @@ SRC_TO_FILE = {
     "consent": "consent.jsonl",
     "egress": "egress.jsonl",
     "tls": "tls.jsonl",
+    # 内存 Hook 的明文/元数据体量大且与「隐私读取」语义无关，分流到独立文件，
+    # 避免 reads.jsonl 被 EVP/SNI 事件淹没（2026-10-18）。下游目前不读这两个文件，
+    # 留档供证据包/报告按需取用。
+    "native_crypto": "native_crypto.jsonl",
+    "tls_meta": "tls_meta.jsonl",
 }
 MAIN_FILE = "reads.jsonl"
 

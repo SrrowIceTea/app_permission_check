@@ -87,6 +87,9 @@ def main() -> int:
     parser.add_argument("--seconds", type=float, default=30.0)
     parser.add_argument("--out", type=Path, required=True, help="JSONL written on this PC")
     parser.add_argument("--gadget", action="store_true")
+    parser.add_argument("--spawn", action="store_true",
+                        help="spawn 注入（钩子在应用第一条指令前就位）。"
+                             "用于必须抓启动瞬间流量的场景；默认 attach。")
     parser.add_argument("--port", type=int)
     parser.add_argument("--allow-package", action="append")
     parser.add_argument("--event-db", type=Path)
@@ -169,12 +172,22 @@ def main() -> int:
         return 2
 
     ensure_forward()
-    pid = None if args.gadget else (args.pid or resolve_pid(args.package))
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
     device = frida.get_device_manager().add_remote_device(f"127.0.0.1:{FRIDA_PORT}")
     if args.gadget:
         pid = device.spawn(["re.frida.Gadget"])
+    elif args.spawn:
+        # spawn 注入（2026-10-18 新增）：attach 模式下应用**启动那一刻**的握手/外发
+        # 全在钩子装上之前，实测 F-Droid 首轮 SSL 明文一条没捕到、keylog 也装不上
+        # （App 的 SSL_CTX 在我们 attach 前就建好了）。spawn 时钩子在应用跑第一条
+        # 指令前就已就位，这两处缺口同时消失。
+        if not args.package:
+            print("--spawn 需要 --package", file=sys.stderr)
+            return 2
+        pid = device.spawn([args.package])
+    else:
+        pid = args.pid or resolve_pid(args.package)
     session = device.attach(pid)
     session.on("detached", lambda *info: failed.append("detached: " + str(info)))
     store = EventStore(args.event_db or args.out.with_suffix(".sqlite"))
@@ -236,7 +249,7 @@ def main() -> int:
 
     script.on("message", on_message)
     script.load()
-    if args.gadget:
+    if args.gadget or args.spawn:
         device.resume(pid)
     print(f"attached pid {pid}; collecting for {args.seconds:.0f}s -> {args.out}", flush=True)
 
