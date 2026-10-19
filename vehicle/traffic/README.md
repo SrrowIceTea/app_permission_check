@@ -1,4 +1,4 @@
-> 2026-09-24 当前增补与复现见 [根 COMPLETION.md](../COMPLETION.md)。以下旧实测条数、时间与未实现描述属于历史轮次，以当前交付说明和对应 verification.json 为准。
+> 2026-09-24 当前增补与复现见 [根 COMPLETION.md](../../COMPLETION.md)。以下旧实测条数、时间与未实现描述属于历史轮次，以当前交付说明和对应 verification.json 为准。
 
 # Mitmproxy 流量层（vehicle/traffic，原 Phase 4）
 

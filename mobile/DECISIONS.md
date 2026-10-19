@@ -689,6 +689,269 @@ evidence_bundle `py_compile` 通过；全量 `run_regressions.py --mobile` 复�
 C1/C2 均不改变既有结论的判定路径——C1 只把原本静默降级的匹配升回来，
 C2 是纯增量字段。
 
+## M036 明文缺口的真根因：Frida 17 API 已删 + 库懒加载 + RTLD_LOCAL；native/QUIC 接线（2026-10-18）
+
+**动机**：面板把 `HTTPS·native pinning` / `Flutter·RN·WebView` / `QUIC` 三行标成
+"拿不到 / 漏掉"，外部又给了一份修复建议（r0capture 兜底、iptables 在模拟器不可行、
+Flutter 用 NVISO 脚本、RN 需 Hook Hermes）。逐条在本机 AVD 上核实，能落地的直接接线。
+
+**核实结论（含被证伪的）**：
+- **"模拟器内核不支持 iptables，QUIC 只能真机"——证伪。** 实测 Android 37 x86_64 AVD：
+  `iptables -I OUTPUT -p udp --dport 443 -j DROP` 返回 0，`-L OUTPUT -v` 首条规则
+  pkts 随发包增长；`-D` 撤销后无残留。M033 的"C：UDP 直出"只证明 `-http-proxy`
+  这个参数不管 UDP，**不等于内核层丢不掉**——当时把"参数的能力边界"写成了"内核的能力边界"。
+- **"r0capture 可作兜底"——方向对，但真根因不在方案选择上：现有 native 钩子在
+  Frida 17 上从没真正跑通过。** 三层，逐层实测：
+  1. **API 已删**：Frida 17 移除 `Module.findExportByName`，只留
+     `Module.getGlobalExportByName`。旧代码把它包在 try/catch 里 → 永远静默
+     `SYMBOL_ABSENT`，看上去像"设备/方案不支持"。
+  2. **全局查找查不到**：`getGlobalExportByName` 对 dlopen 进来的库返回 not found——
+     Android 的 linker 默认 `RTLD_LOCAL`，符号不进全局作用域。必须逐模块
+     `module.findExportByName(sym)`。
+  3. **懒加载**：attach 那一刻库里往往还没有 `libssl.so`（BreezyWeather 冷启动 2s 时
+     为 0，产生流量后才加载）。只在 arm 时扫一次会**永久**漏掉。
+- **"Flutter 用 NVISO 脚本"——可信，但仓库没有 Flutter 样本**，无法实测；按
+  "无实测不出结论"不接，边界如实标注。
+- **"RN 需 Hook Hermes"——不需要**：RN 的网络最终走 OkHttp/Java 栈，既有 Java 钩子覆盖；
+  仓库里唯一的 RN 样本（车载喜马拉雅）只有 arm ABI，本 x86_64 模拟器跑不起来。
+
+**改动**：
+- `mobile/hooks/hook_native_ssl.js`（车载同源副本同步）：逐模块扫描 + 按地址去重挂载；
+  Hook `dlopen`/`android_dlopen_ext`，库加载后重扫（SSL/加解密相关库立即重扫，其余
+  150ms 节流）；`SYMBOL_ABSENT` 附带"相关库在不在"的清单，作为边界判据而不是猜测。
+  另修一个真 bug：`SSL_write_ex` 的长度取的是 `args[3]`（`written` 出参，onEnter 还没写），
+  恒为 0 → 新 API 调用永远记不到明文；应为 `args[2]`。
+- **接线**：两个文件改为只导出 `main()`，由 `hook_all` 在同一 `Java.perform` 里调用
+  （`build.mjs` / 车载 `build.py` 各自加单模块入口）。**不能用 side-effect import**：
+  ESM 的 import 会被提升到入口 `globalThis.Java = Java` 之前，实测直接
+  `ReferenceError: 'Java' is not defined`。
+- `runtime.js` / `vscan_runtime.js`：新增共用的 `decodeUtf8()`，供两个明文钩子把
+  byte[] 解成真 UTF-8（原实现给出的是 Latin-1）。
+- **QUIC**：`thirdparty_env.block_quic / unblock_quic`；`device_run_thirdparty.py` 在
+  `am start` **之前**压制（外发就发生在启动那一刻），窗口结束或 `app_started` 早退时撤销。
+  失败不阻断采集，记 `quic_blocked` 缺口——"没拦住"与"没流量"在报告里必须可区分。
+
+**实测**（Android 37.1 x86_64 AVD，frida 17.18.0）：
+- 合并包 `hook_all` 在 F-Droid（`pm clear` 后首启，逼出索引下载）：5 个 ARMED，native 侧
+  `SSL_write@libjavacrypto.so` + `SSL_read@libjavacrypto.so`，cipher 12 个重载，
+  与 privacy/consent/egress/tls 同处一个 agent（A1 单脚本约束不变）；
+  同一轮记到 **27 条 `SSL_READ_PLAINTEXT` + 7 条 `SSL_WRITE_PLAINTEXT`**
+  （HTTP/1.1 响应头、F-Droid 索引 JSON），另有 9 条 EGRESS_CONNECT / 16 条 EGRESS_URL。
+- native 单独挂载 F-Droid 冷启动：**1003 条 `SSL_READ_PLAINTEXT`**（每条 16KB，
+  内容是 F-Droid 索引 JSON 原文），模块 `libjavacrypto.so`。
+- **关键性质**：所有轮次设备 `http_proxy` 都是 `:0`（没有代理），明文是在**应用自己的
+  SSL 栈里**读到的——证书 pinning 挡的是"我们伪造证书"这条路，挡不住这条路。
+- 顺带修 `utf8` 预览字段：原先逐字节 `String.fromCharCode` 得到的是 Latin-1，
+  中文变成乱码（`hex` 对、人读不了）。改为共用 `runtime.decodeUtf8()`（含截断处理），
+  实测 10 条明文事件里中文可读；Node 单测覆盖中文/emoji/截断三例。
+- QUIC 开关：`block_quic=True`、规则首条 `DROP udp dpt:443`、`unblock` 后 `still_present=False`。
+
+**遗留边界**：符号被剥/内联的静态 BoringSSL（部分 Cronet 构建）、Flutter
+（`libflutter.so` 自带 BoringSSL，需模式扫描）、不经 JCE 的手工加密/XOR；
+Java 层 pinning 三手法仍缺阳性对照样本（与本次改动无关，缺口不变）。
+
+## M037 明文范围扩围：应用层加密（EVP/AES）+ TLS 元数据（SNI/keylog）+ 轮询兜底（2026-10-18）
+
+**动机**：M036 之后 TLS 记录层已能读明文，但"TLS 之前就已加密"的路径仍是盲区；
+且符号被剥的构建没有旁路。本轮按"加密转换点"思路补两条，并把实测暴露的懒加载缺陷修掉。
+
+**新增两个钩子**（均为纯 native attach，不替换 Java 方法，随 `hook_all` 装配）：
+
+- `hook_native_crypto.js`：拦 `EVP_EncryptUpdate` / `EVP_DecryptUpdate` 与低层
+  `AES_encrypt` / `AES_cbc_encrypt` / `AES_ctr128_encrypt`，取加密的**入参**、
+  解密的**出参**（`outl` 在 onLeave 才写，onEnter 读是上一轮残留——这类钩子最常见的错）。
+- `hook_tls_meta.js`：`SSL_set_tlsext_host_name` 记 SNI；hook `SSL_CTX_new` 的返回值后
+  **主动**调 `SSL_CTX_set_keylog_callback`。为什么不是 hook setter 本身：那是 App 的调用
+  入口，App 不调就什么都拿不到。
+
+**关键设计：EVP 必须过滤 TLS 记录层。** BoringSSL 的 `tls_seal_record` 内部也走
+`EVP_EncryptUpdate`，不过滤的话每条 TLS 流量都会多记一条**密文**事件，既污染日志又误导
+"拿到了明文"的结论。两道过滤：① 回溯前 6 帧符号名命中 `^(ssl_|tls_|dtls_|SSL_|DTLS_)`；
+② 兜底看入参是否以 HTTP 方法/状态行开头（符号被剥时仍有效）。低层 AES 按
+`symbol|direction|module` 做 120ms 节流 + 全局 800 条上限。
+
+**实测证据（Android 37.1 x86_64 AVD / Frida 17.18.0）**：
+
+- **EVP 阳性对照**（`NativeFunction` 直接调 `EVP_EncryptInit_ex` + `EVP_EncryptUpdate`）：
+  命中 `EVP_ENCRYPT_PLAINTEXT`，`byte_len=39`，`utf8="VSCAN-EVP-SELFTEST-PLAINTEXT-0123456789"`。
+- **端到端对照**（自写 `NetProbe` 走 `HttpsURLConnection` → conscrypt）：
+  `TLS_SNI host=www.baidu.com`；`TLS_KEYLOG label=CLIENT_RANDOM`（64 字节 master secret）；
+  `SSL_WRITE_PLAINTEXT 114B = "GET / HTTP/1.1\r\nUser-Agent: ...Host: www.baidu.com"`；
+  `SSL_READ_PLAINTEXT` 6 条（200 OK 头 + gzip body 分段）。
+- **TLS 过滤生效**：同一轮里 EVP 事件 **0 条**——握手/收发全程走了大量 EVP，全部被正确
+  跳过。这是"过滤对不对"的阴性对照，和上面的阳性对照缺一不可。
+- **懒加载补挂**：`lazy` 模式（attach 时库未加载、6s 后才 `SSLContext.init`）初始
+  `native_ssl=0 / tls_meta=0` 钩子；2s 后 `RESCAN_HOOKED {how:"poll", added:2}`，
+  随后 SNI/keylog/明文全部命中，`RESCAN_STOPPED rounds=6`。
+
+**修掉的缺陷：`dlopen` 重扫不可靠。** 第一轮 lazy 对照里库加载后**没有**触发重扫
+（钩子仍为 0、无 `RESCAN_HOOKED`）。诊断：`dlopen` 在 app_process64 / libdl.so /
+libc.so 等所有模块里解析到**同一地址**，无法区分 linker 真实实现与 PLT 转发。
+不深究 linker 细节，改为 2s 低频轮询兜底（连续 3 次无新增或满 30 轮停止），三个 native
+钩子都加。真实 App 里 attach 通常晚于库加载，轮询只是保险；探针场景是它的主战场。
+
+**仍存在的边界（不要写成已覆盖）**：
+
+- ~~**gzip body 不可读**~~ → **已解（M038）**：改由 pcap + tshark 重组，`http.file_data`
+  给出的是解压后的明文，`test_pcap_pipeline.py` 里有一条 `gzip → 明文` 的实测用例。
+- ~~**keylog 需要 pcap 才兑现**~~ → **已解（M038）**：`device_run_thirdparty.py` 现在
+  先抓 pcap，收尾时把 keylog 事件写成 `keys.log` 喂给 tshark。
+- ~~Flutter / 剥符号的静态 BoringSSL 在覆盖外~~ → **部分解（M039）**：`hook_flutter_ssl.js`
+  按代码形状（不是符号）定位并 patch 证书校验函数，静态/运行时两路对同一偏移互相印证。
+  不经 JCE 也不走 EVP 的自研算法仍在覆盖外（同 M036）。
+
+## M038 完整 HTTP 报文：设备端 tcpdump + keylog + tshark，重组外包（2026-10-18）
+
+**动机**：M037 收尾时留下的最大缺口是「hook 拿到的是 `SSL_read/SSL_write` 的**分片**」——
+一次调用可能只有半个 body，且没有连接标识、没有方向。要自己拼就得上
+`Content-Length`/chunked 状态机、gzip 解压、HTTP/2 帧与 HPACK，等于重写一个 Wireshark。
+而这条路**本来就有成熟实现**，缺的只是"把 pcap 抓下来"。
+
+**做法（三层，各管一件事）**：
+
+| 文件 | 职责 |
+|---|---|
+| `mobile/tools/pcap_capture.py` | 设备端 `tcpdump` 起停 + 拉回本地。只抓不解 |
+| `mobile/tools/pcap_http.py` | 从事件抽 NSS keylog → 调 `tshark -o tls.keylog_file:` → JSONL（body 落 `bodies/`）|
+| `device_run_thirdparty.py` | 在 `am start` **之前**起抓包（外发就在启动那一刻），UI 探索结束后停 |
+
+**实测（本机 AVD / Android 17）**：
+
+- `/system/bin/tcpdump` **4.99.6（libpcap 1.10.6）是系统预装的**，不用 push 二进制。
+- 但它的 SELinux 类型是 `tcpdump_exec`：**shell 域既读不到也 exec 不了**（`ls` 直接
+  Permission denied），只有 `su 0` 看得见。所以能力探测必须**以 root 身份**做——
+  先用 shell 探测会得到"设备上没有 tcpdump"的假阴性（本轮踩过一次）。
+- `-i eth0` → EN10MB；`-i any` → **linktype 276（Linux SLL2）**；tshark 两种都认。
+- `-G N -W 1` 退出时会把文件**截断成 0 字节**（踩了两次），必须用 `timeout N tcpdump`
+  或发 SIGINT 让它走正常收尾。
+- 端到端跑通：一轮 F-Droid（走设备代理）解出 **31 条报文**（h1=29 / h2=2，见下方
+  「HTTP/2」一节），`http_messages.jsonl` 里 method/host/uri/status/body 齐全；
+  其中 h2 的 `index-v2.json` 拿到了 37KB gzip 明文。
+- `test_pcap_pipeline.py`（16 条断言，不依赖设备与外网）覆盖：keylog 去重、
+  请求+响应齐全、**gzip → 明文**、**h2c 伪头还原 + 跨段 gzip DATA**、
+  缺 pcap/未启动时必须报错而不是返回空。
+
+**修掉的缺陷（都是测试逼出来的）**：
+
+- `keylog_from_events` 第一版用正则枚举标签，写错一个字符就**静默返回 0 行**；
+  改成按结构校验（3 段、后两段 hex），TLS 1.3 的 `CLIENT_HANDSHAKE_TRAFFIC_SECRET` 一并收。
+- `PcapRecorder.stop()` 在没 `start()` 时会把**设备上残留的同名文件**当成"本轮抓到的"
+  拉回来——最坏的一种假证据。现在未启动直接返回 None。
+
+**已知边界（不要写成已覆盖）**：
+
+- **抓包截止会截断 body**：应用被杀/抓包停止时，正在传输的 body 只拿到前一半。
+  这类报文带 `gaps: ["gzip_truncated"]`，`http-stats.json` 里有 `bodies_truncated` 计数。
+  实测那条 F-Droid 索引 body 解出 37016 字节明文，`json.loads` 在 28501 字符处报
+  `Unterminated string`——**是截断，不是解码错误**。报告里必须写明"部分正文"，不能当全文用。
+- 抓的是**全设备**流量，要靠 tshark 侧按五元组/端口筛；QUIC 的 keylog 是另一套 API，
+  仍靠 `block_quic` 压制。
+- 轮询兜底原先「连续 3 轮空闲（6s）就停」，实测采集窗口比库加载窗口长时整轮失明；
+  已放宽到 12 轮（24s）/ 90 轮。
+- `hook_tls_meta.js` 原先只 hook `SSL_CTX_new`，而 attach 模式下 App 的上下文往往在
+  挂钩之前就建好了（实测 F-Droid 一轮 5 条 `SSL_WRITE_PLAINTEXT`、keylog 为 0）。
+  已补 `SSL_new` + `SSL_get_SSL_CTX` 反查上下文补装（`KEYLOG_INSTALLED … +ssl_new`）。
+
+**HTTP/2：不解这一趟等于白抓（2026-10-18 补）**
+
+第一版只跑 `-Y "http.request or http.response"`，结果 keylog 明明生效、tshark 明明白白
+解开了 TLS（`tls.app_data` 上千帧），`http_messages.jsonl` 里却只有 CONNECT 那几条——
+因为 **ALPN 协商成了 `h2`**，而 h2 的头在 `http2.header.*` 里，`http.request.*` 一个都不匹配。
+所以加了第二趟 `decode_h2()`。三个坑：
+
+| 坑 | 现象 | 解法 |
+|---|---|---|
+| 分组键少一维 | 请求和响应共用 (连接, streamid)，只按这两维分组 → `:method` 顶掉 `:status`，**有请求没响应** | 键加**方向**：(tcp.stream, streamid, 源 ip:port) |
+| `-e` 是包级提取 | 一个 TCP 段塞 SETTINGS+HEADERS+DATA 三帧，`http2.streamid` 给成 `["0","1","1"]` | 用 `http2.type` 与 `http2.streamid` **逐帧同序成数组**做下标对齐，头个数由 `http2.header.count` 给 |
+| h2 没有 `decompress_body` | `-o http.decompress_body` 管不到 h2 | 取 `http2.body.reassembled.data` 原始字节自己解；`http2.data.data` 是 Wireshark 解好的，只作兜底 |
+
+**实测（同一份 `capture.pcap` 重解，2026-10-18）**：29 → **31 条**报文（h1=29 / h2=2），
+h2 那条是 `GET https://ftp.lysator.liu.se/pub/fdroid/repo/index-v2.json` →
+`200 application/json`，body 37016 字节，明文是 `{"repo": {"name": {"ar": "F-Droid"…`
+——**gzip 的完整 HTTP 报文拿到了**，这是 M037 留下的那个缺口的正解。
+
+注意 h2 的 body 在这份真包里，Wireshark **没有**替我们解压（`http2.data.data` 以 `1f 8b`
+开头），是我自己的 gunzip 兜住的；离线合成用例里 Wireshark 又确实解压了。两条路径都得留着，
+所以加了 gzip 魔数校验：**留魔数=没解压，就地解；没有魔数=已解压，不能再解一次**。
+
+`test_pcap_pipeline.py` 现在 **16 条断言**（不依赖设备与外网），新增的 h2 用例造的是
+h2c 明文 + 跨 TCP 段的 gzip DATA——正是因为两个方向用同一个 `ip.src` 会让 Wireshark
+把它们当成两条会话（`tcp.stream` 0/1），h2 反向就解不出来。这个坑是测试逼出来的。
+
+**还没做**：请求与响应只按 streamid 分到同一个流，没有配对成"一问一答"的事务对象；
+`http_messages.jsonl` 目前是**报文级**而不是事务级。要用事务视角得再拼一层。
+
+**keylog 覆盖率：4 轮实测 2/4，且"通过"曾经在骗人（2026-10-18 补）**
+
+| 轮次 | 装配顺序 | keylog 行 | 报文 | 备注 |
+|---|---|---|---|---|
+| 1 | tls_meta 第 7 位 | 10 | 29 | 拿到 |
+| 2 | 同上 | **0** | 2 | 只有明文 CONNECT |
+| 3 | tls_meta 提到第 1 位 | 20 | 19 | 拿到 |
+| 4 | 同上 | **0** | 22 | 只有明文 CONNECT |
+
+**顺序不是根因**：改序前后各 2 轮、都是 1 成 1 败，没有可测量的提升。失败轮的现象是
+`tls_meta ARMED` 了但 `SSL_new` 一次都没触发——应用的 TLS 连接在 agent 装载**之前**
+就建好了，之后只是在旧连接上 `SSL_read`，`SSL_CTX_new` / `SSL_new` 早就过去了，
+任何"后装回调"都无从补。（改序仍然保留：它更正确，且 privacyMain 抛异常时 keylog 已就位。）
+
+**spawn 在本机 AVD 上不可用**（`exp_spawn_keylog.py` 可复现）：钩子全部 ARMED 之后
+`pid 在第 5s 消失`并被重启为新 pid，新进程没有任何钩子，抓到的 TLS 应用数据为 0。
+这与 `core/frida_host/run.py` 里早就写着的 "Frida spawn is unreliable on this emulator"
+一致，也与之前 LocalSend（Flutter）3s 消失的现象一致——**两个不同技术栈的样本都这样**，
+所以不是某个 App 的问题，是这台模拟器的问题。要在真机上才有资格谈 spawn。
+
+**修掉的"假通过"（这条比覆盖率更重要）**：没有 keylog 时，`messages=2` 和 `messages=0`
+在报告里长得几乎一样，检查项曾经照常 `passed`——把"解不开"读成"没流量"。
+现在 `pcap_http.decode()` 在缺 keylog 时会额外数一遍 `tls.app_data` 帧，写进
+`stats.tls_undecrypted_app_data`；`device_run_thirdparty.py` 见到
+`keylog=0 且未解密帧>0` 就把 `http_messages_extracted` 判**失败**（optional，不中断整轮），
+并在 note 里写明"上面这些不是全部外发内容"。实测该值为 1999 / 2009 帧。
+
+## M039 Flutter / 静态剥符号 BoringSSL：按代码形状定位，不靠符号（2026-10-18）
+
+**结论先说**：不是「看不了明文」，是「没有符号可 hook」。`libflutter.so` 把 BoringSSL
+静态链接进去并剥表，实测样本（LocalSend 1.18.2 x86_64）的 `.dynsym` 里**连 `SSL_read`
+这个字符串都不存在**——`hook_native_ssl.js` / `hook_tls_meta.js` 对它零挂载且静默。
+
+**做法**：定位 `ssl_crypto_x509_session_verify_cert_chain`，把返回值改成 true。
+
+- 不用社区现有的**整段函数序言签名**（NVISO 2019/2022、reFlutter）：版本一变栈帧就变。
+  实测本地样本序言是 `48 83 ec 38` + `[rdi+0xa0]`，而 NVISO 2019 x64 那份是
+  `[rdi+0xa8]`——**旧签名直接不命中**（本地验证：`find()` 返回 -1）。
+- 改成**锚在解剖学常量上再回扫序言**：函数第一条语句是 `*out_alert = SSL_AD_INTERNAL_ERROR`
+  （0x50），编译成 `c6 02 50`（x64）/ `08 0a 80 52 48 00 00 39`（arm64），
+  紧跟一次 ssl 解引用。这个"先写 0x50 再解引用"的形状不随栈帧/结构体偏移变化。
+- 静态：`mobile/tools/flutter_probe.py` 从 APK 里取 `lib/*/libflutter.so`，报
+  stripped 状态并给出 `va` / `file_offset` / 命中的锚点。
+- 运行时：`mobile/hooks/hook_flutter_ssl.js` 扫**可执行区间**、回扫序言、`Interceptor.attach`
+  后 `retval.replace(1)`。已并入 `hook_all`。
+
+**实测**：
+
+- 静态：LocalSend 1.18.2 x64 → `stripped=true`、`how=anatomy+prologue`、
+  `va=0x8113ee`、`anchor_va=0x8113fc`、`gap=4`。
+- 运行时：同一 APK 装进 AVD，attach 后日志
+  `FLUTTER_VERIFY_PATCHED {offset:"0x8113ee", anchor_offset:"0x8113fc", gap:4}`
+  ——**静态与运行时对同一个偏移互相印证**，这是本条最硬的一份证据。
+
+**两个坑**：
+
+- `Memory.scanSync(mod.base, mod.size, …)` 会崩：模块跨度里夹着未映射空洞
+  （实测 0x7639a640c000），一次 access violation 就让**整次扫描归零**，表现成
+  `FLUTTER_SCAN_MISS`——看起来像"没有这个函数"。必须按 `Process.enumerateRanges('r-x')`
+  逐段扫。
+- **spawn 注入**（本轮给 `run.py` 加的 `--spawn`）在 LocalSend 上 pid 第 3 秒消失；
+  attach 模式正常。原因未查明，**Flutter 样本一律用 attach**，不要默认 spawn。
+
+**仍是边界的部分（重要）**：
+
+- **补丁 ≠ 明文。** 绕过的是证书校验；Dart 的 `HttpClient` **不读 Android 系统代理**，
+  所以"装系统 CA + `settings put global http_proxy`"那套对 Flutter 无效。要拿明文还需
+  iptables `REDIRECT`/`DNAT` 把 443 引到 mitmproxy 透明模式——**本仓库尚未实现**。
+- 因此本轮只证明到"定位准确 + 补丁生效"，**没有** Flutter 明文样本。
+- 加固/改名 `libflutter.so` 时扫不到（会记 `FLUTTER_SCAN_MISS`，带模块列表）。
+
 ## 待办（已想清楚要做什么，尚未做）
 
 - ~~**P0 · 修`hook_privacy` 打死应用**（M030 的结论）~~ **→ 已修（2026-10-16，见 M031

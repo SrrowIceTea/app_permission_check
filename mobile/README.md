@@ -15,8 +15,22 @@
 | --- | --- |
 | 静态分析：识别敏感数据的收集 | APK 清单权限 + dex 代码引用（复用 vehicle/workbench 事实抽取） |
 | 动态分析：识别存储与传输行为 | Frida 钩子观测 58 条敏感 API 签名（覆盖 28 类数据）读取 + 同意时序 |
-| 通信流量：明文/未加密传输 | mitmproxy 抓流 + 形态打标 + 值哈希匹配 |
+| 通信流量：明文/未加密传输 | mitmproxy 抓流 + 设备端 `tcpdump` + keylog + `tshark` 重组完整 HTTP 报文 + 形态打标 + 值哈希/派生值匹配 |
+| 风险量化 | 四维乘积评分 v1.3（重复衰减 + 正交置信度），见 `RISK_SCORE_MODEL.md` |
 | 基于大模型，结合隐私政策与行为研判 | 三阶段提示词 + 证据包 + 输出校验 |
+
+> **2026-10-16 → 10-19 的新增能力**（细节见 `DECISIONS.md` M034–M039）：
+>
+> - **完整 HTTP 报文**：hook 只能拿到 `SSL_read/SSL_write` 的**分片**，自己拼要重写
+>   HPACK/chunked/gzip。改为 `tools/pcap_capture.py`（设备端 tcpdump）+ `tools/pcap_http.py`
+>   （抽 keylog → `tshark -o tls.keylog_file:` → JSONL），抓包须在 `am start` 之前起。
+> - **明文范围扩围**：`hook_native_crypto.js`（EVP/AES 应用层加密）+ `hook_tls_meta.js`
+>   （SNI + 主动挂 keylog 回调）+ `hook_flutter_ssl.js`（Flutter 剥符号 BoringSSL 按代码形状定位）。
+> - **值证据**：派生值候选（md5/sha*/base64/urlencode/hex/gzip+b64，`core/collector/derive.py`）
+>   与静态/动态覆盖差集（`analyze/coverage_gap.py`）。
+> - **风险量化**：`analyze/risk_score.py` + `calibrate_risk_bands.py`，模型与阈值见
+>   `RISK_SCORE_MODEL.md`；报告与答辩的量化口径以它为准。
+> - **工程**：`run_regressions.py --mobile`（移动侧失败计入根回归失败）、`conn_probe` 并发防撞。
 
 ## 快速开始（不需要设备、不需要网络、不需要 API key）
 

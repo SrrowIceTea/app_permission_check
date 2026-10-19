@@ -10,7 +10,7 @@ vscanner/
 ├── core/           # 平台无关内核（唯一一份）：事件库/流量采集/代码行号/规则契约/Frida驱动/静态内核
 ├── vehicle/        # 车载 AAOS 产品线：rules→targets→hooks→traffic→analyze→dashboard→workbench
 ├── mobile/         # 移动端产品线：规则库/钩子/政策/AI/报告/工具（详见 mobile/CLAUDE.md）
-├── frontend/       # 前端壳（车载工作台专用；移动端报告在 output/mobile-*/ 下）
+├── frontend/       # 前端壳（车载工作台；移动端报告在 frontend/pdfs/）
 └── tools/          # 验收 / 回归脚本
 ```
 
@@ -68,7 +68,12 @@ vscanner/
 | `vehicle/dashboard/` | Web 可视化预警看板（交付物 B，静态单文件） | [vehicle/dashboard/CLAUDE.md](vehicle/dashboard/CLAUDE.md) |
 | `vehicle/workbench/` | APK 静态反编译工作台（server + static_rules + crosscheck） | [vehicle/workbench/CLAUDE.md](vehicle/workbench/CLAUDE.md) |
 | `mobile/` | 移动端产品线（MOB-* 规则库/钩子/政策/AI/报告/工具） | [mobile/CLAUDE.md](mobile/CLAUDE.md) |
-| `frontend/` | 车载工作台前端壳 | [frontend/README.md](frontend/README.md) |
+| `frontend/` | 车载工作台前端壳（**零构建**纯 HTML/CSS/JS） | [frontend/README.md](frontend/README.md) |
+
+改 `frontend/` 之前先读 [frontend/README.md](frontend/README.md) 的「Skills / MCP 使用」：
+项目级技能在 `.workbuddy/skills/vscanner-frontend-redesign/`（已入库）；
+上游 25 个 skill/MCP 仓库副本 **1.5 GB 不入库**，按 [skills/SKILLS.md](skills/SKILLS.md)
+的地址只拉最小集，别全量克隆，也别引 React/Vue/Tailwind。
 
 各目录的实测教训记录在各自 `DECISIONS.md`（D101–D7xx 编号），
 改任何模块前先读对应目录的 DECISIONS——几乎每个坑都是**静默失败**。

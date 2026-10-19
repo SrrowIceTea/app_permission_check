@@ -1,6 +1,18 @@
-# V-Scanner 两人协作开发规划（2026-10-16 · 移动端聚焦版 v3 —— A1/SLIRP 修复同步）
+# V-Scanner 两人协作开发规划（2026-10-19 · 移动端聚焦版 v4 —— M034–M039 同步）
 
 > **仅用于授权测试（自有设备与自有 APK）。**
+> **v4 修订说明（2026-10-19）**：按 v3 定的规矩「改完当场重标」，对 10-16 之后落地的
+> M034–M039 做一次状态同步。**四条从"待做"翻为"已完成"**：
+> ① **C1 派生值匹配**（`core/collector/derive.py`，M035）；
+> ② **C2 静态/动态覆盖差集**（`mobile/analyze/coverage_gap.py`，M035）；
+> ③ **工程-6** `conn_probe` 并发防撞（M034）；
+> ④ **工程-7** `run_regressions --mobile` 开关（M034）。
+> **v3 未覆盖的新增主线**（§2.5 补录）：M036 明文缺口真根因（Frida 17 API 已删 + 库懒加载 +
+> `RTLD_LOCAL`）、M037 应用层加密与 TLS 元数据、M038 完整 HTTP 报文（tcpdump+keylog+tshark）、
+> M039 Flutter/剥符号 BoringSSL；以及**风险量化模型 v1.0→v1.3**（`mobile/analyze/risk_score.py`）。
+> **工程-2 的口径也变了**：>300 行文件由「6 个」涨到 **11 个**（见 §1 该行），拆分不能再按旧清单做。
+> 依据：`mobile/DECISIONS.md` M034–M039；实查 `find + wc -l`、文件存在性与 DB 计数（2026-10-19）。
+> v3 保留说明：A1 / SLIRP 已于 2026-10-16 修复并独立复验（`VERIFY_M031_M032_20261016.md`）。
 > **v3 修订说明（2026-10-16 晚）**：把 v2 中标"待设备定位"的 **A1（插桩打死应用，唯一 P0 硬阻塞）**
 > 与当晚新发现的 **SLIRP 强制代理失效（P0）** 两项**重标为「已修」**；"关 JIT"假修复路线已双向证伪并
 > 清退（M032）。§3 排期、§6 行动项随修复顺延重排。
@@ -49,8 +61,8 @@
 | B1 | 时间窗未校准 | `WINDOW_CALIBRATION.md` 不存在；`mobile_rules_inputs.py:29` 注释"声明值；未校准前不是通用阈值" | **✅存在（未做）**——A1 已修，设备侧可开工 |
 | B2 | 无 ground truth / VScanBench | 全仓 grep 无 VScanBench；实验仅构造时序（15 场景 precision/recall=1.0 非真实误判率） | **✅存在（未做）**——A1 已解锁设备侧 |
 | B3 | AI 幻觉率/一致性零量化 | `mobile/ai/` 无评测集目录；只有 `test_ai.py` 20 个校验单测（性质不同） | **✅存在（未做）** |
-| C1 | 值证据只支持原值/同哈希 | 无 `derive.py`；`evaluation_mobile_parts.value_matches()` 仅原 hash16 匹配 | **✅存在（未做）** |
-| C2 | 静态引用 vs 动态观测差集 | 无 `coverage_gap.py`（注意：`rule_coverage_report.py` 是"规则覆盖矩阵"，是另一件事） | **✅存在（未做）** |
+| C1 | 值证据只支持原值/同哈希 | ~~无 `derive.py`~~ → 已落地 `core/collector/derive.py` + `test_derive.py`（M035） | **✅已修（2026-10-16，M035）** |
+| C2 | 静态引用 vs 动态观测差集 | ~~无 `coverage_gap.py`~~ → 已落地 `mobile/analyze/coverage_gap.py` + `test_coverage_gap.py`（M035） | **✅已修（2026-10-16，M035）** |
 | E1 | 政策声明五分类 | `stage1_policy_extract.md` 现为三态 `met/not_met/unclear`（五分类未做） | **✅存在（未做）** |
 | A5-1 | protectionLevel 40 条未标定 | **查数据库实锤**：`rules_mobile.db` 权限表 40 条、`protection_level_raw` 非空 **0 条** | **✅存在（未做）**——A1 已修，设备侧可开工 |
 | A5-2 | API→权限映射新谓词 | 谓词集无新项（仍八谓词） | **✅存在（未做）** |
@@ -59,12 +71,12 @@
 | E2 | 数据类别本体表 | 无 subclass 关系实现 | **✅存在（未做）** |
 | C3/DT | 差分原型 / 有限污点 | 全仓无实现（研究级） | ✅存在（未做，P2） |
 | 工程-1 | CI 在 Gitee 不生效 | `.github/workflows/ci.yml` 存在且**文件自述**"Gitee 不执行 .github/workflows/"；`.git/hooks/` 为空 → pre-commit 未安装；全仓 **293 条** ruff 存量问题 | **✅存在（未生效）** |
-| 工程-2 | 6 个 >300 行文件 | 实测：移动相关 5 个 = `device_run.py`(457) / `thirdparty_env.py`(459) / `device_run_thirdparty.py`(472) / `evidence_bundle.py`(355) / `core/collector/addon.py`(355) | **✅存在**——"等 A1"前置**已满足**，可启动拆分（低优先） |
+| 工程-2 | >300 行文件（v4 重测为 **11 个**，不再是 6 个） | 2026-10-19 实测：`thirdparty_env.py` 647 / `device_run_thirdparty.py` 618 / `risk_score.py` 618 / `pcap_http.py` 540 / `device_run.py` 478 / `test_risk_score.py` 472 / `addon.py` 355 / `batch_thirdparty.py` 339 / `runner.py` 318 / `test_hooks_parity.py` 303 / `frida_host/run.py` 302 | **✅存在（且比 v3 恶化：`thirdparty_env` 459→647、`device_run_thirdparty` 472→618）**——拆分清单必须重列 |
 | 工程-3 | hooks 共享化（中期） | `core/hooks_shared/` 不存在；短期守卫（`test_hooks_parity.py` 7 对 13 规则）已绿 | ⚠️部分（短期已完成） |
-| 工程-4 | output/ 归档未做 | `output/` 400+ 子目录（4 万+文件）；`latest-*.txt` 指针链未处理 | ✅存在（P3） |
-| 工程-5 | sqlite 只读 URI 编码 | 只改了 `core/rules_contract.py`；`correlate_mobile.py:56`、`evidence_bundle.py` 等 **4 处同类**未改 | ⚠️部分 |
-| 工程-6 | `conn_probe.py:57` 固定路径 | 仍为固定 `/data/local/tmp/vscan_conn_*`（并发冲突） | ✅存在（P2 小项） |
-| 工程-7 | `run_regressions --mobile` 开关 | 未加（需先定义"移动侧失败算不算根回归失败"的语义） | ✅存在（待定义） |
+| 工程-4 | output/ 归档未做 | ~~400+ 子目录（4 万+文件）~~ → **已于 2026-10-19 清理**：删除 208 项历史跑批与 `latest-*.txt`，仅留今日产物+交付物 | **✅已完成（2026-10-19）** |
+| 工程-5 | sqlite 只读 URI 编码 | M034 顺带核查已**更正**：全仓只读连接（correlate_mobile / evidence_bundle / policy_lint / gen_targets / rule_coverage_report / static_scan_thirdparty 等）均已带 `?mode=ro`，其余不带 URI 的是写库/测试/内存库 | **✅无需动作（M034 已核实，v3 的"⚠️部分"是滞后）** |
+| 工程-6 | `conn_probe.py:57` 固定路径 | ~~仍为固定 `/data/local/tmp/vscan_conn_*`~~ → M034 已加 pid 后缀防并发冲突 | **✅已修（2026-10-16，M034）** |
+| 工程-7 | `run_regressions --mobile` 开关 | ~~未加~~ → M034 已落地（语义：移动侧失败计入根回归失败） | **✅已修（2026-10-16，M034）** |
 | 工程-8 | JIT-off 假修复残留风险 | 全库 grep `_ensure_jit_off` 代码 **0 残留**（只剩文档留痕）；启动参数无 `-prop`（均为清退后实测） | **✅已清退（2026-10-16）** |
 | 人工-1 | **AI key 轮换** | `config.local.json` 真实 key 待本人吊销轮换 + 历史提交核查（`git log --all -- mobile/ai/config.local.json`） | **✅存在（用户本人执行）** |
 | 人工-2 | H4：Frida 上游 issue 核对 | 根因已落到 frida-java-bridge 上游限制（"多脚本替换不支持"；x64/API37 未覆盖区），以单 agent 规避；对应 frida#3700/#3745 | 📌已更新——无需再查 release note；换 Frida 版本时复核这两个 issue |
@@ -124,10 +136,12 @@
 - **E2 本体表**（"IMEI ⊂ 设备标识符"可复核）、**C3 差分原型**（仅限自有夹具）、**DT 有限污点**（研究级）——纯离线。
 - **工程-1 CI**：两条路选一——① 加 GitHub 远端推一份（Actions 直接可用）；② 搬进 Gitee Go。
   pre-commit 建议**先摘掉 `ruff-format` 只留 `ruff check`**（293 条存量问题，防止开钩子即大 diff）。
-- **工程-2 拆分**：5 个移动相关文件可启动拆分（"等 A1"前置已满足；建议低优先、放 W5 后）。
-- **工程-5 sqlite URI** 4 处同类补齐；**工程-6** `conn_probe.py` pid 后缀；**工程-7** `--mobile` 开关（先定语义）。
-- **工程-4 归档**：`output/` 历史产物（涉 `latest-*.txt` 指针，先做旧→新路径映射再动）。
-- **C1/C2/E1** 是"P0 价值最高的离线项"，直接见 §3 人 B 排期。
+- **工程-2 拆分**：~~5 个~~ → **11 个 >300 行文件**（清单见 §1 该行，风险评分与 pcap 链路是新增的大头），
+  建议按"先拆 `pcap_http.py` / `risk_score.py` 这两个新增大文件、再拆 `thirdparty_env.py`"的顺序。
+- ~~**工程-5 sqlite URI**~~ ✅ M034 已核实无需动作；~~**工程-6**~~ ✅ M034 已修；
+  ~~**工程-7** `--mobile`~~ ✅ M034 已加。
+- ~~**工程-4 归档**~~ ✅ 2026-10-19 已完成（`output/` 清空，208 项历史跑批删除）。
+- **E1 政策五分类** 仍是"P0 价值最高的离线项"（C1/C2 已于 M035 完成，不必再排）。
 
 ### 2.4 本轮核查确认「已修复」的清单（不要再动，防止重复劳动）
 
@@ -148,6 +162,38 @@
 - **拆分 11 → 6** ✅（拆掉 5 个低风险文件，测试数守恒）
 - **回归基线（修复后重跑）**：`run_mobile_checks.py` **23 项全绿**（2026-10-16 15:07）；
   根回归 **13 组全绿**（2026-10-16 14:21）——均晚于全部修复文件 mtime，覆盖到位
+
+### 2.5 v3 未覆盖的新主线（M036–M039 + 风险量化，2026-10-18）
+
+> 这五项不在 v2/v3 的核查表里，是 10-16 之后新增的。列出来是为了让排期**别再按 v3 老清单**开。
+
+**M036 ·「明文读不到」的真根因**（原以为要换方案，其实是钩子从没跑通）：三层实测——
+① Frida 17 删掉 `Module.findExportByName`，旧代码包在 try/catch 里 → 永久静默 `SYMBOL_ABSENT`；
+② Android linker 默认 `RTLD_LOCAL`，`getGlobalExportByName` 查不到 dlopen 进来的库；
+③ 库懒加载，attach 时 `libssl.so` 往往还没加载，只扫一次就**永久**漏。
+顺带**证伪**「模拟器内核不支持 iptables、QUIC 只能真机」（实测 `-I OUTPUT -p udp --dport 443 -j DROP` 可用）。
+边界：仓库内无 Flutter 样本，NVISO 思路未实测。
+
+**M037 · 明文范围扩围**：新增 `hook_native_crypto.js`（EVP/AES 加密入参、解密出参）与
+`hook_tls_meta.js`（SNI + 主动挂 `SSL_CTX_set_keylog_callback`）。关键坑：EVP 必须过滤 TLS
+记录层（BoringSSL `tls_seal_record` 内部也走 EVP），否则每条 TLS 流量多记一条密文事件。
+
+**M038 · 完整 HTTP 报文**：hook 只能拿到 `SSL_read/SSL_write` **分片**，自己拼要重写
+HPACK/chunked/gzip。改为设备端 `tcpdump` + keylog + `tshark` 重组（`pcap_capture.py` /
+`pcap_http.py`，抓包须在 `am start` **之前**起）。两个已踩的坑：tcpdump 只能 `su 0` 用
+（shell 域探测会得到假阴性）、`-G N -W 1` 会把文件截成 0 字节。
+
+**M039 · Flutter / 剥符号 BoringSSL**：不是「看不了明文」，是「没有符号可 hook」
+（`libflutter.so` 静态链接并剥表，连 `SSL_read` 字符串都不存在）。改用解剖学常量锚点
+（`*out_alert = 0x50` → `c6 02 50`）回扫序言，不依赖版本相关的整段签名。
+
+**风险量化 v1.0→v1.3**（`mobile/analyze/risk_score.py` + `calibrate_risk_bands.py`）：
+四维乘积 + 重复衰减 + 正交置信度，含 necessity 维度与单调性保证；模型说明见
+`mobile/RISK_SCORE_MODEL.md`。**v3 完全没有这一项**——论文/答辩的「量化」章节以它为准，
+不要再用旧文档「仅有计数」的描述。
+
+**对排期的影响**：人 B 的 W1–W2（C1+C2）已空出，建议前移到 E1 五分类与 B3 AI 评测集；
+人 A 的 B1/B2/A5-1 仍未动，且 M036–M039 改的都是采集核心，需补回归覆盖。
 
 ---
 
@@ -172,6 +218,10 @@
 | W6–8 | **G1 UI 探索器** + **B2 设备侧 matrix** | 三项度量输出；矩阵出数字 |
 
 ### 3.3 人 B · 离线增强 + 工程轨（纯离线，可立即开工）
+
+> **v4 注**：下表 W1–W2 的 **C1/C2 已于 2026-10-16 完成（M035）**，W4–W5 的工程小项中
+> 工程-5/6/7 也已闭环（M034），故实际进度已前移约两周——请按 §6 第 2 条（E1 → B3）接续，
+> 不要照表从 W1 重做。下表保留为原始排期与验收判据来源。
 
 | 周 | 任务 | 验收判据 |
 | --- | --- | --- |
@@ -245,13 +295,23 @@ W7─W8  人A: G1 + B2 设备侧                          ┃ 人B: 归档 + 协
 
 ---
 
-## 6. 立即行动项（本周）
+## 6. 立即行动项（2026-10-19 起）
 
-1. **人 A**：**A1 端到端验收**——去掉 `--skip-fixture-selftest` 重跑第三方批次（含 keepass 等高死亡
-   样本复跑）；对 SLIRP 修复前批次（如 `tp-10151137`）的"零出网"结论加覆盖边界标注或重采。
-2. **人 B**：开工 C1（`derive.py` 接口草案先行）+ C2。
-3. **用户本人**：吊销轮换 `config.local.json` 的真实 key（`DEV_FIX_REPORT §6.2`），核查历史提交。
-4. 两人：定 CI 路线（GitHub 远端 or Gitee Go）与 pre-commit 是否摘 `ruff-format`（建议摘）。
+> v3 的本节是 10-16 那周的清单，其中第 2 条（C1+C2）已完成，其余按现状重排。
+> **`output/` 已于 2026-10-19 清空**：本节不再给出 `output/...` 证据路径，需要证据一律重跑。
+
+1. **人 A · A1 端到端验收仍未闭环**：去掉 `--skip-fixture-selftest` 重跑第三方批次
+   （含 keepass 等高死亡样本）；对 SLIRP 修复前批次（如 `D:/vscanner-tp/tp-10151137`）的
+   "零出网"结论加覆盖边界标注或重采。判据：批次自检真出 PRIVACY_READ。
+2. **人 B · 前置已清空 → 前移到 E1 政策五分类**（clear/vague/omitted/incorrect/ambiguous），
+   再做 B3 AI 评测集（6 fixture，量化幻觉率与跨 3 次一致性）。
+3. **用户本人 · 安全项（v3 遗留，仍未确认完成）**：吊销轮换 `mobile/ai/config.local.json`
+   里的真实 key，并核查历史提交（`git log --all -- mobile/ai/config.local.json`）。
+4. **两人 · 拆分**：11 个 >300 行文件，优先 `pcap_http.py`(540)、`risk_score.py`(618)、
+   `thirdparty_env.py`(647) 三个新增/恶化的大文件（清单见 §1 工程-2 行）。
+5. **两人 · 集中跑测试集前的闸门**：先跑 `run_regressions.py --mobile`（13 组 + 移动 23 项）
+   全绿再开跑；本轮 `output/` 已空，首轮会产生新时间戳目录，`latest-*.txt` 随之重建。
+6. 两人：定 CI 路线（GitHub 远端 or Gitee Go）与 pre-commit 是否摘 `ruff-format`（建议摘）。
 
 ---
 
@@ -263,13 +323,16 @@ W7─W8  人A: G1 + B2 设备侧                          ┃ 人B: 归档 + 协
   `D:/vscanner-tp/pipeline/dc89d5a6f6b4/`（`emulator-start.log` 命令行、`emulator.log` 无警告、
   `kill-early-mitm.log` 回收）
 - **独立复验**：`VERIFY_M031_M032_20261016.md`（代码清退核查 + 原始证据核对 + 回归重跑）
-- **回归**：`output/mobile-regression-20261016-150714/`（23 项全绿，修复后重跑）；
-  `output/regression-20261016-142103/`（13 组全绿）
-- **旧核查证据**：`output/tp-10151137/`（01-keepass `app-death.json` + reads 2 行；06-contacts
-  reads 361 行；`_fixture-selftest/result.json` 跳过留痕）；`rules_mobile.db`（40 条权限 / 0 条标定）
-- 状态权威源：`mobile/DEV_FIX_REPORT.md`、`mobile/DECISIONS.md`（M029–M032）
+- **回归**：~~`output/mobile-regression-20261016-150714/`、`output/regression-20261016-142103/`~~
+  —— 已于 2026-10-19 随 `output/` 清理删除，**需重跑**：
+  `run_regressions.py --mobile`（13 组 + 移动 23 项）
+- **旧核查证据**：`output/tp-10151137/`（符号链接 → `D:/vscanner-tp/tp-10151137`，**未删**；
+  含 01-keepass `app-death.json` + reads 2 行、06-contacts reads 361 行、
+  `_fixture-selftest/result.json` 跳过留痕）；`rules_mobile.db`（40 条权限 / 0 条标定）
+- **M034–M039 证据**：`mobile/DECISIONS.md` 对应各节（路径、实测数字与边界均在其中）
+- 状态权威源：`mobile/DEV_FIX_REPORT.md`、`mobile/DECISIONS.md`（M029–M039）
 - 缺口与建议：`mobile/RESEARCH_OUTLOOK.md`（§2/§4/§8）、`mobile/EVAL_CROSSCHECK.md`
-- 外部调研时间：2026-10-15；**状态重标：2026-10-16**
+- 外部调研时间：2026-10-15；**状态重标：2026-10-16（v3）→ 2026-10-19（v4）**
 
 ---
 

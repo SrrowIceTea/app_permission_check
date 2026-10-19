@@ -101,7 +101,7 @@
 # 二、环境与构建(确定性坑,已经踩实)
 
 1. **本网络 `dl.google.com` 和 `android.googlesource.com` 都不可达**。AGP / AndroidX / Room 全在 Google Maven 上,`settings.gradle.kts` 必须阿里云镜像优先,**不要改回裸 `google()`**。这条直接改变了项目路线:D009 里 android-15 之所以走设备实测,根源就是源码镜像不可达。
-2. **工程路径含非 ASCII 字符**(Windows 用户名),AGP 默认拒绝。已用 `android.overridePathCheck=true`,但 [README.md](vscode-webview://03l2cr3vbc4ctp0i879aqemt325odk7malcdhe9ki5s1r7q9j9ft/README.md) 明确警告:这是真实风险,若 aapt2 或 NDK 报错,**应把构建迁到纯 ASCII 路径,而不是继续加开关**。
+2. **工程路径含非 ASCII 字符**(Windows 用户名),AGP 默认拒绝。已用 `android.overridePathCheck=true`,但 AGP 官方 README 明确警告:这是真实风险,若 aapt2 或 NDK 报错,**应把构建迁到纯 ASCII 路径,而不是继续加开关**。
 3. SDK 路径拼写是 `D:\Anroid\SDK`(少个 d),JDK 在 `D:\Anroid\JDK`,写脚本时别"顺手改正"。
 
 ---
@@ -115,7 +115,7 @@
 
 **排查口诀**:对照 `databases/vscanner-rules.db` 的大小与 mtime 最快。另外首次成功打开后文件会多出 `room_master_table`,此后报错文案会变但仍属 schema 不匹配。
 
-**还有一条**:Room 的运行时校验**只看列、索引列和外键**,看不到 CHECK 约束、索引名、主键顺序——而这三项恰好是本项目数据完整性主张的依托。所以有 [tools/verify\_schema\_parity.py](vscode-webview://03l2cr3vbc4ctp0i879aqemt325odk7malcdhe9ki5s1r7q9j9ft/android/tools/verify_schema_parity.py) 独立覆盖,**不能只依赖 Room 的结论**。
+**还有一条**:Room 的运行时校验**只看列、索引列和外键**,看不到 CHECK 约束、索引名、主键顺序——而这三项恰好是本项目数据完整性主张的依托。所以有 `tools/verify_schema_parity.py` 独立覆盖,**不能只依赖 Room 的结论**。
 
 ---
 

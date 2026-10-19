@@ -71,6 +71,18 @@ Phase 5=`vehicle/analyze/`，Phase 6=`vehicle/dashboard/`，Phase 7=`vehicle/wor
 
 移动库不再伪造空 `vhal_properties` 表去适配车载加载器（该 hack 已删除）。
 
+## 前端改动与外部 Skills（2026-10-19）
+
+`frontend/` 是**零构建**的纯 HTML/CSS/JS：不新增 `package.json`、不引 React/Vue/Tailwind/CDN 组件库，
+`python -m http.server` 必须直接能打开。改版的工作流、契约与视觉规范见
+[frontend/README.md](frontend/README.md) 的「Skills / MCP 使用」与
+`.workbuddy/skills/vscanner-frontend-redesign/SKILL.md`（项目级技能，**随仓库分发**）。
+
+上游 25 个 skill/MCP 仓库副本共 **1.5 GB / 34,262 文件，已全部不入库**（见 `.gitignore`）；
+clone 后 `skills/` 下只有两个索引文件。需要时按 [skills/SKILLS.md](skills/SKILLS.md) 的地址
+**只拉最小集**（`anthropics-skills` + `lucide`，约 67 MB），其余按表里的判定决定是否要；
+浏览器自动化用 `npx @playwright/mcp@latest`，不必克隆仓库。**不要**全量克隆——会把 1.5 GB 拖进工作区。
+
 ## 离线回归（改完代码先跑，不需要设备）
 
 ```bash
@@ -86,7 +98,7 @@ PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
 > `cryptography`/`frida`/`pypdf`）。若解释器没装，会冒出 6 处 `ModuleNotFoundError` 的**假红**，
 > 把真正的回归失败盖住。看到红先跑一次 `"$PY" -c "import reportlab, PIL, mitmproxy, cryptography"`。
 
-## 当前交付与拆分进度（2026-10-12）
+## 当前交付与拆分进度（2026-10-19）
 
 完整复现入口与证据说明见 [COMPLETION.md](COMPLETION.md)。
 APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，用户解除原排除）；违规代码行号仍**只**
@@ -96,6 +108,25 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
 自有源码 Gadget 模式、OkHttp 固定证书夹具、订阅回调、规则覆盖缺口展示、/collect 200 接收端。
 外发规则每版 8 条已正式启用，窗口 30000ms，revision=2；双版本 44 条风险规则全部启用。
 启用依据与范围见 vehicle/rules/EGRESS_CALIBRATION.md，不再依赖分析时窗口覆盖。
+
+**移动端进展（M034–M039，2026-10-16 → 10-19；详见 `mobile/DECISIONS.md`）**：
+
+- **C1 派生值匹配**：`core/collector/derive.py`（md5/sha*/base64/urlencode/hex/gzip+b64 候选）
+  — 值为派生形态时不再只认原值哈希。
+- **C2 静态/动态覆盖差集**：`mobile/analyze/coverage_gap.py` — 只出缺口，不下结论。
+- **明文链路补全**：M036 定位 Frida 17 API 已删 + 库懒加载 + `RTLD_LOCAL`（这才是旧的
+  "明文读不到"真根因）、native/QUIC 接线；M037 扩到应用层加密（EVP/AES）与 TLS 元数据
+  （SNI/keylog）+ 轮询兜底；M038 设备端 `tcpdump` + keylog + `tshark` 重组完整 HTTP 报文；
+  M039 Flutter / 静态剥符号 BoringSSL 按代码形状定位（不靠符号）。入口见 `mobile/tools/pcap_http.py`。
+- **风险量化**：`mobile/analyze/risk_score.py`（四维乘积 + 重复衰减 + 正交置信度，v1.3）
+  + `calibrate_risk_bands.py`（阈值标定），模型说明见 `mobile/RISK_SCORE_MODEL.md`。
+- **工程小项闭环**：M034 修 `conn_probe` 并发防撞、加 `run_regressions --mobile` 开关
+  （原 TWO_DEV_PLAN 工程-6/工程-7 已完成）。
+- **隐私工作台**：`mobile/workbench/`（工作流 / 运行时导入 / 合并布局，独立测试齐备）。
+
+仍**未做**（勿当成已完成）：B1 窗口校准（`WINDOW_CALIBRATION.md` 仍不存在）、
+A5-1 protectionLevel 标定（库内 `protection_level_raw` 仍 0/40）、B2 VScanBench、
+F1 类加载归因（无 `hook_classload.js`）、G1 UI 探索覆盖率度量、A4 分段自愈。
 
 **拆分进度**（已提交、每步回归全绿）：
 - ✅ 建 git 仓库 + 快照（ce1859d）
@@ -121,8 +152,12 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
   `session-manifest` 的 `hook_bundles` 同时补上 core 目录（原先静默漏记这两个的哈希）。
   新增离线守卫 `tools/test_hook_bundles.py`（已并入 `run_regressions.py`）
 
-**待办**：拆分主体已完成。剩余可选整理（见 archive/README.md）：
-- `output/` 历史产物归档——涉及 `latest-*.txt` 指针与 DELIVERY_INDEX 引用链，需确认后再动
+**待办**：拆分主体已完成。
+- ✅ `output/` 历史产物已清空（2026-10-19）——删除 208 项历史跑批目录与 `latest-*.txt` 指针；
+  仅保留 `dataset-quality-20261019/`、`frontend-shots/`、`pdf/`、`frontend-review/`、`completion/`
+  与 10 个指向 `D:/vscanner-tp` 的 `tp-*` 符号链接（删链不影响外部批次数据）。
+  `output/` 在 `.gitignore` 中、git 不跟踪，且所有工具用 `mkdir(parents=True)` 自建目录，
+  清空不影响任何入口；历史结论的引用改为"按需重跑"，见 `DELIVERY_INDEX.md`。
 
 边界仍须保留：native TLS/未解析协议无明文能力；Gadget 需要自有源码与安装授权，
 不支持无条件注入任意第三方 APK；统计归因遇歧义不关联；代码行号不证明违规语义。

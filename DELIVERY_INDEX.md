@@ -1,51 +1,54 @@
-# 交付索引（2026-09-25）
+# 交付索引（2026-10-19 更新）
 
-已完成本轮开发与验证。APK 静态反编译见 [vehicle/workbench/](vehicle/workbench/)（独立工作台，2026-09-28 加入）。适用范围见 [COMPLETION.md](COMPLETION.md)。
+> **2026-10-19 `output/` 清理**：历史跑批产物共 208 项（`mobile-regression-*`、`thirdparty-*`、
+> `device-*`、`delivery-*`、`regression-*`、`mobile-device-*` 等）已删除，`latest-*.txt` 指针一并移除。
+> 原因：项目尚未进入集中跑测试集阶段，这些是历次调试／验收的中间产物，不是最终交付物。
+>
+> **清理不改变任何结论**——已有结论仍以 `COMPLETION.md`、各目录 `DECISIONS.md`（D1xx–D7xx、M0xx）、
+> `mobile/DEV_FIX_REPORT.md` 的文字记录为准；但**逐次运行的原始 `verification.json` 已不可复核**，
+> 需要证据请按下方「复现」重跑，不要引用已删除的目录路径。
 
-## 前端更新（2026-09-25）
+## 现存交付物
 
-- [审计复核工作台](output/frontend-review/dashboard.html)：组合检索、代码位置、规则依据、离线深浅主题。复用下方真实交付会话。
-- [前端浏览器验证](output/frontend-review/verification.json) 与 [精确手机视口验证](output/frontend-review/viewport-verification.json)。
+### 车载（AAOS）
 
-## 最终产物
+- [审计报告 PDF](output/pdf/vscanner-audit-report.pdf)：12 页、含真实载荷截图与结论。
+- [审计复核工作台](output/frontend-review/dashboard.html)：单文件，双击可离线打开（需启用 JavaScript）。
+- [前端验证结果](output/frontend-review/verification.json) 与
+  [手机视口验证](output/frontend-review/viewport-verification.json)。
+- [验收原始材料](output/completion/)：`findings.jsonl`、`summary.json`、`room-verification.json`、
+  `rdap-smoke.json`、`geo-smoke.json`、`payload-images/`、PDF 逐页截图。
+- 夹具 APK：
+  - [主夹具 Debug](vehicle/targets/target-app/app/build/outputs/apk/debug/app-debug.apk)
+  - [第二夹具 Debug](vehicle/targets/target-app2/app/build/outputs/apk/debug/app-debug.apk)
+  - [主夹具 Gadget](vehicle/targets/target-app/app/build/outputs/apk/gadget/app-gadget.apk)
+- [规则库](vehicle/rules/rules_library/rules.db)：双版本 44 条风险规则全部启用，
+  外发规则每版 8 条、窗口 30000ms、revision=2（依据见 `vehicle/rules/EGRESS_CALIBRATION.md`）。
 
-- [PDF报告](output/pdf/vscanner-audit-report.pdf)：12页、8张真实载荷图、16条结论。
-- [自包含看板](output/delivery-20260924-193039/dashboard.html)：6 candidate、5 observed、5 correlated。
-- [机器可读结论](output/delivery-20260924-193039/findings.jsonl) 与 [汇总](output/delivery-20260924-193039/summary.json)。
-- [装机APK核对](output/delivery-20260924-193039/dex-verification.json)：38 VERIFIED、2 INCOMPLETE。
-- [数据来源及摘要](output/delivery-20260924-193039/provenance.json)。
-- [接收端归属](output/delivery-20260924-193039/ownership.json)：本次为私网地址，如实标non_public。
-- [主夹具Debug APK](vehicle/targets/target-app/app/build/outputs/apk/debug/app-debug.apk)。
-- [第二夹具Debug APK](vehicle/targets/target-app2/app/build/outputs/apk/debug/app-debug.apk)。
-- [主夹具Gadget APK](vehicle/targets/target-app/app/build/outputs/apk/gadget/app-gadget.apk)。
-- [规则库](vehicle/rules/rules_library/rules.db)：每版22条风险规则全部启用，8条外发规则窗口30000ms。
+### 移动端
 
-## 实测证据
+前端日常查看报告走 `frontend/pdfs/`（四份）：
 
-| 验收 | 结果 | 证据 |
-| --- | --- | --- |
-| 离线回归 | 88项全通过，另schema parity PASS | [回归日志索引](output/regression-20260924-193043/verification.json) |
-| Room预置库 | state=OK，14/15分别39/179行，每版22条启用 | [设备结果](output/completion/room-verification.json) |
-| 单应用Wi-Fi链路 | 订阅回调、OkHttp Pinner、HTTPS明文、完整载荷、200响应均通过 | [设备结果](output/device-20260924-133521/verification.json) |
-| Gadget启动等待 | 注入后恢复，23条真实VHAL读取 | [设备结果](output/gadget-20260924-174538/verification.json) |
-| 双App与Phase5 | 错峰两条MATCH，近同时两条AMBIGUOUS，无串包，歧义流不关联 | [设备结果](output/multi-20260924-183952/verification.json) |
-| PDF/看板展示 | 深浅主题、筛选、事件徽章、定位缺口、纹理、PDF页码和载荷图通过；逐页视觉检查完成 | [展示结果](output/delivery-20260924-193039/presentation-qa/verification.json) |
-| RDAP | example.com真实查询及可校验缓存 | [独立查询示例](output/completion/rdap-smoke.json) |
-| IP地理估计 | 8.8.4.4真实HTTPS查询及缓存 | [独立查询示例](output/completion/geo-smoke.json) |
+- [车载报告](frontend/pdfs/car-audit-report.pdf)
+- [设备实机](frontend/pdfs/mobile-device-latest.pdf)
+- [回归](frontend/pdfs/mobile-regression-latest.pdf)
+- [第三方批次](frontend/pdfs/thirdparty-latest.pdf)
 
-双App轮次使用ADB回环转发；600ms错峰和50ms近同时触发。之前SLIRP轮次的连接超时保留在output中，
-不得将回环成功写成SLIRP完全同时外发已通过。公网归属查询示例不是本次私网接收端的身份。
-可选MMDB接口尚未用真实数据库做端到端验收；当前可用路径为HTTPS查询及离线缓存。
+生成与模型说明：`mobile/README.md`（流程）、`mobile/RISK_SCORE_MODEL.md`（风险评分 v1.3）。
 
-核对备份库发现CURRENT_GEAR已有R004，8个属性均已有规则，旧“3/8”描述已纠正。
-2条INCOMPLETE均来自订阅回调的Native Method栈；保持调用链及缺口，不从dex表编选行号。
+### 2026-10-19 新产物（保留）
+
+- [测试集质量分析](output/dataset-quality-20261019/质量分析-20261019.md)
+  + `batch-quality.csv` / `batch-quality.json` / `policy-inventory.json`
+- [前端界面截图](output/frontend-shots/)
 
 ## 复现
 
-先按 [COMPLETION.md](COMPLETION.md) 初始化 environment.ps1。常用入口：
+先按 [COMPLETION.md](COMPLETION.md) 初始化 `environment.ps1`，再按需运行：
 
 ```powershell
-& $VScanPython tools/run_regressions.py
+& $VScanPython tools/run_regressions.py          # 根回归 13 组
+& $VScanPython mobile/tools/run_mobile_checks.py # 移动侧 23 项
 & $VScanPython tools/device_acceptance.py
 & $VScanPython tools/gadget_acceptance.py
 & $VScanPython tools/multi_acceptance.py
@@ -53,7 +56,21 @@
 & $VScanPython tools/verify_presentation.py
 ```
 
-设备验收要求本项目自建AAOS模拟器与Frida服务已启动；仅用于授权测试。
-每轮产生独立目录；latest-*.txt指向最近一次尝试，是否成功必须检查verification.json。
-没有执行第三方APK重打包、签名或任意无授权App注入。静态分析见 vehicle/workbench，只读 APK、只分析已获授权的样本。
+每轮在 `output/<类型>-<时间戳>/` 下产生独立目录。
 
+> **`latest-*.txt` 已删除的副作用**：`tools/verify_presentation.py` 会读取
+> `output/latest-delivery.txt`。在全新 `output/` 上直接跑它会 `FileNotFoundError`；
+> 正确顺序是**先跑 `build_delivery.py`**（会重建指针与交付目录），再跑 `verify_presentation.py`。
+> 其余工具用 `mkdir(parents=True)` 自建目录，清空 `output/` 不影响。
+
+设备验收要求本项目自建 AAOS 模拟器与 Frida 服务已启动；**仅用于授权测试**。
+没有执行第三方 APK 重打包、签名或任意无授权 App 注入。静态分析见 `vehicle/workbench`，
+只读 APK、只分析已获授权的样本。
+
+## 保留的判定边界（不因清理而放宽）
+
+- 双 App 轮次使用 ADB 回环转发；600ms 错峰与 50ms 近同时触发。
+  **不得**把回环成功写成 SLIRP 完全同时外发已通过。
+- 公网归属查询示例**不是**本次私网接收端的身份；可选 MMDB 接口尚未用真实数据库做端到端验收。
+- 2 条 INCOMPLETE 来自订阅回调的 Native Method 栈；保持调用链与缺口，不从 dex 表编选行号。
+- 失败运行保留、不覆盖：重跑请用新时间戳目录，不要复用旧目录名。

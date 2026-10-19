@@ -12,13 +12,14 @@
 | --- | --- |
 | `rules/` | **规则库**：schema v2 + 法规依据 + android.jar 签名抽取 + 构建器 |
 | `rules/regulations/` | 法规原文（认定方法 / 必要信息规定 / 个保法 / GB-T 35273），带条款号与 URL |
-| `hooks/` | Frida 钩子：敏感 API 读取 + 同意时序 + TLS 校验收宽（Java 层 pinning 绕过，随 hook_all 挂载）。内存 Hook（JCE/native 明文）已移植但**未接线**，详见「能力边界」段。监视表由规则库生成，不手抄 |
+| `hooks/` | Frida 钩子：敏感 API 读取 + 同意时序 + TLS 校验收宽（Java 层 pinning 绕过）+ **内存 Hook（native TLS / JCE / native 应用层加密明文 + SNI/keylog）**，全部随 `hook_all` 单 agent 挂载。native 覆盖到哪、到哪为止，见「能力边界」段 |
 | `traffic/` | mitmproxy 移动适配：打标表 + 注入壳（复用 core/collector/addon.py）+ 透明代理（transparent.py） |
 | `policy/` | 隐私政策获取 / 正文抽取 / 规则化检查 |
-| `analyze/` | 关联引擎与八种移动谓词（复用 core/evidence/codeloc.py 的行号链） |
+| `analyze/` | 关联引擎与八种移动谓词（复用 core/evidence/codeloc.py 的行号链）；**风险量化** `risk_score.py`（四维乘积 + 重复衰减 + 正交置信度，v1.3，模型见 `RISK_SCORE_MODEL.md`、阈值标定 `calibrate_risk_bands.py`）；静态/动态覆盖差集 `coverage_gap.py` |
 | `ai/` | **证据打包 + 三阶段提示词 + LLM 客户端 + 输出校验**；打包时顺带做 APK 加固特征探测，命中即写入 gaps（结论受限） |
 | `report/` | PDF 报告（工具结论 + AI 研判 + 校验问题清单） |
-| `tools/` | 离线回归总入口、合成演示会话生成器 |
+| `tools/` | 离线回归总入口、合成演示会话生成器、设备跑批；**完整报文链路** `pcap_capture.py`（设备端 tcpdump，只能 `su 0` 用）、`pcap_http.py`（keylog + `tshark` 重组）、`flutter_probe.py`（剥符号 BoringSSL 静态探测） |
+| `workbench/` | 隐私审计工作台（工作流 / 运行时导入 / 合并布局，带独立测试） |
 | `fixture-app/` | 自有靶子 App（隐私演示），用于端到端验证 |
 
 ## 怎么跑（离线优先，不需要设备）
@@ -126,8 +127,9 @@ cp mobile/ai/config.example.json mobile/ai/config.local.json   # ← 在这里�
   ——前置 mitm → 冷启动 → **等网络就绪** → `settings put global http_proxy :0`
   彻底禁系统代理 → raw socket 三测。已实测（系统代理全禁的极端条件）：A `nc -4`
   直连域名被捕获；B 直连 TEST-NET-3 不可达 IP 收到 **mitmproxy 自己的 400 页**
-  （"no host header"，铁证）；C UDP 到宿主 **直出、不经代理**（`-http-proxy` 只重定向
-  TCP；QUIC/UDP 属已声明边界 §能力边界，不解码）。**boot 完成 ≠ 网络就绪**（eth0
+  （"no host header"，铁证）；C UDP 到宿主 **直出、不经代理**——这是 `-http-proxy`
+  的边界（它只重定向 TCP），**不是** UDP 不能被拦：常规采集链路已改为在设备侧
+  `iptables -I OUTPUT -p udp --dport 443 -j DROP` 逼 QUIC 回退 TCP（见 §能力边界）。**boot 完成 ≠ 网络就绪**（eth0
   DHCP 实测还要等 36s / 106s 两轮），过早测试全是 "Network is unreachable" 假阴性——
   本工具内置网络等待，同源探测勿在别处绕过。
 
@@ -202,14 +204,73 @@ AI 三阶段研判（含编造校验）、PDF 报告（十章 + 三附录）、�
 - 写入类 API（`ContentResolver.insert` 等）与覆写型服务（无障碍/通知监听）未覆盖，
   理由与前置条件见 `EVAL_CROSSCHECK.md` 第四节。
 
-**能力边界**：加固壳 / QUIC 不在覆盖内——加固壳现由 `apk_packer_probe.py` 在报告里
-如实标注"结论受限"，但仍**不具备**脱壳能力；**明文的当前来源只有两条**：mitmproxy
-解密（系统 CA + `-http-proxy`）+ Java 层 TLS 校验收宽（`tls_bypasses_tp.js` 三手法）。
-`hook_cipher.js` / `hook_native_ssl.js`（JCE 加密前明文 / native TLS 明文）**已移植但
-未接线进流水线**（2026-10-16 核实：`device_run*.py` 只挂 `hook_all`，二者仅存在于
-构建产物与一致性守卫；授权范围标注也窄一档："自有设备与自有 APK"）——接线需合并进
-hook_all 并重跑 A1 稳定性；静态链接自有 BoringSSL（Cronet 常见，符号不导出）与不经
-JCE 的手工加密 / XOR 属该路径本身的覆盖外；
+**能力边界**：加固壳不在覆盖内——`apk_packer_probe.py` 只在报告里如实标注"结论受限"，
+仍**不具备**脱壳能力。**明文来源现有五条**：mitmproxy 解密（系统 CA + `-http-proxy`）、
+Java 层 TLS 校验收宽（`tls_bypasses_tp.js` 三手法）、**native TLS 明文**
+（`hook_native_ssl.js` 拦 `SSL_write/SSL_read`）、**native 应用层加密明文**
+（`hook_native_crypto.js` 拦 `EVP_EncryptUpdate/DecryptUpdate` 与低层 `AES_*`）、
+**TLS 元数据**（`hook_tls_meta.js` 取 SNI 与 keylog）。前三条 2026-10-18 接线进
+`hook_all`，后两条同批加入，同一 agent 装配。native 路径是在**应用自己的 SSL / 加密栈里
+读明文**，不依赖代理与证书，因此**对证书 pinning 免疫**——pinning 挡住的是"我们伪造
+证书"这条路，不是明文本身。
+
+`hook_native_crypto.js` 解决的是"TLS 之前就已加密"：SSL_write 看到的是密文，明文只在
+`EVP_*Update` 的入参（加密）/ 出参（解密）。**必须过滤 TLS 记录层自己的 EVP 调用**
+（BoringSSL 的 `tls_seal_record` 内部也走 EVP），否则每条 TLS 流量都会多记一条密文事件；
+实现用回溯符号名 + HTTP 报文启发式双保险，实测 TLS 握手全程 **EVP 事件为 0**。
+低层 AES 按 120ms/类节流、全局 800 条上限，超限记 `NATIVE_CRYPTO_DROPPED`。
+
+`hook_tls_meta.js` 是"符号被剥"场景的旁路：`SSL_set_tlsext_host_name` 记 SNI（明文拿不到
+时仍能证明"发给了谁"）；hook `SSL_CTX_new` **与 `SSL_new`** 的返回值后主动调
+`SSL_CTX_set_keylog_callback`，拿标准 NSS keylog 行（`CLIENT_RANDOM` 等）。只挂
+`SSL_CTX_new` 是不够的：attach 模式下 App 的上下文通常在我们挂钩之前就建好了
+（实测 F-Droid 一轮有 5 条 `SSL_WRITE_PLAINTEXT` 但 keylog 为 0），所以补了
+`SSL_new` + `SSL_get_SSL_CTX` 反查上下文补装，事件标 `arms:"…+ssl_new"`。
+App 若在之后覆盖回调，后续连接会失效，以 `KEYLOG_INSTALLED` 是否出现为准。
+
+**明文来源第六条：pcap + tshark（2026-10-18，M038）**。hook 拿到的是 `SSL_read/SSL_write`
+的**分片**——没有连接标识、没有方向、没有边界，gzip 的是压缩字节。完整报文改由
+`pcap_capture.py` 抓设备端 pcap、`pcap_http.py` 把 keylog 喂给 `tshark` 解：
+TCP 重组、TLS 解密、chunked 分帧、gzip 解压**全是 tshark 做的**，我们一行重组代码没写。
+产物是 `out/http_messages.jsonl` + `out/bodies/`。实测一轮解出 31 条报文
+（h1=29 / h2=2），其中 h2 那条拿到 37KB 的 gzip 明文 JSON；`test_pcap_pipeline.py`
+（16 条断言）把 `gzip → 明文`、h2 伪头还原、缺 pcap/未启动必须报错这几条钉死。
+**必须跑两趟**：h1 用 `http.request or http.response`，h2 用 `http2.header.*`——
+ALPN 协商成 h2 时前者**一条都匹配不到**，只跑一趟会误判成"没抓到东西"。
+body 带 `*_truncated` 的只拿到前半截（抓包在流中途结束），报告里不能当全文用。
+**keylog 覆盖率实测只有一半**（4 轮 2 成）：应用若在 agent 装载前就建好 TLS 连接，
+`SSL_CTX_new`/`SSL_new` 都已过去，后装回调补不回来；本机 AVD 的 spawn 不可用
+（pid 5s 消失），所以别指望 spawn 兜底。缺 keylog 时 `stats.tls_undecrypted_app_data`
+会给出未解密帧数（实测 ~2000），非 0 就说明报文只是零头——这时 `http_messages_extracted`
+判失败，不是通过。
+`/system/bin/tcpdump` 在测试 AVD 上是预装的（4.99.6），但 SELinux 只允许 `su 0` 执行——
+能力探测也必须以 root 身份做，否则会得到"设备上没有 tcpdump"的假阴性。
+
+**Flutter / 静态剥符号 BoringSSL：已从覆盖外移入（M039）**。`hook_flutter_ssl.js` 不靠
+符号，靠**代码形状**：`ssl_crypto_x509_session_verify_cert_chain` 的第一条语句是
+`*out_alert = SSL_AD_INTERNAL_ERROR`（0x50），x64 上是 `c6 02 50` + `48 8b af`；
+从这个锚点回扫 10~14 字节拿到序言，`Interceptor.attach` 后 `retval.replace(1)`。
+静态侧 `flutter_probe.py` 给出同一偏移，两路互相印证（LocalSend 1.18.2 x64：
+`va=0x8113ee`，运行时日志一致）。**但这只绕过证书校验**：Dart 的 `HttpClient` 不读
+Android 系统代理，"装系统 CA + 设 http_proxy"对 Flutter 无效，拿明文还需要把 443
+用 iptables 引到 mitmproxy 透明模式——本仓库尚未实现，所以 Flutter **仍无明文样本**。
+另外 `Memory.scanSync` 不能整模块扫（跨度里有未映射空洞，一次 access violation 就让
+整次扫描归零、伪装成 `FLUTTER_SCAN_MISS`），必须按 `Process.enumerateRanges('r-x')` 逐段扫。
+
+覆盖边界：只覆盖**导出了**相应符号的模块。实测 conscrypt（`libjavacrypto.so`，同时导出
+SSL 与 EVP/AES 两套）与 `libssl.so`/`libcrypto.so` 可截（F-Droid 索引刷新一轮记到 1003
+条明文）；**符号被剥/内联的静态 BoringSSL（部分 Cronet 构建）与 Flutter（`libflutter.so`
+自带 BoringSSL）由 `hook_flutter_ssl.js` 按代码形状处理（见上，只到"绕过校验"为止）**；
+RN 走 OkHttp/Java 栈、WebView 走系统网络栈，由既有 Java 钩子 + mitmproxy 覆盖。
+不经 JCE 也不走 EVP/AES 的自研算法（XOR、字节置换）仍在覆盖外。**库晚加载**：attach 时
+SSL 库常尚未 dlopen，仅靠 `dlopen` 重扫实测不可靠（`dlopen` 在各模块解析到同一地址，
+无法区分 linker 实现与 PLT 转发），已加 2s 低频轮询兜底（`RESCAN_HOOKED` 带
+`how:"poll"`），实测懒加载场景 2s 内补挂成功；**空闲阈值已从 3 轮（6s）放宽到 12 轮（24s）**
+——采集窗口比库加载窗口长时，早期放弃等于整轮失明（F-Droid 实测踩到）。
+**QUIC 已从"覆盖外"改为设备侧压制**：`device_run_thirdparty.py` 在 `am start` **之前**
+`iptables -I OUTPUT -p udp --dport 443 -j DROP`，逼 HTTP/3 回退 TCP（2026-10-18 实测：
+规则 pkts 计数随发包增长、撤销后无残留）；无 root / 内核缺 netfilter 时 `quic_blocked`
+记缺口，报告回落为"QUIC 不在覆盖内"。
 剪贴板等无需运行时权限的 API，"无同意事件"需要结合 API 判断；
 政策关键词预扫是正则代理指标，未命中不等于未声明；
 静态扫描看不到被 D8 折叠掉的版本分支（M013）。

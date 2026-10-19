@@ -292,8 +292,9 @@ confidence = 0.5 × 输入完整度 + 0.5 × √(数据类别覆盖率)
 
 ## 四、实测结果
 
-在仓库已有的真实回归产物上验证（`output/mobile-regression-20261017-162715/e2e/`，
-18 条结论，App 类别 map_navigation）：
+在当时的回归产物上验证（`output/mobile-regression-20261017-162715/e2e/`，
+18 条结论，App 类别 map_navigation；**该目录已于 2026-10-19 随 `output/` 清理删除**，
+下列数字为当时实测留档，需复跑重验）：
 
 ```
 总分 48.20 ｜ 档位 high ｜ 置信度 medium (0.689) ｜ necessity 已启用
@@ -416,12 +417,15 @@ PY="C:/Users/OneKyubey/.workbuddy/binaries/python/envs/default/Scripts/python.ex
 （Spearman 秩相关）。这能把"我说它 critical"变成"它在 8 个样本中的排序与
 人工判断一致"。
 
-> ⚠️ **当前数据前提不满足**：仓库 `output/` 下所有 e2e 样本都是 `make_demo_session.py`
-> 生成的**合成数据**（SYNTHETIC_DEMO）；5 个真实第三方样本（Fossify Camera 等）因
-> 插桩 bug 运行时数据为零（见 `SAMPLE_RUN_5APPS.md` P0-1）。所以「真实样本统计标定」
-> 现在**做不了**，不是模型代码能修的，必须先修插桩、重新采集。工具已就绪：
-> `python mobile/analyze/calibrate_risk_bands.py --samples output/*/e2e`
+> ⚠️ **标定数据前提仍不满足（2026-10-19 更新）**：
+> ~~5 个真实第三方样本因插桩 bug 运行时数据为零~~ → **该 bug（A1）已于 2026-10-16 修复**
+> （M031/M032：bridge 补丁 + 单 agent 合并；夹具 5/5、真实样本 `e2e-1` passed）。
+> 所以现在**能**采到真实样本，卡点从"采不到"变成"**样本量不足**"：
+> 真实第三方批次的成功样本还没攒到 5–10 个，且 `output/` 已于 2026-10-19 清空、
+> 历史 e2e 产物不再可用。
+> 工具已就绪：`python mobile/analyze/calibrate_risk_bands.py --samples output/*/e2e`
 > 会自动标注「真实样本 N 个」并在 <5 时输出演示性警告。
+> **不要再用「插桩 bug 导致无法标定」的老说法**——那是 A1 修复前的状态。
 
 **P0.5 — 补全必要数据映射粒度**
 

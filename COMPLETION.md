@@ -50,6 +50,13 @@ Gradle8.13、API36 与构建工具36 已装（Gradle 由各工程 gradlew 包装
 
 每轮保存到独立 `output/device-*`、`output/gadget-*`、`output/multi-*` 目录。
 `output/latest-*.txt` 指向最近一次尝试；判断是否通过必须读该目录 `verification.json`，不能只看目录存在。
+
+> **2026-10-19 状态**：`output/` 内历史跑批产物（208 项）与全部 `latest-*.txt` 已清理，
+> 只保留 `pdf/`、`frontend-review/`、`completion/`、`dataset-quality-20261019/`、`frontend-shots/`
+> 和指向 `D:/vscanner-tp` 的 `tp-*` 链接。下面的命令可直接重跑（各工具自建目录）；
+> 但 `tools/verify_presentation.py` 依赖 `latest-delivery.txt`，须**先跑 `build_delivery.py`**。
+> 因此本文其余章节中提到的 `output/<时间戳>/` 证据路径均为**历史轮次**，已不可访问；
+> 需要证据请按本节命令重跑，不要引用旧目录路径。
 Gadget 验收会安装 Gadget APK并在结束时停止等待型进程；multi验收会恢复普通 Debug APK。
 multi使用ADB回环转发与真实双App，600ms错峰/50ms近同时触发；Wi-Fi/SLIRP轮次的超时证据保留。
 夹具控制脚本只允许两个自有包，触发原有按钮；它是验收控制器，不是审计Hook。
@@ -154,7 +161,8 @@ dex 40 项核对（38 VERIFIED / 2 INCOMPLETE）、PDF 与看板 QA、前端 22 
 - **不替代 vehicle/dashboard 看板**：D601 要求看板静态单文件，而上传+反编译必须有服务端。
   两者并存，`dashboard.html` 未改动，也未接进 `build_delivery.py` 的报告流水线。
 
-端到端验收 8 项全过（`output/latest-workbench.txt`）：权限 8 条与动态路径一致、
+端到端验收 8 项全过（当时指针 `output/latest-workbench.txt`，**该目录已于 2026-10-19 清理**；
+复跑 `tools/workbench_acceptance.py` 会重建）：权限 8 条与动态路径一致、
 3 个 dex 全扫、`GEAR_SELECTION` 在 `classes3.dex` 找到、静态等级封顶、
 四象限 16 both / 6 static_only / 0 dynamic_only、身份证明为同一个 APK、
 反编译 930 个类、5 个部分失败被记成缺口。
