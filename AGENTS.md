@@ -126,9 +126,9 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
   （原 TWO_DEV_PLAN 工程-6/工程-7 已完成）。
 - **隐私工作台**：`mobile/workbench/`（工作流 / 运行时导入 / 合并布局，独立测试齐备）。
 - **一键审计流水线**：`mobile/pipeline/`（16 阶段 + SSE 事件流，`stages.py`/`runner.py`/`server.py`），
-  前端是根 `frontend/app.html`。**注意端口**：`mobile/pipeline/server.py` 与
-  `mobile/workbench/server.py` 默认都是 **8771**，同时起会撞；跑工作台时显式
-  `--port 8772`，见根 `README.md`「运行入口」。
+  前端是根 `frontend/app.html`。**端口分工**：`mobile/pipeline/server.py` 默认 **8771**、
+  `mobile/workbench/server.py` 默认 **8772**，两套可同时起；旧文档里"都为 8771"已过时，
+  见根 `README.md`「运行入口」。
 - **《用户协议》接入（M040）**：`policy_discover.classify()` 按隐私词/协议词分流，
   `policy_fetch --from-apk` 落盘带 `document_kind`；`policy_library.load_app_agreements()`
   以 `AGR-*` 挂到 `app_agreements`，**不进主政策路径**（`--allow-legacy-policy` 下同样拦截）；

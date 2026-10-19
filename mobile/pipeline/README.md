@@ -45,6 +45,9 @@ cd frontend && "$PY" -m http.server 8090   # 8080 被本机 httpd.exe 占用，�
 # 也可用 app.html#pipeline 直达；首页「一键审计」按钮同样跳这里。
 ```
 
+端口分工：本服务默认 **8771**，`mobile/workbench/server.py` 默认 **8772**，两套可同时起。
+不要再给工作台显式传 `--port 8771`，那是旧文档的写法。
+
 ## API
 
 | 端点 | 方法 | 说明 |

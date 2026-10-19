@@ -2,15 +2,15 @@
 
 新增的移动端产品入口，复用 core 静态内核与 MOB 规则。前端独立在 mobile/workbench/frontend/，
 由工作台服务同源托管；**根 `frontend/` 是另一套「一键审计」前端**（对接 `mobile/pipeline`），
-两者互不覆盖，默认端口都是 8771，同时起要显式换端口。
+两者互不覆盖；默认端口已错开——工作台 **8772**，一键审计 **8771**，可以同时起。
 
 ## 启动（项目根目录，PowerShell）
 
 ```powershell
-python mobile/workbench/server.py --port 8771
+python mobile/workbench/server.py
 ```
 
-在浏览器打开 `http://127.0.0.1:8771/app.html`。前端与 API 同源，无 CDN、远程字体或构建工具依赖。
+在浏览器打开 `http://127.0.0.1:8772/app.html`。前端与 API 同源，无 CDN、远程字体或构建工具依赖。
 静态扫描需要 Android SDK 的 `aapt2`、`dexdump`；源码反编译另需 JADX 与 Java。
 缺少 JADX 时静态扫描仍可完成，界面明确展示反编译缺口。
 
@@ -52,8 +52,8 @@ API 契约与后端测试见 `mobile/workbench/README.md`。
 `test_audit_model.mjs`、`test_benchmark_model.mjs`、`test_risk_model.mjs`；
 浏览器验收需使用移动端同源服务。
 
-> 这个前端由 `mobile/workbench/server.py` 托管（默认 8771）。根 `frontend/` 是**另一套**
-> 「一键审计」前端，对接 `mobile/pipeline`（也是 8771）。两者不要同时用默认端口，
+> 这个前端由 `mobile/workbench/server.py` 托管（默认 8772）。根 `frontend/` 是**另一套**
+> 「一键审计」前端，对接 `mobile/pipeline`（默认 8771）。两套默认端口不冲突，
 > 见根 `README.md`「运行入口」。
 
 ## 基准实验概览

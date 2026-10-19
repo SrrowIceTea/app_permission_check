@@ -34,18 +34,18 @@ class CorePipelineTests(unittest.TestCase):
         task = {'state': 'partial', 'stages': {'static': {'state': 'done'}, 'decompile': {'state': 'partial'}}}
         with patch('mobile.lab.core_pipeline.request', side_effect=[task, {'decompile': {'classes_written': 0}}]):
             with self.assertRaises(RuntimeError):
-                wait_static('http://127.0.0.1:8771', 'any')
+                wait_static('http://127.0.0.1:8772', 'any')
 
     def test_usable_partial_sources_keep_gap_but_allow_behavior_audit(self):
         task = {'state': 'partial', 'stages': {'static': {'state': 'done'}, 'decompile': {'state': 'partial'}},
                 'gaps': [{'kind': 'partial_decompile', 'errors': 83}]}
         with patch('mobile.lab.core_pipeline.request', side_effect=[task, {'decompile': {'classes_written': 4053}}]):
-            self.assertEqual(wait_static('http://127.0.0.1:8771', 'any')['gaps'][0]['errors'], 83)
+            self.assertEqual(wait_static('http://127.0.0.1:8772', 'any')['gaps'][0]['errors'], 83)
 
     def test_real_static_terminal_states_are_required(self):
         task = {'state': 'done', 'stages': {'static': {'state': 'done'}, 'decompile': {'state': 'done'}}}
         with patch('mobile.lab.core_pipeline.request', return_value=task):
-            self.assertEqual(wait_static('http://127.0.0.1:8771', 'any'), task)
+            self.assertEqual(wait_static('http://127.0.0.1:8772', 'any'), task)
 
 
     def test_reaudit_static_input_never_reuses_previous_capture_or_network_gaps(self):

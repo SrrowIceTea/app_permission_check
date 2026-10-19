@@ -20,7 +20,7 @@
 | `report/` | PDF 报告（工具结论 + AI 研判 + 校验问题清单） |
 | `tools/` | 离线回归总入口、合成演示会话生成器、设备跑批；**完整报文链路** `pcap_capture.py`（设备端 tcpdump，只能 `su 0` 用）、`pcap_http.py`（keylog + `tshark` 重组）、`flutter_probe.py`（剥符号 BoringSSL 静态探测） |
 | `workbench/` | 隐私审计工作台（工作流 / 运行时导入 / 合并布局 / 一键审计，带独立测试）；自带前端 `workbench/frontend/` |
-| `pipeline/` | **一键审计流水线**：16 阶段定义 `stages.py`、执行器 `runner.py`、HTTP+SSE `server.py`；前端在根 `frontend/`。默认 8771，与 `workbench/server.py` 撞端口，见根 `README.md` |
+| `pipeline/` | **一键审计流水线**：16 阶段定义 `stages.py`、执行器 `runner.py`、HTTP+SSE `server.py`；前端在根 `frontend/`。默认 **8771**（`workbench/server.py` 默认 **8772**，两套可同时起），见根 `README.md` |
 | `fixture-app/` | 自有靶子 App（隐私演示），用于端到端验证 |
 
 ## 怎么跑（离线优先，不需要设备）

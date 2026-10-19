@@ -38,7 +38,7 @@
 
 移动端文档入口（合并 ch / junzhe 后按这个顺序读）：
 
-- 总览与两条运行入口：根 [README.md](README.md)（注意 `pipeline` 与 `workbench` 默认都占 8771）
+- 总览与两条运行入口：根 [README.md](README.md)（`pipeline` 默认 8771、`workbench` 默认 8772）
 - 一键审计流水线：[mobile/pipeline/README.md](mobile/pipeline/README.md)（16 阶段 + SSE 契约）
 - 静态/动态工作台：[mobile/workbench/README.md](mobile/workbench/README.md)、
   完整检测 API：[README.audit.md](mobile/workbench/README.audit.md)

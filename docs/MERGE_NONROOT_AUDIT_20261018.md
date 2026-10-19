@@ -163,7 +163,7 @@ python mobile/hooks/gen_targets.py
 6. 使用同模式/同设备真实正控启动服务，详细参数见 `mobile/workbench/README.audit.md`。
 
 ```powershell
-python mobile/workbench/server.py --port 8771 `
+python mobile/workbench/server.py `
   --sdk <本机SDK目录> --jadx <本机JADX目录> --java-home <本机JDK目录> `
   --audit-config <源码外私有模型配置.json> `
   --audit-selftest <本机新正控目录/verification.json>

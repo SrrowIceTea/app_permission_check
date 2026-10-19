@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """移动端本地审计工作台。仅用于授权测试；不 Root、不装 CA、不自动联网调用 AI。
 
-运行：python mobile/workbench/server.py --port 8771 [--sdk SDK目录] [--jadx jadx目录]
+运行：python mobile/workbench/server.py [--port 8772] [--sdk SDK目录] [--jadx jadx目录]
+
+默认 8772：`mobile/pipeline/server.py`（一键审计）占 8771，两个默认值不得重合，
+否则同时启动时后起的一方 bind 失败。
 """
 from __future__ import annotations
 
@@ -14,6 +17,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_PORT = 8772  # 8771 留给 mobile/pipeline，两套入口必须能同时起
 sys.path.insert(0, str(ROOT))
 from mobile.workbench import routes  # noqa: E402
 from mobile.workbench.runtime import Runtime  # noqa: E402
@@ -99,7 +103,7 @@ class Handler(BaseHTTPRequestHandler):
         self._dispatch(routes.post)
 
 
-def create_server(runtime: Runtime, port: int = 8771,
+def create_server(runtime: Runtime, port: int = DEFAULT_PORT,
                   frontend: Path = ROOT / "mobile/workbench/frontend") -> ThreadingHTTPServer:
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.runtime = runtime
@@ -109,7 +113,7 @@ def create_server(runtime: Runtime, port: int = 8771,
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", type=int, default=8771)
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--storage", type=Path, default=ROOT / "output" / "mobile-workbench")
     parser.add_argument("--rules", type=Path, default=ROOT / "mobile" / "rules" / "rules_mobile.db")
     parser.add_argument("--version", default="36")

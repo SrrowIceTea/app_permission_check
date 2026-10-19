@@ -26,7 +26,7 @@ def request(server, method, path, apk=None):
     url = urlsplit(server)
     if url.scheme != 'http' or url.hostname not in ('127.0.0.1', 'localhost'):
         raise ValueError('use the local workbench HTTP service')
-    connection = http.client.HTTPConnection(url.hostname, url.port or 8771, timeout=120)
+    connection = http.client.HTTPConnection(url.hostname, url.port or 8772, timeout=120)
     try:
         connection.putrequest(method, path)
         if apk:
@@ -268,7 +268,7 @@ def main():
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--policy-store', type=Path, default=DEFAULT_STORE)
     parser.add_argument('--storage', type=Path, default=ROOT / 'output/mobile-workbench')
-    parser.add_argument('--server', default='http://127.0.0.1:8771')
+    parser.add_argument('--server', default='http://127.0.0.1:8772')
     parser.add_argument('--serial', default='emulator-5562')
     parser.add_argument('--scenario', choices=('libchecker', 'readyou', 'launch'), default='launch')
     parser.add_argument('--seconds', type=int, default=20)

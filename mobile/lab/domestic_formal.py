@@ -198,7 +198,7 @@ def main():
     parser.add_argument('--config', type=Path, default=Path.home() / 'Desktop/mobile-app-permission-check-deepseek.local.json')
     parser.add_argument('--policy-store', type=Path, default=DEFAULT_STORE)
     parser.add_argument('--storage', type=Path, default=ROOT / 'output/mobile-workbench')
-    parser.add_argument('--server', default='http://127.0.0.1:8771')
+    parser.add_argument('--server', default='http://127.0.0.1:8772')
     parser.add_argument('--serial', default='emulator-5562')
     parser.add_argument('--jobs', type=int, choices=(1, 2), default=2)
     parser.add_argument('--sample', action='append')

@@ -5,10 +5,12 @@
 ## 服务配置
 
 ```powershell
-python mobile/workbench/server.py --port 8771 `
+python mobile/workbench/server.py `
   --audit-config <本机模型配置.json> `
   --audit-selftest <同设备同模式夹具正控目录/verification.json>
 ```
+
+默认端口 **8772**（8771 留给 `mobile/pipeline`）；需要换端口再显式加 `--port`。
 
 已有 `--jadx`、`--java-home`、`--sdk`、`--storage` 参数保持不变。
 完整审计要求 storage 位于项目 `output` 下；模型配置只由服务启动读取，不从 HTTP 接收密钥或路径。

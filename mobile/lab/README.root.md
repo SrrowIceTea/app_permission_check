@@ -29,7 +29,8 @@ Benign 是作者命名的含漏洞目标，不是安全阴性。Secure 是作者
 - 主机转发 `127.0.0.1:27043` 到该模拟器的 Frida Server；不修改其他设备。
 - 全量 DEX 静态扫描复用 `core.static.analysis.scan_static` 与移动端 223 条规则；
   反编译使用现有官方 JADX 1.5.6 Maven 库，不修改共享内核。
-- Web 本机端口 8771，基准页为 `/app.html#benchmarks`。
+- Web 本机端口 8771（当次运行记录；2026-10-19 起 `workbench/server.py` 默认改为 8772），
+  基准页为 `/app.html#benchmarks`。
 
 本次启动资料与日志在 `output/root-runtime-20261017/`。没有安装系统 CA、关闭证书验证或修改原应用返回值。
 

@@ -27,10 +27,10 @@
 
 **组员合并前先读 [合并说明](docs/MERGE_NONROOT_AUDIT_20261018.md)。队友主线优先，不用整目录覆盖 main。**
 
-## 运行入口（两套，别同时用默认端口）
+## 运行入口（两套，默认端口已错开）
 
-两个后端**默认端口都是 8771**，同时启动会撞。前端也不同：一键审计用根 `frontend/`（静态 8090），
-工作台用自带的 `mobile/workbench/frontend/`（同源）。按需要选一套：
+一键审计占 **8771**、工作台占 **8772**，两套可以同时起。前端也不同：一键审计用根 `frontend/`
+（静态 8090），工作台用自带的 `mobile/workbench/frontend/`（同源）。
 
 **A. 一键审计（`mobile/pipeline` + 根 `frontend/`）**
 
@@ -45,8 +45,8 @@ python -m http.server 8090 --directory frontend
 **B. 静态/动态工作台（`mobile/workbench`，自带前端）**
 
 ```powershell
-# 必须显式换端口，否则和上面的 pipeline 抢 8771
-python mobile/workbench/server.py --port 8772 `
+# 默认 8772（pipeline 占 8771），两个服务可同时运行
+python mobile/workbench/server.py `
   --sdk <本机SDK目录> --jadx <本机JADX目录> --java-home <本机JDK目录> `
   --audit-config <源码外私有模型配置.json> `
   --audit-selftest <同设备同模式真实正控目录/verification.json>

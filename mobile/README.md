@@ -33,8 +33,8 @@
 > - **政策分册（M040）**：`policy/policy_discover.py` 按隐私词/协议词把文档分成
 >   `privacy` / `agreement`；《用户协议》入库后挂在 `app_agreements`（ID `AGR-*`），
 >   **不参与主政策披露比对**，只有协议时主政策记 `not_found`。见 `policy/README.local.md`。
-> - **一键审计**：`pipeline/`（16 阶段 + SSE），前端在根 `frontend/`，与
->   `workbench/` 是两套入口且默认端口相同（8771），起法见根 `README.md`。
+> - **一键审计**：`pipeline/`（16 阶段 + SSE）默认占 8771，前端在根 `frontend/`；
+>   `workbench/` 是另一套入口、默认 8772，与它互不抢端口。起法见根 `README.md`。
 > - **工程**：`run_regressions.py --mobile`（移动侧失败计入根回归失败）、`conn_probe` 并发防撞。
 
 ## 快速开始（不需要设备、不需要网络、不需要 API key）

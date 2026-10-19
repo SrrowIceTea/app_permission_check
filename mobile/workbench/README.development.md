@@ -22,7 +22,7 @@
 
 ## 2. 为方便合并主动让出的部分
 
-- **不替换根 `frontend/`**。移动 UI 放到 `mobile/workbench/frontend/`，默认端口改为 **8771**，不占用原车载入口。
+- **不替换根 `frontend/`**。移动 UI 放到 `mobile/workbench/frontend/`，默认端口 **8771**（2026-10-19 起改为 **8772**），不占用原车载入口。
   （2026-10-19 合并后：根 `frontend/` 已被另一条线改成「一键审计」前端并改对接 `mobile/pipeline`，
   本条只描述当时让出入口的决定；现实情况见根 `README.md`「运行入口」。）
 - **不替换上游 `device_run.py`、`trigger.py`**。我方入口改名为 `device_fixture_run.py`、`device_fixture_trigger.py`。
@@ -39,8 +39,8 @@
 
 ```powershell
 # 仓库根目录；SDK/JADX/JDK 可以沿用原环境或通过参数明确提供
-python mobile/workbench/server.py --port 8771
-# 页面：http://127.0.0.1:8771/app.html
+python mobile/workbench/server.py
+# 页面：http://127.0.0.1:8772/app.html（默认端口 8772；8771 留给 mobile/pipeline）
 ```
 
 没有 JADX 时仍可静态扫描，但源码阶段明确显示不可用；没有已构建的 Gadget APK 时仍可上传/导入证据，设备采集不会假装可用。

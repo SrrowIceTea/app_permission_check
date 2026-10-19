@@ -7,17 +7,17 @@
 在仓库根目录运行：
 
 ```powershell
-& .venv/Scripts/python.exe mobile/workbench/server.py --port 8771
+& .venv/Scripts/python.exe mobile/workbench/server.py
 # SDK / jadx / Java 位置可由参数或既有环境变量提供
-& .venv/Scripts/python.exe mobile/workbench/server.py --port 8771 `
+& .venv/Scripts/python.exe mobile/workbench/server.py `
   --sdk SDK目录 --jadx JADX目录
 ```
 
-> **端口冲突（2026-10-19 合并后）**：`mobile/pipeline/server.py`（一键审计）默认也是 **8771**。
-> 两者同时起会抢端口；要并行就显式给本服务换一个：
-> `--port 8772`。根 `README.md`「运行入口」写了推荐起法。
+> **端口分工（2026-10-19 起）**：本服务默认 **8772**，`mobile/pipeline/server.py`（一键审计）
+> 默认 **8771**，两者可以同时起。旧命令里的 `--port 8771` 现在会把两个服务撞在一起，
+> 需要换端口再显式加 `--port`。根 `README.md`「运行入口」写了推荐起法。
 
-浏览器访问 `http://127.0.0.1:8771/app.html`。页面源码在 `mobile/workbench/frontend/`；
+浏览器访问 `http://127.0.0.1:8772/app.html`。页面源码在 `mobile/workbench/frontend/`；
 根 `frontend/` 现在对接的是 `mobile/pipeline`（一键审计），**不再是车载工作台**，
 车载看板仍在 `output/frontend-review/dashboard.html`。同一服务托管移动前端与 API，不需要另开静态服务。
 只监听回环地址；客户端传文件内容，不传本机任意文件路径。
@@ -94,7 +94,7 @@ $env:PYTHONDONTWRITEBYTECODE='1'
 
 ## 与上游并存
 
-默认页面来自 `mobile/workbench/frontend/`，默认端口 8771（与 `mobile/pipeline` 撞，见「启动」段的提示）。
+默认页面来自 `mobile/workbench/frontend/`，默认端口 8772（`mobile/pipeline` 占 8771）。
 根 `frontend/` 后来被改成了「一键审计」前端（对接 `mobile/pipeline`），**不再是车载工作台**；
 车载看板在 `output/frontend-review/dashboard.html`。两套前端互不引用。
 自有 Gadget 入口是 `mobile/tools/device_fixture_run.py`；上游 `mobile/tools/device_run.py` 不替换。
