@@ -1,7 +1,13 @@
 # V-Scanner 前端界面
 
-面向 AAOS 的车载 App 数据安全合规审计平台前端界面。
+移动端「一键审计」工作台 + 落地页（零构建纯静态）。
 **仅用于授权测试（自有设备与自有 APK）。**
+
+> **后端变了（2026-10-16 起）**：`app.js` 对接的是 `mobile/pipeline`（`http://127.0.0.1:8771`），
+> **不是** `vehicle/workbench`（8770）。本文件下面的文件结构注释与 `CONTRACT_AUDIT.md`
+> 仍写着 8770 时期的情况，属于已知漂移；契约以
+> [`.workbuddy/skills/vscanner-frontend-redesign/references/contract.md`](../.workbuddy/skills/vscanner-frontend-redesign/references/contract.md)
+> 与 `app.js` 为准。车载看板仍在 `output/frontend-review/dashboard.html`。
 
 ## 文件结构
 
@@ -13,8 +19,9 @@ frontend/
 ├── assets/         # 首页背景视频（网络安全监视实拍，Mixkit 免费可商用，720p）
 ├── app.html        # 工作台主界面
 ├── app.css         # 工作台样式
-├── app.js          # 工作台逻辑（对接 vehicle/workbench 后端）
+├── app.js          # 工作台逻辑（对接 mobile/pipeline 一键审计后端，127.0.0.1:8771）
 ├── highlight.js    # 零依赖 Java/Kotlin 词法高亮器（自写，不引 CDN）
+├── library.js      # 历史报告书架
 └── pdfs/           # 审计报告 PDF 快照：车载 + 移动端（设备/回归/第三方）各一份
 ```
 

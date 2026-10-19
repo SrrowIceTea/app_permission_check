@@ -34,7 +34,16 @@ python build.py                  # 产出 dist/*.bundle.js
 | `ssl_pinning_bypass.js` | 为审计流量捕获而绕过证书校验（进程内，白名单限定）——**入口**，只做白名单判断与装配 |
 | `pinning_bypasses.js` | 上者的四条绕过手法本身（conscrypt / SSLContext / okhttp Pinner / HostnameVerifier） |
 | `hook_egress.js` | 观察出站连接（`Socket.connect`），**Phase 4 包名归因的主来源** |
-| `vscan_runtime.js` | **四个钩子共用**的观测运行时：事件记录格式、落盘双通道、进程名 |
+| `hook_native_ssl.js` | native TLS 明文（BoringSSL `SSL_read`/`SSL_write`），靠导出符号定位 |
+| `hook_native_crypto.js` | 应用层加密明文：`SSL_write` 之前先 AES/EVP 了一次的情况（看入参/解密出参） |
+| `hook_tls_meta.js` | TLS 元数据：SNI + 主动挂 keylog 回调（给 `tshark` 解包用），剥符号时的兜底 |
+| `hook_flutter_ssl.js` | Flutter 静态 BoringSSL：按**代码形状**回扫序言定位，不依赖符号 |
+| `hook_cipher.js` | JCE `Cipher.update/doFinal` 入参明文（自绘加密，不走 native） |
+| `subscription_hooks.js` | 订阅回调观测（只读，不替换 callback） |
+| `fixture_control.js` | 触发自有夹具按钮（`btnRead`/`btnEgressHttp`/`btnOkHttp`），不是审计 Hook |
+| `scope.js` | 主机注入的显式包名白名单，禁止空白名单或默认全进程 |
+| `stack_capture.js` | 共用 Java 栈采集：只挑应用自己的帧（行号定位唯一依据） |
+| `vscan_runtime.js` | **各入口共用**的观测运行时：事件记录格式、落盘双通道、进程名 |
 | `test_runtime.mjs` | 上者的离线回归（`node test_runtime.mjs`），**不需要设备、不需要 Frida** |
 | `analyze_log.py` | 解析 JSONL，统计与还原 |
 | `build.py` | 注入 bridge shim + 调 frida-compile |
@@ -68,8 +77,15 @@ PY313="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"   
 
 ```bash
 node test_runtime.mjs            # 10 个用例，不需要设备
-python build.py                  # 重新打包，四个 bundle 都要重建
+python build.py                  # 重新打包，8 个默认 bundle 都要重建
+python build.py --only hook_flutter_ssl.js   # 该模块不在默认清单，按需单独构建
 ```
+
+`build.py` 的默认清单是 `recon_cpm / hook_vhal / ssl_pinning_bypass / hook_egress /
+hook_cipher / hook_native_ssl / hook_native_crypto / hook_tls_meta` 八个；
+`hook_flutter_ssl.js` 只导出 `main()` 且不默认构建，用到时用 `--only` 显式加。
+`ssl_pinning_bypass` 与 `hook_egress` 两个平台无关 bundle 同时输出到
+`core/frida_host/dist/`，移动端直接复用，别只重建一边。
 
 ## 三个环境事实（实测，违反会失败或得到误导性结果）
 
@@ -160,8 +176,13 @@ FUEL_LEVEL、EV_BATTERY_LEVEL）**规则库里没有对应规则**——这是�
 
 ## 边界
 
-- 三个脚本都是**观察模式**，不阻断、不改值。
-- `ssl_pinning_bypass.js` 只覆盖 Java 层（conscrypt、自定义 TrustManager、HostnameVerifier）；
-  **不覆盖** native TLS（BoringSSL）、自绘加密协议、WebView 自身的校验路径。
+- 所有脚本都是**观察模式**，不阻断、不改值。
+- 明文覆盖分四层，各管一段，别指望一个脚本通吃：
+  `ssl_pinning_bypass`（Java 层放宽校验）、`hook_native_ssl`（BoringSSL 记录层）、
+  `hook_native_crypto`（TLS 之前的应用层 AES/EVP）、`hook_cipher`（JCE 自绘加密）；
+  `hook_tls_meta` 出 SNI + keylog，给 `tshark` 重组完整报文。
+- 仍然**不覆盖**：WebView 自身的校验与网络栈、QUIC/HTTP3 载荷、加壳/反调试后的自定义协议、
+  以及需要登录后才下发的加密配置。剥符号 BoringSSL 只有 Flutter 那条按代码形状回扫的路子，
+  其它静态链接实现未见得能定位。
 - 靶子 App 未使用 okhttp3，所以 `CertificatePinner` 路径在本轮未被实际触发。
 - 事件时间戳是设备 `Date.now()`，与主机时钟的对应关系尚未建立（Phase 5 的时间窗关联需要）。

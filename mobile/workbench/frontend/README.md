@@ -1,6 +1,8 @@
 # Permission Lab · 移动应用隐私审计工作台
 
-新增的移动端产品入口，复用 core 静态内核与 MOB 规则。前端独立在 mobile/workbench/frontend/，不覆盖根 frontend/ 车载工作台；默认端口 8771。
+新增的移动端产品入口，复用 core 静态内核与 MOB 规则。前端独立在 mobile/workbench/frontend/，
+由工作台服务同源托管；**根 `frontend/` 是另一套「一键审计」前端**（对接 `mobile/pipeline`），
+两者互不覆盖，默认端口都是 8771，同时起要显式换端口。
 
 ## 启动（项目根目录，PowerShell）
 
@@ -15,10 +17,16 @@ python mobile/workbench/server.py --port 8771
 ## 工作流
 
 1. **任务总览**：上传 APK，或导入 `mobile/ai/evidence_bundle.py` 生成的 JSON。依赖就绪状态来自本机服务。检测执行面板可显式枚举设备、选择设备并授权运行固定自有 Gadget 夹具；默认不探测、不采集。
-2. **静态发现**：查看、搜索、筛选规则命中；展开原始证据。静态结论封顶候选，不等于实际收集或违规。
-3. **动态证据**：浏览本任务采集或导入的敏感读取、权限/政策事件、网络流与钩子健康。空返回不计为取得数据；打开政策不视为接受政策。
-4. **政策与研判**：展示政策原文及检查信息；已有 AI 输出须通过本地阶段校验。失败阶段不显示为有效结论。
-5. **报告中心**：基于当前任务证据包生成新 PDF、预览、独立打开。项目中已有的 PDF（若存在）明确标为历史快照，不是本轮产物；本提交不新增 PDF 或预览图片。
+2. **一键审计**：在任务页对已上传 APK 触发 `POST /api/tasks/{id}/audit`，服务端按
+   `static → policy → capture → correlate → bundle → ai → report` 串联（阶段清单见
+   `mobile/workbench/report_ai.py` 的 `STAGES`）；前提是 `workflow.can_audit=true` 且正控自检通过。
+   视图逻辑在 `js/audit-view.js` + `js/audit-model.js`，契约回归 `test_audit_model.mjs`。
+   后端能力与限制见 `../README.audit.md`。
+3. **静态发现**：查看、搜索、筛选规则命中；展开原始证据。静态结论封顶候选，不等于实际收集或违规。
+4. **动态证据**：浏览本任务采集或导入的敏感读取、权限/政策事件、网络流与钩子健康。空返回不计为取得数据；打开政策不视为接受政策。
+5. **政策与研判**：展示政策原文及检查信息（含《用户协议》分册 `app_agreements`）；已有 AI 输出须通过本地阶段校验。失败阶段不显示为有效结论。
+6. **报告中心**：基于当前任务证据包生成新 PDF、预览、独立打开。项目中已有的 PDF（若存在）明确标为历史快照，不是本轮产物；本提交不新增 PDF 或预览图片。
+7. **基准实验**：只读视图，见下文「基准实验概览」。
 
 ### 证据导入
 
@@ -39,7 +47,14 @@ python mobile/workbench/server.py --port 8771
 API 契约与后端测试见 `mobile/workbench/README.md`。
 运行产物默认保存在 `output/mobile-workbench/`，不提交至 Git。
 
-前端离线检查：`node mobile/workbench/frontend/test_workflow_model.mjs`、`node mobile/workbench/frontend/test_job_model.mjs`；浏览器验收需使用移动端同源服务。
+前端离线检查（`tools/check_mobile_branch.py` 的 7 个 `ui_*` 组就是这七个）：
+`test_workflow_model.mjs`、`test_job_model.mjs`、`test_runtime_model.mjs`、`test_evidence_model.mjs`、
+`test_audit_model.mjs`、`test_benchmark_model.mjs`、`test_risk_model.mjs`；
+浏览器验收需使用移动端同源服务。
+
+> 这个前端由 `mobile/workbench/server.py` 托管（默认 8771）。根 `frontend/` 是**另一套**
+> 「一键审计」前端，对接 `mobile/pipeline`（也是 8771）。两者不要同时用默认端口，
+> 见根 `README.md`「运行入口」。
 
 ## 基准实验概览
 

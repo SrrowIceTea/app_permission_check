@@ -13,7 +13,13 @@
   --sdk SDK目录 --jadx JADX目录
 ```
 
-浏览器访问 `http://127.0.0.1:8771/app.html`。页面源码在 `mobile/workbench/frontend/`，根 `frontend/` 仍保留上游车载工作台。同一服务托管移动前端与 API，不需要另开 8080 服务。
+> **端口冲突（2026-10-19 合并后）**：`mobile/pipeline/server.py`（一键审计）默认也是 **8771**。
+> 两者同时起会抢端口；要并行就显式给本服务换一个：
+> `--port 8772`。根 `README.md`「运行入口」写了推荐起法。
+
+浏览器访问 `http://127.0.0.1:8771/app.html`。页面源码在 `mobile/workbench/frontend/`；
+根 `frontend/` 现在对接的是 `mobile/pipeline`（一键审计），**不再是车载工作台**，
+车载看板仍在 `output/frontend-review/dashboard.html`。同一服务托管移动前端与 API，不需要另开静态服务。
 只监听回环地址；客户端传文件内容，不传本机任意文件路径。
 
 持久化目录默认 `output/mobile-workbench/`，可用 `--storage` 改为其他本机目录。
@@ -39,6 +45,7 @@
 | `GET /api/devices` | 显式只读 ADB 枚举，返回 `{devices,observed_at,reason}`，不由 health 调用 |
 | `POST /api/tasks/{id}/capture` | `{serial,authorized:true,permission_response:"allow"或"deny",generate_report:true}` → `202 {task_id,job_id}` |
 | `POST /api/tasks/{id}/report` | `{}` → `202 {task_id,job_id}`；只使用当前任务证据，不接受路径或命令 |
+| `POST /api/tasks/{id}/audit` | 一键审计：`{serial, authorized:true, mode, scenario, generate_report}` → `202`；需先通过 `workflow.can_audit` 与正控自检，详见 [README.audit.md](README.audit.md) |
 | `GET /api/tasks` | `{tasks:[], count}` |
 | `POST /api/apk?name=…` | 原始 APK 字节 → `202 {task_id,job_id,job,digest,cached}`；上限 512 MiB |
 | `GET /api/jobs/{id}` | 状态、阶段、真实进度（未知时 `percent:null`）、错误和 task_id |
@@ -51,6 +58,8 @@
 | `GET /api/tasks/{id}/evidence` | `{available,origin,bundle,counts_observed,ai,gaps}` |
 | `GET /api/reports` | `{reports:[{id,title,kind,task_id,available,url}],count}` |
 | `GET /api/reports/{id}/file` | 受控 PDF 文件；不存在返回 JSON 404 |
+| `GET /api/benchmarks` | 基准批次目录（`{batches:[…],count}`）；无批次时为空，不伪造 |
+| `GET /api/benchmarks/{suite}/{sample}/evidence` | 单样本证据 JSON；不存在 404 `benchmark_evidence_not_found` |
 
 证据导入支持原证据包本身，或包装格式：
 
@@ -85,7 +94,9 @@ $env:PYTHONDONTWRITEBYTECODE='1'
 
 ## 与上游并存
 
-默认页面来自 `mobile/workbench/frontend/`，默认端口 8771；根 `frontend/` 与车载服务保持原样。
+默认页面来自 `mobile/workbench/frontend/`，默认端口 8771（与 `mobile/pipeline` 撞，见「启动」段的提示）。
+根 `frontend/` 后来被改成了「一键审计」前端（对接 `mobile/pipeline`），**不再是车载工作台**；
+车载看板在 `output/frontend-review/dashboard.html`。两套前端互不引用。
 自有 Gadget 入口是 `mobile/tools/device_fixture_run.py`；上游 `mobile/tools/device_run.py` 不替换。
 
 开发增量、兼容取舍与合并说明见 [README.development.md](README.development.md)。

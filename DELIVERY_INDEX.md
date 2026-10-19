@@ -36,6 +36,17 @@
 
 生成与模型说明：`mobile/README.md`（流程）、`mobile/RISK_SCORE_MODEL.md`（风险评分 v1.3）。
 
+移动端文档入口（合并 ch / junzhe 后按这个顺序读）：
+
+- 总览与两条运行入口：根 [README.md](README.md)（注意 `pipeline` 与 `workbench` 默认都占 8771）
+- 一键审计流水线：[mobile/pipeline/README.md](mobile/pipeline/README.md)（16 阶段 + SSE 契约）
+- 静态/动态工作台：[mobile/workbench/README.md](mobile/workbench/README.md)、
+  完整检测 API：[README.audit.md](mobile/workbench/README.audit.md)
+- 政策库（含《用户协议》分册）：[mobile/policy/README.local.md](mobile/policy/README.local.md)
+- 非 root / root / 真机实验：[mobile/lab/README.core.md](mobile/lab/README.core.md)、
+  [README.nonroot.md](mobile/lab/README.nonroot.md)、[README.root.md](mobile/lab/README.root.md)
+- 决策与踩坑：[mobile/DECISIONS.md](mobile/DECISIONS.md)（M001–M040）
+
 ### 2026-10-19 新产物（保留）
 
 - [测试集质量分析](output/dataset-quality-20261019/质量分析-20261019.md)
@@ -48,7 +59,8 @@
 
 ```powershell
 & $VScanPython tools/run_regressions.py          # 根回归 13 组
-& $VScanPython mobile/tools/run_mobile_checks.py # 移动侧 23 项
+& $VScanPython mobile/tools/run_mobile_checks.py # 移动侧 24 组
+& $VScanPython tools/check_mobile_branch.py      # 移动分支 22 组（含 workbench/policy/AI/前端契约）
 & $VScanPython tools/device_acceptance.py
 & $VScanPython tools/gadget_acceptance.py
 & $VScanPython tools/multi_acceptance.py

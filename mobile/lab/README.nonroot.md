@@ -55,8 +55,8 @@ python -B -m mobile.lab.core_pipeline `
 
 ## 2026-10-18 真实验收
 
-4 个 Ghera 密码学正反对照与 LibChecker，共 5 个 APK，均完成实际 Gadget 采集、三阶段 AI、PDF 与工作台发布。15 次真实模型请求通过正式门控；原验收及报告入口见 [非 root 五样本验收](../../output/nonroot-delivery-20261018/README.md)。
+4 个 Ghera 密码学正反对照与 LibChecker，共 5 个 APK，均完成实际 Gadget 采集、三阶段 AI、PDF 与工作台发布。15 次真实模型请求通过正式门控；原验收入口 `output/nonroot-delivery-20261018/README.md`（**该目录已于 2026-10-19 清理，路径不可达**，结论保留、证据需重跑，见 `DELIVERY_INDEX.md`）。
 
-随后已接通上传原始 APK 的完整审计 API 与工作台“运行完整检测（含AI）”功能按钮，操作与授权说明见 [完整审计入口](../workbench/README.audit.md)。Read You 上传任务 `b2f4402f5d91` 已完成实际非 root 采集、AI 与报告；最新重判保留在 `output/platform-completion-20261018/readyou-reassessment/`，观察到 179 个包、1 条有应用归因的 F1 流量证据，生成 14 页 PDF。完整记录见 [本轮平台验收](../../output/platform-completion-20261018/README.md)。LibChecker 工作台第二轮操作 `fa1beedd59a3` 随后通过真实完整检测：2 次实际读取、3 次模型请求、13 页 PDF；仍在原上传任务 `4c2053ccb80f` 展示，失败的第一轮另外保留。
+随后已接通上传原始 APK 的完整审计 API 与工作台“运行完整检测（含AI）”功能按钮，操作与授权说明见 [完整审计入口](../workbench/README.audit.md)。Read You 上传任务 `b2f4402f5d91` 已完成实际非 root 采集、AI 与报告；最新重判保留在 `output/platform-completion-20261018/readyou-reassessment/`，观察到 179 个包、1 条有应用归因的 F1 流量证据，生成 14 页 PDF。完整记录见 `output/platform-completion-20261018/README.md`（**该目录已于 2026-10-19 清理，路径不可达**，结论保留、证据需重跑）。LibChecker 工作台第二轮操作 `fa1beedd59a3` 随后通过真实完整检测：2 次实际读取、3 次模型请求、13 页 PDF；仍在原上传任务 `4c2053ccb80f` 展示，失败的第一轮另外保留。
 
 当前支持范围是已经验证的 APK 与相应场景；入口接通不等于任意 APK 都能重打包运行，也不代表所有协议可解密。原包/重签衍生包区别、有限交互覆盖和未知风险仍按上文分别保留。

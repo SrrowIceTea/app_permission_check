@@ -9,8 +9,8 @@
 vscanner/
 ├── core/           # 平台无关内核（唯一一份）：事件库/流量采集/代码行号/规则契约/Frida驱动/静态内核
 ├── vehicle/        # 车载 AAOS 产品线：rules→targets→hooks→traffic→analyze→dashboard→workbench
-├── mobile/         # 移动端产品线：规则库/钩子/政策/AI/报告/工具（详见 mobile/CLAUDE.md）
-├── frontend/       # 前端壳（车载工作台；移动端报告在 frontend/pdfs/）
+├── mobile/         # 移动端产品线：规则库/钩子/政策/AI/报告/工具 + pipeline 一键审计（详见 mobile/CLAUDE.md）
+├── frontend/       # 零构建前端：落地页 + 「一键审计」工作台（对接 mobile/pipeline:8771）
 └── tools/          # 验收 / 回归脚本
 ```
 
@@ -108,7 +108,8 @@ PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
 "$PY" tools/run_regressions.py            # 车载/内核 13 组：completion/rules-contract/event-store/
                                           #   codeloc/correlate/collector/tagging-vehicle/dashboard/
                                           #   runtime/parity/workbench/hook-bundles/frida-bundle-config
-"$PY" mobile/tools/run_mobile_checks.py   # 移动端 23 项
+"$PY" mobile/tools/run_mobile_checks.py   # 移动端 24 组
+"$PY" tools/check_mobile_branch.py        # 移动分支 22 组（含 workbench/policy/AI/前端契约）
 ```
 
 ## 边界（必须保留）

@@ -19,7 +19,7 @@
 | 风险量化 | 四维乘积评分 v1.3（重复衰减 + 正交置信度），见 `RISK_SCORE_MODEL.md` |
 | 基于大模型，结合隐私政策与行为研判 | 三阶段提示词 + 证据包 + 输出校验 |
 
-> **2026-10-16 → 10-19 的新增能力**（细节见 `DECISIONS.md` M034–M039）：
+> **2026-10-16 → 10-19 的新增能力**（细节见 `DECISIONS.md` M034–M040）：
 >
 > - **完整 HTTP 报文**：hook 只能拿到 `SSL_read/SSL_write` 的**分片**，自己拼要重写
 >   HPACK/chunked/gzip。改为 `tools/pcap_capture.py`（设备端 tcpdump）+ `tools/pcap_http.py`
@@ -30,6 +30,11 @@
 >   与静态/动态覆盖差集（`analyze/coverage_gap.py`）。
 > - **风险量化**：`analyze/risk_score.py` + `calibrate_risk_bands.py`，模型与阈值见
 >   `RISK_SCORE_MODEL.md`；报告与答辩的量化口径以它为准。
+> - **政策分册（M040）**：`policy/policy_discover.py` 按隐私词/协议词把文档分成
+>   `privacy` / `agreement`；《用户协议》入库后挂在 `app_agreements`（ID `AGR-*`），
+>   **不参与主政策披露比对**，只有协议时主政策记 `not_found`。见 `policy/README.local.md`。
+> - **一键审计**：`pipeline/`（16 阶段 + SSE），前端在根 `frontend/`，与
+>   `workbench/` 是两套入口且默认端口相同（8771），起法见根 `README.md`。
 > - **工程**：`run_regressions.py --mobile`（移动侧失败计入根回归失败）、`conn_probe` 并发防撞。
 
 ## 快速开始（不需要设备、不需要网络、不需要 API key）

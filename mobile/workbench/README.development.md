@@ -23,6 +23,8 @@
 ## 2. 为方便合并主动让出的部分
 
 - **不替换根 `frontend/`**。移动 UI 放到 `mobile/workbench/frontend/`，默认端口改为 **8771**，不占用原车载入口。
+  （2026-10-19 合并后：根 `frontend/` 已被另一条线改成「一键审计」前端并改对接 `mobile/pipeline`，
+  本条只描述当时让出入口的决定；现实情况见根 `README.md`「运行入口」。）
 - **不替换上游 `device_run.py`、`trigger.py`**。我方入口改名为 `device_fixture_run.py`、`device_fixture_trigger.py`。
 - **不改 `vehicle/`、`core/static/`、`mobile/rules/`**。保留组员的 223 条规则、58 个 API、归因诊断及长路径修复。
 - **不改依赖清单、环境脚本、现有 CI 与回归入口**。不携带我方 Maven JADX 安装器/发现逻辑及全局环境重构；JADX 沿用上游支持的发行版。
@@ -56,6 +58,7 @@ python mobile/workbench/server.py --port 8771
 ## 4. 本次兼容验证结果
 
 - 组员原移动总入口：**23/23 项通过**，包含规则、诊断、Hooks parity、流量、政策、关联、AI、报告和合成端到端。
+  （2026-10-19 合并后该入口为 **24 组**；`check_mobile_branch.py` 为 **22 组**。）
 - 新工作台 **44**、夹具设备管线 **34**、Gadget 准备 **14**、Python Compiler **13**、读取/TLS **16**、AI 门控 **12**、报告门控/健康计数 **10** 项离线测试通过。
 - 前端模型 **59 条断言通过**；移动 Hook **6 个入口编译通过**，保留上游 58 个目标及诊断占位符。
 - HTTP 测试验证新默认页面与 JS/CSS 来自独立移动目录。此兼容目录没有重做真实设备/在线 AI 实测，不移用旧目录的设备验收结论。

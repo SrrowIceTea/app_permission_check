@@ -2,7 +2,7 @@
 
 仅用于授权测试（已获授权的样本与设备）。
 
-> 状态：v1.3 已实现并通过 34 项离线回归；已接入 `tools/check_mobile_branch.py`。
+> 状态：v1.3 已实现并通过 38 项离线回归；已接入 `tools/check_mobile_branch.py`。
 > 代码：`mobile/analyze/risk_score.py`　测试：`mobile/analyze/test_risk_score.py`
 >
 > v1.3 变更：修复衰减分组键——`data_type=None` 的 over_permission 结论不再坍缩成一个
@@ -392,7 +392,7 @@ PY="C:/Users/OneKyubey/.workbuddy/binaries/python/envs/default/Scripts/python.ex
 ### 已完成（v1.3）
 
 - [x] `risk_score.py`：评分核心 + CLI
-- [x] `test_risk_score.py`：34 项回归
+- [x] `test_risk_score.py`：38 项回归
 - [x] 接入 `tools/check_mobile_branch.py`（检查组 `risk_score`）
 - [x] 真实样本验证
 - [x] necessity 维度（Zhu 异常度 + PrivacyGrade 期望 gap）

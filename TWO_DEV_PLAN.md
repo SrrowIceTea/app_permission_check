@@ -1,4 +1,4 @@
-# V-Scanner 两人协作开发规划（2026-10-19 · 移动端聚焦版 v4 —— M034–M039 同步）
+# V-Scanner 两人协作开发规划（2026-10-19 · 移动端聚焦版 v4 —— M034–M040 同步）
 
 > **仅用于授权测试（自有设备与自有 APK）。**
 > **v4 修订说明（2026-10-19）**：按 v3 定的规矩「改完当场重标」，对 10-16 之后落地的
@@ -10,8 +10,11 @@
 > **v3 未覆盖的新增主线**（§2.5 补录）：M036 明文缺口真根因（Frida 17 API 已删 + 库懒加载 +
 > `RTLD_LOCAL`）、M037 应用层加密与 TLS 元数据、M038 完整 HTTP 报文（tcpdump+keylog+tshark）、
 > M039 Flutter/剥符号 BoringSSL；以及**风险量化模型 v1.0→v1.3**（`mobile/analyze/risk_score.py`）。
-> **工程-2 的口径也变了**：>300 行文件由「6 个」涨到 **11 个**（见 §1 该行），拆分不能再按旧清单做。
+> **工程-2 的口径也变了**：>300 行文件由「6 个」涨到 **11 个**，合并 ch / junzhe 后复测为 **14 个**（见 §1 该行），拆分不能再按旧清单做。
 > 依据：`mobile/DECISIONS.md` M034–M039；实查 `find + wc -l`、文件存在性与 DB 计数（2026-10-19）。
+> **补充（M040）**：《用户协议》已收进资料库并接入实际链路（`policy_discover.classify` →
+> `policy_fetch` 落盘 `document_kind` → `policy_library.load_app_agreements` → AI `policy_source`），
+> 协议不进主政策路径。回归基线随之变为移动 24 组 / 分支 22 组 / risk_score 38 项。
 > v3 保留说明：A1 / SLIRP 已于 2026-10-16 修复并独立复验（`VERIFY_M031_M032_20261016.md`）。
 > **v3 修订说明（2026-10-16 晚）**：把 v2 中标"待设备定位"的 **A1（插桩打死应用，唯一 P0 硬阻塞）**
 > 与当晚新发现的 **SLIRP 强制代理失效（P0）** 两项**重标为「已修」**；"关 JIT"假修复路线已双向证伪并
@@ -71,7 +74,7 @@
 | E2 | 数据类别本体表 | 无 subclass 关系实现 | **✅存在（未做）** |
 | C3/DT | 差分原型 / 有限污点 | 全仓无实现（研究级） | ✅存在（未做，P2） |
 | 工程-1 | CI 在 Gitee 不生效 | `.github/workflows/ci.yml` 存在且**文件自述**"Gitee 不执行 .github/workflows/"；`.git/hooks/` 为空 → pre-commit 未安装；全仓 **293 条** ruff 存量问题 | **✅存在（未生效）** |
-| 工程-2 | >300 行文件（v4 重测为 **11 个**，不再是 6 个） | 2026-10-19 实测：`thirdparty_env.py` 647 / `device_run_thirdparty.py` 618 / `risk_score.py` 618 / `pcap_http.py` 540 / `device_run.py` 478 / `test_risk_score.py` 472 / `addon.py` 355 / `batch_thirdparty.py` 339 / `runner.py` 318 / `test_hooks_parity.py` 303 / `frida_host/run.py` 302 | **✅存在（且比 v3 恶化：`thirdparty_env` 459→647、`device_run_thirdparty` 472→618）**——拆分清单必须重列 |
+| 工程-2 | >300 行文件（v4 重测为 **11 个**，不再是 6 个；**10-19 合并后复测为 14 个**） | **2026-10-19 合并后实测**：`thirdparty_env.py` 821 / `device_run_thirdparty.py` 625 / `risk_score.py` 618 / `pcap_http.py` 540 / `device_run.py` 478 / `test_risk_score.py` 472 / `addon.py` 449 / `conn_probe.py` 406 / `policy_fetch.py` 371 / `batch_thirdparty.py` 339 / `runner.py` 318 / `vehicle/workbench/server.py` 316 / `test_hooks_parity.py` 303 / `frida_host/run.py` 302 | **✅存在（比 v4 又恶化 3 个）**——新越线：`conn_probe`(406)、`policy_fetch`(371)、`vehicle/workbench/server.py`(316)；`thirdparty_env` 647→821、`addon` 355→449 |
 | 工程-3 | hooks 共享化（中期） | `core/hooks_shared/` 不存在；短期守卫（`test_hooks_parity.py` 7 对 13 规则）已绿 | ⚠️部分（短期已完成） |
 | 工程-4 | output/ 归档未做 | ~~400+ 子目录（4 万+文件）~~ → **已于 2026-10-19 清理**：删除 208 项历史跑批与 `latest-*.txt`，仅留今日产物+交付物 | **✅已完成（2026-10-19）** |
 | 工程-5 | sqlite 只读 URI 编码 | M034 顺带核查已**更正**：全仓只读连接（correlate_mobile / evidence_bundle / policy_lint / gen_targets / rule_coverage_report / static_scan_thirdparty 等）均已带 `?mode=ro`，其余不带 URI 的是写库/测试/内存库 | **✅无需动作（M034 已核实，v3 的"⚠️部分"是滞后）** |
@@ -136,7 +139,7 @@
 - **E2 本体表**（"IMEI ⊂ 设备标识符"可复核）、**C3 差分原型**（仅限自有夹具）、**DT 有限污点**（研究级）——纯离线。
 - **工程-1 CI**：两条路选一——① 加 GitHub 远端推一份（Actions 直接可用）；② 搬进 Gitee Go。
   pre-commit 建议**先摘掉 `ruff-format` 只留 `ruff check`**（293 条存量问题，防止开钩子即大 diff）。
-- **工程-2 拆分**：~~5 个~~ → **11 个 >300 行文件**（清单见 §1 该行，风险评分与 pcap 链路是新增的大头），
+- **工程-2 拆分**：~~5 个~~ → ~~11 个~~ → **14 个 >300 行文件**（清单见 §1 该行，风险评分与 pcap 链路是新增的大头；合并后又多了 `conn_probe`/`policy_fetch`/`vehicle/workbench/server.py`），
   建议按"先拆 `pcap_http.py` / `risk_score.py` 这两个新增大文件、再拆 `thirdparty_env.py`"的顺序。
 - ~~**工程-5 sqlite URI**~~ ✅ M034 已核实无需动作；~~**工程-6**~~ ✅ M034 已修；
   ~~**工程-7** `--mobile`~~ ✅ M034 已加。
@@ -307,9 +310,9 @@ W7─W8  人A: G1 + B2 设备侧                          ┃ 人B: 归档 + 协
    再做 B3 AI 评测集（6 fixture，量化幻觉率与跨 3 次一致性）。
 3. **用户本人 · 安全项（v3 遗留，仍未确认完成）**：吊销轮换 `mobile/ai/config.local.json`
    里的真实 key，并核查历史提交（`git log --all -- mobile/ai/config.local.json`）。
-4. **两人 · 拆分**：11 个 >300 行文件，优先 `pcap_http.py`(540)、`risk_score.py`(618)、
-   `thirdparty_env.py`(647) 三个新增/恶化的大文件（清单见 §1 工程-2 行）。
-5. **两人 · 集中跑测试集前的闸门**：先跑 `run_regressions.py --mobile`（13 组 + 移动 23 项）
+4. **两人 · 拆分**：14 个 >300 行文件，优先 `thirdparty_env.py`(821)、`device_run_thirdparty.py`(625)、
+   `risk_score.py`(618)、`pcap_http.py`(540) 四个新增/恶化的大文件（清单见 §1 工程-2 行）。
+5. **两人 · 集中跑测试集前的闸门**：先跑 `run_regressions.py --mobile`（13 组 + 移动 24 组）
    全绿再开跑；本轮 `output/` 已空，首轮会产生新时间戳目录，`latest-*.txt` 随之重建。
 6. 两人：定 CI 路线（GitHub 远端 or Gitee Go）与 pre-commit 是否摘 `ruff-format`（建议摘）。
 
@@ -325,7 +328,7 @@ W7─W8  人A: G1 + B2 设备侧                          ┃ 人B: 归档 + 协
 - **独立复验**：`VERIFY_M031_M032_20261016.md`（代码清退核查 + 原始证据核对 + 回归重跑）
 - **回归**：~~`output/mobile-regression-20261016-150714/`、`output/regression-20261016-142103/`~~
   —— 已于 2026-10-19 随 `output/` 清理删除，**需重跑**：
-  `run_regressions.py --mobile`（13 组 + 移动 23 项）
+  `run_regressions.py --mobile`（13 组 + 移动 24 组）
 - **旧核查证据**：`output/tp-10151137/`（符号链接 → `D:/vscanner-tp/tp-10151137`，**未删**；
   含 01-keepass `app-death.json` + reads 2 行、06-contacts reads 361 行、
   `_fixture-selftest/result.json` 跳过留痕）；`rules_mobile.db`（40 条权限 / 0 条标定）

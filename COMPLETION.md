@@ -3,6 +3,12 @@
 仅用于授权测试（自有设备、自有 APK）。APK 静态反编译作为独立工作台加入（vehicle/workbench）；违规行号仍只取自运行时栈。
 本文件描述当前交付；各 DECISIONS 的旧记录保留为历史证据，不能当成当前状态。
 
+> **适用范围（2026-10-19 补注）**：本文主体是**车载线 + 共享内核**的交付与复现说明（写于 2026-09-25）。
+> 移动端在 10-16 → 10-19 已独立成第二条产品线，当前状态**不在**本文里：
+> 看 [mobile/README.md](mobile/README.md)（能力与边界）、[mobile/DECISIONS.md](mobile/DECISIONS.md)
+> （M001–M040 决策）、[DELIVERY_INDEX.md](DELIVERY_INDEX.md)（移动端文档入口清单）。
+> 合并 ch / junzhe 后的入口与回归基线见根 [README.md](README.md)。
+
 交付索引与验收结果见 [DELIVERY_INDEX.md](DELIVERY_INDEX.md)。
 
 ## 当前实现

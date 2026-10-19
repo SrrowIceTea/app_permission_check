@@ -14,12 +14,13 @@
 | `rules/regulations/` | 法规原文（认定方法 / 必要信息规定 / 个保法 / GB-T 35273），带条款号与 URL |
 | `hooks/` | Frida 钩子：敏感 API 读取 + 同意时序 + TLS 校验收宽（Java 层 pinning 绕过）+ **内存 Hook（native TLS / JCE / native 应用层加密明文 + SNI/keylog）**，全部随 `hook_all` 单 agent 挂载。native 覆盖到哪、到哪为止，见「能力边界」段 |
 | `traffic/` | mitmproxy 移动适配：打标表 + 注入壳（复用 core/collector/addon.py）+ 透明代理（transparent.py） |
-| `policy/` | 隐私政策获取 / 正文抽取 / 规则化检查 |
+| `policy/` | 隐私政策获取 / 正文抽取 / 规则化检查；`policy_discover.py` 按「隐私词 / 协议词」分流（`doc_kind`），《用户协议》进 `app_agreements` 而不冒充主政策（M040） |
 | `analyze/` | 关联引擎与八种移动谓词（复用 core/evidence/codeloc.py 的行号链）；**风险量化** `risk_score.py`（四维乘积 + 重复衰减 + 正交置信度，v1.3，模型见 `RISK_SCORE_MODEL.md`、阈值标定 `calibrate_risk_bands.py`）；静态/动态覆盖差集 `coverage_gap.py` |
 | `ai/` | **证据打包 + 三阶段提示词 + LLM 客户端 + 输出校验**；打包时顺带做 APK 加固特征探测，命中即写入 gaps（结论受限） |
 | `report/` | PDF 报告（工具结论 + AI 研判 + 校验问题清单） |
 | `tools/` | 离线回归总入口、合成演示会话生成器、设备跑批；**完整报文链路** `pcap_capture.py`（设备端 tcpdump，只能 `su 0` 用）、`pcap_http.py`（keylog + `tshark` 重组）、`flutter_probe.py`（剥符号 BoringSSL 静态探测） |
-| `workbench/` | 隐私审计工作台（工作流 / 运行时导入 / 合并布局，带独立测试） |
+| `workbench/` | 隐私审计工作台（工作流 / 运行时导入 / 合并布局 / 一键审计，带独立测试）；自带前端 `workbench/frontend/` |
+| `pipeline/` | **一键审计流水线**：16 阶段定义 `stages.py`、执行器 `runner.py`、HTTP+SSE `server.py`；前端在根 `frontend/`。默认 8771，与 `workbench/server.py` 撞端口，见根 `README.md` |
 | `fixture-app/` | 自有靶子 App（隐私演示），用于端到端验证 |
 
 ## 怎么跑（离线优先，不需要设备）
@@ -165,7 +166,8 @@ crash 缓冲 0 行）。
 39 类 App 必要信息 / 16 条政策条款）、移动钩子（敏感读取 + 同意时序）、流量打标
 （含值哈希令牌）、隐私政策三件套（获取 / 抽取 / 检查）、关联引擎（八种谓词）、
 AI 三阶段研判（含编造校验）、PDF 报告（十章 + 三附录）、自有靶子 App 与设备端端到端
-均已实现。离线回归 23 项全过（`mobile/tools/run_mobile_checks.py`）。
+均已实现。离线回归 **24 组**全过（`mobile/tools/run_mobile_checks.py`）；
+分支全量（含 workbench/policy/AI/前端契约）**22 组**见 `tools/check_mobile_branch.py`。
 
 **2026-10-13（外部评估核对后的落地，见 [EVAL_CROSSCHECK.md](EVAL_CROSSCHECK.md)、DECISIONS M021–M025）**：
 - 覆盖守护：每个数据类别要么有 API 抓手、要么显式声明 `uncovered_by_design`（构建期断言）。

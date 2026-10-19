@@ -2,6 +2,12 @@
 
 > 交付日期：2026-10-18。本文描述本机实际源码与验收，不代表已同步远端 main。
 > 合并原则：**队友主线优先；增量接入本分支能力，不用整个目录覆盖主线。**
+>
+> **合并结果（2026-10-19 补记）**：本分支已以 `e629b6b` 合入 main 并推到 `origin/main`，
+> 文本冲突 2 处（`tools/check_mobile_branch.py`、`mobile/ai/evidence_bundle.py`），按并集解决。
+> 本文只覆盖「非 root Gadget 审计」这条线的增量；同时合入的 `mobile/pipeline/`（16 阶段
+> 一键审计 + SSE）与根 `frontend/` 改版**不在本文范围内**，见 `mobile/pipeline/README.md`
+> 与根 `README.md`。
 
 ## 1. 这份交付是什么
 
@@ -52,7 +58,7 @@
 | `mobile/ai/` | 正式证据包、三阶段提示词、传输、来源/引用/存储补充门控；读 `README.storage.md` |
 | `mobile/analyze/`、`mobile/report/` | 原关联引擎的增量、风险与补充证据、AI PDF |
 | `mobile/hooks/`、`mobile/fixture-app/` | 共享观察钩子与自有正控；不是用夹具结果替换真实 APK |
-| `tools/check_mobile_branch.py` | 一键移动分支回归：当前 21 组；不要替换队友已有的其他回归入口 |
+| `tools/check_mobile_branch.py` | 一键移动分支回归：**当前 22 组**（10-18 时为 21 组，10-19 合并后并入 `risk_score` 与 ch 的扩展组）；不要替换队友已有的其他回归入口 |
 | `core/io_utils.py` | 少量平台共享修改，影响不止移动侧；必须逐行审查 |
 
 `vehicle/` 是既有车载产品线，不要为合并移动功能覆盖或改造车载成果。复用共享内核，避免复制两份同名规则或证据协议。

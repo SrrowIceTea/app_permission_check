@@ -9,8 +9,8 @@
 vscanner/
 ├── core/           # 平台无关内核（唯一一份）：事件库/流量采集/代码行号/规则契约/Frida驱动/静态内核
 ├── vehicle/        # 车载 AAOS 产品线：rules→targets→hooks→traffic→analyze→dashboard→workbench
-├── mobile/         # 移动端产品线：规则库/钩子/政策/AI/报告/工具（详见 mobile/CLAUDE.md）
-├── frontend/       # 前端壳（车载工作台专用；移动端报告在 output/mobile-*/ 下）
+├── mobile/         # 移动端产品线：规则库/钩子/政策/AI/报告/工具 + 一键审计流水线（详见 mobile/CLAUDE.md）
+├── frontend/       # 零构建前端：落地页 + 「一键审计」工作台（对接 mobile/pipeline:8771）
 └── tools/          # 验收 / 回归脚本
 ```
 
@@ -50,7 +50,8 @@ vscanner/
 | `vehicle/analyze/` | 关联引擎 + PDF 报告（代码行号已抽到 core/evidence） | [vehicle/analyze/CLAUDE.md](vehicle/analyze/CLAUDE.md) |
 | `vehicle/dashboard/` | Web 可视化预警看板（交付物 B，静态单文件） | [vehicle/dashboard/CLAUDE.md](vehicle/dashboard/CLAUDE.md) |
 | `vehicle/workbench/` | APK 静态反编译工作台（server + static_rules + crosscheck） | [vehicle/workbench/CLAUDE.md](vehicle/workbench/CLAUDE.md) |
-| `mobile/` | 移动端产品线（MOB-* 规则库/钩子/政策/AI/报告/工具） | [mobile/CLAUDE.md](mobile/CLAUDE.md) |
+| `mobile/` | 移动端产品线（MOB-* 规则库/钩子/政策/AI/报告/工具）+ `pipeline/` 一键审计（16 阶段 + SSE）+ `workbench/` 静态工作台 | [mobile/CLAUDE.md](mobile/CLAUDE.md) |
+| `frontend/` | 零构建前端：`index.html` 落地页 + `app.html`「一键审计」工作台 | [frontend/README.md](frontend/README.md) |
 
 各目录的实测教训记录在各自 `DECISIONS.md`（D101–D7xx 编号），
 改任何模块前先读对应目录的 DECISIONS——几乎每个坑都是**静默失败**。
@@ -91,7 +92,8 @@ PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
                                       #       correlate/collector/tagging-vehicle/dashboard/
                                       #       runtime/parity/workbench/hook-bundles/frida-bundle-config
 
-"$PY" mobile/tools/run_mobile_checks.py   # 移动侧 23 项（另一条入口，改 mobile 后必须跑）
+"$PY" mobile/tools/run_mobile_checks.py   # 移动侧 24 组（另一条入口，改 mobile 后必须跑）
+"$PY" tools/check_mobile_branch.py        # 移动分支 22 组（含 workbench / policy / AI / 7 个前端契约）
 ```
 
 > **先确认解释器再判红**：这两条都依赖 `requirements.txt`（`reportlab`/`Pillow`/`mitmproxy`/
@@ -109,7 +111,7 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
 外发规则每版 8 条已正式启用，窗口 30000ms，revision=2；双版本 44 条风险规则全部启用。
 启用依据与范围见 vehicle/rules/EGRESS_CALIBRATION.md，不再依赖分析时窗口覆盖。
 
-**移动端进展（M034–M039，2026-10-16 → 10-19；详见 `mobile/DECISIONS.md`）**：
+**移动端进展（M034–M040，2026-10-16 → 10-19；详见 `mobile/DECISIONS.md`）**：
 
 - **C1 派生值匹配**：`core/collector/derive.py`（md5/sha*/base64/urlencode/hex/gzip+b64 候选）
   — 值为派生形态时不再只认原值哈希。
@@ -123,6 +125,15 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
 - **工程小项闭环**：M034 修 `conn_probe` 并发防撞、加 `run_regressions --mobile` 开关
   （原 TWO_DEV_PLAN 工程-6/工程-7 已完成）。
 - **隐私工作台**：`mobile/workbench/`（工作流 / 运行时导入 / 合并布局，独立测试齐备）。
+- **一键审计流水线**：`mobile/pipeline/`（16 阶段 + SSE 事件流，`stages.py`/`runner.py`/`server.py`），
+  前端是根 `frontend/app.html`。**注意端口**：`mobile/pipeline/server.py` 与
+  `mobile/workbench/server.py` 默认都是 **8771**，同时起会撞；跑工作台时显式
+  `--port 8772`，见根 `README.md`「运行入口」。
+- **《用户协议》接入（M040）**：`policy_discover.classify()` 按隐私词/协议词分流，
+  `policy_fetch --from-apk` 落盘带 `document_kind`；`policy_library.load_app_agreements()`
+  以 `AGR-*` 挂到 `app_agreements`，**不进主政策路径**（`--allow-legacy-policy` 下同样拦截）；
+  AI 端 `policy_source()` 可解析 `AGR-`，协议不得把条款判 `met`。只有协议时主政策是
+  `not_found` 而不是 `invalid`（新增 `NotAPolicy` 异常区分）。
 
 仍**未做**（勿当成已完成）：B1 窗口校准（`WINDOW_CALIBRATION.md` 仍不存在）、
 A5-1 protectionLevel 标定（库内 `protection_level_raw` 仍 0/40）、B2 VScanBench、

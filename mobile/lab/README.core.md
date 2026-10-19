@@ -58,6 +58,7 @@ JADX 已产生可用源码但部分类失败时允许继续行为审计，**保�
 - run1 静态 gate 与 run2 非法模型 JSON 的失败现场保留；JSON 输出模式修复后的 run3 新跑完整采集和 AI。
 - 移动分支一键离线检查 `python tools/check_mobile_branch.py` 已纳入新增核心模块，19 组通过，
   记录 `output/mobile-branch-20261018-014900/verification.json`。它不替代上述真实设备与模型验收。
+  （2026-10-19 合并 ch / junzhe 后为 **22 组**；上面的 19 是当日那一轮的数字。）
 
 ## 批次复用与交付索引
 
