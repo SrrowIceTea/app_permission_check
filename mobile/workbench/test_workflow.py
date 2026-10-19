@@ -233,6 +233,59 @@ class WorkflowTest(unittest.TestCase):
         self.assertEqual(restarted.store.get(self.task["id"])["state"], "failed")
         self.assertIsNone(restarted.job("../secrets"))
 
+    def test_successful_report_preserves_partial_source_or_decompile_or_core_quality(self):
+        for reason in ('prior_partial', 'decompile_partial', 'core_quality'):
+            with self.subTest(reason=reason):
+                value = bundle()
+                value['app']['apk_sha256'] = 'a' * 64
+                task = self.runtime.import_evidence(value)['task']
+                self.runtime.store.patch(task['id'], state='partial' if reason == 'prior_partial' else 'done')
+                if reason == 'decompile_partial':
+                    self.runtime.store.stage(task['id'], 'decompile', 'partial', 'actual JADX test double')
+                if reason == 'core_quality':
+                    source = self.root / 'offline-core-quality'
+                    write_json(source / 'verification.json', {'passed': True, 'task_id': task['id'],
+                        'apk_sha256': 'a' * 64, 'quality_gaps': [{'kind': 'no_read_observed'}]})
+                    self.runtime.store.patch(task['id'], core_run={'state': 'done', 'source_run': str(source)})
+                def report_done(store, task_id, job, attempt):
+                    # Outcome-only offline double; no PDF or AI provenance is claimed here.
+                    store.stage(task_id, 'report', 'done')
+                with patch('mobile.workbench.report_generation.generate', side_effect=report_done):
+                    result = self.runtime.operate(task['id'], 'report', {})
+                    self.assertEqual(wait(self.runtime, result['job_id'])['state'], 'done')
+                current = self.runtime.store.get(task['id'])
+                self.assertEqual(current['state'], 'partial')
+                self.assertEqual(current['operation']['state'], 'done')
+
+    def test_successful_done_report_stays_done_despite_generic_methodology_gaps(self):
+        task = self.runtime.import_evidence(bundle())['task']
+        self.runtime.store.patch(task['id'], state='done', gaps=['methodology: finite observation window'])
+        with patch('mobile.workbench.report_generation.render', side_effect=self.render):
+            result = self.runtime.operate(task['id'], 'report', {})
+            self.assertEqual(wait(self.runtime, result['job_id'])['state'], 'done')
+        self.assertEqual(self.runtime.store.get(task['id'])['state'], 'done')
+
+    def test_report_failure_or_cancellation_overrides_previous_partial_state(self):
+        task = self.runtime.import_evidence(bundle())['task']
+        self.runtime.store.patch(task['id'], state='partial')
+        with patch('mobile.workbench.report_generation.render', side_effect=RuntimeError('offline report failure')):
+            result = self.runtime.operate(task['id'], 'report', {})
+            self.assertEqual(wait(self.runtime, result['job_id'])['state'], 'failed')
+        self.assertEqual(self.runtime.store.get(task['id'])['state'], 'failed')
+        self.runtime.store.patch(task['id'], state='partial')
+        began, release = threading.Event(), threading.Event()
+        def slow_render(path, out, session):
+            began.set()
+            release.wait(3)
+            self.render(path, out, session)
+        with patch('mobile.workbench.report_generation.render', side_effect=slow_render):
+            result = self.runtime.operate(task['id'], 'report', {})
+            self.assertTrue(began.wait(2))
+            self.assertTrue(self.runtime.cancel(result['job_id']))
+            release.set()
+            self.assertEqual(wait(self.runtime, result['job_id'])['state'], 'cancelled')
+        self.assertEqual(self.runtime.store.get(task['id'])['state'], 'cancelled')
+
 
 if __name__ == "__main__":
     unittest.main()

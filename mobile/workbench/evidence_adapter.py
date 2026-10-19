@@ -6,6 +6,7 @@ import json
 
 from mobile.ai import validate
 from mobile.workbench.store import read_json, write_json
+from mobile.workbench import local_policy
 
 
 def _object(value, label: str) -> dict:
@@ -45,6 +46,14 @@ def check_bundle(bundle) -> dict:
                 raise ValueError(f"{section}.{key} 的 evidence_id 缺失")
             if evidence_id in ids:
                 raise ValueError(f"重复 evidence_id：{evidence_id}")
+            ids.add(evidence_id)
+    supplemental = [("static.findings", (bundle.get("static") or {}).get("findings", [])),
+                    ("traffic.network_observations", (bundle["traffic"].get("network_observations") or {}).get("observations", []))]
+    for label, values in supplemental:
+        for row in _rows(values, label):
+            evidence_id = row.get("evidence_id")
+            if not isinstance(evidence_id, str) or not evidence_id or evidence_id in ids:
+                raise ValueError(f"{label} missing/duplicate evidence_id: {evidence_id}")
             ids.add(evidence_id)
     for reg in _rows(bundle["rules"].get("regulations", []), "rules.regulations"):
         if not reg.get("doc") or reg.get("clause") is None:
@@ -144,9 +153,11 @@ def import_bundle(store, payload: dict) -> dict:
 def result(store, task: dict) -> dict:
     directory = store.task_dir(task["id"])
     bundle = read_json(directory / "bundle.json")
-    return {"available": bundle is not None, "origin": ("device_capture" if task.get("capture", {}).get("state") == "done" else "imported_bundle") if bundle else None,
+    captured = bundle is not None
+    bundle = bundle or local_policy.envelope(store, task)
+    return {"available": captured, "origin": ("device_capture" if task.get("capture", {}).get("state") == "done" else "imported_bundle") if captured else "local_policy_snapshot" if bundle else None,
             "bundle": bundle, "counts_observed": task["counts"],
             "ai": read_json(directory / "ai-import.json", {"state": "not_run", "stages": {},
                                                             "validation": {}}),
             "gaps": task.get("gaps", []),
-            "reason": None if bundle else "当前任务暂无可用动态证据；采集失败/取消的原始产物保留在本轮 attempt"}
+            "reason": None if captured else "当前任务暂无可用动态证据；采集失败/取消的原始产物保留在本轮 attempt"}

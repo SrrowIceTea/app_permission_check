@@ -33,8 +33,10 @@ def _read(path: Path | None, on_bad_line: str) -> tuple[list[dict], int]:
     skipped = 0
     # errors="replace"：坏字节不至于让整个文件读不出来；被替换的那一行随后
     # 多半 JSON 解析失败，仍会按策略抛出或被计数——不会静默消失。
+    # JSON strings may legally contain U+0085/U+2028/U+2029. Only LF frames records;
+    # str.splitlines() would split those string contents into invalid JSON fragments.
     for lineno, raw in enumerate(
-            Path(path).read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            Path(path).read_text(encoding="utf-8", errors="replace").split("\n"), 1):
         raw = raw.strip()
         if not raw:
             continue

@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import os
 import ssl
@@ -33,7 +34,9 @@ class ConfigError(RuntimeError):
 
 
 class LLMError(RuntimeError):
-    pass
+    def __init__(self, message: str, records: list[dict] | None = None):
+        super().__init__(message)
+        self.records = records or []
 
 
 def load_config(path: Path | None = None) -> dict:
@@ -50,6 +53,12 @@ def load_config(path: Path | None = None) -> dict:
     cfg.setdefault("max_tokens", 8192)
     cfg.setdefault("timeout_s", 240)
     cfg.setdefault("max_retries", 2)
+    cfg.setdefault("validation_retries", 1)
+    if type(cfg["validation_retries"]) is not int or cfg["validation_retries"] not in (0, 1):
+        raise ConfigError("validation_retries 必须为 0 或 1；每阶段最多一次模型纠正")
+    cfg.setdefault("use_system_proxy", True)
+    if not isinstance(cfg["use_system_proxy"], bool):
+        raise ConfigError("use_system_proxy 必须是 JSON 布尔值")
     if not cfg.get("base_url") or not cfg.get("model"):
         raise ConfigError(
             f"缺少 base_url / model。复制 {HERE / 'config.example.json'} 为 "
@@ -66,8 +75,7 @@ def load_config(path: Path | None = None) -> dict:
 def redact(cfg: dict) -> dict:
     out = dict(cfg)
     if out.get("api_key"):
-        k = out["api_key"]
-        out["api_key"] = f"{k[:4]}…{k[-4:]}（已脱敏）" if len(k) > 10 else "（已脱敏）"
+        out["api_key"] = "（已脱敏）"
     return out
 
 
@@ -82,21 +90,38 @@ def chat(cfg: dict, *, system: str, user: str, tag: str) -> dict:
                      {"role": "user", "content": user}],
         "stream": False,
     }
+    # Provider options are opt-in, never inferred for unrelated compatible endpoints.
+    for option in ("thinking", "reasoning_effort"):
+        if option in cfg:
+            payload[option] = cfg[option]
+    if cfg.get("response_format") is not None:
+        payload["response_format"] = cfg["response_format"]
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req_sha = hashlib.sha256(body).hexdigest()
     headers = {"Content-Type": "application/json; charset=utf-8",
                "Authorization": f"Bearer {cfg['api_key']}"}
 
-    last_err = None
+    last_err, failed = None, []
     for attempt in range(int(cfg.get("max_retries", 2)) + 1):
         started = time.time()
+        raw_bytes, status, complete = b"", None, False
+        record = {"tag": tag, "request_sha256": req_sha, "request_bytes": len(body),
+                  "model": cfg["model"], "attempt": attempt,
+                  "use_system_proxy": cfg.get("use_system_proxy", True)}
         try:
             req = urllib.request.Request(url, data=body, headers=headers, method="POST")
             ctx = ssl.create_default_context()
-            with urllib.request.urlopen(req, timeout=cfg.get("timeout_s", 240),
-                                         context=ctx) as resp:
-                raw = resp.read().decode("utf-8", errors="replace")
+            if cfg.get("use_system_proxy", True):
+                response = urllib.request.urlopen(req, timeout=cfg.get("timeout_s", 240), context=ctx)
+            else:
+                opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                    urllib.request.HTTPSHandler(context=ctx))
+                response = opener.open(req, timeout=cfg.get("timeout_s", 240))
+            with response as resp:
                 status = getattr(resp, "status", 200)
+                raw_bytes = resp.read()
+                complete = True
+            raw = raw_bytes.decode("utf-8", errors="replace")
             elapsed = int((time.time() - started) * 1000)
             try:
                 data = json.loads(raw)
@@ -106,35 +131,55 @@ def chat(cfg: dict, *, system: str, user: str, tag: str) -> dict:
                 raise LLMError(f"响应里没有 choices: {json.dumps(data, ensure_ascii=False)[:300]}")
             text = (data["choices"][0].get("message") or {}).get("content") or ""
             usage = data.get("usage") or {}
-            return {"tag": tag, "text": text, "request_sha256": req_sha,
+            return {**record, "text": text,
                     "response_raw": raw, "elapsed_ms": elapsed, "http_status": status,
                     "usage": usage, "model": data.get("model") or cfg["model"],
-                    "attempt": attempt, "error": None}
+                    "response_complete": True, "response_bytes": len(raw_bytes),
+                    "attempt_records": failed, "error": None,
+                    "finish_reason": data["choices"][0].get("finish_reason")}
         except urllib.error.HTTPError as e:
+            status = e.code
             detail = ""
             try:
-                detail = e.read().decode("utf-8", errors="replace")[:300]
+                raw_bytes = e.read()
+                complete = True
+                detail = raw_bytes.decode("utf-8", errors="replace")[:300]
             except Exception:  # noqa: BLE001
                 pass
             last_err = f"HTTP {e.code} {e.reason} {detail}"
+        except http.client.IncompleteRead as e:
+            # 保留已收到的残片供诊断，但绝不解析或接受截断正文。
+            raw_bytes = e.partial
+            last_err = f"IncompleteRead: {e}"
         except Exception as e:  # noqa: BLE001
             last_err = f"{e.__class__.__name__}: {e}"
+        last_err = last_err.replace(cfg["api_key"], "（已脱敏）")
+        failed.append({**record, "text": None, "http_status": status, "error": last_err,
+            "elapsed_ms": int((time.time() - started) * 1000), "response_complete": complete,
+            "response_bytes": len(raw_bytes), "response_raw": raw_bytes.decode("utf-8", errors="replace")})
         if attempt < int(cfg.get("max_retries", 2)):
             time.sleep(1.5 * (attempt + 1))
-    raise LLMError(f"调用失败（已重试）: {last_err}")
+    raise LLMError(f"调用失败（共 {len(failed)} 次请求）: {last_err}", failed)
 
 
 def write_call_log(out_dir: Path, records: list[dict], cfg: dict) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
+    expanded = []
+    for record in records:
+        expanded.extend(record.get("attempt_records") or [])
+        expanded.append({k: v for k, v in record.items() if k != "attempt_records"})
     path = out_dir / "llm-calls.jsonl"
     with path.open("a", encoding="utf-8") as fh:
-        for r in records:
+        for r in expanded:
             rec = {k: v for k, v in r.items() if k != "response_raw"}
             rec["config"] = redact(cfg)
             rec["logged_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
             fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
     # 响应原文单独存：体积大，且是"模型到底说了什么"的原始证据。
-    for r in records:
+    for r in expanded:
         if r.get("response_raw"):
-            (out_dir / f"llm-response-{r['tag']}.raw.json").write_text(
+            suffix = (f".attempt-{r.get('attempt', 0) + 1}.incomplete.raw.txt"
+                      if r.get("response_complete") is False else
+                      f".attempt-{r.get('attempt', 0) + 1}.failed.raw.json" if r.get("error") else ".raw.json")
+            (out_dir / f"llm-response-{r['tag']}{suffix}").write_text(
                 r["response_raw"], encoding="utf-8")

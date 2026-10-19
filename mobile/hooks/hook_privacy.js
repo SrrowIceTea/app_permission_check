@@ -81,7 +81,12 @@ function buildExtra(entry, dts, args, ret, outcome, err) {
 
 function armOne(entry) {
   var cls;
-  try { cls = Java.use(entry.cls); }
+  // PackageManager is abstract: hooking its declaration reports ARMED but
+  // ApplicationPackageManager overrides bypass it (fixture + LibChecker API 36).
+  // Keep the SDK/rules identity in `api`; expose the observed implementation.
+  var hookClass = entry.cls === 'android.content.pm.PackageManager'
+    ? 'android.app.ApplicationPackageManager' : entry.cls;
+  try { cls = Java.use(hookClass); }
   catch (e) {
     vlog('TARGET_ABSENT', { cls: entry.cls, api: entry.method });
     STATE.failed.push(entry.cls + '.' + entry.method);
@@ -102,7 +107,11 @@ function armOne(entry) {
         errInfo = describeException(e);
         outcome = errInfo.denied ? 'denied' : 'error';
       }
-      try { vlog('PRIVACY_READ', buildExtra(entry, dts, args, ret, outcome, errInfo)); }
+      try {
+        var extra = buildExtra(entry, dts, args, ret, outcome, errInfo);
+        extra.hook_class = hookClass;
+        vlog('PRIVACY_READ', extra);
+      }
       catch (e2) {}
       if (err) throw err;
       return ret;

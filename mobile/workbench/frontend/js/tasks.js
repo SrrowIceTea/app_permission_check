@@ -1,5 +1,5 @@
 import {workflowPanel} from './workflow.js';
-import {operationLabel} from './workflow-model.js';
+import {operationLabel,taskModeLabel} from './workflow-model.js';
 import {jobPresentation} from './job-model.js';
 import {state,selectTask} from './state.js';
 import {h,icon,button,badge,header,empty,panel,metric,table,date} from './ui.js';
@@ -16,8 +16,8 @@ function dropZone(title,desc,name,choose,eventName){
 }
 function capabilities(){
  const health=state.health;const caps=health?.capabilities;
- const items=[['scan','静态分析',caps?.static,`aapt2 / dexdump · MOB-${health?.rules?.version||'—'}`],['code','源码反编译',caps?.decompile,'JADX / Java · 可独立降级'],['pulse','设备采集',caps?.device_capture,'授权后运行自有 Gadget 夹具'],['book','AI 研判','manual','导入产物后重验，本服务不调用模型']];
- return h('div',{class:'capabilities'},items.map(([name,title,cap,desc])=>h('div',{class:'capability'},h('span',{class:'capability-icon'},icon(name)),h('div',{class:'capability-text'},title,h('small',{},cap?.missing?.length?`未选定 ${cap.missing.join(' / ')}`:desc)),badge(!health?'unknown':cap==='manual'?'not_requested':cap?.available?'done':'blocked',!health?'未连接':cap==='manual'?'手动导入':cap?.available?'就绪':'缺少依赖'))));
+ const items=[['scan','静态分析',caps?.static,`aapt2 / dexdump · MOB-${health?.rules?.version||'—'}`],['code','源码反编译',caps?.decompile,'JADX / Java · 可独立降级'],['pulse','设备采集',caps?.device_capture,'夹具独立入口；真实 APK 使用下方完整检测'],['book','AI 研判','explicit','默认不联网；显式完整检测调用本机已配置模型']];
+ return h('div',{class:'capabilities'},items.map(([name,title,cap,desc])=>h('div',{class:'capability'},h('span',{class:'capability-icon'},icon(name)),h('div',{class:'capability-text'},title,h('small',{},cap?.missing?.length?`未选定 ${cap.missing.join(' / ')}`:desc)),badge(!health?'unknown':cap==='explicit'?'not_requested':cap?.available?'done':'blocked',!health?'未连接':cap==='explicit'?'显式授权':cap?.available?'就绪':'缺少依赖'))));
 }
 function jobCard(){
  const job=state.job;if(!job)return null;
@@ -35,7 +35,7 @@ export function renderTasks(){
   h('div',{class:'grid-2'},panel('开始检测','APK 或现有证据，两种入口',h('div',{class:'upload-grid'},dropZone('上传 APK 文件','点击或拖拽 · 静态扫描与源码反编译','upload',chooseApk,'lab:upload'),dropZone('导入证据包 JSON','已有动态采集与政策文本 · 原样留证','book',chooseBundle,'lab:import'))),panel('检测环境','依赖可用性来自本地服务，不推断设备状态',capabilities())));
  body.append(h('div',{class:'section-gap'},workflowPanel()));
  const job=jobCard();if(job)body.append(h('div',{class:'section-gap'},job));
- const rows=tasks.map(task=>h('tr',{},h('td',{},h('button',{class:'row-link',onclick:()=>selectTask(task.id,task.mode==='static'?'static':'evidence')},task.name||task.apk?.name||task.id),h('span',{class:'subtext mono'},task.apk?.package||task.id)),h('td',{},badge(task.state)),h('td',{},h('span',{class:'subtext'},task.origin==='device_capture'?'自有夹具采集':task.stages?.dynamic?.state==='done'&&task.mode==='static'?'静态 + 设备证据':task.mode==='static'?'APK 静态分析':'证据包导入')),h('td',{},badge(task.stages?.static?.state||'not_requested')),h('td',{},badge(task.stages?.dynamic?.state||'not_requested')),h('td',{},h('small',{},date(task.created_at))),h('td',{},button('查看',()=>selectTask(task.id,task.mode==='static'?'static':'evidence'),'ghost','arrow'))));
+ const rows=tasks.map(task=>h('tr',{},h('td',{},h('button',{class:'row-link',onclick:()=>selectTask(task.id,task.mode==='static'?'static':'evidence')},task.name||task.apk?.name||task.id),h('span',{class:'subtext mono'},task.apk?.package||task.id)),h('td',{},badge(task.state)),h('td',{},h('span',{class:'subtext'},taskModeLabel(task))),h('td',{},badge(task.stages?.static?.state||'not_requested')),h('td',{},badge(task.stages?.dynamic?.state||'not_requested')),h('td',{},h('small',{},date(task.created_at))),h('td',{},button('查看',()=>selectTask(task.id,task.mode==='static'?'static':'evidence'),'ghost','arrow'))));
  body.append(h('div',{class:'section-gap'},panel('最近任务',tasks.length?`${tasks.length} 个真实任务 · 原始产物保存在本机`:'尚未创建任务，上传后将自动出现在这里',rows.length?table(['应用 / 任务','任务状态','检测模式','静态','动态','创建时间',''],rows,x=>x):empty('工作空间已就绪','上传 APK 进行静态分析，或导入现有 evidence bundle 查看动态证据。','scan'))));
  if(state.error)body.append(h('div',{class:'notice error section-gap'},icon('link'),state.error));
  return body;

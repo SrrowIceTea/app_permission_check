@@ -5,8 +5,10 @@ import json
 from pathlib import Path
 try:
     from . import validate as vd
+    from .review_contract import contract_problems
 except ImportError:
     import validate as vd
+    from review_contract import contract_problems
 
 
 def digest(value) -> str:
@@ -22,9 +24,11 @@ def validate_stage(stage: str, output, bundle: dict) -> dict:
             if stage == "stage1":
                 policy = bundle.get("policy") or {}
                 req_ids = [c["req_id"] for c in (policy.get("lint") or {}).get("checks", [])]
-                result = vd.validate_stage1(output, req_ids=req_ids, policy_text=policy.get("text") or "")
+                result = vd.validate_stage1(output, req_ids=req_ids, policy_text=policy.get("text") or "", policy=policy)
             else:
                 result = vd.VALIDATORS[stage](output, bundle=bundle)
+            result["problems"].extend(contract_problems(stage, output, bundle))
+            result["ok"] = not result["problems"]
         except (TypeError, ValueError, KeyError, AttributeError) as exc:
             result = {"ok": False, "problems": [f"输出结构不可校验: {type(exc).__name__}: {exc}"],
                       "warnings": []}

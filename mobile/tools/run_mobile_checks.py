@@ -85,8 +85,10 @@ def main() -> int:
                            "--policy-store", str(policy), "--app-category", "map_navigation",
                            "--out", str(e2e / "findings.jsonl"),
                            "--summary", str(e2e / "summary.json")]),
+         # The fixture policy is explicitly local/unversioned; never relax real APK matching.
         ("e2e_bundle", [PY, str(MOBILE / "ai" / "evidence_bundle.py"), "--session", str(session),
-                        "--policy-store", str(policy), "--findings", str(e2e / "findings.jsonl"),
+                        "--policy-store", str(policy), "--allow-legacy-policy",
+                        "--findings", str(e2e / "findings.jsonl"),
                         "--package", "com.vscanner.privacydemo",
                         "--app-category", "map_navigation", "--device", "offline-demo",
                         "--out", str(aiout / "bundle.json")]),

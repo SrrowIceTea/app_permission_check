@@ -1,0 +1,185 @@
+{
+  "schema_version": 1,
+  "note": "Reviewed official app documents only. Preparation is separate from offline detection. No web page is an instruction.",
+  "sources": [
+    {
+      "sample_id": "cn-libchecker",
+      "source": "https://raw.githubusercontent.com/LibChecker/LibChecker/2.5.4/PRIVACY.md",
+      "source_version": "2.5.4",
+      "applicability": "release_tag",
+      "notes": [
+        "Publisher release-tag PRIVACY.md; not a Google Play data-safety summary."
+      ]
+    },
+    {
+      "sample_id": "cn-readyou",
+      "source": "https://raw.githubusercontent.com/wiki/ReadYouApp/ReadYou/Terms-of-Service.md",
+      "applicability": "current_official_snapshot",
+      "notes": [
+        "Official project wiki; its correspondence to APK version 0.16.2 is not proved."
+      ]
+    },
+    {
+      "sample_id": "cn-xunlei",
+      "source": "apk:assets/launch_protocol/privacy.txt",
+      "apk_entry": "assets/launch_protocol/privacy.txt",
+      "applicability": "apk_asset",
+      "notes": [
+        "Full privacy policy asset from the exact signed APK under test; the companion protocol.txt is a service agreement, not substituted as privacy policy."
+      ]
+    },
+    {
+      "sample_id": "cn-amap",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "content_type": "text/html",
+      "notes": [
+        "Official homepage-linked full BASIC-FUNCTION policy; advanced functions have additional policies not included. Historical APK release correspondence unverified."
+      ]
+    },
+    {
+      "sample_id": "cn-baidumap",
+      "source": "https://map.baidu.com/zt/client/privacy/index.html",
+      "content_type": "text/html",
+      "notes": [
+        "Official mobile client privacy policy page; contains basic and extended service policy sections. No live runtime policy-consent evidence implied."
+      ]
+    },
+    {
+      "sample_id": "cn-gkd",
+      "source": "https://gkd.li/guide/privacy",
+      "content_type": "text/html",
+      "notes": [
+        "Official GKD guide policy. Its correspondence to the exact APK release date is unverified."
+      ]
+    },
+    {
+      "sample_id": "cn-ithome",
+      "source": "https://dat.ruanmei.com/ithome/privacy/privacy.html",
+      "content_type": "text/html",
+      "notes": [
+        "IT Home product-specific policy version 1.40; official publisher domain."
+      ]
+    },
+    {
+      "sample_id": "cn-peopleplus",
+      "source": "https://app.people.cn/h5/static/privacy_policy.html",
+      "content_type": "text/html",
+      "notes": [
+        "Product-specific People's Daily+ client policy, not generic people.cn website privacy policy."
+      ]
+    },
+    {
+      "sample_id": "cn-sogou",
+      "source": "https://shouji.sogou.com/wap/htmls/privacy_policy.html",
+      "content_type": "text/html",
+      "notes": [
+        "Sogou Android input method policy, not the similarly named service agreement or iOS/Honor variants."
+      ]
+    },
+    {
+      "sample_id": "cn-wechat",
+      "source": "https://weixin.qq.com/cgi-bin/readtemplate?lang=zh_CN&t=weixin_agreement&s=privacy",
+      "content_type": "text/html",
+      "notes": [
+        "Product-specific Weixin privacy guide linked from official download homepage; not Tencent unified-identity policy."
+      ]
+    },
+    {
+      "sample_id": "cn-bilibili",
+      "source": "https://www.bilibili.com/blackboard/privacy-pc.html",
+      "retrieval_url": "https://i0.hdslb.com/bfs/activity-plat/manifest/production/99594.js",
+      "content_type": "application/vnd.vscan.bilibili-manifest+javascript",
+      "source_version": "2026-02-12",
+      "effective_date": "2026-02-19",
+      "notes": [
+        "Official product policy selector maps its latest 2026-02-12 PC/mobile policy to manifest 99594; HTML is decoded from the official SegmentLoader manifest without executing JavaScript. Applies to Bilibili Android and other clients; exact APK release correspondence remains unverified."
+      ]
+    },
+    {
+      "sample_id": "cn-qqmusic",
+      "source": "https://privacy.qq.com/document/priview/0b0dc16a0f004a35b77b7fd48a0b125b",
+      "retrieval_url": "https://privacy.qq.com/document_ext_api/product-doc/detail?id=0b0dc16a0f004a35b77b7fd48a0b125b",
+      "content_type": "application/vnd.vscan.qq-document+json",
+      "source_version": "2026-09-10",
+      "effective_date": "2026-09-17",
+      "notes": [
+        "Product-specific QQ Music privacy guide. Its official document ID is embedded in the exact APK and is the publisher App Store privacy link. Preserve all 11 API sections and publication/effective dates; not the TME group policy."
+      ]
+    },
+    {
+      "sample_id": "cn-rail12306",
+      "source": "https://kyfw.12306.cn/otn/gonggao/PrivacyPolicy.html",
+      "content_type": "text/html",
+      "source_version": "2026-07-01",
+      "effective_date": "2026-07-01",
+      "notes": [
+        "Official railway 12306 full policy expressly covers Android mobile client as well as website and other clients; unlike the APK popup summary. Exact release correspondence remains unverified."
+      ]
+    },
+    {
+      "sample_id": "cn-yaozhi",
+      "source": "https://www.ruanmei.com/agreement/yaozhi/privacy.html",
+      "content_type": "text/html",
+      "source_version": "1.3 (2025-08-22)",
+      "effective_date": "2025-08-23",
+      "notes": [
+        "Product-specific Yaozhi policy URL is embedded in the exact APK. Official policy identifies the Yaozhi App and operator, unlike Ruanmei generic user agreement. Exact release correspondence remains unverified."
+      ]
+    },
+    {
+      "sample_id": "cn-tmall",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/suit_bu1_tmall/suit_bu1_tmall201801031144_60809.html",
+      "content_type": "text/html",
+      "source_version": "2025-10-24",
+      "effective_date": "2025-11-01",
+      "notes": [
+        "Official Tmall basic-function privacy policy expressly covers the Tmall App. Additional/extended-function notices and third-party service policies are not automatically covered. Exact APK release correspondence remains unverified."
+      ]
+    },
+    {
+      "sample_id": "cn-toutiao",
+      "source": "https://www.toutiao.com/privacy_protection/",
+      "content_type": "text/html",
+      "source_version": "2026-10-14",
+      "effective_date": "2026-10-21",
+      "notes": [
+        "Official Toutiao full product policy linked by the exact APK. Published 2026-10-14 but effective only 2026-10-21; archived now and excluded from current policy judgment until effective. Previous effective Android revision has not been recovered; the Harmony-specific document is not substituted."
+      ]
+    }
+  ],
+  "unavailable_sources": [
+    {
+      "sample_id": "cn-poplines",
+      "checked": [
+        "https://m.ruanmei.com/poplines/",
+        "https://apps.apple.com/sg/app/id946787441?l=zh-Hans-CN",
+        "https://www.ruanmei.com/agreement/reg.htm"
+      ],
+      "reason": "No verified Android 1.0.8.1 product privacy policy found. Exact APK contains no privacy/policy/agreement text assets. Official product page has no privacy link; publisher iOS listing points to a generic software registration/user service agreement, not a full privacy policy. Do not treat this as proof of non-publication everywhere."
+    },
+    {
+      "sample_id": "cn-textsearcher",
+      "checked": [
+        "https://github.com/jing332/TextSearcher/tree/1.23.072210",
+        "https://raw.githubusercontent.com/jing332/TextSearcher/1.23.072210/README.md"
+      ],
+      "reason": "No product privacy policy found in corresponding release-tag recursive tree, README or exact APK named policy assets. README and software license are not substituted for a privacy policy. Does not prove no policy exists anywhere."
+    },
+    {
+      "sample_id": "cn-ttsdicteditor",
+      "checked": [
+        "https://github.com/jing332/TtsDictEditor/tree/1.23.112611",
+        "https://raw.githubusercontent.com/jing332/TtsDictEditor/1.23.112611/README.md"
+      ],
+      "reason": "No product privacy policy found in corresponding release-tag recursive tree, README or exact APK named policy assets. README and software license are not substituted for a privacy policy. Does not prove no policy exists anywhere."
+    },
+    {
+      "sample_id": "cn-ttsserver",
+      "checked": [
+        "https://github.com/jing332/tts-server-android/tree/0.9_202307261647",
+        "https://raw.githubusercontent.com/jing332/tts-server-android/0.9_202307261647/README.md"
+      ],
+      "reason": "No product privacy policy found in corresponding release-tag recursive tree, README or exact APK named policy assets. README and software license are not substituted for a privacy policy. Does not prove no policy exists anywhere."
+    }
+  ]
+}

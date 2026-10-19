@@ -1,0 +1,304 @@
+{
+  "schema_version": 1,
+  "note": "One-hop primary-policy referenced official notices. Separate from primary app policies; never substitute these for missing full policies or assume every function was tested.",
+  "sources": [
+    {
+      "sample_id": "cn-amap",
+      "label": "点击此处",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_permission_description/20250313172026844/20250313172026844.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "点击此处",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_sdk_description/20250313180318991/20250313180318991.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "点击此处",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_description_of_sharing/20250313181212756/20250313181212756.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "儿童个人信息保护规则和监护人须知",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_kid_protect/20251225232959171/20251225232959171.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "《用车信息服务个人信息处理规则》",
+      "source": "https://cache.gaode.com/activity/lowcode/h5/UAxmMuli/index.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "《足迹服务协议及个人信息处理规则》",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_other/20250313224717409/20250313224717409.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "《群组服务协议及个人信息处理规则》",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_other/20250313225308569/20250313225308569.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "酒旅服务个人信息处理规则",
+      "source": "https://cache.gaode.com/activity/lowcode/h5/3uKoTXvM/index.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "汽车服务个人信息处理规则",
+      "source": "https://cache.gaode.com/activity/lowcode/h5/47eviKiX/index.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "到店团购个人信息处理规则",
+      "source": "https://cache.gaode.com/activity/lowcode/h5/hoMYocBC/index.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "《家人地图服务协议》",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_other/20250313225923864/20250313225923864.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "内容发布个人信息处理规则",
+      "source": "https://cache.gaode.com/activity/lowcode/h5/VywDhTPe/index.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "咨询服务个人信息处理规则",
+      "source": "https://cache.gaode.com/activity/lowcode/h5/pAuviELd/index.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "信息交互服务个人信息处理规则",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_other/20250313230330779/20250313230330779.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "车辆信息处理规则",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_other/20250313230557477/20250313230557477.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "高德油耗个人信息处理规则",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_other/20250313230808622/20250313230808622.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "通行费助手个人信息处理规则",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_other/20250313231010706/20250313231010706.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "高德运动个人信息处理规则",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_other/20250313231729234/20250313231729234.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "记录足迹个人信息处理规则",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_other/20250313223659961/20250313223659961.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "高德账号服务个人信息处理规则",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_other/20250313232240407/20250313232240407.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "《顺风车信息服务平台个人信息处理规则》",
+      "source": "https://dache.amap.com/lowcode#/lowcode/page/Renderer?pageJsonUrl=%2Frule-desc%2FFORM-TPB664D12RKM6DNL87HMBBFYOV9S3781KQMYL8%2Fprod%2Findex.json",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-amap",
+      "label": "《借钱技术服务个人信息处理规则》",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/user_authorization_agreement/20240822120642240/20240822120642240.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/privacy_policy_full/20250314145608599/20250314145608599.html",
+      "primary_text_sha256": "6ec87d28b3368d64c5833cc83d008b3f068f9dbf7873038202f9fbfb1d4ffcf2",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-baidumap",
+      "label": "《与第三方共享个人信息清单》",
+      "source": "https://map.baidu.com/zt/client/privacy/thirdPartyDescription.html",
+      "discovered_from": "https://map.baidu.com/zt/client/privacy/index.html",
+      "primary_text_sha256": "9def518b52584ab4b247363ff8f98c7740c9dda1315cf415cbf41dcd192ad7d9",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-ithome",
+      "label": "IT之家使用的第三方 SDK 清单",
+      "source": "https://dat.ruanmei.com/ithome/privacy/sdk-list.html",
+      "discovered_from": "https://dat.ruanmei.com/ithome/privacy/privacy.html",
+      "primary_text_sha256": "1ca53feea8794afe402bea66f4db995c38eea2b7257662c6bbf3784544c50117",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-yaozhi",
+      "label": "要知使用的第三方 SDK 清单",
+      "source": "https://www.ruanmei.com/agreement/yaozhi/sdk-list.html",
+      "discovered_from": "https://www.ruanmei.com/agreement/yaozhi/privacy.html",
+      "primary_text_sha256": "884a6452c215897b66e48dafb13f1b9c2862d9d614a57ba44c48ba6209e61d53",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-sogou",
+      "label": "\"第三方信息共享清单\"",
+      "source": "https://shouji.sogou.com/wap/htmls/privacy_policy_ext_third_collect_info.html",
+      "discovered_from": "https://shouji.sogou.com/wap/htmls/privacy_policy.html",
+      "primary_text_sha256": "5219a2653e0d4b17dee90aef969178e33c6b6be5ca90557bd8cfa8de7ec2655b",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-toutiao",
+      "label": "应用权限申请与使用情况说明",
+      "source": "https://sf3-cdn-tos.douyinstatic.com/obj/ies-hotsoon-draft/toutiaoGIP/yingyongquanxian.html",
+      "discovered_from": "https://www.toutiao.com/privacy_protection/",
+      "primary_text_sha256": "a13747df1f2a205cee8d83dfe0ed3589475e65b5d945464fa94be952289b26fd",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-toutiao",
+      "label": "第三方信息共享清单",
+      "source": "https://sf3-cdn-tos.douyinstatic.com/obj/ies-hotsoon-draft/toutiaoGIP/SDKmulu.html",
+      "discovered_from": "https://www.toutiao.com/privacy_protection/",
+      "primary_text_sha256": "a13747df1f2a205cee8d83dfe0ed3589475e65b5d945464fa94be952289b26fd",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-wechat",
+      "label": "《第三方信息共享清单》",
+      "source": "https://support.weixin.qq.com/cgi-bin/mmsupport-bin/newreadtemplate?t=datalist/shared",
+      "discovered_from": "https://weixin.qq.com/cgi-bin/readtemplate?lang=zh_CN&t=weixin_agreement&s=privacy",
+      "primary_text_sha256": "08810374728fd7fe56f7196f7935d70e31d9749922dc79aba59c92a8d2eec4c3",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-qqmusic",
+      "label": "QQ音乐第三方信息共享清单",
+      "source": "https://privacy.qq.com/document/preview/d9a0c3c02e584a91a3d5f664d0dc6b42",
+      "discovered_from": "https://privacy.qq.com/document/priview/0b0dc16a0f004a35b77b7fd48a0b125b",
+      "primary_text_sha256": "6fd0bb49d081b7bc7eebffb2f0272d6d95b430d208975bd47bed35db3e081295",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review.",
+      "retrieval_url": "https://privacy.qq.com/document_ext_api/product-doc/detail?id=d9a0c3c02e584a91a3d5f664d0dc6b42",
+      "content_type": "application/vnd.vscan.qq-document+json"
+    },
+    {
+      "sample_id": "cn-tmall",
+      "label": "点击此处",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/c_end_product_protocol/20230208134154958/20230208134154958.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/suit_bu1_tmall/suit_bu1_tmall201801031144_60809.html",
+      "primary_text_sha256": "c1c2dabdc735f51ac694d4abce21fc34e8e3f0d32503fa7e82895f9a60f3e304",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-tmall",
+      "label": "点击此处",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/product/20220830130104502/20220830130104502.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/suit_bu1_tmall/suit_bu1_tmall201801031144_60809.html",
+      "primary_text_sha256": "c1c2dabdc735f51ac694d4abce21fc34e8e3f0d32503fa7e82895f9a60f3e304",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-tmall",
+      "label": "点击此处",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_description_of_sharing/20230210162254258/20230210162254258.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/suit_bu1_tmall/suit_bu1_tmall201801031144_60809.html",
+      "primary_text_sha256": "c1c2dabdc735f51ac694d4abce21fc34e8e3f0d32503fa7e82895f9a60f3e304",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-tmall",
+      "label": "点击此处",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/privacy_sdk_description/20230203101726438/20230203101726438.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/suit_bu1_tmall/suit_bu1_tmall201801031144_60809.html",
+      "primary_text_sha256": "c1c2dabdc735f51ac694d4abce21fc34e8e3f0d32503fa7e82895f9a60f3e304",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-tmall",
+      "label": "《天猫儿童个人信息保护规则及监护人须知》",
+      "source": "https://terms.alicdn.com/legal-agreement/terms/suit_bu1_tmall/suit_bu1_tmall202011200012_53681.html",
+      "discovered_from": "https://terms.alicdn.com/legal-agreement/terms/suit_bu1_tmall/suit_bu1_tmall201801031144_60809.html",
+      "primary_text_sha256": "c1c2dabdc735f51ac694d4abce21fc34e8e3f0d32503fa7e82895f9a60f3e304",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-bilibili",
+      "label": "《个人信息收集清单》",
+      "source": "https://www.bilibili.com/blackboard/fe/activity-kRRmygcr4x.html?navhide=1",
+      "discovered_from": "https://www.bilibili.com/blackboard/privacy-pc.html",
+      "primary_text_sha256": "07a9190cb064891b05706050d1ca0e8218d02283cdaa9b35dcac712ac8a54f38",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    },
+    {
+      "sample_id": "cn-bilibili",
+      "label": "《哔哩哔哩App权限申请与使用情况说明》",
+      "source": "https://www.bilibili.com/blackboard/activity-4gdCkFG48T.html",
+      "discovered_from": "https://www.bilibili.com/blackboard/privacy-pc.html",
+      "primary_text_sha256": "07a9190cb064891b05706050d1ca0e8218d02283cdaa9b35dcac712ac8a54f38",
+      "scope": "Linked additional notice; applies only to the described function/platform; exact APK release correspondence and applicability require review."
+    }
+  ]
+}

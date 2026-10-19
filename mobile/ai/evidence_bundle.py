@@ -31,11 +31,16 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
+sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "policy"))
 sys.path.insert(0, str(HERE.parent / "tools"))
 sys.path.insert(0, str(ROOT))
 from bundle_observations import read_jsonl, top_app_frame, build_reads, build_consent, build_flows
 import policy_lint  # noqa: E402
+from local_knowledge import bind_regulations, load_bound_policy
+from mobile.ai.storage_observations import build_storage_crypto
+from mobile.ai.supplemental_observations import build_static, build_network
+from mobile.analyze.bundle_risk import assess_bundle
 import apk_packer_probe  # noqa: E402  加固特征探测：命中即把「结论受限」写进 gaps
 
 HERE_ANALYZE = HERE.parent / "analyze"
@@ -68,7 +73,8 @@ def load_rules_meta(db: Path, version: str) -> dict:
                     regs.append({"doc": ref["doc"], "clause": ref["clause"],
                                  "title": ref.get("title")})
     conn.close()
-    return {"version": version, "enabled_by_type": dict(sorted(by_type.items())),
+    regs, scope = bind_regulations(regs)
+    return {"version": version, "knowledge_scope": scope, "enabled_by_type": dict(sorted(by_type.items())),
             "enabled_total": sum(by_type.values()),
             "regulations": sorted(regs, key=lambda x: (x["doc"], x["clause"])),
             "db_sha256": sha256_file(db)}
@@ -100,6 +106,7 @@ def load_category(db: Path, version: str, key: str | None) -> dict:
 def build(session: Path, rules_db: Path, *, version: str, policy_store: Path | None,
           findings_path: Path | None, app: dict, include_previews: bool,
           notes: list[str] | None = None, apk_path: Path | None = None,
+          allow_legacy_policy: bool = False, static_evidence: Path | None = None,
           static_supplement_path: Path | None = None) -> dict:
     gaps: list[str] = []
     # 编排层显式提供的缺口说明。它们**不替代**下面自动发现的缺口，只做补充：
@@ -127,6 +134,9 @@ def build(session: Path, rules_db: Path, *, version: str, policy_store: Path | N
     reads = build_reads(session, gaps)
     consent = build_consent(session, gaps)
     flows, plaintext = build_flows(session, gaps, include_previews=include_previews)
+    storage_crypto = build_storage_crypto(session, app.get("package"), gaps)
+    static = build_static(static_evidence, app, gaps)
+    network = build_network(session, app, gaps)
 
     # C2 覆盖差集：静态 dex 引用 vs 动态观测。提供了静态产物才算（没跑静态扫描
     # 时差集没有"静态侧"可言，硬算只会产出误导性的全 dynamic_only）。
@@ -163,38 +173,21 @@ def build(session: Path, rules_db: Path, *, version: str, policy_store: Path | N
     if any(v.get("not_target") for v in health.values()):
         gaps.append("有钩子报了 NOT_TARGET：该进程不在白名单，事件为空是预期的，不是故障")
 
-    policy = {"available": False}
-    if policy_store and policy_store.exists():
-        metas = sorted(policy_store.glob("policy-*.meta.json"))
-        if metas:
-            meta = json.loads(metas[-1].read_text(encoding="utf-8"))
-            text_file = policy_store / meta["text_file"]
-            text = text_file.read_text(encoding="utf-8") if text_file.exists() else ""
-            reqs = policy_lint.load_requirements(rules_db, version)
-            text_lint = policy_lint.lint(text, reqs, meta.get("cjk_ratio") or 0.0)
-            policy = {"available": True, "source": meta.get("source"),
-                      "source_kind": meta.get("source_kind"),
-                      "raw_sha256": meta.get("raw_sha256"),
-                      "text_sha256": meta.get("text_sha256"),
-                      "extract_status": meta.get("extract_status"),
-                      "chars": meta.get("text_chars"), "title": meta.get("title"),
-                      "text": text,
-                      "lint": text_lint,
-                      "disclosure_scan": policy_lint.disclosure_scan(
-                          text, policy_lint.load_keywords())}
-        else:
-            gaps.append("policy store 里没有 policy-*.meta.json：未取得隐私政策文本")
-    else:
-        gaps.append("未提供 policy store：**隐私政策相关判定全部不可用**")
+    policy = load_bound_policy(policy_store, app, rules_db, version,
+                               allow_legacy=allow_legacy_policy)
+    gaps.extend(policy.get("gaps") or [])
+    if not policy.get("available"):
+        gaps.append("本地隐私政策不可用或未匹配APK：隐私政策相关判定不可用")
 
-    return {
+    bundle = {
         "bundle_version": BUNDLE_VERSION,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "app": app,
         "rules": load_rules_meta(rules_db, version),
         "dynamic": {"reads": reads, "consent_timeline": consent, "hook_health": health,
-                    "policy_consent_state": "unknown"},
-        "traffic": {"flows": flows, "plaintext_flow_ids": plaintext},
+                    "policy_consent_state": "unknown", "storage_crypto": storage_crypto},
+        "traffic": {"flows": flows, "plaintext_flow_ids": plaintext, "network_observations": network},
+        "static": static,
         **({"coverage_gaps": coverage_gaps} if coverage_gaps is not None else {}),
         "findings": [{"rule_id": f.get("rule_id"), "rule_type": f.get("rule_type"),
                       "severity": f.get("severity"), "conclusion_level": f.get("conclusion_level"),
@@ -219,8 +212,12 @@ def build(session: Path, rules_db: Path, *, version: str, policy_store: Path | N
                                                            "note": "未提供 APK，未做加固特征探测"},
         "gaps": gaps,
         "counts": {"reads": len(reads), "consent_events": len(consent),
-                   "flows": len(flows), "findings": len(findings)},
+                   "flows": len(flows), "findings": len(findings),
+                   "storage_crypto_observations": len(storage_crypto["observations"]),
+                   "storage_crypto_findings": len(storage_crypto["findings"])},
     }
+    bundle["risk_assessment"] = assess_bundle(bundle)
+    return bundle
 
 
 def main() -> int:
@@ -229,6 +226,10 @@ def main() -> int:
     ap.add_argument("--rules", default=str(ROOT / "mobile" / "rules" / "rules_mobile.db"))
     ap.add_argument("--version", default="36")
     ap.add_argument("--policy-store", default=None)
+    ap.add_argument("--allow-legacy-policy", action="store_true",
+                    help="仅兼容显式指定的旧夹具政策目录；真实应用应使用有版本绑定的政策库")
+    ap.add_argument("--version-code", default=None)
+    ap.add_argument("--static-evidence", type=Path, default=None, help="Same-original-APK workbench-static.json")
     ap.add_argument("--findings", default=None)
     ap.add_argument("--package", required=True)
     ap.add_argument("--app-category", default=None, help="39 类中的 category_key（未声明则留空）")
@@ -250,13 +251,16 @@ def main() -> int:
     if not session.is_dir():
         sys.exit(f"[fatal] 会话目录不存在: {session}")
 
-    app = {"package": args.package, "apk_sha256": args.apk_sha256, "device": args.device,
+    app = {"package": args.package, "version_code": args.version_code,
+           "apk_sha256": args.apk_sha256, "device": args.device,
            "app_category": load_category(Path(args.rules), args.version, args.app_category)}
     bundle = build(session, Path(args.rules), version=args.version,
                    policy_store=Path(args.policy_store) if args.policy_store else None,
                    findings_path=Path(args.findings) if args.findings else None,
                    app=app, include_previews=args.include_previews, notes=args.note,
                    apk_path=Path(args.apk) if args.apk else None,
+                   allow_legacy_policy=args.allow_legacy_policy,
+                   static_evidence=args.static_evidence,
                    static_supplement_path=(Path(args.static_supplement)
                                            if args.static_supplement else None))
 

@@ -11,18 +11,23 @@ from core.static import jobs, toolchain
 from mobile.workbench import evidence_adapter, health, static_adapter
 from mobile.workbench.store import Store
 from mobile.workbench.operation_jobs import Operations
-from mobile.workbench import device_bridge, workflow
+from mobile.workbench import audit_jobs, audit_process, audit_recovery, device_bridge, workflow
 
 
 class Runtime:
-    def __init__(self, storage: Path, rules: Path, version: str, threads: int = 4):
+    def __init__(self, storage: Path, rules: Path, version: str, threads: int = 4,
+                 *, audit_config: Path | None = None, audit_selftest: Path | None = None):
         self.store = Store(storage)
+        self.audit_config = audit_config.resolve() if audit_config else None
+        self.audit_selftest = audit_selftest.resolve() if audit_selftest else None
         self.rules, self.version, self.threads = rules.resolve(), version, threads
         self.cache = jobs.Cache(self.store.cache)
         self.registry = jobs.Registry(self.cache)
         self.operations = Operations(self.store)
         for task in self.store.list():
             if task["state"] in ("queued", "running"):
+                if audit_recovery.task_on_startup(self.store, task):
+                    continue
                 stages = task["stages"]
                 for name, value in stages.items():
                     if value["state"] in ("queued", "running"):
@@ -105,6 +110,9 @@ class Runtime:
         return device_bridge.devices()
 
     def operate(self, task_id: str, kind: str, payload: dict) -> dict:
+        audit_process.ensure_idle(self.store)
+        if kind == "audit":
+            return audit_jobs.submit(self, task_id, payload)
         return workflow.submit(self, task_id, kind, payload)
 
     def close(self) -> None:
