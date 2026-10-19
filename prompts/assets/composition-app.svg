@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-label="工作台构图：初始态与拖入后的覆盖态">
+  <defs>
+    <linearGradient id="live" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#9BE7F5" stop-opacity="0"/>
+      <stop offset=".5" stop-color="#9BE7F5" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#9BE7F5" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx=".5" cy=".44" r=".58">
+      <stop offset="0" stop-color="#12222B" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#05070A" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx=".5" cy=".46" r=".58">
+      <stop offset="0" stop-color="#12222B" stop-opacity=".42"/>
+      <stop offset="1" stop-color="#05070A" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1440" height="900" fill="#05070A"/>
+
+  <text x="24" y="34" fill="#6F7C88" font-family="'JetBrains Mono',Consolas,monospace" font-size="9.5" letter-spacing="2">APP · 两种状态 · 构图示意（比例已压缩，像素看文档表格）</text>
+  <text x="1416" y="34" text-anchor="end" fill="#6F7C88" font-family="'JetBrains Mono',Consolas,monospace" font-size="9.5" letter-spacing="2">RAIL 76 · TOPBAR 64</text>
+
+  <!-- ================= A 初始 ================= -->
+  <rect x="24" y="72" width="688" height="780" fill="#05070A" stroke="#1E2730"/>
+  <rect x="24" y="72" width="688" height="780" fill="url(#glowA)"/>
+  <text x="40" y="62" fill="#8A97A3" font-family="'JetBrains Mono',Consolas,monospace" font-size="9" letter-spacing="1.6">A / 初始 · 只做一件事</text>
+
+  <rect x="24" y="72" width="40" height="780" fill="#0A0E13" opacity=".8"/>
+  <line x1="64" y1="72" x2="64" y2="852" stroke="#1E2730"/>
+  <path d="M44 96 L52 92 L60 96 L60 104 L52 108 L44 104 Z" fill="none" stroke="#F2F4F6" stroke-width="1" opacity=".8"/>
+  <g stroke="#F2F4F6" stroke-width="1" fill="none" opacity=".3">
+    <path d="M50 148 l-4 8 h4 l-2 7 6 -9 h-4 l2 -6 z"/>
+    <path d="M44 206 l-3 4 3 4 M56 206 l3 4 -3 4"/>
+    <rect x="45" y="254" width="10" height="10" rx="1"/>
+    <path d="M44 318 h4 l2 -6 3 11 2 -7 h4"/>
+    <path d="M52 366 l1 3 3 1 -3 1 -1 3 -1 -3 -3 -1 3 -1 z"/>
+    <path d="M44 414 h9 l4 4 v10 H44 z"/>
+  </g>
+
+  <line x1="64" y1="112" x2="712" y2="112" stroke="#1E2730"/>
+  <text x="80" y="92" fill="#6F7C88" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="7.5">当前样本</text>
+  <text x="80" y="104" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="9">未选择</text>
+  <text x="676" y="104" text-anchor="end" fill="#6F7C88" font-family="'JetBrains Mono',Consolas,monospace" font-size="6.5">127.0.0.1:8771</text>
+
+  <text x="388" y="430" text-anchor="middle" fill="#F2F4F6" font-family="'Archivo','Helvetica Neue',Arial,sans-serif" font-size="30" font-weight="500" letter-spacing="-1.2" style="font-stretch:115%">V-SCANNER</text>
+  <text x="388" y="452" text-anchor="middle" fill="#A7B0B9" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="8.5" letter-spacing="1.6">一键审计</text>
+
+  <rect x="184" y="492" width="408" height="76" rx="12" fill="#FFFFFF" fill-opacity=".045" stroke="#4A5662"/>
+  <circle cx="212" cy="530" r="14" fill="#FFFFFF" fill-opacity=".08"/>
+  <path d="M212 525 v9 M208 529 l4 -4 4 4" stroke="#F2F4F6" stroke-width="1" fill="none"/>
+  <text x="236" y="526" fill="#F2F4F6" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="10.5" font-weight="500">拖入 APK</text>
+  <text x="236" y="542" fill="#6F7C88" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="8">或点击选择 · 仅 .apk</text>
+  <rect x="512" y="514" width="64" height="32" rx="2" fill="#F2F4F6"/>
+  <text x="544" y="534" text-anchor="middle" fill="#06080B" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="8" font-weight="500">选择</text>
+
+  <text x="388" y="606" text-anchor="middle" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="7" letter-spacing="1.4">整屏只有：品牌 + 一行副标题 + 一个拖拽区</text>
+
+  <!-- ================= B 流程 ================= -->
+  <rect x="728" y="72" width="688" height="780" fill="#05070A" stroke="#1E2730"/>
+  <rect x="728" y="72" width="688" height="780" fill="url(#glowB)"/>
+  <text x="744" y="62" fill="#8A97A3" font-family="'JetBrains Mono',Consolas,monospace" font-size="9" letter-spacing="1.6">B / 拖入后 · 流程层覆盖上传区</text>
+
+  <rect x="728" y="72" width="40" height="780" fill="#0A0E13" opacity=".8"/>
+  <line x1="768" y1="72" x2="768" y2="852" stroke="#1E2730"/>
+  <path d="M748 96 L756 92 L764 96 L764 104 L756 108 L748 104 Z" fill="none" stroke="#F2F4F6" stroke-width="1" opacity=".8"/>
+  <g stroke="#F2F4F6" stroke-width="1" fill="none" opacity=".3">
+    <path d="M754 148 l-4 8 h4 l-2 7 6 -9 h-4 l2 -6 z"/>
+    <path d="M748 206 l-3 4 3 4 M760 206 l3 4 -3 4"/>
+    <rect x="749" y="254" width="10" height="10" rx="1"/>
+    <path d="M748 318 h4 l2 -6 3 11 2 -7 h4"/>
+    <path d="M756 366 l1 3 3 1 -3 1 -1 3 -1 -3 -3 -1 3 -1 z"/>
+    <path d="M748 414 h9 l4 4 v10 H748 z"/>
+  </g>
+
+  <line x1="768" y1="112" x2="1416" y2="112" stroke="#1E2730"/>
+  <text x="784" y="92" fill="#6F7C88" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="7.5">当前样本</text>
+  <text x="784" y="104" fill="#F2F4F6" font-family="'JetBrains Mono',Consolas,monospace" font-size="9">com.example.apk</text>
+  <circle cx="1380" cy="100" r="2.2" fill="#9BE7F5"/>
+  <text x="1364" y="104" text-anchor="end" fill="#6F7C88" font-family="'JetBrains Mono',Consolas,monospace" font-size="6.5">127.0.0.1:8771</text>
+
+  <!-- 品牌从 56px 缩到 18px，仍在，但不抢流程 -->
+  <text x="1092" y="176" text-anchor="middle" fill="#F2F4F6" font-family="'Archivo','Helvetica Neue',Arial,sans-serif" font-size="18" font-weight="500" letter-spacing="-.6" style="font-stretch:112%">V-SCANNER</text>
+  <text x="1092" y="192" text-anchor="middle" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="6.5" letter-spacing="2.4">AUDIT IN PROGRESS</text>
+
+  <!-- 流程层 -->
+  <rect x="838" y="210" width="508" height="500" rx="10" fill="#0A0E13" stroke="#2A3540"/>
+  <text x="858" y="238" fill="#6F7C88" font-family="'JetBrains Mono',Consolas,monospace" font-size="7.5" letter-spacing="1.6">AUDIT · 03 / 16</text>
+  <text x="858" y="264" fill="#F2F4F6" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="16" font-weight="500">静态剖析</text>
+  <text x="1286" y="264" text-anchor="end" fill="#6F7C88" font-family="'JetBrains Mono',Consolas,monospace" font-size="7.5">00:41</text>
+
+  <!-- 16 格进度轨 -->
+  <g>
+    <rect x="858" y="280" width="24" height="2" fill="#F2F4F6"/>
+    <rect x="885" y="280" width="24" height="2" fill="#F2F4F6"/>
+    <rect x="912" y="280" width="24" height="2" fill="#9BE7F5"/>
+    <rect x="939" y="280" width="24" height="2" fill="#FFFFFF" opacity=".12"/>
+    <rect x="966" y="280" width="24" height="2" fill="#FFFFFF" opacity=".12"/>
+    <rect x="993" y="280" width="24" height="2" fill="#FFFFFF" opacity=".12"/>
+    <rect x="1020" y="280" width="24" height="2" fill="#FFFFFF" opacity=".12"/>
+    <rect x="1047" y="280" width="24" height="2" fill="#FFFFFF" opacity=".12"/>
+    <rect x="1074" y="280" width="24" height="2" fill="#FFFFFF" opacity=".12"/>
+    <rect x="1101" y="280" width="24" height="2" fill="#FFFFFF" opacity=".12"/>
+    <rect x="1128" y="280" width="24" height="2" fill="#FFFFFF" opacity=".12"/>
+    <rect x="1155" y="280" width="24" height="2" fill="#FFFFFF" opacity=".12"/>
+    <rect x="1182" y="280" width="24" height="2" fill="#FFFFFF" opacity=".12"/>
+    <rect x="1209" y="280" width="24" height="2" fill="#FFFFFF" opacity=".12"/>
+    <rect x="1236" y="280" width="24" height="2" fill="#FFFFFF" opacity=".12"/>
+    <rect x="1263" y="280" width="24" height="2" fill="#FFFFFF" opacity=".12"/>
+  </g>
+
+  <!-- 当前阶段卡（只有它长得像卡） -->
+  <rect x="858" y="300" width="468" height="126" rx="6" fill="#FFFFFF" fill-opacity=".03" stroke="#2A3540"/>
+  <rect x="858" y="300" width="468" height="1.5" fill="url(#live)"/>
+  <circle cx="878" cy="326" r="3.4" fill="#9BE7F5"/>
+  <circle cx="878" cy="326" r="7" fill="none" stroke="#9BE7F5" stroke-opacity=".35"/>
+  <text x="892" y="330" fill="#F2F4F6" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="10.5">正在反编译</text>
+  <text x="892" y="350" fill="#7FB9C4" font-family="'JetBrains Mono',Consolas,monospace" font-size="8">1 284 / 4 844 classes</text>
+  <text x="892" y="370" fill="#5E6A76" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="8">只显示当前阶段的大字与实时消息</text>
+  <rect x="858" y="394" width="468" height="20" fill="none" stroke="#1E2730" stroke-dasharray="2 4"/>
+  <text x="1092" y="408" text-anchor="middle" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="6.5">本格随事件增长，结束后折叠为一行</text>
+
+  <!-- 已完成（折叠成行） -->
+  <g font-family="'Inter','Microsoft YaHei',sans-serif" font-size="8.5">
+    <text x="858" y="448" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="6.5" letter-spacing="1">COMPLETED</text>
+    <path d="M860 460 l3 3 5 -6" stroke="#7FE0AE" stroke-width="1.2" fill="none"/>
+    <text x="876" y="464" fill="#8A97A3">环境准备</text>
+    <text x="1296" y="464" text-anchor="end" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="7">0.4s</text>
+    <line x1="858" y1="472" x2="1326" y2="472" stroke="#161D24"/>
+
+    <path d="M860 486 l3 3 5 -6" stroke="#7FE0AE" stroke-width="1.2" fill="none"/>
+    <text x="876" y="490" fill="#8A97A3">模拟器就绪</text>
+    <text x="1296" y="490" text-anchor="end" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="7">8.1s</text>
+    <line x1="858" y1="498" x2="1326" y2="498" stroke="#161D24"/>
+
+    <path d="M860 512 l3 3 5 -6" stroke="#7FE0AE" stroke-width="1.2" fill="none"/>
+    <text x="876" y="516" fill="#8A97A3">静态剖析 · 规则求值</text>
+    <text x="1296" y="516" text-anchor="end" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="7">进行中</text>
+    <line x1="858" y1="524" x2="1326" y2="524" stroke="#161D24"/>
+  </g>
+
+  <text x="858" y="556" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="7" letter-spacing="1">04–16 还没发生 → 不渲染，不占位，不留空槽</text>
+
+  <!-- 结果 -->
+  <rect x="858" y="580" width="468" height="88" rx="6" fill="none" stroke="#1E2730" stroke-dasharray="3 5"/>
+  <text x="878" y="606" fill="#5E6A76" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="8.5">结束后：流程层淡出，结果卡上滑 12px</text>
+  <text x="878" y="628" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="7">#pipeline-result · id 不变，只换皮肤</text>
+
+  <text x="1092" y="742" text-anchor="middle" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="7" letter-spacing="1.2">上传层 drop 后 240ms 内淡出到 0、缩至 0.985；DOM 保留，display 由 JS 管</text>
+  <text x="1092" y="762" text-anchor="middle" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="7" letter-spacing="1.2">流程层从上传区的位置「长大」到整块舞台，不做淡入盖住</text>
+</svg>

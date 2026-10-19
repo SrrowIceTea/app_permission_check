@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-label="历史报告：书脊扇形排列，点击展开为跨页">
+  <defs>
+    <linearGradient id="shelf" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1E2730" stop-opacity="0"/>
+      <stop offset=".5" stop-color="#46545F"/>
+      <stop offset="1" stop-color="#1E2730" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="spineLight" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F2F4F6" stop-opacity=".14"/>
+      <stop offset=".3" stop-color="#F2F4F6" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity=".45"/>
+    </linearGradient>
+    <linearGradient id="spineGap" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#000000" stop-opacity=".75"/>
+      <stop offset=".5" stop-color="#3A4753"/>
+      <stop offset="1" stop-color="#000000" stop-opacity=".75"/>
+    </linearGradient>
+    <radialGradient id="gA" cx=".5" cy=".66" r=".55">
+      <stop offset="0" stop-color="#12222B" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#05070A" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="gB" cx=".5" cy=".46" r=".55">
+      <stop offset="0" stop-color="#12222B" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#05070A" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1440" height="900" fill="#05070A"/>
+
+  <text x="24" y="34" fill="#6F7C88" font-family="'JetBrains Mono',Consolas,monospace" font-size="9.5" letter-spacing="2">LIBRARY · 历史报告 · 两种状态</text>
+  <text x="1416" y="34" text-anchor="end" fill="#6F7C88" font-family="'JetBrains Mono',Consolas,monospace" font-size="9.5" letter-spacing="2">书脊 44×280 · 扇形 ±21° · 封面 296×400</text>
+
+  <!-- ================= A 书架 ================= -->
+  <rect x="24" y="72" width="688" height="780" fill="#05070A" stroke="#1E2730"/>
+  <rect x="24" y="72" width="688" height="780" fill="url(#gA)"/>
+  <text x="40" y="62" fill="#8A97A3" font-family="'JetBrains Mono',Consolas,monospace" font-size="9" letter-spacing="1.6">A / 静止 · 扇形书架</text>
+
+  <rect x="24" y="72" width="40" height="780" fill="#0A0E13" opacity=".8"/>
+  <line x1="64" y1="72" x2="64" y2="852" stroke="#1E2730"/>
+  <path d="M44 96 L52 92 L60 96 L60 104 L52 108 L44 104 Z" fill="none" stroke="#F2F4F6" stroke-width="1" opacity=".72"/>
+  <g stroke="#F2F4F6" stroke-width="1" fill="none" opacity=".28">
+    <path d="M50 148 l-4 8 h4 l-2 7 6 -9 h-4 l2 -6 z"/>
+    <path d="M44 206 l-3 4 3 4 M56 206 l3 4 -3 4"/>
+    <rect x="45" y="254" width="10" height="10" rx="1"/>
+    <path d="M44 318 h4 l2 -6 3 11 2 -7 h4"/>
+    <path d="M52 366 l1 3 3 1 -3 1 -1 3 -1 -3 -3 -1 3 -1 z"/>
+    <path d="M44 414 h9 l4 4 v10 H44 z"/>
+  </g>
+  <line x1="64" y1="112" x2="712" y2="112" stroke="#1E2730"/>
+
+  <text x="104" y="200" fill="#F2F4F6" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="21" font-weight="500" letter-spacing="-.3">历史报告</text>
+  <text x="680" y="200" text-anchor="end" fill="#6F7C88" font-family="'JetBrains Mono',Consolas,monospace" font-size="9" letter-spacing="1.6">04 / 归档</text>
+  <text x="104" y="222" fill="#5E6A76" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="9">按归档时间从左到右排列，最近的一册在最右</text>
+
+  <ellipse cx="388" cy="646" rx="206" ry="13" fill="#000000" opacity=".55"/>
+  <rect x="100" y="640" width="576" height="1.5" fill="url(#shelf)"/>
+  <rect x="100" y="641" width="576" height="24" fill="#080C10" opacity=".55"/>
+
+  <!-- 四册：pivot(388,640) -->
+  <g transform="translate(388,640) rotate(-21) translate(-22,-280)">
+    <rect width="44" height="280" rx="2" fill="#0C1218" stroke="#2A3540"/>
+    <rect width="44" height="280" fill="url(#spineLight)"/>
+    <rect x="4" y="0" width="1" height="280" fill="#F2F4F6" opacity=".06"/>
+    <rect x="0" y="14" width="44" height="1.5" fill="#9BE7F5" opacity=".22"/>
+    <text transform="translate(29,266) rotate(-90)" fill="#8A97A3" font-family="'JetBrains Mono',Consolas,monospace" font-size="8" letter-spacing=".6">mobile-device</text>
+    <text transform="translate(14,266) rotate(-90)" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="6.5" letter-spacing=".6">2026-09-28</text>
+  </g>
+  <g transform="translate(388,640) rotate(-7) translate(-22,-280)">
+    <rect width="44" height="280" rx="2" fill="#0D1319" stroke="#2A3540"/>
+    <rect width="44" height="280" fill="url(#spineLight)"/>
+    <rect x="4" y="0" width="1" height="280" fill="#F2F4F6" opacity=".06"/>
+    <rect x="0" y="14" width="44" height="1.5" fill="#9BE7F5" opacity=".22"/>
+    <text transform="translate(29,266) rotate(-90)" fill="#A7B0B9" font-family="'JetBrains Mono',Consolas,monospace" font-size="8" letter-spacing=".6">mobile-regression</text>
+    <text transform="translate(14,266) rotate(-90)" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="6.5" letter-spacing=".6">2026-10-11</text>
+  </g>
+  <g transform="translate(388,640) rotate(7) translate(-22,-280)">
+    <rect width="44" height="280" rx="2" fill="#0D1319" stroke="#2A3540"/>
+    <rect width="44" height="280" fill="url(#spineLight)"/>
+    <rect x="4" y="0" width="1" height="280" fill="#F2F4F6" opacity=".06"/>
+    <rect x="0" y="14" width="44" height="1.5" fill="#9BE7F5" opacity=".22"/>
+    <text transform="translate(29,266) rotate(-90)" fill="#A7B0B9" font-family="'JetBrains Mono',Consolas,monospace" font-size="8" letter-spacing=".6">thirdparty</text>
+    <text transform="translate(14,266) rotate(-90)" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="6.5" letter-spacing=".6">2026-10-15</text>
+  </g>
+  <g transform="translate(388,640) rotate(21) translate(-22,-280)">
+    <rect width="44" height="280" rx="2" fill="#101923" stroke="#46545F"/>
+    <rect width="44" height="280" fill="url(#spineLight)"/>
+    <rect x="4" y="0" width="1" height="280" fill="#F2F4F6" opacity=".1"/>
+    <rect x="0" y="14" width="44" height="1.5" fill="#9BE7F5" opacity=".55"/>
+    <rect x="18" y="-11" width="8" height="34" fill="#9BE7F5" opacity=".75"/>
+    <text transform="translate(29,266) rotate(-90)" fill="#F2F4F6" font-family="'JetBrains Mono',Consolas,monospace" font-size="8" letter-spacing=".6">car-audit-report</text>
+    <text transform="translate(14,266) rotate(-90)" fill="#5E6A76" font-family="'JetBrains Mono',Consolas,monospace" font-size="6.5" letter-spacing=".6">2026-10-18</text>
+  </g>
+
+  <text x="388" y="712" text-anchor="middle" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="7" letter-spacing="1.2">书脊＝文件名＋日期 · 最新一册的青色书签条 · 不用缩略图墙</text>
+  <text x="388" y="732" text-anchor="middle" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="7" letter-spacing="1.2">HOVER 抬起 6px 并归正 4° · ← → 移动 · ENTER 展开</text>
+
+  <text x="104" y="812" fill="#2E3A45" font-family="'JetBrains Mono',Consolas,monospace" font-size="7">SOURCE · frontend/pdfs/*.pdf（扫到几份排几本，不写死数量）</text>
+
+  <!-- ================= B 展开 ================= -->
+  <rect x="728" y="72" width="688" height="780" fill="#05070A" stroke="#1E2730"/>
+  <rect x="728" y="72" width="688" height="780" fill="url(#gB)"/>
+  <text x="744" y="62" fill="#8A97A3" font-family="'JetBrains Mono',Consolas,monospace" font-size="9" letter-spacing="1.6">B / 点击 · 从书架抽出封面</text>
+
+  <rect x="728" y="72" width="40" height="780" fill="#0A0E13" opacity=".8"/>
+  <line x1="768" y1="72" x2="768" y2="852" stroke="#1E2730"/>
+  <path d="M748 96 L756 92 L764 96 L764 104 L756 108 L748 104 Z" fill="none" stroke="#F2F4F6" stroke-width="1" opacity=".72"/>
+  <g stroke="#F2F4F6" stroke-width="1" fill="none" opacity=".28">
+    <path d="M754 148 l-4 8 h4 l-2 7 6 -9 h-4 l2 -6 z"/>
+    <path d="M748 206 l-3 4 3 4 M760 206 l3 4 -3 4"/>
+    <rect x="749" y="254" width="10" height="10" rx="1"/>
+    <path d="M748 318 h4 l2 -6 3 11 2 -7 h4"/>
+    <path d="M756 366 l1 3 3 1 -3 1 -1 3 -1 -3 -3 -1 3 -1 z"/>
+    <path d="M748 414 h9 l4 4 v10 H748 z"/>
+  </g>
+  <line x1="768" y1="112" x2="1416" y2="112" stroke="#1E2730"/>
+
+  <text x="808" y="196" fill="#F2F4F6" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="21" font-weight="500" letter-spacing="-.3">历史报告</text>
+  <text x="1384" y="196" text-anchor="end" fill="#6F7C88" font-family="'JetBrains Mono',Consolas,monospace" font-size="9" letter-spacing="1.6">02 / 04 · ESC 合上</text>
+  <text x="808" y="218" fill="#5E6A76" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="9">选中的一册离开书架、放大成封面；其余不动，只变暗</text>
+
+  <!-- 抽出的封面：只写"确定知道"的信息，不编统计数字 -->
+  <ellipse cx="1092" cy="638" rx="196" ry="14" fill="#000000" opacity=".62"/>
+  <g transform="translate(0,28) rotate(-2 1092 400)">
+    <rect x="944" y="200" width="296" height="400" rx="3" fill="#0E141A" stroke="#3A4753"/>
+    <rect x="944" y="200" width="296" height="400" fill="url(#spineLight)" opacity=".5"/>
+    <rect x="944" y="200" width="3" height="400" fill="#9BE7F5" opacity=".35"/>
+    <text x="978" y="246" fill="#6F7C88" font-family="'JetBrains Mono',Consolas,monospace" font-size="7" letter-spacing="2">PDF · ARCHIVE</text>
+    <text x="978" y="292" fill="#F2F4F6" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="17" font-weight="500" letter-spacing="-.2">移动端回归测试</text>
+    <text x="978" y="316" fill="#5E6A76" font-family="'JetBrains Mono',Consolas,monospace" font-size="7.5">mobile-regression-latest.pdf</text>
+    <line x1="978" y1="338" x2="1206" y2="338" stroke="#1E2730"/>
+    <text x="978" y="366" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="7" letter-spacing="1.4">本册只有两件事可做</text>
+    <text x="978" y="390" fill="#8A97A3" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="9">内嵌预览 · 或在新标签打开</text>
+    <rect x="978" y="520" width="152" height="34" rx="2" fill="#F2F4F6"/>
+    <text x="1054" y="541" text-anchor="middle" fill="#06080B" font-family="'Inter','Microsoft YaHei',sans-serif" font-size="9.5" font-weight="500">打开 PDF</text>
+    <text x="978" y="574" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="6.5">不渲染未返回的统计 · 不编页数</text>
+    <!-- 内页厚度 -->
+    <path d="M1240 204 v392 l5 -4 v-384 z" fill="#1A232B"/>
+    <path d="M1245 208 v384 l5 -4 v-376 z" fill="#141C23"/>
+  </g>
+
+  <!-- 书架底缘 + 两侧剩下的书 -->
+  <rect x="836" y="640" width="512" height="1.5" fill="url(#shelf)" opacity=".7"/>
+  <g opacity=".3">
+    <g transform="translate(862,640) rotate(-17) translate(-22,-280)">
+      <rect width="44" height="280" rx="2" fill="#0C1218" stroke="#2A3540"/>
+      <text transform="translate(29,266) rotate(-90)" fill="#8A97A3" font-family="'JetBrains Mono',Consolas,monospace" font-size="8">mobile-device</text>
+    </g>
+    <g transform="translate(1322,640) rotate(17) translate(-22,-280)">
+      <rect width="44" height="280" rx="2" fill="#0D1319" stroke="#2A3540"/>
+      <text transform="translate(29,266) rotate(-90)" fill="#A7B0B9" font-family="'JetBrains Mono',Consolas,monospace" font-size="8">thirdparty</text>
+    </g>
+  </g>
+
+  <text x="1092" y="700" text-anchor="middle" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="7" letter-spacing="1.2">抽出是连续动效（280ms）：书脊位移 + 旋转归 0 + 尺寸插值，不是新开弹窗</text>
+  <text x="1092" y="720" text-anchor="middle" fill="#3F4A55" font-family="'JetBrains Mono',Consolas,monospace" font-size="7" letter-spacing="1.2">其余书脊下沉 8px、透明度 0.30、位置不动（不重排、不补位）</text>
+</svg>

@@ -36,7 +36,10 @@
   function el(tag, cls, text) {
     var n = document.createElement(tag);
     if (cls) n.className = cls;
-    if (text !== undefined && text !== null) n.textContent = text;
+    if (text !== undefined && text !== null) {
+      if (typeof text === 'object' && text.nodeType) n.appendChild(text);
+      else n.textContent = text;
+    }
     return n;
   }
   function esc(s) {
@@ -94,6 +97,11 @@
     document.querySelectorAll('.page').forEach(function (p) {
       p.classList.toggle('active', p.id === 'page-' + page);
     });
+    // 切到结果页时若产物还没到位，顺手补拉一次（static done 事件漏掉时也能恢复）
+    if (state.current && state.current.id === pipelineState.jobId &&
+        (!state.current.staticData || !state.current.tree) && !state.current._artLoading) {
+      loadPipelineArtifacts(state.current.id);
+    }
     updateCurrentPage();
   }
 
@@ -305,14 +313,24 @@
     findings.forEach(function (f) {
       var tr = el('tr');
       tr.appendChild(el('td', 'mono', f.rule_id));
-      tr.appendChild(el('td', null, f.title || ''));
+      var titleText = f.title || '';
+      var titleTd = el('td');
+      var titleSpan = el('span', 'cell-clamp', titleText);
+      titleSpan.title = titleText;
+      titleTd.appendChild(titleSpan);
+      tr.appendChild(titleTd);
       tr.appendChild(el('td', null, f.rule_type || ''));
       tr.appendChild(el('td', null, f.severity || ''));
       tr.appendChild(el('td', null, strengthBadge(f.static_strength)));
       tr.appendChild(el('td', null, levelBadge(f.conclusion_level, f.declared_conclusion_level)));
       var sigs = Object.keys(f.signals || {}).filter(function (k) { return f.signals[k]; });
       tr.appendChild(el('td', 'mono', sigs.join(', ') || '—'));
-      tr.appendChild(el('td', 'hint', f.note || ''));
+      var note = f.note || '';
+      var noteTd = el('td', 'hint');
+      var noteSpan = el('span', 'cell-clamp', note.length > 120 ? note.slice(0, 120) + '…' : note);
+      noteSpan.title = note;
+      noteTd.appendChild(noteSpan);
+      tr.appendChild(noteTd);
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
@@ -661,16 +679,21 @@
 
   function loadPipelineArtifacts(id) {
     var entry = state.history.find(function (a) { return a.id === id; });
-    if (!entry) return;
-    Promise.all([
+    if (!entry || entry._artLoading) return;
+    entry._artLoading = true;
+    // 两份产物互不拖累：tree 还没生成时，static 结果也要能显示
+    Promise.allSettled([
       fetch(PIPELINE_API_BASE + '/api/pipeline/' + id + '/static').then(function (r) { return r.json(); }),
       fetch(PIPELINE_API_BASE + '/api/pipeline/' + id + '/tree').then(function (r) { return r.json(); })
     ]).then(function (results) {
-      entry.staticData = results[0] && results[0].error ? null : results[0];
-      var tree = results[1];
-      entry.tree = Array.isArray(tree) ? tree : (tree && tree.files) || [];
+      var s = results[0].status === 'fulfilled' ? results[0].value : null;
+      var tree = results[1].status === 'fulfilled' ? results[1].value : null;
+      if (s && !s.error) entry.staticData = s;
+      if (Array.isArray(tree)) entry.tree = tree;
+      else if (tree && Array.isArray(tree.files)) entry.tree = tree.files;
+      entry._artLoading = false;
       if (state.current && state.current.id === id) updateCurrentPage();
-    }).catch(function () { /* 静态产物缺失时结果页保持空态提示 */ });
+    }).catch(function () { entry._artLoading = false; });
   }
 
   function onPipelineEnd(id, fin) {
@@ -796,5 +819,31 @@
     dl.appendChild(el('dt', null, k));
     dl.appendChild(el('dd', null, v));
   }
+
+})();
+
+(function () { /* v3 前端补丁：舞台三态 / 进度轨 / 书架；只读现有 DOM，不改既有函数。 */
+  var stage = document.getElementById('audit-stage'), prog = document.getElementById('pipeline-progress'),
+      res = document.getElementById('pipeline-result'), rail = document.querySelector('[data-rail]'),
+      list = document.getElementById('pipeline-timeline'), jobEl = document.getElementById('pipeline-job'), errEl = document.getElementById('upload-error');
+  function sync() {
+    if (stage && prog && res) {
+      var running = prog.style.display !== 'none' && jobEl && jobEl.textContent.trim() !== '', done = res.style.display !== 'none' && res.children.length > 0;
+      stage.dataset.state = jobEl && /^上传失败/.test(jobEl.textContent) ? 'idle' : (done ? 'done' : (running ? 'running' : 'idle'));
+      if (errEl) errEl.textContent = jobEl && /^上传失败/.test(jobEl.textContent) ? jobEl.textContent : '';
+    }
+    if (rail && list) {
+      var n = list.querySelectorAll('.pl-done, .pl-failed, .pl-skipped').length;
+      rail.style.setProperty('--p', n);
+      if (rail.parentNode) rail.parentNode.style.setProperty('--p', n);
+    }
+    if (list) list.scrollTop = list.scrollHeight;
+  }
+  if (prog && res && window.MutationObserver) {
+    var mo = new MutationObserver(sync);
+    mo.observe(prog, { attributes: true, attributeFilter: ['style'], childList: true, subtree: true });
+    mo.observe(res, { attributes: true, attributeFilter: ['style'], childList: true });
+  }
+  sync();
 
 })();

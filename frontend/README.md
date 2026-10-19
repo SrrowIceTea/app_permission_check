@@ -18,6 +18,65 @@ frontend/
 └── pdfs/           # 审计报告 PDF 快照：车载 + 移动端（设备/回归/第三方）各一份
 ```
 
+## 开发前：Skills / MCP 使用（Agent 必读）
+
+改这一层之前，先读完本节，别直接开写。
+
+**技术红线（不可协商）**：本前端是**零构建**的纯 HTML/CSS/JS。不新增 `package.json`、
+不引 React/Vue/Tailwind/UnoCSS、不用 CDN 组件库；`python -m http.server` 打开必须能跑。
+所以下面标「禁用」的仓库不是坏东西，是和这条红线冲突。
+
+### 1. 项目级技能已随仓库分发，先读它
+
+```
+.workbuddy/skills/vscanner-frontend-redesign/SKILL.md
+```
+
+里面是工作流、四条红线、11 种失败模式。配套两份依据：`references/design-system.md`（视觉规范）
+与 `references/contract.md`（17 个必需 id / 6 个页面 / API 端点）。**改版不许临场发挥。**
+
+### 2. 外部 skills 不在仓库里，按地址自取
+
+`skills/` 下 25 个上游仓库副本共 1.5 GB，已被 `.gitignore` 排除；
+clone 本仓库后那里只有索引文件。需要时按 **[../skills/SKILLS.md](../skills/SKILLS.md)** 拉取，
+它给的是最小集（2 个仓库，约 67 MB）而不是全量：
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+git clone --depth 1 https://github.com/anthropics/skills.git   skills/anthropics-skills
+git clone --depth 1 https://github.com/lucide-icons/lucide.git skills/lucide
+# 校验（两条都 OK 才算成功）
+test -f skills/anthropics-skills/skills/frontend-design/SKILL.md && echo OK
+test -f skills/lucide/icons/zap.svg && echo OK
+```
+
+### 3. 哪个用在哪
+
+| 资源 | 用在哪 | 说明 |
+| --- | --- | --- |
+| `anthropics-skills/skills/frontend-design` | 写 CSS 之前定调、截图后自评 | 用它反「AI 味」；本文档已锁定一套 token，别另起 |
+| `anthropics-skills/skills/webapp-testing` | 验收 | 本项目优先跑 `.workbuddy/skills/vscanner-frontend-redesign/scripts/shoot.py` |
+| `lucide/icons/*.svg` | 侧边栏 6 + 功能图标 3 | 只取 `<path>` 内联，**不引 npm/CDN** |
+| `playwright` MCP | 截图、点页面、看 console | `npx @playwright/mcp@latest`，不必克隆仓库 |
+| `chrome-devtools` MCP | 首屏卡顿 / 定位不到的 console 报错 | 条件启用 |
+| `motion` / `animejs` | 只读动效原则 | 默认不用；CSS 做不出才 vendor 本地文件 |
+| shadcn-ui / tailwind / magicui / react-bits / sonner / vaul 等 | — | **禁用**：React 或需要构建链 |
+| `motionsites-ai` | — | 上游是**空仓库**，别下 |
+
+MCP 配置写在 `%USERPROFILE%\.workbuddy\mcp.json`，写入后还需在「连接器管理 → 自定义连接器」
+点一次「信任」。浏览器全不可用时，如实写「未做自动化截图验收」，**不许**声称已验收。
+
+### 4. 改完必须跑的验收
+
+```bash
+node --check frontend/app.js && node --check frontend/landing.js
+python .workbuddy/skills/vscanner-frontend-redesign/scripts/check_contract.py
+python .workbuddy/skills/vscanner-frontend-redesign/scripts/shoot.py
+```
+
+`check_contract.py` 出现新的 FAIL 就是契约被改坏；`shoot.py` 的截图看五件事：
+首屏无滚动、巨字不溢出、凹槽/切角看得出来、拖入后页面不跳动、书脊是扇形不是并排矩形。
+
 ## 功能页面
 
 ### 首页 (index.html)
@@ -80,9 +139,11 @@ python -m http.server 8080
 ## 关键约定
 
 - **PDF 页列的是手工快照，不是实时产物**：`pdfs/` 下四份 PDF 都没有脚本引用，
-  要更新得重新拷。移动端报告的**正规产物**在 `output/mobile-*/`、`output/thirdparty-*/` 下
-  （指针 `output/latest-mobile-device.txt` / `latest-mobile.txt` / `latest-thirdparty-batch.txt`），
-  按需替换这里的快照。
+  要更新得重新拷。移动端报告的**正规产物**原本在 `output/mobile-*/`、`output/thirdparty-*/` 下
+  （指针 `latest-mobile-device.txt` / `latest-mobile.txt` / `latest-thirdparty-batch.txt`）。
+  > **2026-10-19**：`output/` 历史跑批产物与全部 `latest-*.txt` 已清理，上述路径与指针
+  > **暂时不存在**。需要新报告时重跑设备/第三方批次，产物会重建并再用新指针替换这里的快照；
+  > 在此之前，`pdfs/` 里的四份快照是唯一的现成报告。
   > 历史：2026-10-12 拆分时曾把移动端三份移出 `archive/`，以让前端「只服务车载」；
   > 2026-10-13 按用户要求恢复回下拉（前端是日常查看报告的入口，只列车载不够用）。
 - **静态结论等级封顶 `candidate`**：代码里出现引用不证明运行时行为，违规仍需人工判定。

@@ -3,103 +3,64 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>V-Scanner · 车载 App 数据安全合规审计平台</title>
+<meta name="theme-color" content="#05070A">
+<title>V-Scanner · 移动应用数据安全审计</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="landing.css">
 </head>
 <body>
-<video id="security-bg" autoplay muted loop playsinline preload="auto" aria-hidden="true">
-  <source src="assets/cyber-security-bg.mp4" type="video/mp4">
-</video>
-<div class="bg-gradient"></div>
-<div class="grid-overlay"></div>
 
-<header class="hero">
-  <nav class="nav">
-    <div class="logo">
-      <div class="logo-icon">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-          <path d="M16 2L4 8v16l12 6 12-6V8L16 2z" stroke="currentColor" stroke-width="1.5" fill="none"/>
-          <path d="M16 8l-6 3v6l6 3 6-3v-6l-6-3z" fill="currentColor" opacity="0.3"/>
-          <circle cx="16" cy="16" r="2" fill="currentColor"/>
-        </svg>
-      </div>
-      <span class="logo-text">V-Scanner</span>
-    </div>
-    <div class="nav-status">
-      <span class="status-dot"></span>
-      <span class="status-text" id="status-text">监测运行中</span>
-    </div>
-  </nav>
+<!-- 页底：比面板更黑，露出一块“被切下去”的底 -->
+<div class="bg" aria-hidden="true"></div>
 
-  <div class="hero-content">
-    <h1 class="hero-title">
-      <span class="title-line">车载 App</span>
-      <span class="title-line gradient-text">数据安全合规审计</span>
-    </h1>
-
-    <p class="hero-sub">
-      面向 AAOS 的第三方车载应用与移动端应用数据安全合规审计平台 · 仅用于授权测试
-    </p>
-
-    <div class="hero-actions">
-      <button class="btn-primary" onclick="enterPipeline()">
-        <span>一键审计（全自动）</span>
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-          <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 2a6 6 0 110 12 6 6 0 010-12zm-1 2v5l4 2 1-1.5-3-1.5V6H9z"/>
-        </svg>
-      </button>
-      <button class="btn-primary" onclick="enterDashboard()">
-        <span>进入工作台</span>
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-          <path d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z"/>
-        </svg>
-      </button>
-      <button class="btn-secondary" onclick="enterDashboard()">
-        了解更多
-      </button>
-    </div>
-  </div>
-
-  <div class="hero-visual">
-    <div class="scan-ring ring-1"></div>
-    <div class="scan-ring ring-2"></div>
-    <div class="scan-ring ring-3"></div>
-    <div class="scan-core">
-      <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
-        <path d="M40 10L15 22.5v35L40 70l25-12.5v-35L40 10z" stroke="currentColor" stroke-width="2" fill="none"/>
-        <path d="M40 25L25 32.5v15L40 55l15-7.5v-15L40 25z" fill="currentColor" opacity="0.2"/>
-        <circle cx="40" cy="40" r="6" fill="currentColor"/>
-        <circle cx="40" cy="40" r="3" fill="var(--bg)"/>
-      </svg>
-    </div>
-  </div>
-</header>
-
-<div class="status-bar">
-  <div class="status-metrics">
-    <div class="metric">
-      <span class="metric-label">白名单进程</span>
-      <span class="metric-value" id="metric-procs">0</span>
-    </div>
-    <div class="metric">
-      <span class="metric-label">事件队列</span>
-      <span class="metric-value" id="metric-events">0</span>
-    </div>
-    <div class="metric">
-      <span class="metric-label">风险规则</span>
-      <span class="metric-value">44</span>
-    </div>
-  </div>
-  <div class="status-note">
-    <span class="status-dot"></span>
-    <span id="status-note-text">观察模式 · 不拦截 · 不篡改</span>
-  </div>
+<!-- 不规则舞台面板（凹槽 + 右下切角） -->
+<div class="stage-panel" aria-hidden="true">
+  <div class="panel-image"></div>
+  <div class="panel-veil"></div>
+  <div class="panel-shine"></div>
+  <div class="panel-rays"></div>
+  <div class="panel-grain"></div>
+  <span class="panel-line panel-top"></span>
+  <span class="panel-line panel-left"></span>
+  <span class="panel-line panel-right panel-right-a"></span>
+  <span class="panel-line panel-right panel-right-c"></span>
+  <span class="panel-line panel-right panel-right-b"></span>
+  <span class="panel-line panel-bottom"></span>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<!-- 凹槽里的竖排落款：面板的兄弟节点，否则会被 clip-path 裁掉 -->
+<div class="notch-tag" aria-hidden="true">AUTHORIZED TESTING ONLY</div>
+
+<header class="masthead">
+  <span class="brand-word">V-SCANNER</span>
+  <span class="authorized">仅用于授权测试</span>
+</header>
+
+<main class="hero">
+  <div class="hero-mark" aria-hidden="true">
+    <svg width="36" height="38" viewBox="0 0 36 38" fill="none">
+      <path d="M18 1.5 34.5 9.2v12.4L18 36.5 1.5 21.6V9.2Z" stroke="currentColor" stroke-width="1.3"/>
+      <path d="M18 9.6 25.8 13.4v7.2L18 24.4l-7.8-3.8v-7.2Z" fill="currentColor" opacity=".2"/>
+      <circle cx="18" cy="17" r="2.4" fill="currentColor"/>
+    </svg>
+  </div>
+
+  <h1 class="display"><span class="display-inner">V-SCANNER</span></h1>
+
+  <p class="lede">移动应用数据安全审计</p>
+
+  <button class="cta" type="button" onclick="enterDashboard()">
+    <span>进入工作台</span>
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M2.5 8h11M9.5 3.5 14 8l-4.5 4.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+</main>
+
+<div class="corner-note" aria-hidden="true">2026 · 移动应用审计</div>
+
 <script src="landing.js"></script>
 </body>
 </html>
