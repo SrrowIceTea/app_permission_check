@@ -21,6 +21,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.collector.body import body_of  # noqa: E402
 from core.collector.payloads import capture  # noqa: E402
 
+# **系统自身的连通性探测**（2026-10-19 实测）：每次联网 Android 自己都会打
+# `connectivitycheck.gstatic.com/generate_204`，跟被测应用毫无关系。它走明文 HTTP，
+# 所以 `ignore_hosts`（只管 TLS 拦截）拦不住，会落进 unattributed 通道。
+# 后果不小：那条通道的语义是"应用**可能**外发了、只是钩子没覆盖"，下游据此
+# **禁止**写「应用未外发」。一条系统探测就能让这个结论永远写不出来——01 号样本
+# （有 INTERNET 权限、真零外发）当场踩到了。
+# 按「主机 + 路径」精确认：只认这些固定探测路径，不按域名一刀切
+# （`www.google.com` 也可能被应用当普通站点访问）。
+#
+# 放在这里而不是 `addon.py`：addon 导入时要求 `VSCAN_PACKAGES`，带副作用的模块
+# 没法单测；这是纯判据，归 `flow_entry`（只管"记录长什么样"）。
+SYSTEM_PROBE_PATHS = {
+    "connectivitycheck.gstatic.com": {"/generate_204", "/gen_204"},
+    "clients3.google.com": {"/generate_204", "/gen_204"},
+    "connectivitycheck.android.com": {"/generate_204", "/gen_204"},
+    "www.google.com": {"/gen_204"},
+}
+
+
+def is_system_probe(entry: dict) -> bool:
+    """这条流是不是操作系统自己的联网探测（而非被测应用的外发）。"""
+    host = str(entry.get("host") or "").lower()
+    return str(entry.get("path") or "") in SYSTEM_PROBE_PATHS.get(host, ())
+
 
 def _common(flow, found, ts_ms: int, session: str) -> dict:
     """两种记录共有的字段。

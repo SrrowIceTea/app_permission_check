@@ -206,6 +206,110 @@ function hookUriInit() {
   return hooked;
 }
 
+// ============================================================================
+// native connect 层（2026-10-19）：Interceptor 挂 libc connect，覆盖 Java 层够不到的
+// 出站连接——WebView（Chromium 在 sandboxed 进程）、Cronet、纯 native 网络栈等。
+//
+// 与 Java 层（Linux.connect/BlockGuardOs.connect/Socket.connect）互补：
+//   - Java 层拿得到 hostname（getHostString）但漏 native 栈；
+//   - native 层拿得到真实 IP:port（覆盖所有走 libc connect 的栈），但拿不到 hostname
+//     （connect 只收 sockaddr，没有域名）。
+// 归因的 target_match 是 host/IP 三选一，native 层提供 `target_ip` 即可与 flow 的
+// `server_ip` 对上；hostname 缺失不影响匹配（event.ip == flow.ip）。
+//
+// 只观察：Interceptor.attach 只读参数，不 replace、不改写、不篡改返回值。
+// ============================================================================
+function ipv4ToStr(p) {
+  try {
+    return [p.readU8(), p.readU8(), p.readU8(), p.readU8()].join('.');
+  } catch (e) { return null; }
+}
+
+// IPv6 16 字节 → 压缩形式（RFC 5952 最简，够归因比对用即可）。
+function ipv6ToStr(bytes) {
+  var g = [];
+  for (var i = 0; i < 16; i += 2) g.push((bytes[i] << 8) | bytes[i + 1]);
+  var bestStart = -1, bestLen = 0, curStart = -1, curLen = 0;
+  for (var j = 0; j < 8; j++) {
+    if (g[j] === 0) {
+      if (curStart < 0) { curStart = j; curLen = 0; }
+      curLen++;
+      if (curLen > bestLen) { bestLen = curLen; bestStart = curStart; }
+    } else { curStart = -1; curLen = 0; }
+  }
+  if (bestLen < 2) return g.map(function (x) { return x.toString(16); }).join(':');
+  var head = [], tail = [];
+  for (var k = 0; k < 8; k++) {
+    if (k < bestStart) head.push(g[k].toString(16));
+    if (k >= bestStart + bestLen) tail.push(g[k].toString(16));
+  }
+  return head.join(':') + '::' + tail.join(':');
+}
+
+// 解析 sockaddr：返回 { ip, port }，无法解析返回 null。
+function parseSockaddr(sa) {
+  if (sa === null || sa === undefined) return null;
+  try {
+    var fam = sa.readU16();
+    if (fam === 2) {  // AF_INET
+      var port = (sa.add(2).readU8() << 8) | sa.add(3).readU8();
+      var ip = ipv4ToStr(sa.add(4));
+      return { ip: ip, port: port };
+    } else if (fam === 10) {  // AF_INET6
+      var port6 = (sa.add(2).readU8() << 8) | sa.add(3).readU8();
+      var b = new Uint8Array(sa.add(8).readByteArray(16));
+      return { ip: ipv6ToStr(b), port: port6 };
+    }
+  } catch (e) {}
+  return null;
+}
+
+var nativeConnectHooked = false;
+
+function hookNativeConnect() {
+  var hooked = [];
+  if (nativeConnectHooked) return hooked;
+  var addr = null;
+  try { addr = Module.getGlobalExportByName('connect'); } catch (e) {}
+  if (addr === null) {
+    // 兜底：枚举模块找 libc.so 的 connect（RTLD_LOCAL 场景 getGlobalExportByName 查不到）。
+    try {
+      var mods = Process.enumerateModules();
+      for (var i = 0; i < mods.length && addr === null; i++) {
+        if (mods[i].name.indexOf('libc') !== 0) continue;
+        try { addr = mods[i].findExportByName('connect'); } catch (e) {}
+      }
+    } catch (e) {}
+  }
+  if (addr === null) {
+    vlog('HOOK_MISS', { where: 'native.connect', msg: 'libc connect 符号未找到' });
+    return hooked;
+  }
+  try {
+    Interceptor.attach(addr, {
+      onEnter: function (args) {
+        try {
+          var target = parseSockaddr(args[1]);
+          if (target === null) return;   // AF_UNIX / 解析失败：不是 IP 外发，跳过
+          var now = Date.now();
+          // 与 Java 层同口径去重：同一 host:port 短窗内只记一次。
+          if (remember(target.ip + ':' + target.port, now, CFG.dedupMs)) {
+            vlog('EGRESS_CONNECT', withStack({
+              package: PKG, via: 'native.connect', target_host: null,
+              target_port: target.port, target_ip: target.ip, outcome: 'ok'
+            }));
+          }
+        } catch (e) {}
+      }
+    });
+    hooked.push('native.connect@libc');
+    nativeConnectHooked = true;
+  } catch (e) {
+    vlog('HOOK_MISS', { where: 'native.connect', msg: String(e) });
+  }
+  return hooked;
+}
+
 export function main() {
   try {
     Cls.ISA = Java.use('java.net.InetSocketAddress');
@@ -216,11 +320,14 @@ export function main() {
       return;
     }
     vlog('START', { script: 'hook_egress_tp.js', package: PKG, frida: Frida.version });
-    var hooked = hookLibcoreConnect().concat(hookSocketConnect(), hookUriInit());
+    var hooked = hookLibcoreConnect().concat(hookSocketConnect(), hookUriInit(),
+                                             hookNativeConnect());
     var libcore = hooked.filter(function (h) { return h.indexOf('libcore') === 0; });
-    vlog('ARMED', { hooks: hooked, count: hooked.length, libcore_hooks: libcore.length });
+    var nativeHooks = hooked.filter(function (h) { return h.indexOf('native.') === 0; });
+    vlog('ARMED', { hooks: hooked, count: hooked.length, libcore_hooks: libcore.length,
+                    native_hooks: nativeHooks.length });
     console.log('[egress_tp] ARMED in ' + PKG + ' (' + hooked.length + ' hooks, libcore=' +
-                libcore.length + ')');
+                libcore.length + ', native=' + nativeHooks.length + ')');
   } catch (e) {
     vlog('ERROR', { where: 'main', msg: String(e && e.stack ? e.stack : e) });
   }

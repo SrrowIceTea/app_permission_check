@@ -21,6 +21,7 @@ import json
 import os
 from pathlib import Path
 from typing import NamedTuple
+from urllib.parse import urlsplit
 
 # 时间配对的容差：事件与流的间距在此之内才认为是同一次外发。
 MATCH_TOLERANCE_MS = 2000
@@ -47,13 +48,18 @@ def is_loose(flow: dict) -> bool:
 
 
 def is_egress_connect(record: dict) -> bool:
-    """这条记录是不是"一次出站连接"。
+    """这条记录是不是"一次出站连接/出站请求"。
 
     **只对 egress_hook 来源成立**：uid_sampler 写的是 `ev: PROXY_CONN`，走另一条判定。
     不要把它当成通用的候选过滤器——那会把 uid 兜底来源整个静默废掉，
     而现有测试覆盖不到（夹具里全是 EGRESS_CONNECT）。
+
+    除 `EGRESS_CONNECT`（连接）外，还认 `EGRESS_URL`（URI/URL 构造，2026-10-19 新增）：
+    keep-alive 连接复用下，后续请求不再触发 connect，只有 URI/URL 构造被 hook 到——
+    openmensa 实测回退 attach 后，14 条分页请求只有 1 条 EGRESS_URL、0 条 CONNECT。
+    若只认 CONNECT，这类"连接复用"的应用整场归因仍是 unresolved。
     """
-    return record.get("ev") in (None, "EGRESS_CONNECT")
+    return record.get("ev") in (None, "EGRESS_CONNECT", "EGRESS_URL")
 
 
 def is_ok_outcome(record: dict) -> bool:
@@ -131,7 +137,13 @@ class Attribution(NamedTuple):
 
         来源另有 `attribution_source` 字段。分开是因为两者会不同步：
         `ambiguous` 可能来自应用进程内观测，来源确定但归属分不清。
+
+        `single_package_fallback`（2026-10-19）：单被测包 + 系统探测已排除时的
+        排除法归属——没有时间/目标证据，只是"白名单里就这一个包，别无他选"。
+        它有确定的 package，但置信度低于实测归属，标签必须与 app_process_hook 区分。
         """
+        if self.source == "single_package_fallback":
+            return "single_package_fallback"
         if not self.resolved:
             return "unresolved"
         if self.ambiguous:
@@ -251,6 +263,14 @@ class TimeAttribution:
                         host = record.get("target_host")
                         ip = record.get("target_ip") or record.get("literal_ip")
                         port = record.get("target_port")
+                        # EGRESS_URL 事件没有 target_* 字段，但有完整 url——
+                        # 从 url 里解析 host 作为 target_host，让"连接复用"的应用
+                        # （只触发 URI/URL 构造、不触发 connect）也能参与目标校验。
+                        if host is None and ip is None and record.get("url"):
+                            try:
+                                host = urlsplit(record["url"]).hostname
+                            except Exception:  # noqa: BLE001 —— 解析失败只是少个候选
+                                host = None
                         if host is not None or ip is not None:
                             target = {"host": host, "ip": ip, "port": port}
                     if package and ts is not None:

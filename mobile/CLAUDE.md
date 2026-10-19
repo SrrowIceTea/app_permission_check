@@ -181,6 +181,10 @@ AI 三阶段研判（含编造校验）、PDF 报告（十章 + 三附录）、�
 - 跑批前**必须** `export ANDROID_SERIAL=<serial>`（或保证单设备）：多设备时裸 adb
   命令全部报错，且失败形态是**静默空结果**（假"已死亡"、假"已恢复"）。
   `thirdparty_env.device_guard()` 会在启动前拦截并给出可操作的报错。
+- 跑批提速（M041）：静态（jadx）**并行**（`--static-workers`，默认 3），动态**必须串行**——
+  同一台设备并发两个包会共享 8888 单端口 / 全局 `http_proxy` / 单前台 App / 固定 pcap
+  路径，归因必然 `ambiguous`。切法与依据见 `mobile/DECISIONS.md` M041、
+  `mobile/tools/batch_static.py` 的模块注释。
 - 子进程读输出一律显式 `encoding="utf-8", errors="replace"`：本机 `PYTHONUTF8=1`
   使管道默认按 UTF-8 解码，Windows 工具（cmd.exe / mklink 等）的 GBK 输出会打死
   Reader 线程且该流变 None。

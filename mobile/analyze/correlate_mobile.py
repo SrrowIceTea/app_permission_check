@@ -259,7 +259,9 @@ def main() -> int:
     summary = {
         "status": "correlated",
         "android_version": args.version, "package": args.package,
-        "inputs": {"reads": len(reads), "flows": len(flows), "egress_connections": len(egress),
+        "inputs": {"reads": len(reads), "flows": len(flows),
+                   "egress_connections": sum(1 for e in egress
+                                             if e.get("ev") == "EGRESS_CONNECT"),
                    "consent_events": len(consent_raw), "requested_permissions": len(permissions),
                    "rules_evaluated": len(rules),
                    "reads_path_sha256": sha16(reads_p), "flows_path_sha256": sha16(flows_p)},

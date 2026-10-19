@@ -134,6 +134,12 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
   以 `AGR-*` 挂到 `app_agreements`，**不进主政策路径**（`--allow-legacy-policy` 下同样拦截）；
   AI 端 `policy_source()` 可解析 `AGR-`，协议不得把条款判 `met`。只有协议时主政策是
   `not_found` 而不是 `invalid`（新增 `NotAPolicy` 异常区分）。
+- **跑批提速（M041）**：批处理按阶段切分——`batch_plan.py`（判定/续跑/复用）→
+  `batch_static.py`（jadx **N 路并行**，默认 3，`--static-workers` 可退串行）→
+  `batch_dynamic.py`（动态**必须单设备串行**：8888 单端口 / 全局 http_proxy / 单前台 /
+  固定 pcap 路径，并发会串归因，见 M020 / D413）→ `batch_thirdparty.py`（CLI/汇总）。
+  `--resume` 额外复用本批次 `_static/` 已完成产物（判据是 `static-manifest.json`）。
+  实测 3 样本并行 7m42s、同批 `--resume` 3.1s。
 
 仍**未做**（勿当成已完成）：B1 窗口校准（`WINDOW_CALIBRATION.md` 仍不存在）、
 A5-1 protectionLevel 标定（库内 `protection_level_raw` 仍 0/40）、B2 VScanBench、

@@ -72,6 +72,9 @@ DEVICE_LEGACY = ("/data/local/tmp/vscan_conn_all.log",
 # --package 模式下多少轮重解一次 pid。取 25：20ms 一轮时约 0.5s 一次 `pidof`，
 # 相对每轮都要 fork 的 `date` 可以忽略，但比"绑死一个 pid"能扛住应用重启。
 PIDOF_EVERY = 25
+# 取不到 pid 时每多少轮吐一行 `__PID_MISS__`。取 100：20ms 一轮时约 2 秒一次，
+# 既不淹没输出，也足够让"整段没有覆盖到进程"与"采到但没连接"在日志里可分辨。
+PID_MISS_EVERY = 100
 # 行格式（内核文档 net/ipv4/proc.rst，tcp6 同构但地址是 32 个 hex）：
 #   sl local_address rem_address st tx:rx tr:tm->when retrnsmt uid timeout inode
 # 用 split 定位字段而不是写死整行正则：tcp6 的地址长度不同，写死长度的正则
@@ -157,14 +160,41 @@ def main() -> int:
     if args.package:
         # `set -- $(pidof ...)` 取第一个 pid：应用有多进程时 pidof 会返回多个，
         # 直接塞进路径会拼成 "/proc/1 2/net/tcp" 而静默读到零行。
+        #
+        # **uid 兜底**（2026-10-19）：`pidof` 只按**进程名**匹配，而进程名不一定等于
+        # 包名（`android:process=":remote"`、自定义进程名、多进程应用）。实测
+        # 05-betzengineering-op 在 150s 里有 3 次 pid 缺失（≈300 轮），读到 10995 行
+        # 却一条都没归到 uid。给了 --uid 就用 `ps -A -o PID,UID` 反查同 uid 的进程，
+        # 只在 pidof 失败时才 fork，正常样本零额外开销。
+        #
+        # `else` 分支是「pid 缺失可观测」：原来取不到 pid 时整个循环什么都不做，
+        # 产出与「应用真的没有任何连接」**完全同形**。现在每隔 PID_MISS_EVERY 轮
+        # 吐一行标记，下游据此判定"本轮采样未覆盖应用进程"。
+        fallback = ""
+        if args.uid is not None:
+            fallback = (
+                "    if [ -z \"$PID\" ]; then\n"
+                f"      PID=$(ps -A -o PID,UID 2>/dev/null | awk -v u={args.uid} "
+                "'$2+0==u+0 {print $1; exit}')\n"
+                "    fi\n"
+            )
         body = (
             f"  if [ -z \"$PID\" ] || [ $((N % {PIDOF_EVERY})) -eq 0 ]; then\n"
             f"    set -- $(pidof {args.package}); PID=$1\n"
+            + fallback +
             "  fi\n"
             "  if [ -n \"$PID\" ]; then\n"
+            "    SEEN=1\n"
             + "".join(f"    while read -r L; do echo \"$T /proc/$PID/net/{k} $L\"; done "
                       f"< /proc/$PID/net/{k} 2>/dev/null\n" for k in ("tcp", "tcp6"))
-            + "  fi\n"
+            + "  else\n"
+            f"    if [ $((N % {PID_MISS_EVERY})) -eq 0 ]; then\n"
+            # 两种缺失含义完全不同：采样在 `am start` **之前**就起，所以开头几轮
+            # 必然没有进程（正常）；而**见过之后又消失**才是真的覆盖丢失（崩溃/退出）。
+            "      if [ \"$SEEN\" = \"1\" ]; then echo \"$T __PID_LOST__\"; "
+            "else echo \"$T __PID_MISS__\"; fi\n"
+            "    fi\n"
+            "  fi\n"
             "  N=$((N + 1))\n"
         )
     else:
@@ -174,6 +204,7 @@ def main() -> int:
         "#!/system/bin/sh\n"
         "PID=\n"
         "N=0\n"
+        "SEEN=0\n"
         "while true; do\n"
         "  T=$(date +%s%N)\n"
         + body +
@@ -213,38 +244,95 @@ def main() -> int:
               flush=True)
 
     seen: dict[tuple, dict] = {}
-    rows = 0
-    skipped = 0
+    # 计数器放进可变容器：周期落盘的线程要读它（见 _write_cov）。
+    st = {"rows": 0, "skipped": 0, "pid_miss": 0, "pid_lost": 0}
     deadline = time.time() + args.seconds
-    # **边采边写**，不等到结束再落盘。原因：本工具会被编排层 terminate()，
-    # 而 Windows 的 TerminateProcess 不可捕获（finally 不执行）——"采到了却没写下来"
-    # 与"没采到"在交付物里长得一模一样，正是本项目最忌讳的那类失真。
+
+    # **覆盖率 sidecar 必须周期落盘**（2026-10-19 实测）：本工具会被编排层
+    # `kill_tree` 强杀，而 Windows 的 TerminateProcess 不可捕获（finally 不执行）。
+    # 只在结尾写 sidecar 的话，杀早一点就整个丢——07/08 号样本就是这么丢的：
+    # conn-probe.log 只有启动行、没有汇总行，conns.jsonl 有内容但覆盖率无从判断。
+    # 这和 conns.jsonl 选择"边采边写"是同一个理由，当时漏了 sidecar。
+    def write_cov() -> None:
+        rows_now = st["rows"]
+        absent_now = st["pid_miss"]      # 还没见过进程（启动前的预期空窗）
+        lost_now = st["pid_lost"]        # 见过之后又消失（真正的覆盖丢失）
+        # 只要 pid 解得出来，`/proc/<pid>/net/tcp` 至少有表头行，所以 rows>0 等价于
+        # 「至少有一轮真的读到了目标进程的命名空间」。窗口过短时 rows=0 必须报
+        # covered=false，否则等于假装"窗口内确实没有连接"。
+        # 「启动前还没起来」不算覆盖丢失：采样本来就早于 `am start`。
+        covered_now = rows_now > 0 and lost_now == 0
+        payload = {
+            "v": "1", "package": args.package, "uid": args.uid,
+            "seconds": args.seconds, "rows": rows_now, "endpoints": len(seen),
+            "unparsed": st["skipped"],
+            "pid_absent_before_start": absent_now,
+            "pid_lost_after_start": lost_now,
+            "pid_absent_rounds_est": absent_now * PID_MISS_EVERY,
+            "pid_lost_rounds_est": lost_now * PID_MISS_EVERY,
+            "covered": covered_now,
+            "coverage_basis": ("rows>0 且取得进程后未丢失" if covered_now else
+                               ("取得进程后又消失（崩溃/被杀），中段有覆盖缺口"
+                                if lost_now else
+                                "一行都没采到：窗口过短或设备端脚本未运行")),
+            "pids": sorted({r["pid"] for r in seen.values() if r["pid"] is not None}),
+        }
+        try:
+            args.out.with_suffix(".summary.json").write_text(
+                json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+        except OSError:
+            pass          # 落盘失败不能影响采集本身
+
+    _cov_stop = threading.Event()
+
+    def cov_heartbeat() -> None:
+        while not _cov_stop.wait(2.0):
+            write_cov()
+
+    threading.Thread(target=cov_heartbeat, daemon=True).start()
+
+    # **边采边写**，不等到结束再落盘。原因同上：Windows 的 TerminateProcess 不可捕获
+    # ——"采到了却没写下来"与"没采到"在交付物里长得一模一样，正是本项目最忌讳的失真。
     # 所以每发现一个新的 (ip,port,state,family) 就立刻 append+flush；被中途杀掉也只丢最后一瞬。
     handle = args.out.open("w", encoding="utf-8")
     try:
         for line in proc.stdout:  # type: ignore[union-attr]
             if time.time() > deadline:
                 break
-            rows += 1
+            if "__PID_MISS__" in line:
+                st["pid_miss"] += 1
+                continue
+            if "__PID_LOST__" in line:
+                st["pid_lost"] += 1
+                continue
             # 字段位置固定（内核文档 net/ipv4/proc.rst）：
             #   0=ts 1=来源文件 2=sl 3=local 4=remote 5=st 6=tx:rx 7=tr:tm 8=retrnsmt 9=uid
             t = line.split()
             if len(t) < 10:
                 continue                      # 表头/空行
+            # **只把真的来自 tcp 表的行算成采样行**（2026-10-19 实测）：
+            # 设备端脚本被 timeout/终止时 shell 会吐一行 `Terminated`（1 个字段），
+            # 以前它在长度检查之前就被计入 `rows`，于是「整个窗口都没找到进程」
+            # 也会得到 rows>0 → covered=true ——反向的假阳性，比没有更糟。
+            hit = re.match(r"/proc/(?:(\d+)/)?net/tcp6?$", t[1])
+            if not hit:
+                st["skipped"] += 1
+                continue
+            st["rows"] += 1
             try:
                 uid = int(t[9])
                 lip, lport = t[3].split(":")
                 rip, rport = t[4].split(":")
                 rport_i = int(rport, 16)
             except (ValueError, IndexError):
-                skipped += 1
+                st["skipped"] += 1
                 continue
             if args.uid is not None and uid != args.uid:
                 continue
             # 来源路径形如 /proc/<pid>/net/tcp6：pid **从路径里取**，不沿用启动时那个
             # ——应用重启后 pid 会变，沿用会把新进程的连接记到旧 pid 名下。
-            hit = re.match(r"/proc/(\d+)/net/tcp6?$", t[1])
-            row_pid = int(hit.group(1)) if hit else args.pid
+            # 非 `--package` 模式的来源是 `/proc/net/tcp`（无 pid），这时退回 `--pid`。
+            row_pid = int(hit.group(1)) if hit.group(1) else args.pid
             family = "tcp6" if t[1].endswith("tcp6") else "tcp"
             remote_ip = parse_hex_ip(rip)
             # pid 进 key：同一对端在重启前后是两个进程各自的连接，不该被并成一条。
@@ -283,8 +371,28 @@ def main() -> int:
         # 收尾清掉本轮设备侧脚本（带唯一后缀后不会误删别的实例的文件）。
         adb("shell", f"rm -f {DEVICE_SCRIPT}")
 
-    print(f"[conn_probe] scanned {rows} rows; {len(seen)} distinct endpoints "
-          f"(pids={sorted({r['pid'] for r in seen.values()})}); unparsed={skipped}", flush=True)
+    # 正常结束：停掉心跳线程，最后再写一次（覆盖窗口内的最后一次变化）。
+    _cov_stop.set()
+    write_cov()
+
+    print(f"[conn_probe] scanned {st['rows']} rows; {len(seen)} distinct endpoints "
+          f"(pids={sorted({r['pid'] for r in seen.values()})}); "
+          f"unparsed={st['skipped']}", flush=True)
+    if st["pid_lost"]:
+        print(f"[conn_probe] ⚠ 取得进程后又丢失 {st['pid_lost']} 次标记（每 {PID_MISS_EVERY} 轮一个）："
+              f"{args.package} 在窗口内退出了（崩溃/被杀），中段存在覆盖缺口。", flush=True)
+    elif st["pid_miss"] and st["rows"] > 0:
+        print(f"[conn_probe] 启动前有 {st['pid_miss']} 次标记处于「进程尚未出现」状态"
+              f"（采样早于 am start，属预期）。", flush=True)
+    elif st["pid_miss"]:
+        # 一行都没采到 + 一直没见到进程：不是"启动前的预期空窗"，是**整个窗口都没起来**。
+        # 这种时候 0 条连接完全不能当证据，必须显式喊出来。
+        print(f"[conn_probe] ⚠ 整个采样窗口都没找到 {args.package} 的进程"
+              f"（{st['pid_miss']} 次标记）：应用可能没启动成功。"
+              "本轮 0 条连接**不能**当作「应用未联网」。", flush=True)
+    elif st["rows"] == 0:
+        print("[conn_probe] ⚠ 一行都没采到：窗口过短或设备端脚本没跑起来。"
+              "本轮结果**不可用于**「应用未联网」的判断。", flush=True)
     for rec in sorted(seen.values(), key=lambda r: r["ts"]):
         stamp = datetime.datetime.fromtimestamp(rec["ts"] / 1000).strftime("%H:%M:%S")
         tag = " <- 宿主/代理" if rec["remote_ip"] == guest else ""

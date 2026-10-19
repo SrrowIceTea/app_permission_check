@@ -114,6 +114,11 @@ def main() -> int:
                     help="关闭设备端 pcap 采集（默认开）。关掉后不再产出完整 HTTP 报文，"
                          "只有 hook 的 SSL_read/write 分片——gzip/chunked/h2 都读不到，"
                          "报告会把这条记成缺口")
+    ap.add_argument("--spawn-hook", action="store_true",
+                    help="用 Frida spawn 注入（钩子在应用第一条指令前就位）替代 attach。"
+                         "attach 模式的应用启动那一刻的联网（egress 事件）全在钩子装上之前，"
+                         "导致 egress 0 事件、flows 归因 unresolved（2026-10-19 实测定性）。"
+                         "spawn 模式下跳过 am start，由 run.py --spawn 启动应用并挂钩后 resume。")
     args = ap.parse_args()
 
     # 多设备且未指定 ANDROID_SERIAL → 启动前就停。理由见 thirdparty_env.device_guard：
@@ -287,26 +292,33 @@ def main() -> int:
           note=f"http_proxy={proxy_now!r} (原值 {prev_proxy!r})；在 am start 之前设置")
     emit("mitm", "done", f"代理已就绪，设备 http_proxy={proxy_now!r}（早于启动应用）")
 
-    # 冷启动竞争：先 am start，等到 pid 再挂钩子（钩子是 attach 模式）
-    emit("launch", "running", f"启动应用 {main_activity}")
-    env.adb("shell", "am", "start", "-W", "-n",
-            f"{args.package}/{main_activity}", timeout=150)
-    pid = env.wait_for_app(args.package)
-    check("app_started", 0 if pid else 1,
-          note=(f"pid={pid}" if pid else "应用未在超时内出现（冷启动竞争或启动崩溃）")
-               + f"；activity={main_activity}"
-               + ("" if resolved_activity else "（回退值：设备解析为空）"))
-    emit("launch", "done" if pid else "failed", f"pid={pid}" if pid else "应用未启动")
-    if not pid:
-        env.kill_tree(collector, out / "kill-conn.log")   # 早退也不能留孤儿
-        env.unblock_quic(out / "quic-unblock.log")        # 同理：不能把 DROP 规则留在设备上
-        if pcap_rec is not None:                          # 抓包进程同样不能留在设备上
-            pcap_rec.stop(out / "capture.pcap", out / "pcap-stop.log")
-        (out / "verification.json").write_text(json.dumps(
-            {"passed": False, "checks": checks, "failed": ["app_started"],
-             "package": args.package}, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(json.dumps({"status": "failed", "reason": "app_started"}, ensure_ascii=False))
-        return 1
+    # 冷启动竞争：attach 模式先 am start、等到 pid 再挂钩子；
+    # spawn 模式反过来——钩子进程 spawn 应用（在第一条指令前挂上），应用由 resume 启动。
+    # spawn 的根因（2026-10-19 实测定性）：attach 太晚，应用启动那一刻的联网/egress
+    # 全落在钩子覆盖外，flows 归因恒 unresolved（24/24），egress 事件 0 条。
+    if args.spawn_hook:
+        pid = None  # spawn 模式下由 hook 进程启动，这里只做占位，不等 am start
+        emit("launch", "running", f"spawn 模式：应用由 Frida spawn 启动（{main_activity}）")
+    else:
+        emit("launch", "running", f"启动应用 {main_activity}")
+        env.adb("shell", "am", "start", "-W", "-n",
+                f"{args.package}/{main_activity}", timeout=150)
+        pid = env.wait_for_app(args.package)
+        check("app_started", 0 if pid else 1,
+              note=(f"pid={pid}" if pid else "应用未在超时内出现（冷启动竞争或启动崩溃）")
+                   + f"；activity={main_activity}"
+                   + ("" if resolved_activity else "（回退值：设备解析为空）"))
+        emit("launch", "done" if pid else "failed", f"pid={pid}" if pid else "应用未启动")
+        if not pid:
+            env.kill_tree(collector, out / "kill-conn.log")   # 早退也不能留孤儿
+            env.unblock_quic(out / "quic-unblock.log")        # 同理：不能把 DROP 规则留在设备上
+            if pcap_rec is not None:                          # 抓包进程同样不能留在设备上
+                pcap_rec.stop(out / "capture.pcap", out / "pcap-stop.log")
+            (out / "verification.json").write_text(json.dumps(
+                {"passed": False, "checks": checks, "failed": ["app_started"],
+                 "package": args.package}, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(json.dumps({"status": "failed", "reason": "app_started"}, ensure_ascii=False))
+            return 1
 
     # （代理已在 am start 之前就绪并设置，见上面 "启动 mitmproxy" 一段。）
 
@@ -331,10 +343,69 @@ def main() -> int:
         emit("hooks", "running", "挂载 Frida 钩子（单 agent 合并 bundle：隐私/同意/出站/TLS）")
         hooks = [
             env.start_hook(MOBILE / "hooks" / "dist" / "hook_all.bundle.js", session,
-                           "reads.jsonl", out / "hook-all.log", args.seconds, args.package),
+                           "reads.jsonl", out / "hook-all.log", args.seconds, args.package,
+                           spawn=args.spawn_hook),
         ]
+        if args.spawn_hook:
+            # spawn 模式下应用由 run.py 的 device.spawn + resume 启动。等待应用 pid
+            # 出现（spawn 是异步的，run.py 里 spawn→attach→load→resume 需要几秒），
+            # 并确认进程没在窗口内崩溃重启——否则 UI 驱动对着一个已死的进程空点。
+            spawn_pid = env.wait_for_app(args.package, timeout_s=40)
+            # spawn 注入对部分应用会导致 SIGSEGV（实测 openmensa：RenderThread
+            # 在 spawn 后 3s 崩溃，frida 早期注入 + 部分 native 渲染线程初始化冲突）。
+            # 检测到 spawn 的 pid 很快消失时，回退到 attach：停掉 spawn 钩子，用
+            # am start 冷启动应用（此时应用已脱离 frida 早期注入，能正常跑），
+            # 再 attach 重挂——牺牲启动瞬间的流量，换稳定性（2026-10-19）。
+            spawn_died = False
+            if spawn_pid:
+                time.sleep(6)   # 给 spawn 的应用一个崩溃观察窗
+                alive = env.adb("shell",
+                                f"if test -d /proc/{spawn_pid}; then echo y; else echo n; fi",
+                                timeout=30).stdout.strip() == "y"
+                spawn_died = not alive
+            if spawn_died:
+                emit("launch", "running",
+                     f"spawn pid={spawn_pid} 已消失（spawn 注入崩溃），回退 attach 重启")
+                for h in hooks:
+                    env.stop_hook(h, out / "hook-all.log")
+                env.adb("shell", "am", "start", "-W", "-n",
+                        f"{args.package}/{main_activity}", timeout=150)
+                attach_pid = env.wait_for_app(args.package, timeout_s=40)
+                check("app_started", 0 if attach_pid else 1,
+                      note=(f"回退 attach pid={attach_pid}" if attach_pid else
+                            "spawn 崩溃后回退 attach 也未能启动")
+                           + f"；activity={main_activity}")
+                if attach_pid:
+                    hooks = [
+                        env.start_hook(MOBILE / "hooks" / "dist" / "hook_all.bundle.js",
+                                       session, "reads.jsonl", out / "hook-all.log",
+                                       args.seconds, args.package, spawn=False),
+                    ]
+                    emit("launch", "done", f"回退 attach pid={attach_pid}")
+                else:
+                    emit("launch", "failed", "spawn 崩溃且回退 attach 失败")
+            else:
+                check("app_started", 0 if spawn_pid else 1,
+                      note=(f"spawn pid={spawn_pid}" if spawn_pid else
+                            "spawn 后应用未出现（可能被 Frida 挂起或启动崩溃）")
+                           + f"；activity={main_activity}")
+                emit("launch", "done" if spawn_pid else "failed",
+                     f"spawn pid={spawn_pid}" if spawn_pid else "spawn 后应用未出现")
+            if not spawn_pid and not spawn_died:
+                for h in hooks:
+                    env.stop_hook(h, out / "hook-all.log")
+                env.kill_tree(collector, out / "kill-conn.log")
+                env.unblock_quic(out / "quic-unblock.log")
+                if pcap_rec is not None:
+                    pcap_rec.stop(out / "capture.pcap", out / "pcap-stop.log")
+                (out / "verification.json").write_text(json.dumps(
+                    {"passed": False, "checks": checks, "failed": ["app_started"],
+                     "package": args.package}, ensure_ascii=False, indent=2), encoding="utf-8")
+                print(json.dumps({"status": "failed", "reason": "app_started"},
+                                 ensure_ascii=False))
+                return 1
         time.sleep(9)   # 等钩子挂上：钩子掉线与"应用没动作"长得一样（D309）
-        emit("hooks", "done", "钩子已发起挂载（attach 模式，单 agent）")
+        emit("hooks", "done", "钩子已发起挂载（单 agent 合并 bundle）")
 
     emit("explore", "running", f"UI 交互驱动（最多 {args.max_rounds} 轮）")
     actions = flow.explore(out / "ui", args.seconds, args.max_rounds, args.package,

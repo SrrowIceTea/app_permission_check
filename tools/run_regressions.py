@@ -20,6 +20,7 @@ CHECKS = [
     # 车载 VHAL 指纹表留在 vehicle/traffic。
     ('collector', 'core/collector', [sys.executable, '-m', 'unittest', 'test_body',
                                      'test_attribution', 'test_unanswered',
+                                     'test_system_probe',
                                      'test_experiment', 'test_montecarlo',
                                      'test_uid_sampler']),
     ('tagging-vehicle', 'vehicle/traffic', [sys.executable, '-m', 'unittest', 'test_tagging']),

@@ -114,6 +114,39 @@ def summarize(session: Path, out_dir: Path, package: str, app_uid: int | None = 
                        "不等于没有外发，见 caveat。"),
         "note": "设备端每轮重解 pid，读**目标进程命名空间**的 /proc/<pid>/net/tcp{,6}，"
                 "20ms 级采样；回答'钩子零事件'是没外发还是没覆盖"}
+    # 采样覆盖率：0 条连接有两种完全不同的原因——「应用安静」与「整段没采到进程」。
+    # 只有 conns.summary.json 里的 pid_miss_samples 能把它们分开（2026-10-19 实测：
+    # 01 号样本有 INTERNET 权限却 0 行，此前无法自证是哪种）。
+    cov_file = session / "conns.summary.json"
+    if cov_file.exists():
+        try:
+            cov = json.loads(cov_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            cov = {}
+        if cov:
+            if cov.get("covered") is not False:
+                cov_note = ("采样取得进程后未丢失，0 条连接可视为「窗口内确实没有连接」。")
+            elif cov.get("pid_lost_after_start") is not None:
+                cov_note = ("covered=false：取得进程后又丢失（崩溃/被杀），中段存在覆盖缺口。"
+                            "本轮 0 条连接**不能**作为「应用未联网」的依据。")
+            elif cov.get("pid_miss_markers") or cov.get("pid_miss_samples"):
+                cov_note = ("covered=false（旧格式 sidecar，只有缺失标记数）：无法区分"
+                            "「启动前的预期空窗」与「启动后丢失」，本轮 0 条连接不可作结论。")
+            else:
+                cov_note = ("covered=false：一行都没采到（窗口过短或设备端脚本未运行）。"
+                            "本轮 0 条连接不可作结论。")
+            sources["device_conns"]["sampling_coverage"] = {
+                # `pid_absent_before_start`：采样早于 `am start`，开头取不到进程属预期；
+                # `pid_lost_after_start`：取得进程后又消失，才是真正的中段覆盖缺口。
+                # 旧样本只有 `pid_miss_markers`/`pid_miss_samples`（两者混计），一并透出。
+                "pid_absent_before_start": cov.get("pid_absent_before_start"),
+                "pid_lost_after_start": cov.get("pid_lost_after_start"),
+                "pid_miss_markers": cov.get("pid_miss_markers"),
+                "covered": cov.get("covered"),
+                "coverage_basis": cov.get("coverage_basis"),
+                "rows": cov.get("rows"), "endpoints": cov.get("endpoints"),
+                "note": cov_note,
+            }
     if not app_rows:
         sources["device_conns"]["caveat"] = (
             "未采到应用连接。**这不等于没有外发**：窗口内应用可能还没发起请求（本样本按 15 分钟"
@@ -152,15 +185,45 @@ def summarize(session: Path, out_dir: Path, package: str, app_uid: int | None = 
 
     # 6) 代理看见但归因不到应用的流（2026-10-19）：区分"应用没外发"与
     #    "外发了但 egress 钩子没覆盖"。旧实现把这类流直接丢弃，交付物上两者同形。
+    #
+    #    系统连通性探测（`connectivitycheck.gstatic.com/generate_204` 等）必须**拆出去**：
+    #    它们是设备在联网、不是应用在外发。混在一起会让"条数 > 0"恒成立，
+    #    于是「应用未外发」这个结论永远写不出来（01 号样本当场踩到）。
     ua = read_jsonl(session / "flows-unattributed.jsonl")
-    if ua:
+    sys_probe = [f for f in ua if f.get("system_probe")]
+    ua_real = [f for f in ua if not f.get("system_probe")]
+    if ua_real:
         sources["flows_unattributed"] = {
-            "file": "session/flows-unattributed.jsonl", "flows": len(ua),
+            "file": "session/flows-unattributed.jsonl", "flows": len(ua_real),
             "hosts": dict(sorted(collections.Counter(
-                str(f.get("host")) for f in ua).most_common(20))),
+                str(f.get("host")) for f in ua_real).most_common(20))),
             "note": "代理确凿收到了这些请求，但 egress 钩子没有对应事件（覆盖缺口）。"
                     "它们**不进** flows.jsonl，避免被误当成已归因证据；"
                     "条数 > 0 时不能写「应用未外发」。",
+        }
+    if sys_probe:
+        sources["flows_system_probe"] = {
+            "file": "session/flows-unattributed.jsonl", "flows": len(sys_probe),
+            "hosts": dict(sorted(collections.Counter(
+                str(f.get("host")) for f in sys_probe).most_common(20))),
+            "note": "操作系统自身的连通性探测（generate_204 等），不属于被测应用的外发。"
+                    "**不计入** flows_unattributed，不能拿它否定「应用未外发」。",
+        }
+
+    # 6a) 上游**连接建立失败**（2026-10-19）：只出现在 mitmproxy 文本日志里的
+    #     `error establishing server connection: [WinError 121]`，此前结构化产物一条都没有。
+    #     `error(flow)` 钩子在 HTTP/2 多路复用连接整条失败时不会为每条流派发，
+    #     所以 `flows-unanswered.jsonl` 兜不住——02 号样本 3 次 121 全丢。
+    ce = read_jsonl(session / "flows-connect-errors.jsonl")
+    if ce:
+        sources["connect_errors"] = {
+            "file": "session/flows-connect-errors.jsonl", "events": len(ce),
+            "by_kind": dict(sorted(collections.Counter(
+                str(f.get("failure_kind") or "unclassified") for f in ce).items())),
+            "targets": dict(sorted(collections.Counter(
+                str(f.get("server_address")) for f in ce).most_common(20))),
+            "note": "代理**尝试连接**这些上游但失败了：请求可能根本没发出。"
+                    "不能据此说「应用外发了什么」，同样**不能**当作「应用未外发」。",
         }
 
     # 6b) 有请求但没拿到响应（2026-10-19 加分类）：`failure` 是原始异常串，

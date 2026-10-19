@@ -40,7 +40,7 @@ from mitmproxy import ctx, http
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from core.collector.attribution import ATTRIB_SOURCES, TimeAttribution  # noqa: E402
+from core.collector.attribution import ATTRIB_SOURCES, Attribution, TimeAttribution  # noqa: E402
 from core.collector.body import scan_body  # noqa: E402
 from core.collector import flow_entry  # noqa: E402
 from core.event_store import EventStore  # noqa: E402
@@ -85,6 +85,15 @@ FLOW_LOG = Path(os.environ.get("VSCAN_FLOW_LOG") or (HERE / "logs" / "flows.json
 # 后者是"一次尝试"。混在一起会让"没收到响应"与"没有发送请求"这两种情况互相掩盖。
 UNANSWERED_LOG = Path(os.environ.get("VSCAN_UNANSWERED_LOG")
                       or FLOW_LOG.with_name(FLOW_LOG.stem + "-unanswered.jsonl"))
+# 上游**连接建立失败**（2026-10-19 实测）：只落在 mitmproxy 的文本日志里
+# （`error establishing server connection: [WinError 121] ...`），结构化产物一条都没有。
+# 为什么 `flows-unanswered.jsonl` 兜不住：那个文件靠 `error(flow)` 钩子，而 **HTTP/2
+# 多路复用连接**失败时 mitmproxy 不为每个流派发 `error`——实测 02 号样本 3 次
+# WinError 121 全部消失，报告上看与"应用没有外发"同形。
+# 连接级钩子拿不到 flow（`ServerConnectionHookData` 只有 server/client），
+# 所以单独一个文件，只记"代理尝试连 X 失败"，不伪装成一条请求。
+CONNECT_ERROR_LOG = Path(os.environ.get("VSCAN_CONNECT_ERROR_LOG")
+                         or FLOW_LOG.with_name(FLOW_LOG.stem + "-connect-errors.jsonl"))
 # 代理看见了、但**归因不到被测应用**的流（2026-10-19）。旧行为是直接丢弃：
 # 于是"应用确实外发了、只是 egress 钩子没覆盖到"与"应用没有外发"在交付物里
 # 长得一模一样（实测 02-asmat-foggymaps：设备侧 ESTABLISHED、代理拿到
@@ -178,17 +187,46 @@ def server_connected(data) -> None:
 
 def server_connect_error(data) -> None:
     """上游连接失败。**这是 `error()` 之外唯一能看见"连不上"的地方**：
-    连接被拒时 `error()` 会来，但黑洞超时时只靠它才能拿到耗时。"""
+    连接被拒时 `error()` 会来，但黑洞超时时只靠它才能拿到耗时。
+
+    `error()` **不一定来**：HTTP/2 多路复用连接整条失败时，mitmproxy 不为每条流
+    单独派发 `error`，于是这些失败在结构化产物里完全消失（2026-10-19 实测 02 号
+    样本 3 次 WinError 121 全丢）。所以这里**直接落一条连接级记录**。
+    """
     started = _CONNECT_START.pop(id(data.server), None)
     connect_ms = int((time.time() - started) * 1000) if started else None
     err = getattr(data.server, "error", None)
     msg = getattr(err, "msg", None) or str(err or "")
-    _UPSTREAM_FAIL[id(data.server)] = {
-        "failure_kind": classify_upstream_failure(msg, connect_ms),
-        "connect_ms": connect_ms,
-    }
+    kind = classify_upstream_failure(msg, connect_ms)
+    _UPSTREAM_FAIL[id(data.server)] = {"failure_kind": kind, "connect_ms": connect_ms}
     if len(_UPSTREAM_FAIL) > 1000:   # error() 没跟上的情况（load-only），别无限长
         _UPSTREAM_FAIL.clear()
+
+    addr = getattr(data.server, "address", None)
+    if addr:
+        # IPv6 要加方括号，否则拼出来是 `2001:...:::443`（冒号数量对不上，无法解析）
+        fmt_host = f"[{addr[0]}]" if ":" in str(addr[0]) else str(addr[0])
+        server_address = f"{fmt_host}:{addr[1]}"
+    else:
+        server_address = None
+    rec = {
+        "v": "1", "src": "proxy", "session_id": SESSION, "ev": "CONNECT_ERROR",
+        "scope": "connection",
+        "ts": int(time.time() * 1000),
+        "server_address": server_address,
+        "failure": msg or "unknown",
+        "failure_kind": kind,
+        "connect_ms": connect_ms,
+        "note": "连接没建起来，请求可能根本没发出；不能据此判断'应用外发了什么'，"
+                "但也**不能**当作'应用没外发'。",
+    }
+    with _LOCK:
+        try:
+            CONNECT_ERROR_LOG.parent.mkdir(parents=True, exist_ok=True)
+            with CONNECT_ERROR_LOG.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        except OSError as exc:      # noqa: BLE001 —— 落盘失败不能打断代理
+            ctx.log.warn(f"[vscan] 连接失败记录写入失败：{exc}")
 
 
 def _flow_target(flow) -> dict:
@@ -341,6 +379,22 @@ def response(flow: http.HTTPFlow) -> None:
         response_tags, response_tokens, response_scan = [], [], None
     all_tags = set(request_tags) | set(response_tags)
 
+    # 单包兜底归因（2026-10-19）：egress 钩子对 WebView 应用（网络在 Chromium
+    # sandboxed 进程）与"连接复用"的应用覆盖不到，attach 又太晚抓不住启动瞬间的
+    # connect——纯时间归因整场 unresolved。但**单被测包 + 系统探测已排除**时，
+    # 非系统探测的流只能是被测应用发的（白名单里就这一个包，别无他选）。
+    # 兜底必须**诚实标记来源**（single_package_fallback），不得伪装成
+    # app_process_hook 的时间归因——下游据 source 区分"实测归属"与"排除法归属"。
+    # 必须在构造 entry 之前改 found：_common() 会读 found.package/label/source/delta_ms。
+    if not found.resolved and len(WHITELIST) == 1:
+        sole = next(iter(WHITELIST))
+        # is_system_probe 只看 host + path，用 flow 直接构造最小判据即可。
+        if not flow_entry.is_system_probe({
+                "host": getattr(flow.request, "pretty_host", None),
+                "path": getattr(flow.request, "path", None)}):
+            found = Attribution(package=sole, delta_ms=None,
+                                source="single_package_fallback")
+
     entry = flow_entry.answered(
         flow, found, ts_ms, SESSION,
         tags=dict(request_tags=request_tags, request_tokens=request_tokens,
@@ -355,6 +409,9 @@ def response(flow: http.HTTPFlow) -> None:
     elif not found.resolved:
         # 归因不到就**单独留痕**，不丢：这是"代理看到了但钩子没覆盖"的唯一证据。
         entry["unattributed"] = True
+        # 打标记而不丢：系统探测仍然留痕（它是设备侧"联网正常"的证据），
+        # 但下游统计「是否可能存在未捕获的外发」时必须把它排除。
+        entry["system_probe"] = flow_entry.is_system_probe(entry)
         with _LOCK:
             _emit(entry)
 
@@ -444,3 +501,8 @@ def done() -> None:
     if unanswered_total:
         # 明确报出来：这些是"请求发出去了但没拿到响应"，与"没有外发"是两回事。
         ctx.log.warn(f"[vscan] {unanswered_total} 条**无响应**请求记录在 {UNANSWERED_LOG}")
+    connect_err = count(CONNECT_ERROR_LOG)
+    if connect_err:
+        # 连接都没建起来（上游黑洞/拒连）。HTTP/2 场景下 error() 不会为每条流派发，
+        # 只有这个文件能证明"代理试过、但连不上"。
+        ctx.log.warn(f"[vscan] {connect_err} 次**上游连接失败**记录在 {CONNECT_ERROR_LOG}")

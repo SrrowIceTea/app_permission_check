@@ -67,6 +67,10 @@ def main() -> int:
          [PY, "-m", "unittest", "test_ui_flow_label"]),
         ("launcher_activity", MOBILE / "tools",
          [PY, "-m", "unittest", "test_launcher_activity"]),
+        # 批处理的静态并行（2026-10-19）：目录/键唯一性、完成标记语义、失败隔离，
+        # 以及"多个 worker 真的同时在跑"。这三类错误都是静默的（复用永不命中 /
+        # 半成品被当已完成 / 60 个样本只有一个真跑），只能靠离线断言钉住。
+        ("batch_static", MOBILE / "tools", [PY, "-m", "unittest", "test_batch_static"]),
     ]
     for name, cwd, cmd in unit:
         if not cwd.exists():

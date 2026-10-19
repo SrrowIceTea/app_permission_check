@@ -994,6 +994,51 @@ h2c 明文 + 跨 TCP 段的 gzip DATA——正是因为两个方向用同一个 
 `mobile/ai/test_policy_sources.py` 10 项（新增协议可引用、scope 不匹配拒绝、
 协议不能单独判 met 三条）。
 
+## M041 批量跑批提速：静态并行、动态仍单设备串行（2026-10-19）
+
+**背景**：60 样本批次串行跑约 5 小时，其中 jadx 静态阶段每包 1–2 分钟纯等待。
+用户问"能不能多个 APK 一起跑"。核对后结论是：**能不能并行取决于阶段**，
+而"同一台设备跑两个包"不是慢的问题，是**归因必然失真**的问题。
+
+**为什么动态阶段不能并行（写下来防止后人再试）**：同一台设备上的可变状态全是全局的——
+宿主 `MITM_PORT=8888` 单端口（`reclaim_port()` 会把上一单的 mitmdump 当残留杀掉）、
+`settings put global http_proxy`、QUIC 的 iptables 规则、`am start` 只有一个前台、
+`pcap_capture.REMOTE_DEFAULT` 固定路径。归因侧的前提是"一个代理 ↔ 一个会话 ↔ 一个包名"
+（`VSCAN_PACKAGES` 白名单 + 时间窗就近匹配 + `ATTRIB_TARGET_CHECK`），两个包并发时
+两边事件落进同一份代理流量 → `ambiguous` / `unresolved`，甚至静默串包（M020 / D413）。
+
+**做法**：按阶段切分，而不是按样本并发。
+
+1. `batch_plan.py`：先做完**整批判定**（aapt2 解包名、`--resume` 完成判据、
+   `--static-reuse` 命中），产出计划表。判定不碰设备，串行几十秒。
+2. `batch_static.py`：`ThreadPoolExecutor` 跑静态，默认 3 路。并发安全的依据是三条
+   实际核对过的性质：① 产物全在各自 `--out`；② `analysis.scan_static` 用
+   `tempfile.TemporaryDirectory()`；③ `toolchain.jadx_jar()` 只解析路径不写缓存。
+   jadx 线程数按 `ceil(核数/worker)` 下调并封顶 4——**向上取整**是刻意的：
+   `8//3=2` 会让 3 个 worker 只占 6 核，ceil 给 3（合计 9）更好。
+3. `batch_dynamic.py`：原动态段整体搬出，行为不变（按样本前置代理 + `--reuse-mitm`
+   + `finally` 收树）。
+4. `batch_thirdparty.py`：只剩 CLI / 静态并行 / 动态串行 / 汇总。
+
+**顺带修好的断点续跑**：`--resume` 现在也复用**本批次** `_static/<序号>-<短包名>/`
+里 `static-manifest.json` 已存在的产物。模拟器约 20 分钟崩一次是常态，
+崩后接着跑不该把已解完的 jadx 重解一遍。判据仍是 manifest（完成标记），
+不是目录存在——半成品目录长得和成功产物一模一样。
+
+**实测**（本机 15.8 GB / 8 核）：
+- 3 个样本（keepass / breezyweather / fdroid）3 路并行 **7m42s** 全部完成，
+  三个产物目录同一秒创建、分别结束（真并发）；类数 8177 / 9459 / 9885，
+  结论 6 / 12 / 14 条。
+- 同批次 `--resume` 复跑 **3.1s**（0 次 jadx），`static_reused_from` 如实记录。
+- 根回归 13 组全绿；`run_mobile_checks` 新增 `batch_static` 组（12 项）。
+
+**边界（不要当成已完成）**：并行只提升静态段；动态段仍是 wall-clock 主成本
+（每样本 `--seconds 150` + 装包/报告）。要进一步压缩只能上**多设备槽位**
+（每槽独立 serial/端口/pcap 路径），那需要把 `MITM_PORT`/`FRIDA_PORT` 参数化，
+并修 `core/frida_host/run.py::ensure_forward()` 的跨设备串台（它按
+`adb forward --list` 做全局字符串匹配，第二台设备会跳过建转发 → attach 到错的设备）。
+本条目不含这些改动。
+
 ## 待办（已想清楚要做什么，尚未做）
 
 - ~~**P0 · 修`hook_privacy` 打死应用**（M030 的结论）~~ **→ 已修（2026-10-16，见 M031
