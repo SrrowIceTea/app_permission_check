@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from attribution import AMBIGUITY_MS, MATCH_TOLERANCE_MS, TimeAttribution, target_match  # noqa: E402
+from attribution import AMBIGUITY_MS, CONNECT_AGE_MS, MATCH_TOLERANCE_MS, TimeAttribution, target_match  # noqa: E402
 
 A = "com.vscanner.targetapp"
 B = "com.vscanner.targetapp2"
@@ -292,6 +292,53 @@ class ConservativeTest(unittest.TestCase):
         found = TimeAttribution([self.path], conservative=True).resolve(1000)
         self.assertFalse(found.ambiguous)
         self.assertEqual(found.package, A)
+
+
+class ConnectAgeWindowTest(unittest.TestCase):
+    """连接建立 → 其上首个请求的间隔，远大于 2 秒。
+
+    实测（2026-10-20，60 样本里 4 个同时有 egress 与 flows）：中位 16–29 秒，
+    2 秒容差只覆盖 122 条 flow 里的 13 条。语义上 TCP 连接**一定早于**跑在它上面的
+    请求，所以判据是单向的：事件不晚于流（允许 2s 时钟抖动）+ 年龄不超过上限。
+
+    **只在 target_check 开启时生效**：有 host/ip 锚定，放大窗口不会串包；反向代理模式
+    没有锚定，必须保持原来的 2 秒（见下最后一个用例）。
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "egress_events.jsonl"
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_connect_20s_before_request_resolves(self) -> None:
+        write_target_events(self.path, [(1000, A, "api.example.com", "1.2.3.4")])
+        found = TimeAttribution([self.path], target_check=True).resolve(
+            21_000, {"host": "api.example.com", "ip": "1.2.3.4"})
+        self.assertEqual(found.package, A)
+        self.assertEqual(found.label, "app_process_hook")
+
+    def test_connect_beyond_max_age_is_unresolved(self) -> None:
+        """超过年龄上限就不认——否则会把上一次会话的连接算到这次请求头上。"""
+        write_target_events(self.path, [(1000, A, "api.example.com", "1.2.3.4")])
+        found = TimeAttribution([self.path], target_check=True).resolve(
+            1000 + CONNECT_AGE_MS + 1, {"host": "api.example.com", "ip": "1.2.3.4"})
+        self.assertFalse(found.resolved)
+        self.assertEqual(found.label, "unresolved")
+
+    def test_event_later_than_flow_beyond_jitter_is_unresolved(self) -> None:
+        """事件晚于流超过抖动容差同样不认（连接不可能发生在请求之后）。"""
+        write_target_events(self.path, [(1000, A, "api.example.com", "1.2.3.4")])
+        found = TimeAttribution([self.path], target_check=True).resolve(
+            1000 - MATCH_TOLERANCE_MS - 1, {"host": "api.example.com", "ip": "1.2.3.4"})
+        self.assertFalse(found.resolved)
+
+    def test_without_target_check_long_gap_stays_unresolved(self) -> None:
+        """反向代理模式没有目标锚定：窗口必须保持 2 秒，否则会串包。"""
+        write_target_events(self.path, [(1000, A, "api.example.com", "1.2.3.4")])
+        found = TimeAttribution([self.path], target_check=False).resolve(21_000)
+        self.assertFalse(found.resolved)
 
 
 if __name__ == "__main__":

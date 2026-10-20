@@ -44,6 +44,15 @@ var CFG = {
   // 一轮：7 条 ARMED、5 条 SSL_WRITE_PLAINTEXT，keylog 为 0）。改从每条连接入手，
   // 用 SSL_get_SSL_CTX 反查上下文再补装回调——握手发生在 SSL_new 之后，赶得上。
   sslNewSyms: ['SSL_new'],
+  // 握手入口（2026-10-20 补）：`SSL_new` 的 onLeave 装完回调后可能被覆盖，也可能
+  // 该 ctx 压根没用于握手。挂到 `SSL_do_handshake` / `SSL_connect` 上有两个作用：
+  //   ① 在密钥计算前**最后一刻**再装一次回调（覆盖"App 后来设成 NULL"的情形）；
+  //   ② `TLS_HANDSHAKE` 事件直接回答"这个副本到底有没有在握手"——没有它，keylog=0
+  //      时无法区分"回调没触发"和"根本没握手"，只能瞎猜。
+  handshakeSyms: ['SSL_do_handshake', 'SSL_connect'],
+  // 观察谁在设 keylog 回调（只记录，不改）。若 App/框架把它设成 NULL，我们装的回调
+  // 会被静默清除，而 KEYLOG_INSTALLED 早就打过了，看起来一切正常。
+  keylogSetterName: 'SSL_CTX_set_keylog_callback',
   ctxGetter: 'SSL_get_SSL_CTX',
   keylogSetter: 'SSL_CTX_set_keylog_callback',
   maxKeylog: 2000,
@@ -58,6 +67,7 @@ var KEYLOG_SEEN = {};
 var KEYLOG_CTX = {};
 var KEYLOG_COUNT = 0;
 var KEYLOG_DROPPED = false;
+var HS_SEEN = {};
 var LAST_RESCAN = 0;
 var PKG = null;
 
@@ -251,6 +261,74 @@ function attachSslNew(found, sym, how) {
   }
 }
 
+// 握手入口观察 + 最后一刻补装 keylog。见 CFG.handshakeSyms 的说明：
+// keylog=0 时，这一条能把"回调没触发"和"根本没握手"分开。
+function attachHandshake(found, sym, how) {
+  var key = sym + '@' + found.module + '@' + found.addr;
+  if (HOOKED[key]) return 0;
+  var setter = setterForModule(found.module, found.addr);
+  var getCtx = null;
+  try {
+    var mod = Process.findModuleByAddress(found.addr);
+    var getterAddr = mod === null ? null : mod.findExportByName(CFG.ctxGetter);
+    if (getterAddr !== null) getCtx = new NativeFunction(getterAddr, 'pointer', ['pointer']);
+  } catch (e) { getCtx = null; }
+  try {
+    Interceptor.attach(found.addr, {
+      onEnter: function (args) {
+        try {
+          var ssl = args[0];
+          if (ssl === null || ssl.isNull()) return;
+          var k = String(ssl);
+          if (!HS_SEEN[k]) {
+            HS_SEEN[k] = true;
+            vlog('TLS_HANDSHAKE', {
+              module: found.module, symbol: sym, ssl: k, arms: how,
+              note: '握手入口被调用，本副本确实在跑 TLS。若之后仍无 TLS_KEYLOG，' +
+                    '则问题在回调被覆盖或该副本的 keylog 已关闭，不在"没握手"。'
+            });
+          }
+          // 最后一刻补装：App/框架在 SSL_new 之后把回调设成 NULL 时，这里能救回来。
+          if (setter !== null && getCtx !== null) {
+            var ctx = getCtx(ssl);
+            if (ctx !== null && !ctx.isNull()) setter(ctx, KEYLOG_CB);
+          }
+        } catch (e) { vlog('ERROR', { where: sym + ' onEnter', msg: String(e) }); }
+      }
+    });
+    HOOKED[key] = true;
+    ARMED.push(sym + '@' + found.module + '+hs');
+    return 1;
+  } catch (e) {
+    vlog('ERROR', { where: 'attach ' + key, msg: String(e) });
+    return 0;
+  }
+}
+
+// 只观察谁在设 keylog 回调（不改）。cb_null=true 就是"我们的回调被清空"的铁证。
+function attachSetterWatch(found, how) {
+  var key = 'watch:' + found.module + '@' + found.addr;
+  if (HOOKED[key]) return 0;
+  try {
+    Interceptor.attach(found.addr, {
+      onEnter: function (args) {
+        try {
+          var cb = args[1];
+          vlog('KEYLOG_SETTER_CALLED', {
+            module: found.module, arms: how, ctx: String(args[0]),
+            cb_null: cb === null || cb.isNull(),
+            note: 'cb_null=true 表示有人在把 keylog 回调清空，我们装的会被覆盖。'
+          });
+        } catch (e) {}
+      }
+    });
+    HOOKED[key] = true;
+    ARMED.push('watch:' + CFG.keylogSetterName + '@' + found.module);
+    return 1;
+  } catch (e) { return 0; }
+}
+
+
 function armAll(how) {
   var added = 0, i, a;
   for (i = 0; i < CFG.sniSyms.length; i++) {
@@ -265,6 +343,12 @@ function armAll(how) {
     var s3 = findAll(CFG.sslNewSyms[i]);
     for (a = 0; a < s3.length; a++) added += attachSslNew(s3[a], CFG.sslNewSyms[i], how);
   }
+  for (i = 0; i < CFG.handshakeSyms.length; i++) {
+    var s4 = findAll(CFG.handshakeSyms[i]);
+    for (a = 0; a < s4.length; a++) added += attachHandshake(s4[a], CFG.handshakeSyms[i], how);
+  }
+  var setters = findAll(CFG.keylogSetterName);
+  for (a = 0; a < setters.length; a++) added += attachSetterWatch(setters[a], how);
   return added;
 }
 

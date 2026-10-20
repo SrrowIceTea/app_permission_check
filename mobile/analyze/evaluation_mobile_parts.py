@@ -116,8 +116,25 @@ def value_matches(read: dict, flow: dict) -> str | None:
     return None
 
 
+def refs_of(records) -> list[dict]:
+    """把事件记录压成 `{src, evt_id}` 引用，供 codeloc 消解撞号。
+
+    **为什么必须带 src**：`privacy` / `native_ssl` / `egress` 各写各的 JSONL，编号都从 1
+    开始，分流进同一文件后 `evt_id` 必然重复（实测 02 openmensa 的 13/15/25/27 各对应
+    两条：一条 `PRIVACY_READ`、一条 `SSL_READ_PLAINTEXT`）。只留编号，关联引擎就无法
+    判断结论指的是哪一条，只能如实报"编号歧义"，代码位置随之全丢。
+    """
+    out = []
+    for r in records or []:
+        if not isinstance(r, dict) or r.get("evt_id") is None:
+            continue
+        out.append({"src": r.get("src"), "evt_id": r.get("evt_id")})
+    return out
+
+
 def _finding(rule: dict, *, evidence_kind: str, event_ids: list, extra: dict,
-             data_type_zh: str | None = None, note: str) -> dict:
+             data_type_zh: str | None = None, note: str,
+             event_refs: list | None = None) -> dict:
     cond = rule["condition"]
     base = {
         "rule_id": rule["rule_id"], "rule_revision": rule["rule_revision"],
@@ -129,5 +146,8 @@ def _finding(rule: dict, *, evidence_kind: str, event_ids: list, extra: dict,
         "basis_refs": rule["basis_refs"], "source_refs": rule["source_refs"],
         "evidence_source": "mobile_runtime_or_traffic", "note": note,
     }
+    # 只在能给出时才写：老数据/车载链路没有这个字段，消费方按"缺失就走编号"处理。
+    if event_refs:
+        base["event_refs"] = event_refs
     base.update(extra)
     return base

@@ -200,6 +200,10 @@ def build(session: Path, rules_db: Path, *, version: str, policy_store: Path | N
                       if isinstance(f.get("condition"), dict) else f.get("data_type"),
                       "evidence_kind": f.get("evidence_kind"),
                       "event_ids": f.get("event_ids"),
+                      # 代码位置要进包：报告里的"代码位置"一栏靠它，只留在
+                      # findings.jsonl 里等于报告看不到（2026-10-20 修）。
+                      "code_locs": f.get("code_locs"),
+                      "code_loc_note": f.get("code_loc_note"),
                       "basis_refs": f.get("basis_refs"),
                       "note": f.get("note")} for f in findings],
         "policy": policy,

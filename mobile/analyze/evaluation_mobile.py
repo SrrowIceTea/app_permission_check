@@ -35,12 +35,18 @@ from core.collector.attribution import ATTRIB_LOOSE_MS, is_loose  # noqa: E402
 # ch 侧删除了 `_consent_for`（同意判定改由 `consent_semantics.permission_timing` 承担），
 # main 侧新增 `value_match_form`（C1 摘要形态溯源）——两者互不冲突，一并保留。
 from evaluation_mobile_parts import (_finding, _flow_types,  # noqa: E402
-                                     _flow_unusable, _ok_reads, _ts, value_match_form,
-                                     value_matches)
+                                     _flow_unusable, _ok_reads, _ts, refs_of,
+                                     value_match_form, value_matches)
 
 # 对外保留：`correlate_mobile.py` 用 `ev.CONSENT_SIGNALS` 过滤同意事件。
 from consent_semantics import permission_timing
 CONSENT_SIGNALS = ("PERM_REQ", "PERM_RESULT", "PERM_CHECK", "POLICY_VIEW")
+
+
+def _pair_refs(pairs: list[dict]) -> list[dict]:
+    """配对两侧的精确引用（读侧 + 流侧），供 codeloc 消解 `evt_id` 撞号。"""
+    return [{"src": p.get("read_src"), "evt_id": p["read_event_id"]} for p in pairs] + \
+           [{"src": p.get("flow_src"), "evt_id": p["flow_event_id"]} for p in pairs]
 
 
 def evaluate(rule: dict, ctx: dict) -> dict | None:
@@ -66,7 +72,7 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
         if not hits:
             return None
         return _finding(rule, evidence_kind="read_event",
-                        event_ids=[r.get("evt_id") for r in hits],
+                        event_ids=[r.get("evt_id") for r in hits], event_refs=refs_of(hits),
                         extra={"package": ctx["package"], "read_count": len(hits)},
                         data_type_zh=ctx["dt_zh"].get(dt),
                         note=f"观测到 {len(hits)} 次非空返回值/非空结果集。空值、拒绝、调用未证实取得值不计入。")
@@ -81,6 +87,7 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
         note = timing.pop("note")
         result = _finding(rule, evidence_kind="read_event",
                           event_ids=[r.get("evt_id") for r in hits[:5]],
+                          event_refs=refs_of(hits[:5]),
                           extra={"package": ctx["package"], **timing},
                           data_type_zh=ctx["dt_zh"].get(dt), note=note)
         result["title"] = "运行时权限时序待复核（政策同意未知）"
@@ -111,6 +118,9 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
                     continue
                 pairs.append({
                     "read_event_id": r.get("evt_id"), "flow_event_id": f.get("evt_id"),
+                    # 编号在两个 src 之间会重复（privacy 与 native_ssl 各从 1 数），
+                    # 带上 src 才能让 codeloc 唯一定位；见 evaluation_mobile_parts.refs_of。
+                    "read_src": r.get("src"), "flow_src": f.get("src"),
                     "delta_ms": ft - rt, "clock_basis": "host_received_ts",
                     "content_match": True,
                     "content_match_basis": "value_hash_in_payload" if token else "shape_tag",
@@ -175,10 +185,12 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
             return _finding(rule, evidence_kind="read_then_egress",
                             event_ids=sorted({p["read_event_id"] for p in pairs}
                                              | {p["flow_event_id"] for p in pairs}),
+                            event_refs=_pair_refs(pairs),
                             extra=extra, data_type_zh=ctx["dt_zh"].get(dt), note=note)
         return _finding(rule, evidence_kind="read_then_egress",
                         event_ids=sorted({p["read_event_id"] for p in pairs}
                                          | {p["flow_event_id"] for p in pairs}),
+                        event_refs=_pair_refs(pairs),
                         extra=extra, data_type_zh=ctx["dt_zh"].get(dt), note=value_note)
 
     if pred == "data_type_not_in_necessary_scope":
@@ -194,6 +206,7 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
             return None
         return _finding(rule, evidence_kind="read_event",
                         event_ids=[r.get("evt_id") for r in hits[:5]],
+                        event_refs=refs_of(hits[:5]),
                         extra={"package": ctx["package"],
                                "app_category": category.get("name_zh"),
                                "necessary_data_keys": sorted(necessary),
@@ -217,7 +230,7 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
         if not out:
             return None
         return _finding(rule, evidence_kind="flow_sensitive_payload",
-                        event_ids=[f.get("evt_id") for f in out],
+                        event_ids=[f.get("evt_id") for f in out], event_refs=refs_of(out),
                         extra={"package": ctx["package"], "flow_count": len(out),
                                "flows": [{"event_id": f.get("evt_id"), "host": f.get("host"),
                                           "path": f.get("path"), "scheme": f.get("scheme"),
@@ -233,7 +246,7 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
             return None
         domains = sorted({f.get("host") for f in out if f.get("host")})
         return _finding(rule, evidence_kind="flow_sensitive_payload",
-                        event_ids=[f.get("evt_id") for f in out],
+                        event_ids=[f.get("evt_id") for f in out], event_refs=refs_of(out),
                         extra={"package": ctx["package"], "domains": domains,
                                "flow_count": len(out)},
                         data_type_zh=ctx["dt_zh"].get(dt),
@@ -252,6 +265,7 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
             return None
         return _finding(rule, evidence_kind="read_event",
                         event_ids=[r.get("evt_id") for r in hits[:5]],
+                        event_refs=refs_of(hits[:5]),
                         extra={"package": ctx["package"],
                                "policy_sha256": policy.get("raw_sha256"),
                                "disclosure_scan": scan},

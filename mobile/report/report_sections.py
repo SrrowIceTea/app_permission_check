@@ -14,6 +14,7 @@ from reportlab.platypus import KeepTogether, PageBreak, Spacer
 
 from report_common import Paragraph, SEVERITY_COLORS, esc, grid_table, kv_table
 from report_health import health_state
+from code_loc_text import code_loc_text
 
 LEVEL_ZH = {"candidate": "候选（待复核）", "observed": "已观测",
             "correlated": "已关联", "policy_violation": "政策违规（本工具不产出）"}
@@ -238,6 +239,7 @@ def _finding_block(f: dict, st: dict, font: str) -> list:
         ("数据类别/权限", esc(f.get("data_type") or _perm_of(f) or "—")),
         ("事实与说明", esc(f.get("note") or "—")),
         ("证据", esc(_evidence_of(f))),
+        ("代码位置", esc(_code_loc_of(f))),
         ("依据条款", esc("、".join(f"{b.get('doc')}:{b.get('clause')}"
                                   for b in (f.get("basis_refs") or [])
                                   if isinstance(b, dict)) or "—")),
@@ -246,6 +248,11 @@ def _finding_block(f: dict, st: dict, font: str) -> list:
     ]
     block = [head, kv_table(rows, st, font, col1=30 * mm), Spacer(1, 6)]
     return block
+
+
+def _code_loc_of(f: dict) -> str:
+    """代码位置一栏：实现在 code_loc_text（report_sections 已超 300 行，不再往里塞）。"""
+    return code_loc_text(f)
 
 
 def _evidence_of(f: dict) -> str:

@@ -30,7 +30,8 @@ except ImportError as exc:  # 明确失败，不静默退回一个"差不多的"
     ) from exc
 
 
-def nearest_egress(flow_ts: int, package: str, events: list[dict]) -> tuple[dict | None, bool]:
+def nearest_egress(flow_ts: int, package: str, events: list[dict],
+                   window_ms: int = MATCH_TOLERANCE_MS) -> tuple[dict | None, bool]:
     """按时间就近找该包那次**成功**的出站连接；同时报告范围内有没有失败连接。
 
     与 Phase 4 的归因规则同源：同一个 `MATCH_TOLERANCE_MS`，且**同样排除 `outcome=error`**
@@ -54,14 +55,17 @@ def nearest_egress(flow_ts: int, package: str, events: list[dict]) -> tuple[dict
             ts = event.get("ts")
         if ts is None:
             continue
-        delta = abs(ts - flow_ts)
-        if delta > MATCH_TOLERANCE_MS:
+        delta = ts - flow_ts          # 有符号：正 = 连接早于这条流
+        if delta < -MATCH_TOLERANCE_MS or delta > window_ms:
             continue
         if not is_ok_outcome(event):
             failed_nearby = True
             continue
-        if best_delta is None or delta < best_delta:
-            best, best_delta = event, delta
+        # 取"距离最近"的那条，比较必须用绝对距离：`delta` 现在是有符号的，
+        # 直接比大小会挑中"早 20 秒"而漏掉"晚 0.5 秒"的那条。
+        dist = abs(delta)
+        if best_delta is None or dist < best_delta:
+            best, best_delta = event, dist
     return best, failed_nearby
 
 
@@ -89,3 +93,32 @@ def resolve_event(index: dict, event_id) -> tuple[dict | None, str | None]:
         return None, (f"evt_id={event_id} 对应 {len(candidates)} 条记录（src={sources}），"
                       "无法确定结论指的是哪一条；多半是重挂钩子或多次追加后编号重置。")
     return None, None
+
+
+def resolve_ref(index: dict, ref: dict) -> tuple[dict | None, str | None]:
+    """按 `{src, evt_id}` 精确取记录——这是消解撞号的**正路**。
+
+    撞号的成因很具体：`privacy` / `native_ssl` / `egress` 各写各的 JSONL，编号都从 1
+    开始，分流进同一文件后 `evt_id` 必然重复（实测 02 openmensa 的 13/15/25/27 各对应
+    两条）。带上 `src` 就能唯一定位，不需要猜、也不需要靠栈的形态反推。
+
+    `ref` 缺 `src` 时退回按编号解析（车载旧数据没有 `src`，行为保持不变）。
+    """
+    if not isinstance(ref, dict):
+        return None, None
+    event_id = ref.get("evt_id")
+    src = ref.get("src")
+    if not src:
+        return resolve_event(index, event_id)
+    candidates = index.get(event_id) or []
+    exact = [c for c in candidates if str(c.get("src")) == str(src)]
+    if len(exact) == 1:
+        return exact[0], None
+    if len(exact) > 1:
+        return None, (f"evt_id={event_id} 在 src={src} 下仍有 {len(exact)} 条记录，无法确定")
+    if not candidates:
+        return None, None
+    have = ",".join(sorted({str(c.get("src")) for c in candidates}))
+    return None, (f"结论引用 src={src} evt_id={event_id}，该编号下没有这个 src"
+                  f"（实有 {have}）；引用与事件表不一致，不猜。")
+

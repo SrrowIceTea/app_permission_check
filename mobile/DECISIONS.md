@@ -1271,3 +1271,141 @@ degraded（A1 JIT SIGSEGV）。**下一个该修的是 keylog**，不是归因�
 硬线），已把**界面理解层**（候选打分 / 继承文案 / 三个护栏常量）拆到 `ui_flow_text.py`
 （176 行），本体 237 行。`test_ui_flow_label.py` 一行未改——`thirdparty_ui_flow` 原样
 再导出那几个名字。
+
+## M044 代码行号三处断链 + keylog 的真边界（2026-10-20）
+
+冒烟批次 5 个样本里 `findings_with_code_loc = 0/55`、`keylog_lines = 0/5`。用户要求先补这两处
+再跑全量，查下来一个是**三处断链叠加**，另一个**不是接链问题**。
+
+### 一、代码行号：0/55 → 2/10、2/14（同数据回放）
+
+三处断链，每一处单独都足以让"有栈但无位置"：
+
+1. **栈帧分隔符不认 `" <- "`**。移动端钩子把 `getStackTrace()` 压成一行用 `" <- "` 连接，
+   `frames_of()` 只按 `\n` 切 → 整串当一帧 → `FRAME_RE` 要求行尾是 `)`，匹配失败，
+   应用帧凭空消失。修：单行且含 `" <- "` 时按它切。
+2. **`evt_id` 跨 src 撞号**。`privacy` / `native_ssl` 各写各的 JSONL、编号都从 1 开始，
+   分流进同一文件后 13/15/25/27 各对应两条，codeloc 只能如实报"编号歧义"。
+   修：finding 增加 `event_refs: [{src, evt_id}]`，`event_lookup.resolve_ref()` 精确解析；
+   无 refs 时回落编号（车载旧数据零改动）。**src 对不上仍报缺口**，不借用别人的栈。
+3. **R8 混淆后包名没了**。F-Droid 样本大量 R8，栈帧是 `v81.g(...:26)`，`package + '.'`
+   前缀认不出来。修：新增 `core/evidence/app_classes.py`，从 `static/dexfacts.json` 的
+   `classes`（APK 内全部类名）建类表，命中即应用代码；`android./java./com.android.*` 等
+   系统前缀一票否决；类表缺失时回退前缀（只解析首个 dex 时兜底）。
+
+同数据回放（旧 correlate vs 新 correlate，输入完全相同）：
+
+| 样本 | 旧 | 新 | 说明 |
+| --- | --- | --- | --- |
+| 02 openmensa | 0/10 | **2/10** | sensitive_read 与 over_collection 各一条拿到行号 |
+| 01 trail_sense | 0/14 | **2/14** | 同上 |
+| 04 towercollector | 0/11 | 0/11 | 11 条全是 `over_permission`，本质无代码位置（非缺陷） |
+
+**报告可见性**：`evidence_bundle` 原来把 `code_locs` 裁掉，PDF 里看不到——已补
+`code_locs`/`code_loc_note`；`report_sections` 增"代码位置"一行，渲染放
+`mobile/report/code_loc_text.py`（R8 合成文件名压成 `r8-map-id…`，**行号照实显示**）。
+
+### 二、keylog：不是"差接链"，是 attach 模式的结构性边界
+
+三次单样本实测（openmensa×2、towercollector×1）拿到同一组指纹：
+`SSL_CTX_new` 有、`SSL_new` 有、`KEYLOG_INSTALLED` 有，但 `TLS_SNI` 0、
+`SSL_do_handshake`/`SSL_connect` 0、`SSL_write/read` 0 或"有 write 无 new"。
+
+三种成因用 `mobile/tools/tls_profile.py` 分开（这是本轮真正落地的修复）：
+
+| verdict | 证据 | 含义 |
+| --- | --- | --- |
+| `reused_session` | 有 SSL 明文、无 `SSL_new` | 会话在钩子装上前建好，窗口内全复用，回调无处可挂（02：27 条明文、0 次 new） |
+| `other_tls_stack` | pcap 有加密帧、钩子零 SSL_* | WebView/Chromium 静态 BoringSSL，两条旁路都够不着（03：409 帧） |
+| `no_tls_in_window` | 两者皆无 | 应用没被驱动到联网界面（01/05） |
+| `callback_not_fired` | 有握手无 keylog | 真 bug，查 `KEYLOG_SETTER_CALLED` 是否被设 NULL |
+
+所以**没有去改 keylog 的采集代码**（改了也拿不到），改为：
+
+1. `hook_tls_meta.js` 新增 `SSL_do_handshake`/`SSL_connect` 观察 + 握手前最后一刻补装
+   （`TLS_HANDSHAKE` 事件直接回答"到底有没有握手"）；
+2. 新增 `SSL_CTX_set_keylog_callback` 观察钩（只记录谁设的、cb 是否为 NULL）；
+3. `http-stats.error` 从笼统的"keylog 未装上"改成 `tls_profile` 的三分法结论——
+   原文案把 attach 的已知边界误报成采集链故障，会误导排查方向。
+
+**边界（写进报告口径）**：要覆盖"钩子装上之前就建好的会话"，只有 spawn 注入；本机 AVD
+spawn 不可用（M043 实测 3/3 失败）。这一条不是代码能绕过的，只能在报告里如实标注。
+
+### 三、两侧同步与回归
+
+- `hook_tls_meta.js` 的改动已同步到 `vehicle/hooks/hook_tls_meta.js`（parity 守卫会拦）；
+  车载 bundle 用 `vehicle/hooks/build.py` 重建（注意：`build.mjs` 只构 4 个脚本，不含
+  `hook_tls_meta`，别用错）。
+- `run_regressions.py` 13 组全 0；`run_mobile_checks.py` 28 项全绿（codeloc 组新增 6 例，
+  并做了两次变异验证：去掉类表分支 → `test_dexfacts_classes_locate_obfuscated_frame` 变红；
+  去掉 `resolve_ref` → `test_src_ref_resolves_the_collision` 变红）。
+- `check_mobile_branch.py` 的 `mobile_workbench` 5 个 `FileNotFoundError` **与本次无关**：
+  workbench 不引用任何被改模块、`git status` 无 workbench 改动、单独重跑同样失败（既存竞态）。
+
+## M045 归因窗口：连接建立到首个请求是 16–29 秒，不是 2 秒（2026-10-20）
+
+### 一、实测：2 秒容差只覆盖 11%
+
+60 个样本里只有 4 个同时有 `egress` 事件与 `flows`。逐条测量"流到最近 connect 事件的距离"：
+
+| 样本 | egress | flows | 2s 内 | 中位 Δ | 最小 Δ |
+| --- | --- | --- | --- | --- | --- |
+| 34 openmensa | 1 | 14 | 0 | 27.0 s | 23.7 s |
+| 36 geoportail | 10 | 34 | 6 | 16.4 s | 0.16 s |
+| 38 dsub2000 | 4 | 24 | 0 | 29.3 s | 15.0 s |
+| 60 trailence | 12 | 50 | 7 | 708 s | 0.03 s |
+
+合计 122 条 flow，**只有 13 条落在 2 秒内**。归因全量退化为 `single_package_fallback`。
+
+### 二、语义错误：判据本来就不该是双向的
+
+原写法 `abs(event_ts - flow_ts) <= MATCH_TOLERANCE_MS` 默认"事件与流几乎同时"。
+但 **TCP 连接一定早于跑在它上面的请求**——中间隔 TLS 握手、应用组包、连接池排队，
+十几秒是常态，七百秒也不稀奇（应用挂后台再回来）。
+
+改成有符号判据：
+
+```
+-MATCH_TOLERANCE_MS <= (flow_ts - event_ts) <= CONNECT_AGE_MS   # 120 秒
+```
+
+即"事件不晚于流（允许 2 秒时钟抖动）+ 年龄不超过 2 分钟"。
+
+### 三、只在 `target_check` 开启时生效
+
+放大窗口必须配目标锚定，否则会把别人 20 秒前连到别处的连接算到这条流头上：
+- **移动端第三方跑批**：`thirdparty_env.py` 设 `VSCAN_ATTRIB_TARGET_CHECK=1`，候选必须
+  host/ip 对得上 → 放开到 120 秒；
+- **车载反向代理**：所有 App 都寻址同一个代理端口，没有目标锚定 → 保持 2 秒。
+
+`CONNECT_AGE_MS` 与窗口开关都写在 `core/collector/attribution.py` 里，一处定义。
+
+### 四、离线重算的收益与边界
+
+对 88 条 flow 用新窗口重算（`output/_attr_after.py`）：**7 → 39 条能归因**，
+34 号 0/14 → 14/14、38 号 0/24 → 15/24、60 号 7/50 → 10/50。
+
+**但结论数没有增加**（34/38/60 三次重跑 correlate，findings 数不变）。原因不在归因：
+`read_before_egress_within_window` 还要求读取值/形态与报文内容匹配，而这些样本读的是定位、
+发的是食堂 API 查询，两者本来就不沾。**归因是必要条件，不是充分条件**——这条要在报告里
+如实写，不能把"归因率提升"说成"检出了新问题"。
+
+### 五、历史数据可以回填
+
+`attribution` 是采集期写进 `flows.jsonl` 的，改代码不会自动修正历史产物。
+`output/_reattrib.py` 用新引擎重算并输出到独立目录（不覆盖原 session）：
+125 条 flow 里 32 条归因发生变化。下次跑批则直接生效。
+
+### 六、副作用与测试
+
+长窗口命中的 `delta_ms` 远大于 `ATTRIB_LOOSE_MS`（1500ms），`is_loose()` 会把它标 loose，
+相关结论仍封顶 `candidate`——这是对的：只能写"该连接窗口内的唯一候选"，**不能**写成
+"按时间精确对齐"。
+
+- `nearest_egress()` 同步加 `window_ms`（默认不变），`codeloc.attach()` 加
+  `connect_window_ms`，`correlate_mobile` 传 `CONNECT_AGE_MS`——车载路径零影响。
+- 新增 `ConnectAgeWindowTest` 4 例（20 秒前可归因 / 超 120 秒不归因 / 事件晚于流超抖动不归因 /
+  无目标校验时仍按 2 秒）；变异验证：窗口改回 2 秒 → 用例变红。
+- `run_regressions.py` 13 组全 0，`run_mobile_checks.py` 28 项全绿。
+
+

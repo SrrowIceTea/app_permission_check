@@ -26,7 +26,9 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT))
+from core.collector.attribution import CONNECT_AGE_MS  # noqa: E402  连接→请求的实测年龄上限
 from core.evidence import codeloc  # noqa: E402  复用（车载/移动共用一套行号提取）
+from core.evidence.app_classes import load_app_classes  # noqa: E402  R8 混淆类的权威判据
 from core.io_utils import load_jsonl_counting  # noqa: E402  JSONL 唯一实现（§8.2 B-2）
 import evaluation_mobile as ev  # noqa: E402
 from read_semantics import read_state, read_gaps
@@ -122,6 +124,9 @@ def main() -> int:
     ap.add_argument("--flows", default=None)
     ap.add_argument("--egress", default=None)
     ap.add_argument("--permissions", default=None, help="清单权限列表（每行一个）")
+    ap.add_argument("--static-dir", default=None,
+                    help="静态产物目录（含 dexfacts.json）。给了就用 APK 类表认 R8 混淆后的"
+                         "应用类名；不给则退回包名前缀，混淆样本的代码行号会对不上。")
     ap.add_argument("--policy-store", default=None)
     ap.add_argument("--version-code", default=None, help="APK versionCode, for local policy association")
     ap.add_argument("--apk-sha256", default=None, help="Full APK SHA-256, for exact local policy association")
@@ -236,7 +241,12 @@ def main() -> int:
         if f:
             findings.append(f)
 
-    findings = codeloc.attach(findings, reads, flows, egress, args.package)
+    app_classes = load_app_classes(args.static_dir)
+    if args.static_dir and app_classes is None:
+        gaps.append(f"[codeloc] {Path(args.static_dir) / 'dexfacts.json'} 不可用或没有 classes 字段："
+                    "本样本按包名前缀判定应用帧，R8 混淆后的类名会认不出来")
+    findings = codeloc.attach(findings, reads, flows, egress, args.package, app_classes,
+                              connect_window_ms=CONNECT_AGE_MS)
     findings.sort(key=lambda f: (f["rule_id"]))
 
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -307,6 +317,9 @@ def main() -> int:
         "findings_by_rule_type": dict(sorted(by_type.items())),
         "coverage": coverage,
         "code_locs": codeloc.summarize(findings),
+        # 代码行号能不能认 R8 混淆类，取决于这张表有没有加载成功——排查时先看这里。
+        "app_classes": {"loaded": app_classes is not None,
+                        "count": len(app_classes or ())},
         "app_category": ctx["category"].get("key"),
         "policy": {k: v for k, v in policy.items() if k not in ("text", "disclosure_scan")},
         "window_override_ms": args.window_override_ms,

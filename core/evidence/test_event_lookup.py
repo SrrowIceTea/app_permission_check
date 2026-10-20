@@ -87,6 +87,29 @@ class DuplicateEventIdTest(unittest.TestCase):
         self.assertEqual(out[0]["code_locs"][0]["line"], 128)
         self.assertNotIn("code_loc_gaps", out[0])
 
+    def test_src_ref_resolves_the_collision(self) -> None:
+        """带 `src` 的引用能唯一定位——这是撞号的**正路**，不是猜。
+
+        实测形态：reads.jsonl 里 privacy 与 native_ssl 各自从 1 编号，evt_id=13 有两条。
+        只给编号只能报歧义；给 `{src: privacy, evt_id: 13}` 就能取到确定的那一条。
+        """
+        reads = [{"evt_id": 13, "src": "native_ssl", "stack": "SSL_read(Native Method)"},
+                 {"evt_id": 13, "src": "privacy", "stack": VHAL_STACK}]
+        findings = [{"rule_id": "MOB-R006", "evidence_kind": "read_event", "event_ids": [13],
+                     "event_refs": [{"src": "privacy", "evt_id": 13}]}]
+        out = codeloc.attach(findings, reads, [], [], A)
+        self.assertEqual(out[0]["code_locs"][0]["line"], 128)
+        self.assertNotIn("code_loc_gaps", out[0])
+
+    def test_ref_to_missing_src_is_not_guessed(self) -> None:
+        """引用说 src=privacy，但记录里没有这个 src → 报缺口，绝不借用别人的栈。"""
+        reads = [{"evt_id": 13, "src": "native_ssl", "stack": VHAL_STACK}]
+        findings = [{"rule_id": "MOB-R006", "evidence_kind": "read_event", "event_ids": [13],
+                     "event_refs": [{"src": "privacy", "evt_id": 13}]}]
+        out = codeloc.attach(findings, reads, [], [], A)
+        self.assertEqual([], out[0]["code_locs"])
+        self.assertIn("native_ssl", out[0]["code_loc_gaps"][0]["reason"])
+
 
 class FailedConnectionTest(unittest.TestCase):
     """失败连接不能拿来定位外发代码位置——即使它在时间上离流更近。

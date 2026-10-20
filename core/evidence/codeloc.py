@@ -37,8 +37,9 @@ from pathlib import Path
 # 容差与候选判定仍然只有一份：那边从 core/collector/attribution.py 导入，这里转出，
 # 所以 `codeloc.MATCH_TOLERANCE_MS` 对既有调用方照旧可用。
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core.evidence.app_classes import is_app_class  # noqa: E402
 from core.evidence.event_lookup import (  # noqa: E402
-    MATCH_TOLERANCE_MS, index_events, nearest_egress, resolve_event,
+    MATCH_TOLERANCE_MS, index_events, nearest_egress, resolve_event, resolve_ref,
 )
 
 # `com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)`
@@ -82,38 +83,48 @@ def parse_frame(raw: str) -> dict | None:
 
 
 def frames_of(record: dict) -> list[str]:
-    """取一条事件的栈。两种形状都吃：VHAL 是 `\\n` 拼接的字符串，egress 是数组。"""
+    """取一条事件的栈。两种形状都吃：VHAL 是 `\\n` 拼接的字符串，egress 是数组。
+
+    **移动端钩子是第三种形状：`" <- "` 拼接的单行字符串**（`hook_privacy.js` 把
+    `Thread.currentThread().getStackTrace()` 压成一行）。只按换行切，整串会被当成
+    一帧，`FRAME_RE` 又要求行尾就是 `)`，于是匹配失败、应用帧凭空消失——实测
+    02 openmensa 7 条读取事件全部 `code_locs=[]`，栈明明就在那里。
+    """
     if record.get("app_frames"):
         return [str(f) for f in record["app_frames"]]
     raw = record.get("stack")
     if isinstance(raw, list):
         return [str(f) for f in raw]
     if isinstance(raw, str):
-        return [line for line in raw.splitlines() if line.strip()]
+        parts = raw.splitlines()
+        if len(parts) == 1 and " <- " in raw:
+            parts = raw.split(" <- ")
+        return [line.strip() for line in parts if line.strip()]
     return []
 
 
-def app_chain(record: dict, package: str) -> list[dict]:
+def app_chain(record: dict, package: str, app_classes=None) -> list[dict]:
     """应用自己的帧，按调用顺序（由内向外）。
 
-    判定"是自己的帧"用 `package + '.'` 前缀，**不用子串包含**：
-    `com.vscanner.targetapp` 是 `com.vscanner.targetapp2` 的前缀，
-    子串匹配会把另一个 App 的帧算进来——这个坑验收脚本已经踩过一次。
+    判定交给 `app_classes.is_app_class`（见该模块说明）：有 `dexfacts` 类表时按类表判，
+    因此 R8 混淆后的 `v81.g(...)` 也算应用代码；没有类表时退回 `package.` 前缀。
+    旧实现用 `startswith(package + '.')` 且**不用子串包含**——`com.vscanner.targetapp`
+    是 `com.vscanner.targetapp2` 的前缀，子串匹配会把另一个 App 的帧算进来
+    （验收脚本踩过一次），这条依然成立。
     """
-    if not package:
+    if not package and app_classes is None:
         return []
-    prefix = package + "."
     out = []
     for raw in frames_of(record):
         frame = parse_frame(raw)
-        if frame and frame["class"].startswith(prefix):
+        if frame and is_app_class(frame["class"], package, app_classes):
             out.append(frame)
     return out
 
 
-def locate(record: dict, package: str, role: str, event_id) -> dict | None:
+def locate(record: dict, package: str, role: str, event_id, app_classes=None) -> dict | None:
     """把一条事件定位到代码位置。取不到就返回 None——**不编一个出来**。"""
-    chain = app_chain(record, package)
+    chain = app_chain(record, package, app_classes)
     if not chain:
         return None
     # `frame` 只挑**有真实行号**的那一帧；全是合成帧时 frame 为 None，
@@ -138,9 +149,9 @@ def locate(record: dict, package: str, role: str, event_id) -> dict | None:
 
 
 def _take(locs: list[dict], gaps: list[dict], record: dict, package: str, role: str,
-          event_id, absent_reason: str) -> None:
+          event_id, absent_reason: str, app_classes=None) -> None:
     """取一个角色的位置；取不到就记一条 gap。**绝不静默。**"""
-    loc = locate(record or {}, package, role, event_id)
+    loc = locate(record or {}, package, role, event_id, app_classes)
     if loc:
         locs.append(loc)
         if loc.get('line') is None:
@@ -149,8 +160,21 @@ def _take(locs: list[dict], gaps: list[dict], record: dict, package: str, role: 
         gaps.append({"role": role, "event_id": event_id, "reason": absent_reason})
 
 
+def _refs(finding: dict) -> list[dict]:
+    """结论上的精确引用（带 `src`）。旧数据没有 `event_refs`，返回空表走编号路径。"""
+    raw = finding.get("event_refs")
+    return [r for r in raw if isinstance(r, dict) and r.get("evt_id") is not None] \
+        if isinstance(raw, list) else []
+
+
+def _lookup(index: dict, ref: dict | None, event_id):
+    """有 `src` 就精确解析，没有就按编号（沿用旧行为）。"""
+    return resolve_ref(index, ref) if ref and ref.get("src") else resolve_event(index, event_id)
+
+
 def attach(findings: list[dict], reads: list[dict], flows: list[dict],
-           egress_events: list[dict], package: str) -> list[dict]:
+           egress_events: list[dict], package: str, app_classes=None,
+           connect_window_ms: int = MATCH_TOLERANCE_MS) -> list[dict]:
     """给每条结论挂上代码位置。
 
     **挂不上的要说明为什么挂不上**，这是本项目的硬要求：
@@ -161,15 +185,17 @@ def attach(findings: list[dict], reads: list[dict], flows: list[dict],
     必须记进 `code_loc_gaps`——否则读者看到"有 code_locs"就会以为两侧都定位到了。
     实测就撞上过：egress 那一侧因为钩子把栈截断了而取不到，而列表里
     明明躺着 read 那一侧的位置，看上去一切正常。
+
+    `app_classes`（来自 `static/dexfacts.json`）用于认 R8 混淆后的类名，见 app_classes.py。
     """
     no_stack = "事件的栈里没有应用侧帧（钩子未采集，或采集时栈被截断）"
 
     for finding in findings:
-        package = finding.get("package") or package
+        pkg = finding.get("package") or package   # 循环内不得覆盖入参：下一条会跟着错
         # 按包重建索引：跨包借用别人的栈会让结论指向无辜应用（multi_acceptance 的
         # phase5_package_isolation 与 test_other_packages_egress_is_not_borrowed 钉着这条）。
-        reads_by_id = index_events([r for r in reads if (r.get("pkg") or package) == package])
-        flows_by_id = index_events([f for f in flows if (f.get("package") or package) == package])
+        reads_by_id = index_events([r for r in reads if (r.get("pkg") or pkg) == pkg])
+        flows_by_id = index_events([f for f in flows if (f.get("package") or pkg) == pkg])
         kind = finding.get("evidence_kind")
         locs: list[dict] = []
         gaps: list[dict] = []
@@ -182,26 +208,34 @@ def attach(findings: list[dict], reads: list[dict], flows: list[dict],
             continue
 
         if kind == "read_event":
-            for event_id in dict.fromkeys(finding.get("event_ids") or []):
-                record, why = resolve_event(reads_by_id, event_id)
+            refs = _refs(finding)
+            todo = [(r.get("evt_id"), r) for r in refs] if refs else \
+                   [(i, None) for i in dict.fromkeys(finding.get("event_ids") or [])]
+            for event_id, ref in todo:
+                record, why = _lookup(reads_by_id, ref, event_id)
                 ambiguous += [why] if why else []
-                _take(locs, gaps, record, package, "read", event_id, why or no_stack)
+                _take(locs, gaps, record, pkg, "read", event_id, why or no_stack, app_classes)
         elif kind == "read_then_egress":
             for pair in finding.get("pairs") or []:
                 read_id = pair.get("read_event_id")
-                record, why = resolve_event(reads_by_id, read_id)
+                read_ref = {"src": pair.get("read_src"), "evt_id": read_id}
+                record, why = _lookup(reads_by_id, read_ref, read_id)
                 ambiguous += [why] if why else []
-                _take(locs, gaps, record, package, "read", read_id, why or no_stack)
-                flow, why_flow = resolve_event(flows_by_id, pair.get("flow_event_id"))
+                _take(locs, gaps, record, pkg, "read", read_id, why or no_stack, app_classes)
+                flow_id = pair.get("flow_event_id")
+                flow_ref = {"src": pair.get("flow_src"), "evt_id": flow_id}
+                flow, why_flow = _lookup(flows_by_id, flow_ref, flow_id)
                 ambiguous += [why_flow] if why_flow else []
                 if not flow:
-                    gaps.append({"role": "egress", "event_id": pair.get("flow_event_id"),
+                    gaps.append({"role": "egress", "event_id": flow_id,
                                  "reason": why_flow or
                                            "结论引用的流不在 flows 里，无法回查是哪次连接"})
                     continue
-                event, failed_nearby = nearest_egress(flow.get("ts"), package, egress_events)
+                event, failed_nearby = nearest_egress(flow.get("ts"), pkg, egress_events,
+                                                      connect_window_ms)
                 if event:
-                    _take(locs, gaps, event, package, "egress", event.get("evt_id"), no_stack)
+                    _take(locs, gaps, event, pkg, "egress", event.get("evt_id"), no_stack,
+                          app_classes)
                 elif failed_nearby:
                     # 与"根本没有连接"必须分开说：这里**有**本包的连接，只是都失败了。
                     # 写成"没有出站事件"就是假话，而且会把读者的排查方向带偏。

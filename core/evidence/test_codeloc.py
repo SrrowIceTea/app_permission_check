@@ -43,6 +43,14 @@ EGRESS_APP_FRAMES = [
     f"{A}.MainActivity.doEgress$lambda$12(MainActivity.kt:141)",
 ]
 
+# 实测栈（2026-10-20 冒烟批次 02 openmensa，R8 把包名压成了 v81/f81）。
+# 用包名前缀判，这些帧全是"外人"——于是有栈也拿不到任何位置。
+R8_STACK = "\n".join([
+    "android.location.LocationManager.getLastKnownLocation(LocationManager.java)",
+    "v81.g(r8-map-id-8cef73ca394d46242b18079fcbe314ffb2ad8407590664b74a52d990401cc1c6:26)",
+    "f81.a(r8-map-id-8cef73ca394d46242b18079fcbe314ffb2ad8407590664b74a52d990401cc1c6:49)",
+])
+
 
 class ParseFrameTest(unittest.TestCase):
     def test_real_frame_parses(self) -> None:
@@ -148,6 +156,36 @@ class LocateTest(unittest.TestCase):
         stack = "\n".join(["java.net.Socket.connect(Native Method)",
                            "com.android.okhttp.internal.Platform.connectSocket(Platform.java:182)"])
         self.assertIsNone(codeloc.locate({"stack": stack}, A, "egress", 3))
+
+
+class R8ObfuscatedTest(unittest.TestCase):
+    """R8 混淆样本：包名被压成 `v81`，只有 APK 类表认得出来。
+
+    实测 2026-10-20 冒烟批次：02 openmensa 的 7 条读取事件全部 `code_locs=[]`，
+    原因不是"没有栈"（栈里有 `v81.g(...:26)`），而是"不认这个类名"。
+    """
+
+    def test_prefix_alone_cannot_see_obfuscated_frames(self) -> None:
+        """没有类表时按包名判：混淆帧认不出来。这是旧行为，留着当对照。"""
+        self.assertIsNone(codeloc.locate({"stack": R8_STACK}, A, "read", 1))
+
+    def test_dexfacts_classes_locate_obfuscated_frame(self) -> None:
+        """给了 dexfacts 的类表，`v81.g(...:26)` 就被认成应用自己的帧。"""
+        loc = codeloc.locate({"stack": R8_STACK}, A, "read", 1, frozenset({"v81", "f81"}))
+        self.assertEqual(loc["line"], 26, "行号来自运行时栈，不是补出来的")
+        self.assertEqual(loc["class"], "v81")
+        self.assertEqual(len(loc["chain_with_lines"]), 2)
+
+    def test_system_prefix_vetoes_even_if_in_class_set(self) -> None:
+        """类表里有短名时也不能把系统帧算成应用代码（`com.android.*` 一票否决）。"""
+        stack = "com.android.okhttp.internal.Platform.connectSocket(Platform.java:182)"
+        classes = frozenset({"com.android.okhttp.internal.Platform"})
+        self.assertIsNone(codeloc.locate({"stack": stack}, A, "read", 1, classes))
+
+    def test_package_prefix_still_works_without_dexfacts(self) -> None:
+        """类表缺失（多 dex 只解析了首个）时，包名前缀仍要兜住未混淆的样本。"""
+        loc = codeloc.locate({"stack": VHAL_STACK}, A, "read", 5, None)
+        self.assertEqual(loc["line"], 128)
 
 
 class AttachTest(unittest.TestCase):

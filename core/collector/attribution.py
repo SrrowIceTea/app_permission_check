@@ -26,6 +26,16 @@ from urllib.parse import urlsplit
 # 时间配对的容差：事件与流的间距在此之内才认为是同一次外发。
 MATCH_TOLERANCE_MS = 2000
 
+# 连接建立 → 其上首个 HTTP 请求之间的实测间隔（2026-10-20，60 样本里 4 个同时有
+# egress 与 flows 的样本）：中位数 **16–29 秒**，2 秒容差只覆盖 122 条 flow 里的 13 条。
+# 语义上也本该如此：TCP 连接**一定早于**跑在它上面的请求，所以正确的判据是
+# 「事件不晚于流（允许 2s 时钟抖动）+ 年龄不超过上限」，而不是双向 `abs()`。
+#
+# **只在 target_check 开启时启用**：那时候选必须 host/ip 对得上，放大窗口不会串包；
+# 反向代理模式（车载）所有 App 都寻址同一个代理端口，没有目标锚定，
+# 放大窗口会把别人的连接算到自己头上——那里必须保持原来的 2 秒。
+CONNECT_AGE_MS = 120_000
+
 # 亚军判据。若另一个**不同包名**的事件与冠军的接近程度在这么多毫秒之内，
 # 那就不该说"最近的是它"，只能说"分不清是哪个"。见 Attribution.ambiguous。
 AMBIGUITY_MS = 500
@@ -286,10 +296,15 @@ class TimeAttribution:
 
     def resolve(self, ts_ms: int, flow_target: dict | None = None) -> Attribution:
         self._refresh()
+        # 有目标锚定时才放开"连接年龄"窗口，见 CONNECT_AGE_MS 的说明。
+        window = CONNECT_AGE_MS if self.target_check else MATCH_TOLERANCE_MS
         ranked = sorted(
             (abs(event_ts - ts_ms), package, source, target)
             for event_ts, package, source, target in self.events
-            if abs(event_ts - ts_ms) <= MATCH_TOLERANCE_MS
+            # 有符号判据：事件早于流（差值为正）最多 window；允许晚 MATCH_TOLERANCE_MS
+            # 以内的时钟抖动。旧写法 `abs(...) <= 2000` 会把"连接比请求早 20 秒"
+            # 这种最常见的情形全部排除掉。
+            if -MATCH_TOLERANCE_MS <= (ts_ms - event_ts) <= window
         )
         if self.target_check:
             ranked = [r for r in ranked if target_match(r[3], flow_target)]

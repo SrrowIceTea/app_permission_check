@@ -34,6 +34,7 @@ import coverage_window as cov      # noqa: E402  分段采集的覆盖率账本�
 import apk_meta                   # noqa: E402  APK 版本号/包名（政策绑定用）
 import pcap_capture               # noqa: E402  设备端抓包（P0，2026-10-18）
 import pcap_http                  # noqa: E402  pcap → 完整 HTTP 报文（复用 tshark）
+import tls_profile                # noqa: E402  keylog=0 的成因画像（没握手/复用/回调没触发）
 sys.path.insert(0, str(ROOT))
 from core import sdk_paths  # noqa: E402   SDK 路径统一解析（§8.2 B-4）
 from core.io_utils import load_jsonl_counting  # noqa: E402  JSONL 唯一实现（只按 LF 分行）
@@ -786,6 +787,18 @@ def main() -> int:
         stats = pcap_http.decode(pcap_path, out / "http_messages.jsonl",
                                  out / "bodies", keys if nk else None)
         stats["keylog_labels"] = labels
+        # keylog=0 有三种成因（没握手 / 会话复用 / 回调没触发），必须分开记：
+        # 否则"未装上"这句会把 attach 模式的已知边界误报成采集链故障。
+        prof = tls_profile.profile(session)
+        # 与 explain 同口径：有加密帧却零 SSL_* 事件 = 钩子够不着（WebView/Chromium），
+        # 不能记成"没联网"——那是把工具盲区说成样本行为。
+        if prof["verdict"] == "no_tls_in_window" and \
+                (stats.get("tls_undecrypted_app_data") or 0) > 0:
+            prof["verdict"] = "other_tls_stack"
+        stats["tls_profile"] = prof
+        if nk == 0 and (stats.get("tls_undecrypted_app_data") or 0):
+            stats["error"] = tls_profile.explain(
+                prof, int(stats.get("tls_undecrypted_app_data") or 0))
         (out / "http-stats.json").write_text(
             json.dumps(stats, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         undecoded = stats.get("tls_undecrypted_app_data") or 0
@@ -795,12 +808,10 @@ def main() -> int:
                 f"，keylog={nk} 行") if stats["ok"] else \
                f"0 条报文：{stats.get('error') or '未知'}"
         if nk == 0 and undecoded:
-            # "只有明文那几条"和"没流量"在计数上长得一样。App 的 TLS 连接若在
-            # tls_meta 装钩子之前就建好（实测整轮 HTTPS 全是这种），SSL_CTX_new /
-            # SSL_new 都已经错过，keylog 一行也拿不到——此时 pcap 里的 TLS
-            # 解不开，报文明细必然只剩零头。这种情况**不能判通过**。
-            note += (f"；⚠ 有 {undecoded} 帧 TLS 应用数据未解密（keylog 未装上），"
-                     f"上面这些不是全部外发内容")
+            # "只有明文那几条"和"没流量"在计数上长得一样，成因已由 tls_profile 判过：
+            # 三种情形（no_tls_in_window / reused_session / callback_not_fired）
+            # 的整改方向完全不同，所以文案直接用画像的结论，不再写笼统的"未装上"。
+            note += f"；⚠ {stats.get('error') or ''}"
             check("http_messages_extracted", 1, optional=True, note=note)
             emit("http_msgs", "partial", note)
         else:
@@ -963,6 +974,10 @@ def main() -> int:
          "--session", str(session), "--package", args.package,
          "--permissions", str(o / "requested-permissions.txt"),
          "--app-category", args.app_category,
+         # 静态副本在**样本目录**下（`out/static`，见 static_copied 那段），
+         # 不是报告输出子目录 `out/out/`——写错位置会导致 dexfacts 读不到、
+         # R8 混淆样本的代码行号全丢（2026-10-20 冒烟首轮就是这么白跑的）。
+         "--static-dir", str(out / "static"),
          *policy_id_args,
          *policy_args,
          "--out", str(o / "findings.jsonl"), "--summary", str(o / "summary.json")],
