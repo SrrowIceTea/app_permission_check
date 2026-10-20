@@ -92,6 +92,10 @@ def dynamic_step(item: dict, args, cat_map: dict, apk_dir: Path) -> dict:
     else:
         rec["note"] = (rec.get("note", "") +
                        " 无 provenance.json：报告里样本来源会标为未记录").strip()
+    if getattr(args, "policy_store", None):
+        cmd += ["--policy-store", args.policy_store]
+    if getattr(args, "no_system_ca", False):
+        cmd.append("--no-system-ca")
     if args.skip_ai:
         cmd += ["--skip-ai"]
     try:
@@ -106,6 +110,17 @@ def dynamic_step(item: dict, args, cat_map: dict, apk_dir: Path) -> dict:
                 pass
     rec["steps"]["device"] = rc
     rec["status"] = "ok" if rc == 0 else "device_failed"
+    # 覆盖率账本（A4，2026-10-19）：把该样本"窗口是否被死亡截断"摘进汇总，
+    # 否则批次层面只看得到 ok/failed，看不到"这一条结论其实只观测了 16 秒"。
+    ver_p = apk_dir / "out" / "verification.json"
+    if ver_p.exists():
+        try:
+            ver = json.loads(ver_p.read_text(encoding="utf-8"))
+            rec["coverage"] = ver.get("coverage")
+            if (ver.get("coverage") or {}).get("truncated"):
+                rec["note"] = (rec.get("note", "") + " 窗口被进程死亡截断（见 coverage）").strip()
+        except json.JSONDecodeError:
+            pass
     # 把该样本的结论规模摘进汇总，便于一眼看出哪个样本有东西
     summary_p = apk_dir / "out" / "summary.json"
     if summary_p.exists():

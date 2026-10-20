@@ -127,7 +127,29 @@ class EgressTest(unittest.TestCase):
                                     flows=flows))
         self.assertIsNone(f, "unresolved 的流不得参与关联（D413 移动端形态）")
 
-    def test_loose_attribution_caps_conclusion(self):
+    def test_single_package_fallback_caps_conclusion(self):
+        """单包排除法归因没有时间对齐，必须同样封顶 candidate。
+
+        2026-10-19 审计发现：single_package_fallback 的 attribution_delta_ms 为空，
+        旧 is_loose() 直接返回 False——于是"排除法"会被当成精确时间归因，
+        read_then_egress 拿到不该有的结论等级。这里把它钉死。
+        """
+        R = rule("data_egress", "read_before_egress_within_window", "imei",
+                 content_match="required")
+        R["conclusion_level"] = "correlated"
+        flows = [{"evt_id": 2, "host": "openmensa.org", "host_received_ts": 200, "ts": 200,
+                  "request_tags": ["digit15_shape"],
+                  "request_tokens": ["digit15_shape:abc123"], "method": "POST",
+                  "attribution": "single_package_fallback",
+                  "attribution_delta_ms": None}]
+        f = ev.evaluate(R, ctx(reads=[read(1, "imei", 100, value_hash="abc123")],
+                               flows=flows))
+        self.assertIsNotNone(f, "排除法归因的流仍可用于关联，但等级要封顶")
+        self.assertEqual(f["conclusion_level"], "candidate")
+        self.assertEqual(f["conclusion_capped_by"], "attribution_loose")
+        self.assertIn("单包排除法", f["note"], "排除法封顶必须如实写排除法")
+        self.assertNotIn("时间归因距离", f["note"], "排除法没有时间距离，不得套用距离话术")
+
         """归因距离 ≥ ATTRIB_LOOSE_MS 时，correlated 封顶 candidate（D414）。"""
         R = rule("data_egress", "read_before_egress_within_window", "imei",
                  content_match="required")
@@ -142,6 +164,8 @@ class EgressTest(unittest.TestCase):
         self.assertEqual(f["conclusion_level"], "candidate")
         self.assertEqual(f["declared_conclusion_level"], "correlated")
         self.assertEqual(f["conclusion_capped_by"], "attribution_loose")
+        self.assertIn("1500ms", f["note"], "时间距离型封顶必须说距离")
+        self.assertNotIn("单包排除法", f["note"], "时间距离型不得冒用排除法措辞")
 
     def test_tight_attribution_keeps_level(self):
         """归因距离很小（< LOOSE）时不得无端封顶。"""

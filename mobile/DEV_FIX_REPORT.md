@@ -1,10 +1,19 @@
 # 工程缺陷修复记录（2026-10-14）
 
+> ⚠️ **2026-10-19 复核后请先读这条**：本文件里凡写「A1 已修复」的地方，**都只表示
+> 「当时那批改动把崩溃概率降下来了」**，不表示崩溃已消除。10-19 实机仍反复复现
+> （`SIGSEGV @ Jit thread pool`，当天在夹具与真实样本上多次复现，最近一次 22:14
+> `uptime 38s`；同晚 3 次第三方样本又都存活——每组 n 都是个位数，**谈不了概率**），
+> 根因是 frida-java-bridge × ART 的上游缺陷，本仓修不掉。现场证据、已兜住的后果、
+> 以及**仍然没兜住的 4 项**见 [`A1_RESIDUAL_20261019.md`](A1_RESIDUAL_20261019.md)。
+> 答辩/报告引用时**不要**把本文当「A1 已修」的出处。
+
 > 任务书：[`mobile/RESEARCH_OUTLOOK.md` §八](RESEARCH_OUTLOOK.md)「工程缺陷与修复清单」。
 > 执行方式：按 §8.5 的分批计划 1 → 2 → 3 → 4；**每批改完跑两条离线回归**。
 > 批次 4 的第一轮**只写方案、未动一行代码**；第二轮（2026-10-14 晚）落地了其中**纯离线可写**的三项
 > （A1 的分档/缓存预备、A3 的夹具阳性对照、B-2 的钩子一致性守卫）——当时 A1 本体未修，
-> **已于 2026-10-16 修复**（执行记录见 §5.1 / §5.8 / §5.9）。
+> 2026-10-16 的 bridge 补丁 + 单 agent **只是降概率**（见 §5.1 标题与
+> `A1_RESIDUAL_20261019.md`），**不是修好**。
 > 遵守 §8.6 六条红线；`core` 未出现任何 `import vehicle` / `import mobile`。
 
 ---
@@ -18,7 +27,7 @@
 | 移动侧回归 | `mobile/tools/run_mobile_checks.py` → **23/23 passed，failed=[]**（批次 5 终态） |
 | 根回归 | `tools/run_regressions.py` → **13 组全 0 失败**（批次 5 终态） |
 | 回归次数 | 基线 1 次 + 批次 1/2/3 各 1 次 + 批次 3 收尾 2 次 + 批次 4-B 2 次 + 批次 5 至少 4 次，**中间出现过一次回归失败并已修**（见 §3.4） |
-| 未执行条目 | ~~A1 本体（需设备）~~ **2026-10-16 已修复**（见 §5.1/§5.8/§5.9）、A4、A5、B-2 的中期共享化、剩余 6 个超 300 行文件的拆分、`run_regressions.py --mobile` 开关，见 §6 |
+| 未执行条目 | ~~A1 本体（需设备）~~ 2026-10-16 降概率、**未消除**（见 §5.1 标题与 `A1_RESIDUAL_20261019.md`）、A4、A5、B-2 的中期共享化、剩余 6 个超 300 行文件的拆分、`run_regressions.py --mobile` 开关，见 §6 |
 
 两条回归命令（纯离线、不需要设备）：
 
@@ -298,7 +307,7 @@ workbench 0     hook-bundles 0      frida-bundle-config 0
 
 ---
 
-## 5. 批次 4 与批次 5：方案与执行（**A1 已于 2026-10-16 修复**，见 §5.8/§5.9）
+## 5. 批次 4 与批次 5：方案与执行（**A1 于 2026-10-16 降概率，未消除**，见 §5.8/§5.9）
 
 > 批次 4-B（2026-10-14 第二批）只做**纯离线可写**的三件事：A1 的分档/缓存预备（§5.1）、
 > A3 的夹具阳性对照（§5.2）、B-2 的钩子一致性守卫（§5.4）。**当时 A1 本体没修**——
@@ -313,14 +322,20 @@ workbench 0     hook-bundles 0      frida-bundle-config 0
 
 | 条目 | 状态 | 落地物 | 离线证据 | 缺什么才能算完 |
 |---|---|---|---|---|
-| **5.1 A1 分档定位** | **离线预备已落地，A1 本体未修** | `--watch-limit`/`VSCAN_WATCH_LIMIT`（H2）、`--no-stack`/`VSCAN_NO_STACK`（H1）、**`--args-only`/`VSCAN_ARGS_ONLY`（H5，批次 5）**、事件期缓存化 `armRuntimeCache()`/`armValueCache()`、扫描器 `mobile/tools/a1_tier_scan.py` | `core/frida_host/test_bundle_config.py` 6 例全过；真实 bundle 上 **4 个**占位符各存活 1 次（`hook_consent` 只有 2 个，正常），替换后长度头自洽、模块拼接过 `node --check`；`test_a1_tier_scan.py` 11 例 | 设备上按档位跑夹具，`reads.jsonl` 出现 ≥1 条非 START/ARMED 事件且进程存活 |
+| **5.1 A1 分档定位** | **离线预备已落地，A1 本体未修** | `--watch-limit`/`VSCAN_WATCH_LIMIT`（H2）、`--no-stack`/`VSCAN_NO_STACK`（H1）、**`--args-only`/`VSCAN_ARGS_ONLY`（H5，批次 5）**、事件期缓存化 `armRuntimeCache()`/`armValueCache()`、扫描器 `mobile/tools/a1_tier_scan.py` | `core/frida_host/test_bundle_config.py` 6 例全过；真实 bundle 上 **4 个**占位符各存活 1 次（`hook_consent` 只有 2 个，正常；**2026-10-19 已增至 5 个**，多出 `__VSCAN_DEOPTIMIZE__`/`__VSCAN_SESSION_PACKAGES__`），替换后长度头自洽、模块拼接过 `node --check`；`test_a1_tier_scan.py` 11 例 | 设备上按档位跑夹具，`reads.jsonl` 出现 ≥1 条非 START/ARMED 事件且进程存活 |
 | **5.2 A3 夹具自检** | **已落地，待设备验收** | `mobile/tools/fixture_selftest.py`；`batch_thirdparty.py` 前置门 + `--skip-fixture-selftest`；结果写进 `batch-summary.json` 的 `selftest` | 无设备跑 → `passed:false` + `reason`/`hint`；`--skip` → `passed:null` 且跳过事实落进批次摘要；门判 `False` 时批次拒绝出批。**批次 5 修掉一处会记错的字段**：`alive_at_end`/`app_death` 只在真的取到存活状态时才写 | 设备上跑批，夹具自检真出 PRIVACY_READ |
 | **5.4 B-2 一致性守卫** | **已落地并验证** | `mobile/tools/test_hooks_parity.py` + `hooks_parity_whitelist.json`（**7 对**、13 条规则） | 通过 exit 0；注入 4 种真实漂移均 exit 1 并给出行级 A/B 差异；白名单陈旧也 exit 1 | —（纯离线，已完） |
 | **5.5 超 300 行拆分** | **部分落地（11 → 6）** | 拆 5 个：`fetch_apk`(382→242)、`build_mobile_rules`(406→209)、`test_analyze`(324→220)、`test_completion`(318→281)、`evaluation_mobile`(309→241) | 每个都验了"测试数守恒"与受影响套件全绿（§5.5） | 剩 6 个主链路文件**等 A1 修好再拆**（用户决定） |
 | **5.6 `extended_rglob`** | **已落地并复现原缺陷** | `core/static/winpath.py::extended_rglob()`；5 个调用点改完 | 目录自身 310 字符时 `rglob` → `[]`、`extended_rglob` → `['Deep.java']`；`test_jobs.ExtendedRglobTest` 3 例 | —（纯离线，已完） |
 | **5.3 / 5.7** | 未做（仍为方案） | — | — | 见各自小节 |
 
-### 5.1 A1 · 插桩把应用打死（P0，最高优先级）—— **已修复（2026-10-16），执行记录见 §5.8**
+### 5.1 A1 · 插桩把应用打死（P0，最高优先级）—— **降概率（2026-10-16），未消除；2026-10-19 复核见 `A1_RESIDUAL_20261019.md`**
+
+> **2026-10-19 复核（必须连读）**：本节"已修复"的结论**只在当时的 4 模块 bundle 上成立**。
+> 现 `hook_all` 已扩到 9 模块，夹具与真实样本当天仍复现 `SIGSEGV @ Jit thread pool`；
+> 新墓碑把崩溃点定到 **JIT 编译线程 `HBasicBlockBuilder::Build`**（编译期读到无效
+> dex/ArtMethod），属 frida-java-bridge × ART 的上游缺陷。后果侧（窗口截断、假通过、
+> 死因误归属）已修，详见 `mobile/A1_RESIDUAL_20261019.md`。**不要再把本节当"已修"引用。**
 
 > **修复摘要（2026-10-16）**：A1 由**三层独立缺陷**叠加而成（"原分析"段只描述了其中
 > 第 3 层的表象），全部定位并修复。验收判据（§8.1：`reads.jsonl` 出现 ≥1 条非
@@ -367,7 +382,7 @@ workbench 0     hook-bundles 0      frida-bundle-config 0
 
 1. **先把 A2 的强制判据用起来**（本轮已做）：任何一轮跑完先看 `verification.json` 的 `runtime_events_captured`，它现在是 A1 的探针。
 2. **分档脚本**（**本轮已落地**）：`core/frida_host/run.py` 新增 `--watch-limit <n>`，`hook_privacy.js` 里 `for (var i = 0; i < limit; i++) armOne(WATCH[i])`；`0` 是合法档位（等价全不挂，当 attach 对照组），未给 = 全量 58。同名的 `VSCAN_WATCH_LIMIT` 环境变量可兜底。`START`/`ARMED` 事件里都带 `watch_limit`/`watch_limit_raw`，档位可事后从证据里复核。按 H2 的档位跑；每档把 `app-death.json` 与 `reads.jsonl` 落盘归档，形成可对照的表格。
-3. **H1 的缓存化改造**（**本轮已落地**）：`runtime.js` 新增 `armRuntimeCache()` 把 `Java.use('java.lang.Thread')` 提到 ARMED 阶段缓存（`threadName()`/`stackStr()` 事件期不再 `Java.use`）；`values.js` 新增 `armValueCache()` 缓存 `MessageDigest`。`stackStr()` 另有总开关 `VSCAN_NO_STACK=1` / `--no-stack`，打开后事件不带线程/栈字段。`START` 里记 `runtime_cache`/`value_cache` 两个布尔，能立刻看出缓存是否生效。**这些仍是纯离线可写、必须设备验证的改动**——按 §8.6 第 6 条，未验证前不得声称 A1 已修。
+3. **H1 的缓存化改造**（**本轮已落地**）：`runtime.js` 新增 `armRuntimeCache()` 把 `Java.use('java.lang.Thread')` 提到 ARMED 阶段缓存（`threadName()`/`stackStr()` 事件期不再 `Java.use`）；`values.js` 新增 `armValueCache()` 缓存 `MessageDigest`——**2026-10-19 已改为纯 JS SHA-256，不再解析/缓存任何 Java 类，`armValueCache()` 恒定返回 true（`value_cache` 字段从此只作版本标记，见 `A1_RESIDUAL_20261019.md` §3.5）**。`stackStr()` 另有总开关 `VSCAN_NO_STACK=1` / `--no-stack`，打开后事件不带线程/栈字段。`START` 里记 `runtime_cache`/`value_cache` 两个布尔，能立刻看出缓存是否生效。**这些仍是纯离线可写、必须设备验证的改动**——按 §8.6 第 6 条，未验证前不得声称 A1 已修。
    - 坑（已踩并记录）：`frida-compile` 的压缩器会把**直接的字面量比较**（`"__VSCAN_NO_STACK__" === "1"`）常量折叠成 `false`，占位符必须走 `parseInt("__VSCAN_NO_STACK__", 10)` 消费。判断方式是构建后 `grep` bundle，确认占位符字符串还在。
    - **批次 5 追加**：同一条路子又加了第四个占位符 `__VSCAN_ARGS_ONLY__`（H5 开关）。验证方式与 H1 一致——
      构建后 `grep` 确认 4 个占位符在 `hook_privacy.bundle.js` 里各存活 **1 次**（`hook_consent.bundle.js` 只用到 2 个，
@@ -499,7 +514,7 @@ frida-server 17.18.0；frida-java-bridge 7.0.13；模拟器 `-http-proxy` 强制
 | JIT-off | 49 档 | JIT 线程崩溃消失，暴露 `GetOatQuickMethodHeader` FATAL | 第 1 层被消除；第 3 层暴露 |
 | bridge 补丁 | 49/58 档 | 事件首次捕获成功（2 条 PRIVACY_READ + 完整调用栈）但 ~50% 仍崩 | 第 2 层修复；第 3 层残留 |
 | 样本对照 | 单脚本 ×5 vs 双脚本 ~19 轮 | **5/5 vs ~50%** | **第 3 层 = 多 agent**（命中 bridge 注释的限制） |
-| 合并验证 | `hook_all` ×5 | **5/5 通过（零 fatal）** | 修复达成（判据：≥1 真实事件 + 进程存活） |
+| 合并验证 | `hook_all` ×5 | **5/5 通过（零 fatal）** | 当时判据（≥1 事件 + 进程存活）达成；**10-19 同类场景仍死**，判据已作废 |
 
 **关键取证**（`/data/tombstones/tombstone_39`）：一级 FATAL 栈——
 `#17 ArtMethod::GetOatQuickMethodHeader ← #18 <anonymous>`（Frida 代码），
@@ -608,9 +623,10 @@ d) x64 `GetOatQuickMethodHeader` 符号定位（版本偏移表/指纹）属 bri
 ## 6. 遗留问题与建议下一步
 
 1. ~~**A1 未修，是全部运行时结论为空的根因——但工具已就位，下一步就是接设备跑。**~~
-   **→ A1 已修（2026-10-16，见 §5.8）**：三层根因全部定位并修复，验收判据达成
-   （夹具 hook_all 5/5、真实样本端到端通过）。以下原文与分档判据保留——对未来的
-   同类回归排查仍有价值：
+   **→ A1 未修（2026-10-16 只是降概率，10-19 复核仍复现）**：三层根因中前两层被处理，
+   第三层（ArtMethod 克隆 × ART JIT 编译）属上游缺陷，本仓无解。**旧的验收判据
+   （夹具 hook_all 5/5）已被证明不可靠**——它只测了一个时间点的 5 次抽样。以下原文与
+   分档判据保留——对未来的同类回归排查仍有价值：
    三个开关（`--watch-limit` / `--no-stack` / `--args-only`，§5.1 第 2、3 步 + 批次 5 补的 H5 开关）
    已经能用，夹具阳性对照（§5.2）会自动告诉你哪一档活着，分档扫描器 `mobile/tools/a1_tier_scan.py`
    直接把结果出成表。建议按 §5.1 的 H1 → H2 → H5 顺序做分档实验——这张"崩溃率 × 钩子档位"表本身

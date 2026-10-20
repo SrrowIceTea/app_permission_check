@@ -155,12 +155,49 @@ def main() -> int:
     if not consent_raw:
         gaps.append("consent.jsonl 缺失或为空：**no_consent_read 类结论全部不可判定**")
         consent = None
+        consent_observation = "no_consent_channel"
     else:
         consent = [e for e in consent_raw if e.get("ev") in ev.CONSENT_SIGNALS]
-        if not consent:
-            gaps.append("同意链里没有任何 PERM_RESULT/POLICY_VIEW：时序里没有「同意时刻」")
+        # 「有事件」≠「有同意时刻」。PERM_REQ 只是发起请求、PERM_CHECK 只是自查权限，
+        # 两者都不能证明用户做过选择；只有 PERM_RESULT（弹窗结果）与 POLICY_VIEW
+        # （打开政策页）才构成可观测的时刻。把它们混成一个 observed，会让
+        # 「点了允许但没弹窗」与「弹窗被无视」在报告里长得一样。
+        observed_moments = [e for e in consent
+                            if e.get("ev") in ("PERM_RESULT", "POLICY_VIEW")]
+        attempts_only = [e for e in consent if e.get("ev") in ("PERM_REQ", "PERM_CHECK")]
+        if observed_moments:
+            consent_observation = "observed"
+            if not any(e.get("ev") == "POLICY_VIEW" for e in observed_moments):
+                gaps.append("同意链有 PERM_RESULT 但没有 POLICY_VIEW：本轮同意链里未观测到政策告知页面")
+            if not any(e.get("ev") == "PERM_RESULT" for e in observed_moments):
+                gaps.append("同意链只有 POLICY_VIEW、没有 PERM_RESULT：只能证明看过政策页，"
+                            "不能证明用户同意")
+        elif attempts_only:
+            # 应用发起过权限请求/自查，但窗口内没有任何结果回调。
+            # 这是「请求了、没看到结果」，既不是同意，也不是没请求。
+            consent_observation = "requested_only"
+            gaps.append("同意链只有 PERM_REQ/PERM_CHECK（应用发起过权限请求或自查），"
+                        "本轮同意链里没有 PERM_RESULT/POLICY_VIEW——用户是否作出选择**不可判定**；"
+                        "read_before_consent 类规则不适用（≠ 通过），也不能记作「已请求即已同意」")
+        else:
+            # 只有 START/ARMED = 钩子装载成功，但窗口内没有任何同意信号。
+            # 必须与「钩子没装上」分开记：前者是「本次交互路径没有可观测的同意
+            # 时刻」，后者才是「采不到」。两者都写 unknown，报告里长得一模一样。
+            consent_observation = "not_observed"
+            gaps.append("同意链只有 START/ARMED（钩子已装载）：本轮同意链里既没有权限请求/结果，"
+                        "也没有打开疑似政策页——这是「没有可观测的同意时刻」，不是"
+                        "「用户未同意」；read_before_consent 类规则本轮**不适用**（≠ 通过）")
     if not flows:
         gaps.append("flows.jsonl 缺失或为空：无网络流证据（不等于没有外发）")
+    else:
+        fallback_n = sum(1 for f in flows
+                         if f.get("attribution") == "single_package_fallback")
+        if fallback_n == len(flows):
+            # 排除法归因没有时间对齐，比"时间距离大"更松。必须写进结论，
+            # 否则报告里会和精确时间归因长得一样（2026-10-19 审计发现）。
+            gaps.append(f"本轮 {len(flows)} 条网络流全部为单包排除法归因"
+                        "（single_package_fallback）：只证明「非系统探测的流量来自唯一被测包」，"
+                        "不是时间对齐；引用时不得写成「按时间归因」，相关结论封顶 candidate")
 
     permissions = []
     if args.permissions and Path(args.permissions).exists():
@@ -274,6 +311,7 @@ def main() -> int:
         "policy": {k: v for k, v in policy.items() if k not in ("text", "disclosure_scan")},
         "window_override_ms": args.window_override_ms,
         "gaps": gaps, "policy_consent_state": "unknown",
+        "consent_observation": consent_observation,
         "rules_sha256": hashlib.sha256(Path(args.rules).read_bytes()).hexdigest(),
         "caveat": "本工具不产出 policy_violation：是否违规是政策判定，需人工/AI 复核。"
                   "结论等级由规则自身封顶，引擎不抬高。",

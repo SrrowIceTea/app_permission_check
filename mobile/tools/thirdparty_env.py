@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
 import os
@@ -278,29 +279,74 @@ def kill_pid_tree(pid: int) -> None:
         pass
 
 
-def orchestrator_notes(death: dict) -> list[str]:
+def _representative_death(death: dict | None, coverage: dict | None) -> dict:
+    """多段采集时，报告要引用**第一次死亡**的证据，不是最后一段的。
+
+    实测（`a4-smoke5`）：seg0 有 `SIGSEGV @ Jit thread pool`，末段只剩"进程不在了"，
+    于是 bundle 被写成"signal 未知 / 死因未记录"，而证据就躺在同目录的
+    `app-death-seg0.json` 里。审计把这条列为"数据在、没被用"。
+    """
+    best = dict(death or {})
+    for s in ((coverage or {}).get("detail") or []):
+        if s.get("alive_at_end") is not False:
+            continue
+        d = s.get("death") or {}
+        if d and not (best.get("signal") and best.get("uptime_s") is not None):
+            merged = dict(best)
+            for k, v in d.items():
+                if v not in (None, "", [], {}):
+                    merged[k] = v
+            merged["window_alive"] = False
+            if merged.get("hooked_pid_alive") is not False:
+                merged["hooked_pid_alive"] = False
+            return merged
+        break
+    return best
+
+
+def orchestrator_notes(death: dict, package: str | None = None,
+                       coverage: dict | None = None) -> list[str]:
     """编排层写给报告的缺口说明（会带 [orch] 前缀进 bundle.gaps）。
 
     这些限制**工具无法从数据里推出来**；不写就等于让读者把「没采集到」读成「没发生」。
+
+    注意（2026-10-19）：上半段四条是**某一个样本**（com.domivega.gps_car）的实测边界，
+    原先无条件写进所有样本——别的 APK 的报告里也会出现"本样本的天气客户端是
+    loopj/AsyncHttpClient"，属于把 A 样本的结论扣到 B 样本头上。现在按包名收敛。
     """
-    notes = [
-        "本样本的**天气客户端**是 loopj/AsyncHttpClient（重打包 Apache HttpClient），不读系统代理，"
-        "天气 API 流量 mitmproxy 结构性抓不到；地图瓦片走 WebView、确实走代理，代理收到了 "
-        "CONNECT tile.openstreetmap.org:443 但被网络阻断（502），故 flows.jsonl 为空——"
-        "这是**覆盖缺口**不是「没有外发」；旁路证据见 out/supplementary-evidence.json。",
-        "TLS 绕过用的是第三方裁剪版（ssl_pinning_tp）：裁掉了会触发 ART abort 的 "
-        "HttpsURLConnection 主机名校验钩子；且因关键流量不走代理，本轮没有可读的 MITM 流量，"
-        "放宽 TLS 校验对本样本不产生任何证据。",
-        "静态侧证据全部封顶 candidate：规则库 dangerous_apis 只有 33 个 API，"
-        "android_id/定位/通讯录/短信/相册/日历 等数据类别 lib=0，静态扫描看不到这些。",
-        "APK 内未含隐私政策页（只有 OSS 许可文件），policy_from_apk 判 not_found。",
-    ]
-    if not death.get("alive_at_end"):
+    notes: list[str] = []
+    if package == "com.domivega.gps_car":
+        notes += [
+            "本样本的**天气客户端**是 loopj/AsyncHttpClient（重打包 Apache HttpClient），不读系统代理，"
+            "天气 API 流量 mitmproxy 结构性抓不到；地图瓦片走 WebView、确实走代理，代理收到了 "
+            "CONNECT tile.openstreetmap.org:443 但被网络阻断（502），故 flows.jsonl 为空——"
+            "这是**覆盖缺口**不是「没有外发」；旁路证据见 out/supplementary-evidence.json。",
+            "TLS 绕过用的是第三方裁剪版（ssl_pinning_tp）：裁掉了会触发 ART abort 的 "
+            "HttpsURLConnection 主机名校验钩子；且因关键流量不走代理，本轮没有可读的 MITM 流量，"
+            "放宽 TLS 校验对本样本不产生任何证据。",
+            "静态侧证据全部封顶 candidate：规则库 dangerous_apis 只有 33 个 API，"
+            "android_id/定位/通讯录/短信/相册/日历 等数据类别 lib=0，静态扫描看不到这些。",
+            "APK 内未含隐私政策页（只有 OSS 许可文件），policy_from_apk 判 not_found。",
+        ]
+    died = death.get("hooked_pid_alive") is False or death.get("window_alive") is False
+    if died:
+        # 多段采集时换成"第一次死亡"的证据：末段常常只剩"进程不在了"，
+        # 而 signal/uptime 都在 seg0 里（a4-smoke5 实测过的失真）。
+        death = _representative_death(death, coverage)
+        # 死因必须来自**本次**证据（墓碑/信号行），不能沿用某个样本的固定说法。
+        sig = death.get("signal") or "signal 未知"
+        thread = death.get("thread") or "线程未知"
+        uptime = death.get("uptime_s")
+        cause = death.get("cause")
+        if not cause and death.get("fatal_lines"):
+            cause = death["fatal_lines"][0]
         notes.append(
-            "应用在检测窗口内死亡：StartAutoLocationJob 启动 LocationUpdateService 后未在系统时限内调用 "
-            "startForeground()，抛 ForegroundServiceDidNotStartInTimeException。"
-            "这是样本自身在 Android 12+ 上的行为，与检测工具无关（只挂出站钩子、不挂 TLS 钩子时同样复现，"
-            "见 output/_smoke/ab_tls_tp.log）；它导致窗口后半段没有任何事件。")
+            "应用在检测窗口内死亡："
+            f"{sig}，崩溃线程 {thread}"
+            + (f"，进程自报 uptime {uptime}s" if uptime is not None else "")
+            + f"；死因：{cause or '未记录（墓碑/崩溃缓冲已被挤掉）'}。"
+            "窗口后半段没有任何事件是**失明**，不等于「应用没有该行为」；"
+            "有效观测时长见 verification.json 的 coverage.observed_s。")
     return notes
 
 
@@ -690,10 +736,132 @@ def _process_name_variants(package: str) -> set[str]:
     return names
 
 
-def parse_app_death(raw: str, package: str) -> dict:
-    """从 logcat 原文里抽「死于什么」。纯函数，便于用**真实崩溃原文**做单测。
+def _tombstone_blocks(lines: list[str]) -> list[list[str]]:
+    """把日志切成**墓碑记录**：每条的边界是 `*** *** ***` 头或 `Cmdline:` 行。
 
-    归属两条准则（都是实测教训，不要放松）：
+    为什么不能只按头切（2026-10-19 实测）：logcat 的 crash 缓冲里，墓碑的
+    `*** *** ***` 头经常先被挤掉，只剩 `Cmdline:` 之后的行；只按头切会让这些
+    残片粘到**上一条别人的**记录里，于是别人的 Abort message 就成了我们的死因。
+    也不能只按 Cmdline 切：一条完整墓碑同时有头和 Cmdline，会切出一个只有头的
+    空记录。两种边界都认，记录才是"从自己这一行开始"的。
+    """
+    blocks: list[list[str]] = []
+    cur: list[str] | None = None
+    for ln in lines:
+        if "*** *** ***" in ln:
+            if cur:
+                blocks.append(cur)
+            cur = [ln]
+        elif "Cmdline:" in ln:
+            # 同一条墓碑的形状是「头 → Build fingerprint/Timestamp/Process uptime → Cmdline」，
+            # 所以"头在前、还没有 Cmdline"时不能切——那是我们自己这条的一部分。
+            # 只有当前记录已经点名了进程（说明上一条结束了），才以 Cmdline 为界开新记录。
+            if cur and _block_has_header(cur) and _block_cmdline(cur) is None:
+                cur.append(ln)
+            else:
+                if cur:
+                    blocks.append(cur)
+                cur = [ln]
+        elif cur is not None:
+            cur.append(ln)
+    if cur:
+        blocks.append(cur)
+    return blocks
+
+
+def _block_cmdline(block: list[str]) -> str | None:
+    """墓碑记录里的 `Cmdline:` 进程名（第一个 token）。没有返回 None。"""
+    for ln in block:
+        if "Cmdline:" in ln:
+            tail = ln.split("Cmdline:", 1)[1].strip()
+            return tail.split()[0] if tail else None
+    return None
+
+
+def _block_has_header(block: list[str]) -> bool:
+    return any("*** *** ***" in ln for ln in block[:2])
+
+
+def _first_int(pattern: str, text: str) -> int | None:
+    m = re.search(pattern, text)
+    return int(m.group(1)) if m else None
+
+
+def _logcat_epoch_ms(line: str, offset_s: int = 0) -> int | None:
+    """logcat 行首的 `MM-DD HH:MM:SS.mmm` → epoch 毫秒。
+
+    logcat 用的是**设备本地时间**，年份不印。所以：
+    - `offset_s` = 设备本地时间相对 UTC 的偏移（由 `_device_clock_offset_s()` 现取，
+      不猜时区：模拟器是 UTC，真机可能是 +08:00）；
+    - 年份用"离现在最近的那个"推断（跨年时 12-31/01-01 才不会差一年）。
+    """
+    m = re.match(r"\s*(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})\.(\d{3})", line)
+    if not m:
+        return None
+    mo, d, hh, mm, ss, ms = (int(x) for x in m.groups())
+    now = time.time()
+    best = None
+    for year in (time.gmtime(now).tm_year, time.gmtime(now).tm_year - 1,
+                 time.gmtime(now).tm_year + 1):
+        try:
+            dt = datetime.datetime(year, mo, d, hh, mm, ss, ms * 1000,
+                                   tzinfo=datetime.timezone.utc)
+        except ValueError:
+            continue
+        cand = dt.timestamp() - offset_s      # 设备本地 → UTC
+        if best is None or abs(cand - now) < abs(best - now):
+            best = cand
+    return int(best * 1000) if best is not None else None
+
+
+_CLOCK_OFFSET_S: int | None = None
+
+
+def _device_clock_offset_s() -> int:
+    """设备的"本地墙钟 - UTC"偏移（秒）。取不到就按 0（模拟器/UTC 设备）。
+
+    为什么不用宿主时区：宿主可能是 UTC+8，而设备是 UTC——用宿主时区会把死亡时刻
+    整体挪 8 小时，`observed_s` 立刻变成负数或荒谬值（2026-10-19 复核时踩到的坑）。
+    """
+    global _CLOCK_OFFSET_S
+    if _CLOCK_OFFSET_S is not None:
+        return _CLOCK_OFFSET_S
+    _CLOCK_OFFSET_S = 0
+    try:
+        r = adb("shell", "echo $(date +%s); date +'%Y-%m-%d %H:%M:%S'", timeout=20)
+        lines = (r.stdout or "").strip().splitlines()
+        if len(lines) >= 2:
+            epoch = int(lines[0].strip())
+            local = datetime.datetime.strptime(lines[1].strip(), "%Y-%m-%d %H:%M:%S")
+            utc_naive = datetime.datetime(*local.timetuple()[:6],
+                                          tzinfo=datetime.timezone.utc)
+            _CLOCK_OFFSET_S = int(epoch - utc_naive.timestamp())
+    except Exception:
+        pass
+    return _CLOCK_OFFSET_S
+
+
+def _tombstone_epoch_ms(text: str) -> int | None:
+    """墓碑 `Timestamp:` → epoch 毫秒。墓碑时间是 **UTC**（带 +0000）。"""
+    m = re.search(r"Timestamp: (\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?", text)
+    if not m:
+        return None
+    y, mo, d, hh, mm, ss, frac = m.groups()
+    micro = int((frac or "0")[:6].ljust(6, "0"))
+    try:
+        dt = datetime.datetime(int(y), int(mo), int(d), int(hh), int(mm), int(ss),
+                               micro, tzinfo=datetime.timezone.utc)
+    except ValueError:
+        return None
+    return int(dt.timestamp() * 1000)
+
+
+def parse_app_death(raw: str, package: str, pid: int | str | None = None,
+                    since_ms: int | None = None,
+                    clock_offset_s: int = 0) -> dict:
+    """从 logcat 原文里抽「死于什么 + 死在什么时候」。纯函数，便于用真实崩溃原文做单测。
+
+    归属三条准则（都是实测教训，不要放松）：
 
     ① **崩溃标记行必须自己点名我们**——`Fatal signal` 行里的 `(进程名)`、
        `FATAL EXCEPTION` 场景的 `Process: <包名>`、tombstone 的 `Cmdline: <包名>`。
@@ -703,46 +871,121 @@ def parse_app_death(raw: str, package: str) -> dict:
        panic+abort 四行，按块归属会把 UWB 的 abort message（"failed to open the
        serial device"）写成 org.breezyweather 的死因。
 
-    ② **Abort message 只从点名我们的 tombstone 里取**：以 `Cmdline: <包名>` 为锚点，
-       向前找 `*** *** ***` 头；找不到头（缓冲被截断）就从锚点本身起、**只向后**扫——
-       向前扩窗会把紧邻的别人的记录吃进来。
+    ② **Abort message 只能取自"Cmdline 就是我们"的墓碑块**。旧实现以我们的
+       `Cmdline` 行为锚点、向前找最近的 `*** *** ***` 头，再从那个头向后扫 300 行——
+       当我们的墓碑被 UWB 崩溃循环挤出环形缓冲时，找到的头是**别人的**，向后扫就会
+       读到别人的 Abort message（2026-10-19 实测：夹具的 SIGSEGV 死因被写成
+       "failed to open the serial device"，正是 UWB 的）。现在改为：先切块，再按块内
+       Cmdline 整行匹配，块内找不到自己的 Cmdline 就**整块丢弃**。
+
+    ③ **拿不到墓碑就如实为空**（`tombstone_seen=False`）。日志只留了 signal 行时，
+       死因写 null，不猜、不借邻居的。
+
+    除死因外还抽"死在窗口的第几秒"（`uptime_s`，取自墓碑的 `Process uptime: Ns`），
+    因为采集窗口的**有效长度** = min(窗口预算, 死亡时刻)，报告必须能说出这个数。
+
+    **必须按 pid 限定**（`pid=`，2026-10-19 冒烟实测）：`logcat -d` 是整个环形缓冲，
+    里面有**上一轮**、别的样本的崩溃。只按包名匹配会把 5 分钟前另一次运行的墓碑
+    当成"这一段死了"（实测：本段被 force-stop，却报出上一轮的 SIGSEGV + uptime 29s）。
+    给了 `pid` 就只认 `pid <pid> (` / `pid: <pid>,`；给了 `since_ms` 还会丢掉更早的墓碑。
     """
     lines = raw.splitlines()
     names = _process_name_variants(package)
+    pid_txt = str(pid).strip() if pid is not None else None
 
     fatal: list[str] = []
-    cause: str | None = None
-
-    # ① native 崩溃：Fatal signal 行点名我们
+    signal_txt: str | None = None
+    fault_addr: str | None = None
+    thread_name: str | None = None
     for ln in lines:
-        if "Fatal signal" in ln and any(f"({n}" in ln for n in names):
-            s = ln.strip()
-            if s not in fatal:
-                fatal.append(s)
-
-    # ② tombstone：Cmdline 锚定，Abort message 取自该墓碑
-    for i, ln in enumerate(lines):
-        if f"Cmdline: {package}" not in ln:
+        if "Fatal signal" not in ln:
             continue
-        start = i
-        for j in range(i, max(-1, i - 400), -1):
-            if "*** *** ***" in lines[j]:
-                start = j
-                break
-        # 只向后扫：tombstone 里 Abort message 在 Cmdline 之后；若向前扩窗会把
-        # 紧邻的**别人的**记录吃进来（无头可锚时尤为危险）。
-        for l in lines[start:i + 300]:
-            if "Abort message:" in l:
-                cause = cause or l.split("Abort message:", 1)[1].strip().strip("'")
-                break
+        # 括号**成对**匹配：旧写法 `f"({n}" in ln` 是前缀匹配，`com.foo` 会命中
+        # `(com.foobar)`（2026-10-19 审计构造反例实测），把别的包算成本应用。
+        if not any(re.search(r"\(" + re.escape(n) + r"\)", ln) for n in names):
+            continue
+        if pid_txt and f"pid {pid_txt} (" not in ln:
+            continue      # 同一包名的**别的进程/别的轮次**，不算本段
+        s = ln.strip()
+        if s not in fatal:
+            fatal.append(s)
+            if signal_txt is None:
+                m = re.search(r"Fatal signal \d+ \((SIG[A-Z]+)\)", s)
+                signal_txt = m.group(1) if m else None
+                m = re.search(r"fault addr (\S+)", s)
+                fault_addr = m.group(1) if m else None
+                m = re.search(r"in tid \d+ \(([^)]+)\)", s)
+                thread_name = m.group(1) if m else None
 
-    # ③ Java 崩溃：FATAL EXCEPTION 块（其下方数行内带 Process: <包名>）
+    cause: str | None = None
+    uptime_s: int | None = None
+    death_ts: str | None = None
+    ts_ms: int | None = None
+    tombstone_seen = False
+    tombstone_complete = False
+    blocks = _tombstone_blocks(lines)
+    for block in blocks:
+        if _block_cmdline(block) != package:
+            continue          # 别人的墓碑：整条不看（准则②）
+        text = "\n".join(block)
+        if pid_txt and f"pid: {pid_txt}," not in text:
+            continue          # 同包名的别轮次/别的进程：pid 对不上就不算
+        block_ts = _tombstone_epoch_ms(text)
+        if since_ms and block_ts and block_ts < int(since_ms) - 5000:
+            continue          # 本段开始之前的旧墓碑（时钟/缓冲里残留）
+        tombstone_seen = True
+        has_header = _block_has_header(block)
+        tombstone_complete = tombstone_complete or has_header
+        for ln in block:
+            if "Abort message:" in ln and cause is None:
+                cause = ln.split("Abort message:", 1)[1].strip().strip("'")
+        if uptime_s is None:
+            uptime_s = _first_int(r"Process uptime: (\d+)s", text)
+        if death_ts is None:
+            m = re.search(r"Timestamp: (\S+ \S+)", text)
+            death_ts = m.group(1) if m else None
+        if ts_ms is None:
+            ts_ms = _tombstone_epoch_ms(text)
+        if signal_txt is None:
+            m = re.search(r"signal \d+ \((SIG[A-Z]+)\)", text)
+            signal_txt = m.group(1) if m else None
+        if fault_addr is None:
+            m = re.search(r"fault addr (\S+)", text)
+            fault_addr = m.group(1) if m else None
+        if thread_name is None:
+            m = re.search(r"name: ([^ ]+) +>>>", text)
+            thread_name = m.group(1) if m else None
+        if cause is not None and uptime_s is not None:
+            break
+
+    # Java 崩溃：FATAL EXCEPTION 块（其下方数行内带 `Process: <包名>, PID: <pid>`）
+    #
+    # 2026-10-19 复核补齐（审计发现这条路径原先**一个过滤都没有**）：
+    #   ① 旧写法 `package in c` 是子串匹配，`com.foobar` 会被算成 `com.foo`；
+    #   ② 旧写法不看 PID，多段重启时上一段的 `FATAL EXCEPTION` 会被算到本段；
+    #   ③ 旧写法不看时间，`logcat -d` 里几小时前的 Java 崩溃也会被收下。
+    # 现在：必须找到 `Process: <包名>, PID: <pid>` 这一行并按**整名**比对（子进程
+    # `com.foo:remote` 不算主进程），给了 pid 就要求 PID 对上，给了 since_ms 就按行首
+    # 时间戳丢弃旧崩溃。
     for i, ln in enumerate(lines):
         if "FATAL EXCEPTION" not in ln:
             continue
         ctx = lines[i:i + 6]
-        if not any(package in c for c in ctx):
+        proc_name = None
+        proc_pid: int | None = None
+        for c in ctx:
+            m = re.search(r"Process:\s*([^,\s]+),\s*PID:\s*(\d+)", c)
+            if m:
+                proc_name, proc_pid = m.group(1), int(m.group(2))
+                break
+        if proc_name != package:
             continue
+        if pid_txt and proc_pid is not None and str(proc_pid) != pid_txt:
+            continue
+        if since_ms:
+            ln_ms = _logcat_epoch_ms(ln, clock_offset_s)
+            if ln_ms is not None and ln_ms < int(since_ms) - 5000:
+                continue
         s = ln.strip()
         if s not in fatal:
             fatal.append(s)
@@ -752,21 +995,106 @@ def parse_app_death(raw: str, package: str) -> dict:
                     cause = c.strip()
                     break
 
-    return {"fatal_lines": fatal[:3], "cause": cause}
+    # 墓碑被挤掉、只剩 Fatal signal 行时的死亡时刻（2026-10-19 复核补）：
+    # 没有它，`observed_s` 就只能记 None（"知道死了，不知道死在何时"），
+    # 而这两种情况在报告里的写法完全不同。日志行自带毫秒级时间戳，够用。
+    ts_source = "tombstone" if ts_ms is not None else None
+    if ts_ms is None and fatal:
+        fatal_ms = _logcat_epoch_ms(fatal[0], clock_offset_s)
+        if fatal_ms is not None:
+            if since_ms and fatal_ms < int(since_ms) - 5000:
+                # 比本段开始还早的崩溃行不是这一段的（logcat 是整环缓冲）：
+                # 之前只对墓碑做了 since 过滤，Fatal signal 行漏掉了，
+                # 于是上一轮的 SIGSEGV 会被算成"本段死亡"。
+                fatal, signal_txt, fault_addr, thread_name = [], None, None, None
+            else:
+                ts_ms = fatal_ms
+                ts_source = "logcat_fatal_line"
+                death_ts = time.strftime("%Y-%m-%d %H:%M:%S",
+                                         time.gmtime(ts_ms / 1000.0)) + "+0000"
+
+    return {"fatal_lines": fatal[:3], "cause": cause,
+            "signal": signal_txt, "fault_addr": fault_addr, "thread": thread_name,
+            "uptime_s": uptime_s, "death_ts": death_ts, "death_ts_ms": ts_ms,
+            "death_ts_source": ts_source,
+            "tombstone_seen": tombstone_seen, "tombstone_complete": tombstone_complete}
 
 
-def app_death_reason(package: str) -> dict:
-    """应用在窗口内是否死亡、死于什么。
+def pid_alive(pid: int | str | None) -> bool | None:
+    """`/proc/<pid>` 是否还在——"同一个进程还活着"的唯一可信判据。
+
+    `pidof <package>` 只回答"包名有没有进程"：崩溃后自动重启的新进程会是**另一个
+    pid**，用它判活会把死亡伪装成存活（2026-10-19 实测：真实样本被挂钩 pid 12622
+    已 SIGSEGV，pidof 返回 14450 → alive_at_end=True）。pid 缺失时返回 None
+    （"查不到"不是"活着"，也不是"死了"）。
+
+    僵尸也算死（2026-10-19 复核）：被信号打死的进程在父进程回收前，`/proc/<pid>`
+    目录仍然存在，只判 `test -d` 会把它读成"活着"。所以读 `stat` 的状态位，
+    `Z` 直接判 False。adb 出错/超时返回 None——那叫"没查成"，不是"死了"。
+    """
+    if pid is None or str(pid).strip() == "":
+        return None
+    try:
+        r = adb("shell",
+                f"if test -d /proc/{pid}; then cat /proc/{pid}/stat 2>/dev/null "
+                f"| cut -d' ' -f3; else echo n; fi", timeout=30)
+    except Exception:      # adb 超时/设备掉线：查不到 ≠ 死了
+        return None
+    state = (r.stdout or "").strip().splitlines()
+    if not state:
+        return None
+    state = state[0].strip()
+    if state == "n":
+        return False
+    if state == "Z":
+        return False
+    if state in ("R", "S", "D", "T", "t", "I", "X"):
+        return True
+    return None
+
+
+def _device_tombstone(package: str, pid: int | str | None = None) -> tuple[str, str] | tuple[None, None]:
+    """在设备 /data/tombstones 里找**最近一次**点名我们的墓碑原文。
+
+    为什么必须做这件事（2026-10-19 实测）：本机模拟器的 UWB HAL 每 5 秒 abort 一次，
+    crash 缓冲与 /data/tombstones（100 个文件）都会被它挤掉——我们的墓碑大约 4 分钟
+    后就查不到了，而 logcat 的 crash 缓冲更短。窗口一结束就查、且以文件为兜底，
+    是唯一能保住死因与 `Process uptime`（有效窗口）的做法。
+    """
+    try:
+        ls = adb("shell",
+                 f"grep -l 'Cmdline: {package}' /data/tombstones/tombstone_* 2>/dev/null "
+                 f"| xargs -r ls -t 2>/dev/null | head -3", timeout=60)
+    except subprocess.TimeoutExpired:
+        return None, None
+    files = [ln.strip() for ln in (ls.stdout or "").splitlines() if ln.strip().startswith("/")]
+    for path in files:
+        try:
+            raw = adb("shell", "cat", path, timeout=60).stdout or ""
+        except subprocess.TimeoutExpired:
+            continue
+        if _block_cmdline(raw.splitlines()) == package:
+            if pid is None or f"pid: {pid}," in raw:
+                return raw, path
+    return None, None
+
+
+def app_death_reason(package: str, pid: int | str | None = None,
+                     since_ms: int | None = None,
+                     dump_dir: Path | None = None) -> dict:
+    """应用在窗口内是否死亡、死于什么、死在窗口的第几秒。
 
     必须留下："窗口后半段没有事件"既可能是应用没做该动作，也可能是应用已经死了，
-    只看事件文件分不出来。只读 logcat，不改任何东西。
+    只看事件文件分不出来。只读 logcat / tombstones，不改设备。
 
-    三个取证要点（都是实测教训）：
+    四个取证要点（都是实测教训）：
       ① `-b crash` 必须显式带上：native 崩溃（SIGABRT 等）的 tombstone 只在
          crash 缓冲里，而 crash 缓冲会被**其它进程的崩溃**（模拟器的 UWB HAL
          崩溃循环）快速挤占——所以要在窗口一结束就取证，晚了就真没了。
-      ② 解析走 parse_app_death（见其注释）。
-      ③ adb 报错 ≠ 应用死亡：多设备未指定 ANDROID_SERIAL 时 pidof 会报错，
+      ② 解析走 parse_app_death（见其注释）：只认点名我们的块。
+      ③ logcat 里没有我们的墓碑时，从 /data/tombstones 兜底（同样的 5 秒挤占问题，
+         文件比缓冲活得久一点）；拿到就把原文落盘，便于事后复核。
+      ④ adb 报错 ≠ 应用死亡：多设备未指定 ANDROID_SERIAL 时 pidof 会报错，
          旧实现把它当 alive=False，会把"查不到"写成"死了"。
     """
     try:
@@ -781,14 +1109,61 @@ def app_death_reason(package: str) -> dict:
     if "error:" in err:
         return {"alive_at_end": None, "pid": None, "fatal_lines": [], "cause": None,
                 "error": err.splitlines()[0], "package": package}
-    pid = (pid_res.stdout or "").strip()
+    alive_pid = (pid_res.stdout or "").strip()   # 只用于"包名有没有进程"，不能当判活
     try:
         log = adb("logcat", "-d", "-b", "main", "-b", "system", "-b", "crash",
                   "-v", "time", timeout=120).stdout or ""
     except subprocess.TimeoutExpired:
         log = ""   # 同上：拿不到崩溃缓冲就如实为空，不让它掀翻整轮
-    return {"alive_at_end": bool(pid), "pid": pid or None,
-            **parse_app_death(log, package)}
+    parsed = parse_app_death(log, package, pid=pid, since_ms=since_ms,
+                             clock_offset_s=_device_clock_offset_s())
+    source = "logcat" if parsed["tombstone_complete"] else None
+
+    # ①b 有 signal 行但墓碑还没写完：tombstoned 落盘比 libc 行晚约 1s（2026-10-19 冒烟
+    #    实测：force-stop 后 1s 的 SIGSEGV，第一次 dump 只有 signal 行，没有 uptime）。
+    #    重试一次——uptime 决定"有效观测时长"，值这一次往返。
+    if parsed["fatal_lines"] and not parsed["tombstone_complete"]:
+        time.sleep(1.5)
+        try:
+            log2 = adb("logcat", "-d", "-b", "crash", "-b", "main", "-v", "time",
+                       timeout=120).stdout or ""
+        except subprocess.TimeoutExpired:
+            log2 = ""
+        if log2:
+            again = parse_app_death(log2, package, pid=pid, since_ms=since_ms,
+                                    clock_offset_s=_device_clock_offset_s())
+            if again["tombstone_complete"]:
+                for k in ("cause", "uptime_s", "death_ts", "death_ts_ms", "signal",
+                          "fault_addr", "thread", "tombstone_seen", "tombstone_complete"):
+                    if parsed.get(k) in (None, "") and again.get(k) not in (None, ""):
+                        parsed[k] = again[k]
+                parsed["tombstone_seen"] = True
+                parsed["tombstone_complete"] = True
+                source = "logcat(retry)"
+
+    # ② 兜底：logcat 里没有**完整**墓碑（只剩 Cmdline 残片，或被 UWB 崩溃循环挤掉）
+    #    → 去设备目录找最近的一份。文件比缓冲活得久一点，且能拿到 uptime/Abort message。
+    if not parsed["tombstone_complete"]:
+        raw, path = _device_tombstone(package, pid=pid)
+        if raw:
+            fallback = parse_app_death(raw, package, pid=pid, since_ms=since_ms,
+                                       clock_offset_s=_device_clock_offset_s())
+            # 只补日志里缺的字段；fatal_lines 仍以 logcat 的 signal 行为准
+            for k in ("cause", "uptime_s", "death_ts", "death_ts_ms",
+                      "signal", "fault_addr", "thread"):
+                if parsed.get(k) in (None, "") and fallback.get(k) not in (None, ""):
+                    parsed[k] = fallback[k]
+            parsed["tombstone_seen"] = True
+            parsed["tombstone_complete"] = fallback.get("tombstone_complete", True)
+            source = path
+            if dump_dir is not None:
+                try:
+                    (Path(dump_dir) / "tombstone.txt").write_text(raw, encoding="utf-8")
+                except OSError:
+                    pass
+    parsed["tombstone_source"] = source
+    parsed["pid_filter"] = str(pid) if pid is not None else None
+    return {"alive_at_end": bool(alive_pid), "pid": alive_pid or None, **parsed}
 
 
 def parse_resolved_activity(stdout: str, package: str) -> str | None:

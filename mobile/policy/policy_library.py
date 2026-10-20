@@ -154,7 +154,14 @@ def _load_primary_policy(store: Path | None = None, *, package: str,
     store = Path(store or DEFAULT_STORE).resolve()
     missing = {"available": False, "status": "not_found", "gaps": []}
     if not store.is_dir():
-        return {**missing, "gaps": ["No local application policy library supplied or present"]}
+        # 「库目录不存在」与「库里有这份库但没有这个包」是两件事：
+        # 前者是环境问题（库被清理/没准备），后者是数据缺口。原来都返回
+        # not_found，报告里长得一模一样，于是很容易被读成「该应用没有政策」。
+        # 这里单独给 store_missing，并把可执行的补救写进 gap。
+        return {**missing, "status": "store_missing",
+                "gaps": [f"本地政策库目录不存在：{store}（库未准备或被清理）。"
+                         f"这不是「该应用没有政策」；用 mobile/policy/"
+                         f"prepare_local_policies.py --manifest <APK清单> --store <目录> 重建后再判"]}
     errors, skipped, candidates = [], [], []
     catalog_path = store / "catalog.json"
     try:

@@ -78,12 +78,25 @@ def main() -> int:
                     help="已有逐包静态产物目录（<包名>/static-manifest.json）。命中则跳过"
                          "静态分析、直接用它当 --static-dir；未命中照常跑静态。")
     ap.add_argument("--skip-ai", action="store_true")
+    ap.add_argument("--policy-store", default=None,
+                    help="本地应用政策库目录，透传给 device_run。**APK 内抽不到政策时才用它**；"
+                         "不给则回退 policy_library.DEFAULT_STORE（默认 "
+                         "output/local-policy-library-20261018）。该目录被清理后，"
+                         "所有样本都会是 policy.available=false——那是事实，不是 bug，"
+                         "但结论里必须写「未取得匹配政策」，不能写「合规」")
+    ap.add_argument("--no-system-ca", action="store_true",
+                    help="不在每个样本前装 mitmproxy 系统 CA（对照实验用）。"
+                         "不装时 HTTPS 因证书不受信而断，flows.jsonl 预期为空")
     ap.add_argument("--seconds", type=int, default=150)
     ap.add_argument("--build-tools",
                     default=str(sdk_paths.sdk_dir("build-tools", "36.1.0")))
     ap.add_argument("--only", nargs="*", default=None, help="只跑这些包名")
     ap.add_argument("--skip-fixture-selftest", action="store_true",
                     help="显式跳过批前夹具自检（A1 未修期间）。跳过事实会写进 batch-summary.json")
+    ap.add_argument("--strict-selftest", action="store_true",
+                    help="自检降级（有事件但夹具进程被打死）时也拒绝出批。默认放行但整批标注"
+                         "selftest_degraded + coverage_caveats——阳性对照仍然成立（钩子能采），"
+                         "只是窗口完整性不成立，样本级结论必须限定在 observed_s 内")
     ap.add_argument("--spawn-hook", action="store_true",
                     help="动态阶段用 Frida spawn 注入（钩子先于应用第一条指令）。"
                          "attach 太晚导致应用启动瞬间的联网全漏采、flows 归因 unresolved。")
@@ -148,7 +161,7 @@ def main() -> int:
         selftest = (json.loads(st_file.read_text(encoding="utf-8")) if st_file.exists() else
                     {"passed": False, "reason": "自检脚本未产出 result.json（看 "
                                                 "fixture-selftest.log）"})
-        if selftest.get("passed") is False:
+        if selftest.get("passed") is False and not selftest.get("degraded"):
             failed = {"status": "fixture_selftest_failed", "batch_dir": str(batch),
                       "samples": 0, "succeeded": 0, "results": [], "selftest": selftest}
             (batch / "batch-summary.json").write_text(
@@ -157,6 +170,20 @@ def main() -> int:
                               "reason": selftest.get("reason"),
                               "hint": selftest.get("hint")}, ensure_ascii=False, indent=2))
             return 1
+        if selftest.get("degraded"):
+            msg = (f"自检降级：{selftest.get('reason')}")
+            if args.strict_selftest:
+                failed = {"status": "fixture_selftest_degraded", "batch_dir": str(batch),
+                          "samples": 0, "succeeded": 0, "results": [],
+                          "selftest": selftest, "strict": True}
+                (batch / "batch-summary.json").write_text(
+                    json.dumps(failed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                print(json.dumps({"status": "fixture_selftest_degraded", "reason": msg,
+                                  "hint": selftest.get("hint")},
+                                 ensure_ascii=False, indent=2))
+                return 1
+            print(f"  [warn] {msg}")
+            print(f"  [warn] {selftest.get('hint')}")
 
     # ---- 1) 样本判定（串行、秒级、不碰设备）----
     plan = bp.collect(apks, batch, build_tools=args.build_tools, resume=args.resume,
@@ -209,12 +236,29 @@ def main() -> int:
 
 
 def _summarize(plan: list[dict], batch: Path, selftest) -> int:
-    """写 batch-summary.json + latest 指针，返回进程退出码。"""
+    """写 batch-summary.json + latest 指针，返回进程退出码。
+
+    自检降级（有事件但夹具被打死）时，**整批**都带一条覆盖率告示：样本级
+    verification.json 的 coverage.caveat 才是逐条的账，这里是批次级提醒——
+    别让"批次跑完了"被读成"窗口都观测完整了"。
+    """
     results = [item["rec"] for item in plan]
     ok = [r for r in results if r["status"] in ("ok", "static_ok", "resumed")]
+    degraded = bool((selftest or {}).get("degraded"))
+    caveats = []
+    if degraded:
+        caveats.append("夹具自检降级（进程在窗口内被打死）：本批所有阴性结论只能"
+                       "限定在各样本 verification.json 的 coverage.observed_s 内")
+    for r in results:
+        cov = (r.get("coverage") or {})
+        if cov.get("truncated"):
+            caveats.append(f"{r.get('name') or r.get('pkg')}：窗口被截断"
+                           f"（{cov.get('deaths')} 段死亡，有效观测 {cov.get('observed_s')}s）")
     summary = {"status": "ok" if len(ok) == len(results) else "partial",
                "batch_dir": str(batch), "samples": len(results), "succeeded": len(ok),
                "results": results, "selftest": selftest,
+               "selftest_degraded": degraded,
+               "coverage_caveats": caveats,
                "note": "每个样本的判据在 <批次>/<包名>/verification.json；"
                        "本文件只是汇总，不能替代逐样本判据。"}
     (batch / "batch-summary.json").write_text(

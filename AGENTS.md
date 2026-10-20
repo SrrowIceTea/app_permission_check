@@ -38,6 +38,13 @@ vscanner/
 | 网络 | 设备只走 wifi 且会掉线；宿主机 `dl.google.com` 不通 → maven 用阿里云镜像；Git Bash 的 `$PWD` 是 POSIX 形式，写进 Windows 环境变量要用 `$(pwd -W)` |
 | 编译 | Gradle 8.13 / AGP 8.11.1 / Kotlin 2.2.0 / KSP 2.2.0-2.0.2 / Room 2.8.5，compileSdk 36（唯一带 android.car.jar 的平台）；工程路径含非 ASCII 需 `android.overridePathCheck=true` |
 
+## 跑移动端测试集（agent 操作手册）
+
+测试集在 `D:/数据集/数据集/F-Droid-60`（60 个 F-Droid 样本），**不是** `D:/测试集`。
+跑批入口 `mobile/tools/batch_thirdparty.py`（静态 `--static-only` → 动态 `--static-reuse`）。
+完整步骤、判据、故障处置见 [docs/AGENT_TEST_SUITE_RUNBOOK_20261019.md](docs/AGENT_TEST_SUITE_RUNBOOK_20261019.md)，
+改环境或换机后先读它，别从零试错（Wi-Fi 不自动连、System UI ANR 挡夹具、托管 Python 缺 frida 三个坑必踩）。
+
 ## 产品地图
 
 | 目录 | 内容 | 详情 |

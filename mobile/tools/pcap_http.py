@@ -46,6 +46,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
+sys.path.insert(0, str(ROOT))
+# JSONL 分行只认 LF（理由见 core/io_utils.split_jsonl_lines）：tls_meta 事件里
+# 可能夹着 base64/正文片段，splitlines() 会在 U+0085 处切断，keylog 行随之丢光。
+from core.io_utils import split_jsonl_lines  # noqa: E402
 
 _CANDIDATES = [
     r"C:\Program Files\Wireshark\tshark.exe",
@@ -82,8 +86,7 @@ def keylog_from_events(session: Path, out: Path) -> tuple[int, str]:
         f = session / name
         if not f.exists():
             continue
-        for raw in f.read_text(encoding="utf-8", errors="replace").splitlines():
-            raw = raw.strip()
+        for raw in split_jsonl_lines(f.read_text(encoding="utf-8", errors="replace")):
             if not raw:
                 continue
             try:

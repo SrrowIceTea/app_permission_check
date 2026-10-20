@@ -52,19 +52,34 @@ def main() -> int:
         ("traffic", MOBILE / "traffic",
          [PY, "-m", "unittest", "test_tagging_mobile", "test_transparent",
           "test_apex_ca"]),
-        ("policy", MOBILE / "policy", [PY, "-m", "unittest", "test_policy"]),
+        ("policy", MOBILE / "policy",
+         [PY, "-m", "unittest", "test_policy", "test_policy_library"]),
         ("analyze", MOBILE / "analyze",
          [PY, "-m", "unittest", "test_analyze", "test_analyze_egress",
-          "test_coverage_gap"]),
+          "test_coverage_gap", "test_consent_observation"]),
         ("ai", MOBILE / "ai", [PY, "-m", "unittest", "test_ai"]),
         ("report", MOBILE / "report", [PY, "-m", "unittest", "test_report"]),
         ("apk_packer", MOBILE / "tools", [PY, "-m", "unittest", "test_apk_packer"]),
         ("app_death", MOBILE / "tools", [PY, "-m", "unittest", "test_app_death"]),
+        # 分段采集的覆盖率账本（A4，2026-10-19）：把"窗口被死亡截断"换算成
+        # observed_s/truncated。这些数字直接决定报告里阴性结论的适用范围，
+        # 算错就是把"没看"写成"没有"，只能靠离线断言钉住。
+        ("coverage_window", MOBILE / "tools",
+         [PY, "-m", "unittest", "test_coverage_window"]),
         # UI 探索的两个纯函数守卫（2026-10-19）：Compose 容器继承文案的深度/长度/面积
         # 三档护栏，以及"上游不可达"与"客户端主动断开"的分类。前者错了会静默点屏幕中心
         # （taps 仍然通过，检查项看不出来），后者错了会把环境故障记成应用行为。
         ("ui_flow_label", MOBILE / "tools",
          [PY, "-m", "unittest", "test_ui_flow_label"]),
+        # UI 探索状态必须跨分段存活（2026-10-20）：上层按 10 秒分段多次调 explore，
+        # 状态放在局部变量里会让同一两个按钮被反复点——实测 326 次点击只有 3.0 个
+        # 不同目标，而 taps 统计、判据、报告全都"看起来正常"。
+        ("ui_flow_state", MOBILE / "tools",
+         [PY, "-m", "unittest", "test_ui_flow_state"]),
+        # 工具侧 JSONL 读取只按 LF 分行（2026-10-20）：splitlines() 会在 JSON 字符串里
+        # 的 U+0085/U+2028 处切断记录，把"采到了"读成"没采到"。
+        ("jsonl_tool_readers", MOBILE / "tools",
+         [PY, "-m", "unittest", "test_jsonl_tool_readers"]),
         ("launcher_activity", MOBILE / "tools",
          [PY, "-m", "unittest", "test_launcher_activity"]),
         # 批处理的静态并行（2026-10-19）：目录/键唯一性、完成标记语义、失败隔离，

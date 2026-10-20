@@ -105,8 +105,8 @@ def main() -> int:
     parser.add_argument("--args-only", action="store_true",
                         help="H5：事件不带任何返回值字段（不哈希、不计数）。同 VSCAN_ARGS_ONLY=1")
     parser.add_argument("--deoptimize", type=int, default=None, choices=[0, 1, 2],
-                        help="A1 修复：替换 ArtMethod 前把已编译方法退回解释器，消除 JIT 竞态"
-                             "（1=everything、2=boot image、0=关）。同 VSCAN_DEOPTIMIZE")
+                        help="A1 排查开关（已证伪，默认关）：替换 ArtMethod 前把已编译方法退回解释器；"
+                             "实测无法消除 JIT 竞态，仅保留作 A/B 对照（1=everything、2=boot image、0=关）")
     parser.add_argument("--stop-file", type=Path, default=None,
                         help="优雅停止哨兵：该文件一出现就结束采集、走正常 detach 退出。"
                              "调用方应以此替代 taskkill /F——强杀会让 agent 在未清理状态下"

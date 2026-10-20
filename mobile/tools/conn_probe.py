@@ -244,6 +244,28 @@ def main() -> int:
               flush=True)
 
     seen: dict[tuple, dict] = {}
+    # **采样期间解析到过的进程 pid**（不管这些进程的 socket 有没有被记进 seen）。
+    # 2026-10-20：交付物里原来只有 `pids`，它取自 seen（**产生了连接**的进程），
+    # 于是"应用窗口内没有连接"会落成 `pids: []` —— 下游（体检脚本 / 终报生成器）
+    # 顺理成章读成"没拿到进程身份 / 覆盖有缺口"，进而把没外发误报成没覆盖到。
+    # 这两个含义必须分开落盘：`pids_seen` 回答"有没有真的读过某个进程的表"，
+    # `pids`（= pids_with_conns）回答"哪些进程留下了连接"。
+    pids_seen: set[int] = set()
+    # `pids_seen` 由**主线程**在解析每一行时写入，而 sidecar 心跳线程每 2 秒
+    # `sorted(pids_seen)` 读一次。CPython 里"边遍历边改集合"会抛
+    #   RuntimeError: Set changed size during iteration
+    # ——心跳线程抛异常不会终止采集（daemon 线程），但**这一次 sidecar 就不写了**，
+    # 而本项目已经踩过"sidecar 丢失 → 把没采到读成没外发"（见上）。加锁的成本是
+    # 每行一次无竞争 acquire，可以忽略；计数器 `st` 用 dict 容器是同一思路的另一半。
+    # **心跳线程要读的两个容器都必须在同一把锁下写**（2026-10-20 修，第二次）：
+    # 只锁 `pids_seen` 是不够的——`write_cov()` 里还遍历了 `seen`（`len(seen)`、
+    # `sorted({r["pid"] for r in seen.values()})`），而主线程正在 `seen[key] = rec`。
+    # 边遍历边改 dict 同样抛 `RuntimeError: dictionary changed size during iteration`，
+    # 而且后果比"这一次不写"更重：异常会穿出 `cov_heartbeat` 的 `run()`，
+    # **把心跳线程整条打死**，此后整个窗口的 sidecar 停在早期快照；进程又常被编排层
+    # kill_tree 强杀（收尾那次 write_cov 不执行），落盘的 covered/rows 就是陈旧值。
+    # 锁只包住"取快照"，不包 IO，不会与文件写阻塞采集。
+    _state_lock = threading.Lock()
     # 计数器放进可变容器：周期落盘的线程要读它（见 _write_cov）。
     st = {"rows": 0, "skipped": 0, "pid_miss": 0, "pid_lost": 0}
     deadline = time.time() + args.seconds
@@ -257,6 +279,14 @@ def main() -> int:
         rows_now = st["rows"]
         absent_now = st["pid_miss"]      # 还没见过进程（启动前的预期空窗）
         lost_now = st["pid_lost"]        # 见过之后又消失（真正的覆盖丢失）
+        # 快照必须持锁取：心跳线程与主线程并发时 `sorted()` / `len()` 会撞上
+        # "changed size during iteration"（见 _state_lock 的注释）。
+        with _state_lock:
+            pids_now = sorted(pids_seen)
+            endpoints_now = len(seen)
+            pids_with_conns = sorted({r["pid"] for r in seen.values()
+                                      if r["pid"] is not None})
+            no_conn = not seen
         # 只要 pid 解得出来，`/proc/<pid>/net/tcp` 至少有表头行，所以 rows>0 等价于
         # 「至少有一轮真的读到了目标进程的命名空间」。窗口过短时 rows=0 必须报
         # covered=false，否则等于假装"窗口内确实没有连接"。
@@ -264,18 +294,36 @@ def main() -> int:
         covered_now = rows_now > 0 and lost_now == 0
         payload = {
             "v": "1", "package": args.package, "uid": args.uid,
-            "seconds": args.seconds, "rows": rows_now, "endpoints": len(seen),
+            "seconds": args.seconds, "rows": rows_now, "endpoints": endpoints_now,
             "unparsed": st["skipped"],
             "pid_absent_before_start": absent_now,
             "pid_lost_after_start": lost_now,
             "pid_absent_rounds_est": absent_now * PID_MISS_EVERY,
             "pid_lost_rounds_est": lost_now * PID_MISS_EVERY,
             "covered": covered_now,
-            "coverage_basis": ("rows>0 且取得进程后未丢失" if covered_now else
+            "coverage_basis": ("读到目标进程命名空间且进程未中途消失" if covered_now else
                                ("取得进程后又消失（崩溃/被杀），中段有覆盖缺口"
                                 if lost_now else
                                 "一行都没采到：窗口过短或设备端脚本未运行")),
-            "pids": sorted({r["pid"] for r in seen.values() if r["pid"] is not None}),
+            # 语义澄清（2026-10-20）：下面三个字段回答的是**三个不同问题**，
+            # 下游不要拿其中一个去顶替另一个。
+            #   pid_resolved / pids_seen —— 采样有没有真的读过某个进程的 tcp 表
+            #   pids / pids_with_conns    —— 哪些进程留下了（属于目标 uid 的）连接
+            #   covered                   —— 覆盖是否成立（与上两者都不等价）
+            "pid_resolved": bool(pids_now),
+            "pids_seen": pids_now,
+            # `pids` 保留旧名，语义 = **留下了连接的进程**（取自 seen），
+            # 与 pids_seen（读过的进程）不是一个东西。不再另加 pids_with_conns：
+            # 那只是 pids 的逐字复制，多一个名字只会多一处误解。
+            "pids": pids_with_conns,
+            # 「读到了表但目标一条连接都没有」最容易被误读成"没覆盖到"。
+            # **措辞必须限定在 TCP**：本采样器只读 tcp/tcp6（`sources` 里没有 udp），
+            # 走 QUIC/HTTP3 的应用在 TCP 表里就是零条。写成"应用未外发"是一句
+            # 肯定的错话 —— 在项目里，肯定的错话比沉默的字段危险得多。
+            "no_target_conn_note": (
+                "已读到目标进程命名空间，但窗口内没有属于目标 uid 的 TCP socket。"
+                "本采样器只读 tcp/tcp6，UDP 与 QUIC(HTTP/3) 不在观测范围内，"
+                "因此这**不能**推断「应用未外发」" if (covered_now and no_conn) else None),
         }
         try:
             args.out.with_suffix(".summary.json").write_text(
@@ -287,9 +335,16 @@ def main() -> int:
 
     def cov_heartbeat() -> None:
         while not _cov_stop.wait(2.0):
-            write_cov()
+            try:
+                write_cov()
+            except Exception as exc:  # noqa: BLE001
+                # 心跳线程不能因为一次意外就整条死掉：它死了以后 sidecar 会停在
+                # 早期快照，而进程常被 kill_tree 强杀（收尾那次 write_cov 不执行），
+                # 落盘的 covered/rows 就是陈旧值 —— 又是"没采到 vs 没外发"不可分辨。
+                print(f"[conn_probe] ⚠ sidecar 周期写失败（{exc}），采集继续", flush=True)
 
-    threading.Thread(target=cov_heartbeat, daemon=True).start()
+    _cov_thread = threading.Thread(target=cov_heartbeat, daemon=True)
+    _cov_thread.start()
 
     # **边采边写**，不等到结束再落盘。原因同上：Windows 的 TerminateProcess 不可捕获
     # ——"采到了却没写下来"与"没采到"在交付物里长得一模一样，正是本项目最忌讳的失真。
@@ -319,6 +374,12 @@ def main() -> int:
                 st["skipped"] += 1
                 continue
             st["rows"] += 1
+            # 先记进程，再看 uid：这一行来自谁的命名空间与它属不属于目标 uid 是两件事。
+            # 放在 uid 过滤**之前**，否则"应用一条连接都没有"时 pids_seen 也跟着空，
+            # 又退化成"没采到"和"没外发"不可分辨的老问题。
+            if hit.group(1):
+                with _state_lock:
+                    pids_seen.add(int(hit.group(1)))
             try:
                 uid = int(t[9])
                 lip, lport = t[3].split(":")
@@ -337,23 +398,25 @@ def main() -> int:
             remote_ip = parse_hex_ip(rip)
             # pid 进 key：同一对端在重启前后是两个进程各自的连接，不该被并成一条。
             key = (row_pid, remote_ip, rport_i, t[5], family)
-            if key in seen:
-                seen[key]["hits"] += 1
-                continue
-            rec = {
-                "v": "1", "src": "conn_probe", "ev": "DEVICE_CONN",
-                "ts": int(t[0]) // 1_000_000,
-                "pid": row_pid, "uid": uid, "family": family,
-                # pid 是**读取路径**里的 pid（应用进程），uid 是**socket 属主**。
-                # Android 的应用共享同一个网络命名空间，所以这个文件里会混入
-                # system(0)/network_stack(1073)/历史 uid 的 socket —— 归属看 uid，
-                # 不要看 pid（2026-10-19：曾据此误判"应用有连接"）。
-                "pid_is_owner": args.uid is not None and uid == args.uid,
-                "remote_ip": remote_ip, "remote_port": rport_i,
-                "state": STATES.get(t[5], t[5]),
-                "local_port": int(lport, 16), "local_ip": parse_hex_ip(lip), "hits": 1,
-            }
-            seen[key] = rec
+            # 读-改-写必须与心跳线程的遍历互斥（`_state_lock` 见上）。
+            with _state_lock:
+                if key in seen:
+                    seen[key]["hits"] += 1
+                    continue
+                rec = {
+                    "v": "1", "src": "conn_probe", "ev": "DEVICE_CONN",
+                    "ts": int(t[0]) // 1_000_000,
+                    "pid": row_pid, "uid": uid, "family": family,
+                    # pid 是**读取路径**里的 pid（应用进程），uid 是**socket 属主**。
+                    # Android 的应用共享同一个网络命名空间，所以这个文件里会混入
+                    # system(0)/network_stack(1073)/历史 uid 的 socket —— 归属看 uid，
+                    # 不要看 pid（2026-10-19：曾据此误判"应用有连接"）。
+                    "pid_is_owner": args.uid is not None and uid == args.uid,
+                    "remote_ip": remote_ip, "remote_port": rport_i,
+                    "state": STATES.get(t[5], t[5]),
+                    "local_port": int(lport, 16), "local_ip": parse_hex_ip(lip), "hits": 1,
+                }
+                seen[key] = rec
             handle.write(json.dumps(rec, ensure_ascii=False) + "\n")
             handle.flush()
     except KeyboardInterrupt:
@@ -371,13 +434,26 @@ def main() -> int:
         # 收尾清掉本轮设备侧脚本（带唯一后缀后不会误删别的实例的文件）。
         adb("shell", f"rm -f {DEVICE_SCRIPT}")
 
-    # 正常结束：停掉心跳线程，最后再写一次（覆盖窗口内的最后一次变化）。
+    # 正常结束：先停心跳并**等它退出**，再写最后一次。
+    # 只 `set()` 不 join 的话，心跳线程可能正卡在 `write_text` 里，两次写同一个文件
+    # 会互相截断，落一份撕裂的 JSON（解析失败 = sidecar 等于不存在）。
     _cov_stop.set()
+    _cov_thread.join(timeout=5)
     write_cov()
+    # 打印用快照：与 sidecar 同一口径，且不与（已停的）心跳线程抢容器。
+    with _state_lock:
+        pids_final = sorted(pids_seen)
 
+    # 这里打印的 pid 必须是**读过的进程**，不是"留下了连接的进程"：
+    # 原来打 seen 里的 pid，应用没连接时输出 `pids=[]`，读日志的人只会理解成
+    # "没采到进程"，而事实往往是"采到了、但它没联网"（2026-10-20）。
     print(f"[conn_probe] scanned {st['rows']} rows; {len(seen)} distinct endpoints "
-          f"(pids={sorted({r['pid'] for r in seen.values()})}); "
-          f"unparsed={st['skipped']}", flush=True)
+          f"(pids_read={pids_final}); unparsed={st['skipped']}", flush=True)
+    if pids_final and not seen:
+        print(f"[conn_probe] 已读到 {len(pids_final)} 个进程的命名空间，但目标 uid"
+              f"{'' if args.uid is None else f' {args.uid}'} 一条 TCP socket 都没有。"
+              "本采样器不读 UDP/QUIC，故这**不等于**「应用未外发」，"
+              "也不等于采集失败。", flush=True)
     if st["pid_lost"]:
         print(f"[conn_probe] ⚠ 取得进程后又丢失 {st['pid_lost']} 次标记（每 {PID_MISS_EVERY} 轮一个）："
               f"{args.package} 在窗口内退出了（崩溃/被杀），中段存在覆盖缺口。", flush=True)

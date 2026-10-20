@@ -42,7 +42,14 @@ def is_loose(flow: dict) -> bool:
 
     只对**有** delta 的流判松；缺 delta（历史/测试流）返回 False，不推断——
     否则所有旧证据的结论都会被无差别压到 candidate。
+
+    例外是**单包排除法**（`single_package_fallback`）：它根本没有时间对齐，
+    只是"非系统探测的流量只能来自唯一被测包"。这比"距离 ≥1s"更松，
+    必须同样判 True，否则 read_then_egress 会把排除法归因当成精确配对，
+    给出不该有的结论等级（2026-10-19 审计发现）。
     """
+    if flow.get("attribution") == "single_package_fallback":
+        return True
     delta = flow.get("attribution_delta_ms")
     return delta is not None and delta >= ATTRIB_LOOSE_MS
 

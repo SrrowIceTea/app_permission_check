@@ -121,6 +121,7 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
                     "flow_host": f.get("host"), "flow_path": f.get("path"),
                     "flow_method": f.get("method"), "client_tls": f.get("intercepted_tls"),
                     # 归因置信信息（D414）：让"这条配对建立在多紧的归因上"可见。
+                    "attribution_mode": f.get("attribution"),
                     "attribution_delta_ms": f.get("attribution_delta_ms"),
                     "attribution_runner_up": f.get("attribution_runner_up"),
                     "attribution_candidates": f.get("attribution_candidates"),
@@ -161,8 +162,16 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
             extra["conclusion_level"] = "candidate"
             extra["declared_conclusion_level"] = rule["conclusion_level"]
             extra["conclusion_capped_by"] = "attribution_loose"
-            note = (value_note.rstrip("。") + f"（但至少一条流的时间归因距离 ≥ "
-                    f"{ATTRIB_LOOSE_MS}ms，归因偏松，结论封顶 candidate）。")
+            # 封顶理由必须写实际原因：排除法归因（single_package_fallback）
+            # 根本没有时间距离，套用"距离 ≥1500ms"是错误陈述（2026-10-19 审计）。
+            if any(p.get("attribution_mode") == "single_package_fallback" for p in pairs):
+                reason = ("至少一条流的归因是**单包排除法**（single_package_fallback），"
+                          "没有时间对齐，只能证明「非系统探测的流量来自唯一被测包」，"
+                          "结论封顶 candidate")
+            else:
+                reason = (f"至少一条流的时间归因距离 ≥ {ATTRIB_LOOSE_MS}ms，"
+                          "归因偏松，结论封顶 candidate")
+            note = value_note.rstrip("。") + f"（但{reason}）。"
             return _finding(rule, evidence_kind="read_then_egress",
                             event_ids=sorted({p["read_event_id"] for p in pairs}
                                              | {p["flow_event_id"] for p in pairs}),

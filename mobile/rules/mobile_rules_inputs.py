@@ -16,9 +16,13 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parents[1]))      # 仓库根：复用 core.io_utils 的 JSONL 口径
+from core.io_utils import split_jsonl_lines   # noqa: E402
 SCHEMA = HERE / "schema_mobile.sql"
 SEED = HERE / "seed"
 BUILD = HERE / "build"
@@ -36,7 +40,10 @@ def read_json(p: Path):
 def read_jsonl(p: Path) -> list[dict]:
     if not p.exists():
         return []
-    return [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
+    # 只按 LF 分行（口径见 core/io_utils.split_jsonl_lines）：`str.splitlines()` 会在
+    # JSON 字符串里合法的 U+0085/U+2028 处切断记录，把一条读成两段无效碎片。
+    return [json.loads(line) for line in
+            split_jsonl_lines(p.read_text(encoding="utf-8"))]
 
 
 def jdump(obj) -> str:

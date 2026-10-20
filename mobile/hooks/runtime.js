@@ -114,12 +114,17 @@ export function armRuntimeCache() {
   } catch (e) { THREAD_CLS = null; return false; }
 }
 
-// ---- A1 修复（2026-10-16）：JIT × ArtMethod 替换竞态防护 ----
+// ---- A1 降概率尝试（2026-10-16，**未消除**；10-19 复核见 mobile/A1_RESIDUAL_20261019.md）----
 // 证据：58 档夹具自检挂上钩子、按钮触发后，崩溃在 `Jit thread pool` 上
 // （SIGSEGV / SEGV_ACCERR，fault addr 落在 JIT 代码区）——JIT 编译线程与
 // "Frida 替换 ArtMethod entrypoint"读写同一方法结构，状态不一致即崩。
 // 在替换任何 ArtMethod **之前**把已编译方法退回解释器（deoptimize），
-// 让 JIT 从干净状态起步，不与钩子抢同一份机器码。
+// 期望让 JIT 从干净状态起步、不与钩子抢同一份机器码。
+// **实测结论（2026-10-16/10-19）：这条没生效也没用**——emulator 不认
+// `dalvik.vm.usejit=false`，deopt=1/2 与不 deopt 的死亡率没有可辨差别，
+// 所以默认就是 off；保留只为 A/B 对照。真正的崩点已定位到
+// `art::HBasicBlockBuilder::Build`（JIT 线程编译某方法时读到不自洽的 dex/ArtMethod），
+// 属上游 bridge 缺陷，本仓修不掉。
 // `__VSCAN_DEOPTIMIZE__`：0=关（默认，保持旧行为；A/B 对照用）、
 // 1=deoptimizeEverything（全部退回解释器）、2=deoptimizeBootImage（只处理
 // boot image 类——被监视 API 全是系统类，观测面等价且对应用自身代码更温和）。

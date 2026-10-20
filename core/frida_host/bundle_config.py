@@ -8,8 +8,8 @@
   __VSCAN_WATCH_LIMIT__       分档定位（A1/H2）：只挂前 N 条监视项
   __VSCAN_NO_STACK__          分档定位（A1/H1）：'1' 关掉事件里的线程/栈字段
   __VSCAN_ARGS_ONLY__         分档定位（A1/H5）：'1' 时事件不带任何返回值字段
-  __VSCAN_DEOPTIMIZE__        A1 修复：'1'=deoptimizeEverything、
-                               '2'=deoptimizeBootImage、未替换=关（保持旧行为）
+  __VSCAN_DEOPTIMIZE__        A1 排查开关（已证伪，默认不替换=关）：'1'=deoptimizeEverything、
+                               '2'=deoptimizeBootImage
 """
 import json
 

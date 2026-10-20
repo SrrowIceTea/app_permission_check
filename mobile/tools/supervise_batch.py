@@ -111,10 +111,19 @@ def start_emulator(seconds_boot: int = 420) -> bool:
         subprocess.run(["taskkill", "/F", "/IM", exe],
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
     time.sleep(3)
-    avd_dir = Path(os.environ.get("USERPROFILE", "")) / ".android" / "avd" / f"{AVD}.avd"
+    # AVD 目录**不一定**在 %USERPROFILE%\.android\avd：本机设了 ANDROID_AVD_HOME
+    # （`D:\Android studio\AVD`），按 USERPROFILE 拼出来的路径根本不存在，于是
+    # "清 AVD 锁"这一步静默变成 no-op——上一次 qemu 崩溃留下的 *.lock 会让下次启动
+    # 直接失败，而日志里只有一行"模拟器 xxx s 内未启动完成"，看不出是锁。
+    avd_home = Path(os.environ.get("ANDROID_AVD_HOME")
+                    or Path(os.environ.get("USERPROFILE", "")) / ".android" / "avd")
+    avd_dir = avd_home / f"{AVD}.avd"
     if avd_dir.exists():
         for lock in avd_dir.glob("*.lock"):
             shutil.rmtree(lock, ignore_errors=True)
+    else:
+        log(f"⚠ 未找到 AVD 目录 {avd_dir}（ANDROID_AVD_HOME={os.environ.get('ANDROID_AVD_HOME')}）"
+            "——跳过清锁；若启动失败请先手动清 *.lock")
 
     proxy = start_pre_proxy()
     if proxy is None:
@@ -185,6 +194,13 @@ def run_batch(args, cats: list[str]) -> int:
         cmd += ["--static-reuse", str(args.static_reuse)]
     if getattr(args, "spawn_hook", False):
         cmd += ["--spawn-hook"]
+    # 政策库必须透传（2026-10-20 修）：`batch_thirdparty`/`batch_dynamic` 早就支持
+    # `--policy-store`，但守护进程不转发，于是**批次永远用不到准备好的本地政策库**，
+    # 60 个样本一律 `policy.available=false`——政策一致性维度整批不可判定。
+    # 传进来但不可用也不会损伤：device_run 会先 load_policy 回验，失败就**不**把它
+    # 传给 correlate（传了会挡住默认库回退）。
+    if getattr(args, "policy_store", None):
+        cmd += ["--policy-store", str(args.policy_store)]
     with (RUN_DIR / "batch.log").open("a", encoding="utf-8") as fh:
         fh.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} 批次启动 =====\n")
         fh.flush()
@@ -206,6 +222,10 @@ def main() -> int:
     ap.add_argument("--spawn-hook", action="store_true",
                     help="动态阶段用 Frida spawn 注入（钩子先于应用第一条指令）。"
                          "attach 太晚导致应用启动瞬间联网漏采、flows 归因 unresolved。")
+    ap.add_argument("--policy-store", default=None,
+                    help="本地应用政策库目录，透传给 batch_thirdparty。"
+                         "不给则逐样本回退 policy_library.DEFAULT_STORE。"
+                         "目录里没有可用条目不会损伤样本——device_run 会回验后再决定用不用。")
     args = ap.parse_args()
 
     global RUN_DIR, LOG

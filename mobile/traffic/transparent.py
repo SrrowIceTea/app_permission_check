@@ -47,6 +47,7 @@ APEX 那一层的命令生成与执行全在 `apex_ca.py`（含测试），本�
 from __future__ import annotations
 
 import hashlib
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -174,7 +175,7 @@ def install_system_ca(pem_path: Path = CA_PEM, log: Path | None = None) -> dict:
                                "必须用 `-writable-system` 重新启动模拟器"
                                "（见 emulator_capture_args()）。")
             if log:
-                log.write_text(str(result), encoding="utf-8")
+                log.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
             return result
 
     push = adb("push", str(pem_path), f"/sdcard/{fname}", timeout=120)
@@ -201,7 +202,7 @@ def install_system_ca(pem_path: Path = CA_PEM, log: Path | None = None) -> dict:
             result["error"] = ("系统库写好了，但 APEX 信任库没挂进 zygote 命名空间——"
                                "应用依然不会信任代理证书；别只看系统库那一步")
     if log:
-        log.write_text(str(result), encoding="utf-8")
+        log.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return result
 
 

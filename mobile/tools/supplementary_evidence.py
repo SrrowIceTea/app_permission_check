@@ -28,20 +28,20 @@ import json
 import sys
 from pathlib import Path
 
+# JSONL 一律走 core.io_utils（§8.2 B-2）：
+# **不能用 str.splitlines()**——它会在 JSON 字符串里的 U+0085/U+2028 处切分，
+# 而 mitm 落盘的 flow 记录带着 latin-1 解码出的正文，这两类字符常见。
+# 实测 `flows.jsonl` 一条记录里 59 个 U+0085，splitlines 会把整份文件切成碎片。
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core.io_utils import load_jsonl_counting  # noqa: E402
+
 
 def read_jsonl(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    out = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return out
+    rows, skipped = load_jsonl_counting(path)
+    if skipped:
+        print(f"[warn] {path.name} 有 {skipped} 行无法解析，已跳过（索引计数为下界）",
+              file=sys.stderr)
+    return rows
 
 
 def event_counts(events: list[dict]) -> dict:
@@ -124,8 +124,18 @@ def summarize(session: Path, out_dir: Path, package: str, app_uid: int | None = 
         except (json.JSONDecodeError, OSError):
             cov = {}
         if cov:
-            if cov.get("covered") is not False:
-                cov_note = ("采样取得进程后未丢失，0 条连接可视为「窗口内确实没有连接」。")
+            # **必须显式判 `is True`**（2026-10-20 修）：原来写 `is not False`，
+            # 于是 covered 为 None（sidecar 被强杀没写完整 / 旧格式缺字段）时也走
+            # "0 条连接可视为确实没有连接"这条分支，把**没采到**说成**没外发**。
+            # sidecar 丢失在本项目是实测发生过的（conn_probe 头部注释记了 07/08 号）。
+            # 另外该结论要限定到 TCP：采样器不读 UDP/QUIC。
+            if cov.get("covered") is True:
+                cov_note = ("采样取得进程后未丢失；TCP 层 0 条连接可视为「窗口内确实没有 TCP 连接」。"
+                            "注：本采样器只读 tcp/tcp6，UDP 与 QUIC(HTTP/3) 不在观测范围内，"
+                            "故不能据此断言「应用未外发」。")
+            elif cov.get("covered") is None:
+                cov_note = ("覆盖率 sidecar 未给出 covered（缺失/损坏/旧格式）："
+                            "本轮 0 条连接**不能**作为「应用未联网」的依据。")
             elif cov.get("pid_lost_after_start") is not None:
                 cov_note = ("covered=false：取得进程后又丢失（崩溃/被杀），中段存在覆盖缺口。"
                             "本轮 0 条连接**不能**作为「应用未联网」的依据。")
@@ -144,6 +154,12 @@ def summarize(session: Path, out_dir: Path, package: str, app_uid: int | None = 
                 "pid_miss_markers": cov.get("pid_miss_markers"),
                 "covered": cov.get("covered"),
                 "coverage_basis": cov.get("coverage_basis"),
+                # 新增（2026-10-20）：把"读过的进程"和"有连接的进程"分开透出。
+                # 只看 endpoints/pids 会把"应用本轮没有 TCP 连接"读成"没覆盖到进程"。
+                "pid_resolved": cov.get("pid_resolved"),
+                "pids_seen": cov.get("pids_seen"),
+                "pids": cov.get("pids"),
+                "no_target_conn_note": cov.get("no_target_conn_note"),
                 "rows": cov.get("rows"), "endpoints": cov.get("endpoints"),
                 "note": cov_note,
             }

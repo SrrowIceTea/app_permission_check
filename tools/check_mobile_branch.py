@@ -18,7 +18,7 @@ CHECKS = [
     ("fixture_pipeline", "mobile/tools", [PY, "-m", "unittest", "test_device_pipeline", "test_device_trigger", "test_device_runtime", "test_device_permissions", "test_device_cleanup"]),
     ("fixture_packaging", "mobile/fixture-app", [PY, "-m", "unittest", "test_gadget_prepare"]),
     ("hook_compiler", ".", [PY, "-m", "unittest", "core.frida_host.test_build"]),
-    ("read_semantics", "mobile/analyze", [PY, "-m", "unittest", "test_observation_semantics", "test_client_tls"]),
+    ("read_semantics", "mobile/analyze", [PY, "-m", "unittest", "test_observation_semantics", "test_client_tls", "test_consent_observation"]),
     ("risk_score", "mobile/analyze", [PY, "-m", "unittest", "test_risk_score"]),
     ("ai_gates", "mobile/ai", [PY, "-m", "unittest", "test_ai_gates", "test_llm_transport", "test_formal_contract", "test_policy_sources", "test_storage_context", "test_validation_repair", "test_storage_observations", "test_storage_prompt_contract", "test_supplemental_observations", "test_benchmark_review", "test_benchmark_review_attach"]),
     ("policy_library", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/policy", "-p", "test_policy*.py"]),

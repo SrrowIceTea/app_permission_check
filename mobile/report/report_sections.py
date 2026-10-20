@@ -311,7 +311,10 @@ def section_method(bundle: dict, st: dict, font: str, meta: dict) -> list:
     out.append(kv_table([
         ("采 集", "Frida 钩子观测敏感 API 读取与同意时序；mitmproxy 观测网络流；"
                   "静态权限来自 APK 清单。**只观察不改写**。"),
-        ("归 因", "网络流按同会话、同包名的时间归因；归因歧义时不关联（错误归因比没有归因更糟）。"),
+        ("归 因", "网络流优先按同会话、同包名的时间归因；钩子覆盖不到时退化为"
+                  "**单包排除法**（attribution=single_package_fallback），该模式只证明"
+                  "「非系统探测的流量来自唯一被测包」，不是时间对齐，相关结论封顶 candidate。"
+                  "归因歧义时不关联（错误归因比没有归因更糟）。"),
         ("脱 敏", esc((bundle.get("masking") or {}).get("policy_text"))),
         ("中文字体", esc(meta.get("font_note"))),
         ("规则库", "结论等级由规则自身封顶，引擎不抬高；每条结论带规则 ID 与法规条款。"),

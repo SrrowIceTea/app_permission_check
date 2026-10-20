@@ -1075,3 +1075,199 @@ h2c 明文 + 跨 TCP 段的 gzip DATA——正是因为两个方向用同一个 
 - **自有靶子 App**：`fixture-app/` 在建；设备端端到端依赖它。
 - **App 类目归属**：目前靠 `--app-category` 手工声明。自动从应用商店信息推断
   会引入不可靠来源，宁可手工声明并标注 `source: declared`。
+
+## M042 A1 复核：崩在 JIT 编译线程（不是执行替换入口），后果已兜住 4 类中的 3 类（2026-10-19）
+
+**背景**：文档曾把 A1 标"已修（bridge 补丁 + 单 agent）"。10-19 现场夹具与真实样本仍被打死
+（`SIGSEGV @ Jit thread pool`），且旧判据把死亡记成 `alive_at_end=true`（pidof 拿到自动重启的新进程）。
+
+**根因（新证据，完整墓碑）**：崩的是 **JIT 编译线程**在编译某个方法时越界读——
+`JitCompileTask::Run → Jit::CompileMethodInternal → JitCompiler::CompileMethod →
+OptimizingCompiler::JitCompile → TryCompile → HGraphBuilder::BuildGraph →
+HBasicBlockBuilder::Build`，`SEGV_ACCERR` + 页对齐 `fault addr` +
+`Cause: possible buffer underflow accessing before secondary allocation`。
+即 Frida 克隆/改写 `ArtMethod`（`cloneArtMethod` + `patchArtMethod`）与 ART 把该方法排进
+JIT 编译队列并发，编译期拿到的 dex/code item 与 ArtMethod 不再自洽。M029 观察到的
+"主线程取指到未映射页"是同一竞态的另一落点。
+
+**已排除**：`VSCAN_NO_STACK=1`（2/2 仍死，说明事件路径的 getStackTrace 不是触发点）；
+AOT 预编译（2 死 1 活，有迹象但不构成修复，未采纳）；deopt/JIT-off（旧记录已证伪）。
+**放大因素**：模拟器 UWB HAL 每 5s abort，把 `-b crash` 与 `/data/tombstones` 挤掉
+（我们的墓碑约 4 分钟后消失），死因因此丢失/被误归属——`cause` 曾被写成 UWB 的
+`failed to open the serial device`。
+
+**决策**：不再声称"消除崩溃"（属 bridge × ART 上游缺陷，x64 + API 37 未覆盖区），
+改为"**后果逐条兜住 + 概率不恶化**"（不写"全部"：见下方的三处未兜住项）：
+1. 分段采集（A4 落地）：死亡即取证 → 重启 → 重新挂钩 → 用剩余时间续采；
+   `coverage_window.py` 把窗口换算成 `observed_s/truncated`，写进 `verification.json`。
+2. 死因归属：墓碑按记录切块、只认 `Cmdline` 是本包名的记录；logcat 无完整墓碑时从
+   `/data/tombstones` 兜底；结构化抽 `signal/thread/uptime_s`。
+3. 判据三态：`fixture_selftest` 死亡但有事件 = `degraded`（不再 `passed=true`）；
+   批次默认放行但整批标注，`--strict-selftest` 可拒绝。
+4. 报告口径：`bundle.gaps` 增加 `[orch]【采集窗口被截断】…`；`orchestrator_notes`
+   的样本级说明按包名收敛（原先把 domivega 的四条结论无条件写进所有样本）。
+
+**边界**：上游修复依赖 frida-java-bridge #3700/#3745，或改用 JVMTI MethodEntry /
+arm64 设备。详见 `mobile/A1_RESIDUAL_20261019.md`。
+
+**审计核销（2026-10-19 晚，三路独立只读审计）**：初版结论用了"后果全部兜住"，
+审计证明这个说法超出证据，已就地改正。审计挖出并已修掉的：
+- 终局取证顺序颠倒：先判活后取证，拿不到 death 的段被按墙钟记满 → `truncated=true`
+  同时 `coverage_ratio=1.0`。已改为先取证再判活，`observed_s` 取 `min(elapsed, uptime)`。
+- `Fatal signal` 行不受 `since_ms` 约束（只有墓碑块受约束）→ 上一轮的 signal 行可被
+  算进本段。已加 logcat 行时间过滤。
+- `test_values.mjs` 被纯 JS 哈希改动静默打红（`hook_values` 门禁组变红）。已重写用例，
+  现绿。
+- `values.js` 注释里"args-only 两轮里活下来"是错数据（实际 1 活 1 死），已改。
+- 设备端兜底会无条件置 `tombstone_seen=true` 的口径歧义、`tombstone_complete` 只表示
+  "有头"、`orchestrator_notes` 只读末段（多段时把"signal 未知"写进报告而 seg0 明明有证据）。
+
+**仍未兜住（照实记，不要当已修）**：
+1. **有效观测 ≈ 进程存活，不等于钩子在采**。钩子的 `seconds` 从 attach 起算，而窗口起点
+   在 attach 之后 9s（spawn 模式更多），窗口尾部那段没有钩子却记成"已知存活"。
+2. **Java 崩溃路径（`FATAL EXCEPTION`）不过滤 pid/since**，且用子串匹配包名
+   （`com.foobar` 会命中 `com.foo`）。多段重启下上一段的 Java 崩溃会被算到本段。
+3. **钩子中途死掉但应用存活**时，selftest 与 coverage 都看不见（漏报成 `passed`）。
+
+**关于"把 Java 调用移出钩子体"**：根因在 JIT 编译线程，与 trampoline 内是否调 Java
+无因果关系；实测纯 JS 版仍 1/2 死于同型 SIGSEGV，与改前无差别（每组 n=2，统计上
+说明不了任何事）。它只降低 trampoline 内额外分配/Java 调用的风险，**不是解药，不要
+写成"净收益"**。
+
+**新增证据（改写结论的一段）**：`D:/vscanner-tp/ds3-verify-vd/01-lukeneedham-videod/`
+是**自然崩溃**（`SIGSEGV @ binder:9433_1`，uptime 49s）后自动重启续采跑通的真实样本：
+`segments=2 / deaths=1 / observed_s=79.6/100`，seg1 的 `hook-all-seg1.log` 里确有
+`PRIVACY_READ`。所以"自然崩溃 → 重启 → 重新挂钩 → 继续采到数据"这条链已验证；
+而 `a4-smoke5` 那组 48.7/60 **同样是自然 JIT SIGSEGV**（其 `app-death-seg0.json` 有
+`Fatal signal 11 ... Jit thread pool`，全目录无 `force-stop` 痕迹），此前写成
+"`am force-stop` 注入验证"是归因错误，已在 `A1_RESIDUAL_20261019.md` 改正。
+
+
+## M043 UI 探索状态跨分段存活 + 钩子尾窗补全 + JSONL 只按 LF 分行（2026-10-20）
+
+**触发**：`ds60-sup-1019` 跑到 40/60（进程被杀），体检显示"应用在窗口内几乎不联网"，
+但归因、UI、政策三条链路各自的缺陷混在一起，无法判断哪一条是主因。
+
+### D1 探索状态跨分段存活（P1，根因级）
+
+`device_run_thirdparty` 按 `--segment-chunk`（默认 10 秒）**分多次**调 `explore()`——分段
+是为了每 10 秒判一次应用是否还活着，不是重开探索。而 `tapped`/`stale`/`scrolls` 全在
+`explore()` 的局部变量里，每次调用清零。
+
+实测（40 个已完成样本）：**326 次点击 / 平均 3.0 个不同目标**。
+- `40-timer-other`：`Next→Add`（2 轮）→`START STEP→More timer settings`（2 轮）× 5 段
+- `35-kerballone-spamblo`：`Settings→Screening`（2 轮）× 5 段
+- 每段只有 2 轮，因为 `--segment-chunk=10s` ÷ 每轮约 4.5s（2 次 dump + 点击等待）
+
+改为 `explore(..., state)`：调用方持有一份 `new_state()`，跨段传入；轮次号改全局
+（`ui-{r:03d}-*`），顺带修掉**证据被覆盖**——`40-timer-other` 12 次点击，`ui/` 下
+只剩 `ui-00`/`ui-01` 两对（每段都从 0 写起）。另加：候选穷尽时 BACK 回退（`MAX_BACKS=6`，
+BACK 后前台不是目标包就把预算打满，避免"退出→拉回→再退出"）。
+
+**复核后补的关键一条**：`stale`（点了没反应）与 `no_candidate`（没得点）必须走**同一条
+恢复链**。真机上更常见的失败形态是"有按钮、点了界面不变"，它落到 `stale` 分支；原实现
+在 `stale` 里只试一次滚动就 `break`，BACK/填输入根本进不去——修复只覆盖了"看得见没得点"
+的那一半。现在两级共用 `_recover()`（滚动→填输入→滑回顶部→BACK），且滚动加了
+"屏幕真的变了才算恢复成功"，滚不动就换下一种方式。
+
+**这条缺陷不会让任何检查项变红**：taps 照样统计、`ui_taps_made` 照样通过、报告照样印
+"交互了 N 次"，只是应用永远走不到联网界面。所以 `test_ui_flow_state.py` 用"两次分段调用
+必须点出 4 个不同目标"把它钉住；把状态改回"每次新建"时该用例立刻红（变异验证：
+`['Next','Add','Next','Add']`）。
+
+### D2 钩子尾窗（P0 残余，M042「仍未兜住 #1」的另一半）
+
+上一轮只给**主路径**的 `start_hook` 加了余量（spawn 55s / attach 15s）。
+**回退 attach** 那处仍传 `args.seconds`，而它之后还有 `sleep(9)` + 一次
+`wait_for_app(≤20s)` 才开观测窗口 → 末尾至少 9 秒没有钩子，正好落在项目自己认定的
+"延迟读取/延迟外连在后半段"。已改为 `args.seconds + HOOK_MARGIN_ATTACH_S`。
+
+**死亡重启那处不用加**（复核纠正了我第一版的误判）：`remaining` 在死亡时刻算，
+钩子还要排在 `am start + wait_for_app` 之后启动（Δ 秒），deadline 天然 = 窗口结束 + Δ。
+加 15 秒只是让钩子白活 15 秒，已撤回。
+
+### D3 spawn 失败的两条路合并
+
+`device.spawn` **超时/报错**时应用根本没被启动，而原代码只在"spawn 起来的 pid 又消失"
+时回退 attach；前者会直接判 `app_started` 失败并早退（40s 等待白扔）。
+`core/frida_host/run.py:resolve_pid` 的注释明确记着本模拟器上 spawn 会超时——所以这不是
+理论风险。现在 `not spawn_pid` 与 `spawn_died` 走同一个回退分支，`verification.json` 的
+`app_started.note` 会写明回退原因。
+
+### D4 工具侧 JSONL 读取：只认 LF
+
+`core/io_utils` 早已改成 `split("\n")`，但工具侧还有 4 处自己写的 `splitlines()`。
+`36-ign-geoportail/session/flows.jsonl` 一条 6.7KB 记录含 **59 个 U+0085(NEL)**
+（`response_payload.text` 是 latin-1 解码出的正文），`splitlines()` 把 34 条记录读成
+**93 段碎片**。边界要说清：只有**含分隔符的那一条**会被切碎，不影响后面的记录；但本项目
+大量判据是"有没有 ≥1 条"，少数几条的下限就足以翻转结论。
+新增 `core/io_utils.split_jsonl_lines()` 作为唯一出口。
+
+### D5 政策库接线（P2，只修接线，不伪造覆盖）
+
+`batch_thirdparty.py` / `batch_dynamic.py` 早就支持 `--policy-store`，但守护进程
+`supervise_batch.py` 不转发 → **批次永远用不到已准备好的本地库**。已补参数与透传；
+启动器只在 `catalog.json` 存在时才传（空目录会多一条误导性的 `explicit_store` 记录）。
+
+**本样本集的政策一致性维度仍然不可判定**：`output/local-policy-library-fdroid` 目前
+4 个样本全 `not_found`（这些 F-Droid 小工具仓库里确实没有 PRIVACY.md）。
+这不是 bug，报告必须写"未取得匹配政策"，不能写"无政策"或"合规"。
+
+### D6 体检脚本的消费侧误读
+
+`output/_ds60_probe.py` 的 "pids" 读的是 `conns.summary.pids`（= **留下了连接**的进程），
+于是体检表把"应用没联网"写成"进程不可定位"。而实际上：有 `pids_seen` 字段的 **12 个
+样本全部非空**（都读到了目标进程命名空间）；另外 29 个是该字段出现之前的旧格式，只能用
+`rows>0` 推断，无法把"读到了但没连接"与"根本没读到"分开。已改为 `pids_seen`，并另列
+"留下连接的进程"一列——两个问题不能互相顶替。顺带修了脚本自己的两处错读：`deaths`
+在 `app-death.json` 的 `coverage` 里（原来读顶层，恒为 None）、`?`（解析失败行）不再
+计入 `egress_real`。
+
+### D7 conn_probe 的并发：锁要覆盖两个容器
+
+心跳线程每 2 秒 `sorted(pids_seen)` + `len(seen)` + 遍历 `seen.values()`，主线程同时在
+`add()` / `seen[key] = rec`。第一次只锁了 `pids_seen`；`seen` 被并发遍历时抛出的
+`RuntimeError` 会**把心跳线程整条打死**，此后 sidecar 停在早期快照，而进程常被编排层
+kill_tree 强杀（收尾那次写不执行）——落盘的 covered/rows 就是陈旧值。现在两个容器共用
+`_state_lock`，心跳线程外另加 try/except，收尾先 `join` 再写最后一次（避免两次
+`write_text` 互相截断）。`rows/pid_miss` 等 int 计数不加锁：CPython 下读写原子。
+
+### D8 轮次预算多算了"幽灵轮"
+
+`explore()` 到时间上限时追加的 `stop` 动作带的是**下一个**（没跑过的）轮次号，
+`device_run` 原口径把它也算一整轮 —— 实测 `40-timer-other` 每次调用"2 次点击 + 1 条
+stop"记 3 轮，`--max-rounds 32` 实际只有 ~22 轮可用。已改为只数 `action != "stop"`。
+
+### 单样本验证（2026-10-20 11:22–11:36，真机 3/3 通过）
+
+报告 `output/VERIFY_20261020.md`，读数脚本 `output/_verify_check.py`。
+
+1. **spawn 在本模拟器上不可用（3/3）**：`openmensa`/`geoportail`/`timer-other` 三个样本
+   spawn 起的 pid 都在 6 秒观察窗内消失，全部回退 attach 后才跑起来。与
+   `exp_spawn_keylog.py` 的旧结论一致——是 AVD 的问题。代价是可量化的：每样本多花
+   `wait_for_app(≤40s)+6s`，且 `openmensa` 因此多一次死亡、`covered=false`（阴性结论只能
+   限定在 85.1s）。**启动器已改默认不开 `--spawn-hook`（`SPAWN=1` 显式打开）**。
+2. **UI 状态持久化生效**：不同目标/点击数 = 9/10、7/8、9/9（上一批 40 个样本 ≈ 10%）；
+   `round` 跨段递增 0..11 / 0..13；`ui/` XML 组数 ≈ 点击数（不再 12 次点击只剩 2 组）。
+3. **恢复链在真机上真会触发**：geoportail 出现 `stale→fill_input→swipe_top×2→back`，
+   退出去之后继续点到了 `Enregistrés`/`Comparer`/`Filtrer les points d'intérêt`。
+   改之前 `stale` 只滚一次就 break，那 70 秒是死的。
+4. **钩子盖住了尾窗**：START 之后 +95s 仍有事件（`reads` 17 条、`egress` 5 条）。
+
+**同时被证实的未修项**：keylog 仍 0 行（`tls_encrypted_without_body=411`、明文 body 0）、
+`egress` 事件数仍少于 flow 数（keep-alive 复用连接不产生 connect 事件）、夹具自检仍
+degraded（A1 JIT SIGSEGV）。**下一个该修的是 keylog**，不是归因。
+
+### 仍未验证
+
+1. **归因的另一半根因**：hook 没盖住非常规网络栈（NDK/重打包 HttpClient/QUIC）也会
+   egress=0。"有 pcap 流量而 hook 零事件"的样本还没被逐个对照过。
+2. **整批效果**：本轮 3 个样本只能证明机制通了，覆盖率提升要等 60 样本的新批次。
+
+**回归**：`python mobile/tools/run_mobile_checks.py` 28 项全绿（新增
+`ui_flow_state` 5 例、`jsonl_tool_readers` 6 例）。
+
+**单文件行数**：`thirdparty_ui_flow.py` 一度被本轮推到 374 行（破 AGENTS.md:28 的 300 行
+硬线），已把**界面理解层**（候选打分 / 继承文案 / 三个护栏常量）拆到 `ui_flow_text.py`
+（176 行），本体 237 行。`test_ui_flow_label.py` 一行未改——`thirdparty_ui_flow` 原样
+再导出那几个名字。

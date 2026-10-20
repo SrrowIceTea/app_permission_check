@@ -128,8 +128,8 @@ export function main() {
   try {
     STATE.pkg = procName();
     STATE.uid = Java.use('android.os.Process').myUid();
-    // A1 修复（2026-10-16）：替换 ArtMethod 前先把已编译方法退回解释器，
-    // 消除 JIT 编译线程与 entrypoint 替换的竞态（崩溃现场在 Jit thread pool）。
+    // A1 尝试（2026-10-16，**未消除**）：替换 ArtMethod 前先把已编译方法退回解释器。
+    // 实测无效（deopt 默认 off）；崩点在 JIT 编译线程，不在替换入口。见 A1_RESIDUAL_20261019.md。
     var deopt = deoptimizeBeforeArm();
     // A1：事件期不再 Java.use——缓存与分档都在 ARMED 阶段一次定妥。
     var cacheOk = armRuntimeCache();

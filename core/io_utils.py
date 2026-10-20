@@ -24,6 +24,22 @@ import json
 from pathlib import Path
 
 
+def split_jsonl_lines(text: str) -> list[str]:
+    """把 JSONL 文本切成记录，**只认 LF**，返回去掉空白的非空行。
+
+    **不要用 `str.splitlines()`**：它按 Unicode 行边界切分，JSON 字符串里合法的
+    U+0085（NEL）/ U+2028 / U+2029 也会被当成换行。mitmproxy 落盘的 flow 记录里
+    `response_payload.text` 是 latin-1 解码出的正文，二进制响应里 0x85 遍地都是——
+    实测 `36-ign-geoportail/session/flows.jsonl` 一条 6.7KB 的记录里有 59 个 U+0085，
+    用 splitlines() 读会把 **34 条记录读成 93 段无法解析的碎片**，全部被当坏行丢掉，
+    于是"有流"变成"没流"。这不是理论问题，是 2026-10-20 在真实批次里实测到的。
+
+    本函数是这条口径的唯一出口：新代码要自己逐行解析 JSONL 时用它，
+    或者直接用 `load_jsonl` / `load_jsonl_counting`。
+    """
+    return [ln for ln in (line.strip() for line in text.split("\n")) if ln]
+
+
 def _read(path: Path | None, on_bad_line: str) -> tuple[list[dict], int]:
     if on_bad_line not in ("raise", "count"):
         raise ValueError(f"on_bad_line 只能是 'raise' 或 'count'，收到 {on_bad_line!r}")
@@ -33,10 +49,12 @@ def _read(path: Path | None, on_bad_line: str) -> tuple[list[dict], int]:
     skipped = 0
     # errors="replace"：坏字节不至于让整个文件读不出来；被替换的那一行随后
     # 多半 JSON 解析失败，仍会按策略抛出或被计数——不会静默消失。
-    # JSON strings may legally contain U+0085/U+2028/U+2029. Only LF frames records;
-    # str.splitlines() would split those string contents into invalid JSON fragments.
-    for lineno, raw in enumerate(
-            Path(path).read_text(encoding="utf-8", errors="replace").split("\n"), 1):
+    # **分行只认 LF**（理由见 split_jsonl_lines 的 docstring）。这里不用它而直接
+    # `split("\n")`，是为了让报错里的行号等于**物理行号**——空行被过滤掉后如果
+    # 继续用过滤后的序号，`raise` 分支给的 `:N:` 会比真实位置偏小，而这条报错是
+    # 定位坏证据的唯一线索（`test_jsonl_unicode` 正是按物理行号断言的）。
+    text = Path(path).read_text(encoding="utf-8", errors="replace")
+    for lineno, raw in enumerate(text.split("\n"), 1):
         raw = raw.strip()
         if not raw:
             continue
