@@ -28,6 +28,27 @@
 - **找回方式**：从上面指针目录直接取最新一份，或重跑 `mobile/tools/device_run.py` / `run_mobile_checks.py` / `batch_thirdparty.py`；
   本次撤回是用 `git checkout 4122025^ -- frontend/pdfs/<名字>.pdf` 从历史恢复的。
 
+### 3. 文档治理批量归档（2026-10-21，一次性/过期的进度与复核文档）
+
+这批是**已过期或一次性**的进度记录/复核报告，内容均已落入
+`mobile/DECISIONS.md`（M001–M056）与 `AGENTS.md` 的当前状态，不再需要以活跃文档存在。
+集中归档前逐个核对：无代码 import；引用方已同步改为 `archive/...` 路径。
+
+| 文件 | 原路径 | 归档理由 |
+|---|---|---|
+| `VERIFY_M031_M032_20261016.md` | 仓库根 | A1 修复的**一次性独立复核报告**，结论已并入 `mobile/DECISIONS.md` M031/M032 与 `mobile/DEV_FIX_REPORT.md` |
+| `TWO_DEV_PLAN.md` | 仓库根 | 双通道开发计划 v3，其 A1/SLIRP 修复、工程-6/工程-7 均已完成，剩余项已并入 `mobile/PLAN_OPTIMIZATION_20261020.md`（本批同归档）与 `HANDOFF.md` |
+| `EXPERIMENTS.md` | 仓库根 | 早期量化实验结论（归因/相关性 228/228、precision/recall 1.0），为固定时序下的**构造实验**，非当前产品状态；结论被 `COMPLETION.md` 等引用处已改为 `archive/` 路径 |
+| `docs/DS60_VERIFY_20261020.md` `docs/DS60_FIX_20261020.md` | `docs/` | keylog 链路单样本深挖（DS60）的一次性验证与修复记录，结论已并入 `HANDOFF.md` 3.4 与 M056 |
+| `docs/FIX_VERIFICATION_20261019.md` | `docs/` | 前端修复的一次性验证报告 |
+| `docs/MERGE_NONROOT_AUDIT_20261018.md` | `docs/` | 合并 ch/junzhe 分支的一次性审计记录 |
+| `docs/FUNCTIONAL_FRONTEND_20261019.md` | `docs/` | 2026-10-19 前端功能验收的一次性记录，验收表格已在根 `README.md` |
+| `mobile/SAMPLE_RUN_5APPS.md` | `mobile/` | 2026-10-13 五个第三方样本的一次性实机实测报告，结论已并入 `mobile/DECISIONS.md` M026–M028 |
+| `mobile/PLAN_OPTIMIZATION_20261020.md` | `mobile/` | P2 优化计划/优先级裁决；P0-A/P0-B 任务已全部收口（见本批 p1–p7 完成），裁决结论与拆分记录已在 `mobile/DECISIONS.md` M055 |
+
+- **找回方式**：`git checkout <commit>^ -- <原路径>`；或直接读 `archive/<文件名>`（保留在这里，
+  链接已从活跃文档改为本目录）。
+
 ## 尚未归档（留待确认）
 
 以下内容也在 `.gitignore` 之外、或涉及运行链，暂不归档，等确认后再动：

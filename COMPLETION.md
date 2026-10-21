@@ -134,7 +134,7 @@ dex 40 项核对（38 VERIFIED / 2 INCOMPLETE）、PDF 与看板 QA、前端 22 
 
 ## 2026-09-28 量化实验
 
-新增两套**离线、可复现**的量化实验，结论见 [EXPERIMENTS.md](EXPERIMENTS.md)，
+新增两套**离线、可复现**的量化实验，结论见 [EXPERIMENTS.md](archive/EXPERIMENTS.md)，
 入口 `python tools/run_experiments.py`（结果写 `output/experiment-*`，与
 `run_regressions.py` 分开：那边判"有没有坏"，这边只出数字）。
 

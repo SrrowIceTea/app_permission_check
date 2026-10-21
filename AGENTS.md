@@ -108,7 +108,7 @@ PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
                                       #       correlate/collector/tagging-vehicle/dashboard/
                                       #       runtime/parity/workbench/hook-bundles/frida-bundle-config
 
-"$PY" mobile/tools/run_mobile_checks.py   # 移动侧 24 组（另一条入口，改 mobile 后必须跑）
+"$PY" mobile/tools/run_mobile_checks.py   # 移动侧 28 项（另一条入口，改 mobile 后必须跑）
 "$PY" tools/check_mobile_branch.py        # 移动分支 22 组（含 workbench / policy / AI / 7 个前端契约）
 ```
 
@@ -139,7 +139,7 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
 - **风险量化**：`mobile/analyze/risk_score.py`（四维乘积 + 重复衰减 + 正交置信度，v1.3）
   + `calibrate_risk_bands.py`（阈值标定），模型说明见 `mobile/RISK_SCORE_MODEL.md`。
 - **工程小项闭环**：M034 修 `conn_probe` 并发防撞、加 `run_regressions --mobile` 开关
-  （原 TWO_DEV_PLAN 工程-6/工程-7 已完成）。
+  （归档文档 TWO_DEV_PLAN 的工程-6/工程-7 已完成）。
 - **隐私工作台**：`mobile/workbench/`（工作流 / 运行时导入 / 合并布局，独立测试齐备）。
 - **一键审计流水线**：`mobile/pipeline/`（16 阶段 + SSE 事件流，`stages.py`/`runner.py`/`server.py`），
   前端是根 `frontend/app.html`。**端口分工**：`mobile/pipeline/server.py` 默认 **8771**、

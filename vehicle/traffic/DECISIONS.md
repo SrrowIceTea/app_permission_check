@@ -196,7 +196,7 @@ collector_server的/collect返回200和字节摘要，取代历史httpd的404。
 D403 的 `MATCH_TOLERANCE_MS=2000` / `AMBIGUITY_MS=500` 与 D408 的 3000ms 宽限期，
 此前只有**两个夹具**的校准。新增 `vehicle/traffic/experiment_attribution.py` 把时序变成可扫描的
 参数，用真实 `TimeAttribution` 跑混淆矩阵（脚本内的解析预测与实测在 228/228 格一致）。
-详见 ../EXPERIMENTS.md。
+详见 ../../archive/EXPERIMENTS.md。
 
 结论要点：
 - **容差与歧义窗按设计工作**：孤立包在 ±2000ms 内 `correct`、之外 `unresolved`，从不出错。

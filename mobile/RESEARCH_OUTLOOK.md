@@ -116,7 +116,7 @@
 | # | 缺口 | 说明 |
 | --- | --- | --- |
 | B1 | `window_ms=30000` 是**沿自车载的声明值**，未经移动夹具校准 | `WINDOW_CALIBRATION.md` 待建；缺少"读取→外发间隔"的真实分布 |
-| B2 | **无 ground truth 评测** | 召回率、误报率、归因正确率都是未知的。现在只有规则语义层面的离线实验（`EXPERIMENTS.md` 15 场景 precision/recall=1.0，是构造时序，不是真实 App 误判率） |
+| B2 | **无 ground truth 评测** | 召回率、误报率、归因正确率都是未知的。现在只有规则语义层面的离线实验（`archive/EXPERIMENTS.md` 15 场景 precision/recall=1.0，是构造时序，不是真实 App 误判率） |
 | B3 | **AI 阶段未用真实 key 跑过** | 提示词渲染与 `validate.py` 逻辑已测，模型实际表现（含幻觉率、多次运行一致性）零数据 |
 | B4 | **触发覆盖率不可度量** | `device_run.py` 是手写按钮序列 + `uiautomator`；第三方 App 要走 `device_run_thirdparty.py` 的临时方案，没有"本轮探索了多少 Activity / 多少 API 从未被触发"的度量 |
 
@@ -310,7 +310,7 @@
 | **A4** | **App 类目推断（可选、默认关）**：从描述/政策推断类目，只以 `source:inferred, confidence, needs_human_review` 进 bundle | Whyper'13、AC-Net、FCDP | 新增 `mobile/policy/infer_category.py`（或 LLM stage0） | 默认关闭不影响现有链路；开启时"`--app-category` 显式声明优先" | P2 |
 | **C3** | **差分法原型（Agrigento-style）**：仅对**自有夹具**做双次运行、第二次改动数据源（IMEI/位置），比对报文差异 ⇒ 发现被多层加密隐藏的值 | Agrigento NDSS'17 | 新增 `mobile/tools/differential_probe.py` | 仅 `fixture-app`；产出结论标注 `method=differential, scope=self_owned_app` | P2 |
 | **A1** | **有限动态污点**：只对高价值载体（String/byte[]/Bundle）在少数 source API 上打标记，跟踪他们在 `StringBuilder/Base64/Digest/JSONObject.put` 上的传播 | TaintDroid'10 思想的轻量化 | 新增 Frida 模块 | 开销与稳定性先做小规模试验；**不替换现有值哈希链路** | P2 |
-| **I1** | **VScanBench**：夹具矩阵的 ground truth 基准（延迟外发 / 批处理 / 只读不发 / 编码 / 加密 / 并发 / 重启 / 断网），量化归因正确率、歧义率、无法归因率、关联 precision/recall | Reprodroid / DroidBench / UBCBench 的方法学 | 新增 `tools/vscanbench/`，结果并入 `EXPERIMENTS.md` | 每个 case 有明确 ground truth；自动化出数字 | P1–P2 |
+| **I1** | **VScanBench**：夹具矩阵的 ground truth 基准（延迟外发 / 批处理 / 只读不发 / 编码 / 加密 / 并发 / 重启 / 断网），量化归因正确率、歧义率、无法归因率、关联 precision/recall | Reprodroid / DroidBench / UBCBench 的方法学 | 新增 `tools/vscanbench/`，结果并入 `archive/EXPERIMENTS.md` | 每个 case 有明确 ground truth；自动化出数字 | P1–P2 |
 
 ---
 
@@ -351,7 +351,7 @@
 
 ### 阶段 3（学期/论文级）：量化、可对照、可发表
 
-- [ ] **I1 VScanBench**：与 `EXPERIMENTS.md` 并列的定量基准。
+- [ ] **I1 VScanBench**：与 `archive/EXPERIMENTS.md` 并列的定量基准。
       这是把本项目从"能跑通的工具"推进到"结论可被第三方复核的系统"的关键一步，
       也是论文里最有说服力的部分（国内竞赛/省部级项目验收也认这类东西）。
 - [ ] **A1 有限动态污点**（试点即可，不必追求 sound）。

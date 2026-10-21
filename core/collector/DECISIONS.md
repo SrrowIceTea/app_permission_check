@@ -14,7 +14,7 @@
 **静默抢走且不标记**（`wrong`）。因为"真主迟到 600ms + 竞争者 65ms"与"真主就是 65ms
 那个"在**纯时间证据上完全同形**——任何只依赖候选距离的规则都无法同时保住理想锚点
 （本包早 2ms）并消灭那条带。量化见 `experiment_attribution.py`（wrong 28/33）与
-`EXPERIMENTS.md:19`。
+`archive/EXPERIMENTS.md:19`。
 
 移动端还多一种更现实的形态：第三方样本走**常规代理模式**（`emulator -http-proxy` 是
 SLIRP 层强制，全机流量都进代理），白名单只有一个包。此时**别的 App 的一条流**落进

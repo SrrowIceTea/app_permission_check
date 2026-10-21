@@ -621,7 +621,7 @@ mitm.log / emulator.log / emulator-start.log / session/）；早期手稿轮证�
 
 ## M034 工程小项整改：conn_probe 并发防撞 + `run_regressions --mobile` 开关（2026-10-16）
 
-**动机**：对 `TWO_DEV_PLAN.md`（v3）逐条独立核查后，确认"存在"档中两项可离线修复的小项：
+**动机**：对 `archive/TWO_DEV_PLAN.md`（v3）逐条独立核查后，确认"存在"档中两项可离线修复的小项：
 
 1. **工程-6**：`mobile/tools/conn_probe.py` 设备侧脚本/日志路径固定为
    `vscan_conn_all.*`。两个实例并发时，后启动者的开头 `rm -f` 会删掉前者的脚本，
@@ -644,14 +644,14 @@ mitm.log / emulator.log / emulator-start.log / session/）；早期手稿轮证�
 **验证**：两文件 `py_compile` 通过；`run_regressions.py --mobile` 全量跑通
 （13 组根回归 + mobile-checks 组）。
 
-**顺带核查更正**：TWO_DEV_PLAN.md 把"工程-5 sqlite 只读 URI"标为 ⚠️部分（4 处未改）
+**顺带核查更正**：`archive/TWO_DEV_PLAN.md` 把"工程-5 sqlite 只读 URI"标为 ⚠️部分（4 处未改）
 已**滞后**——现全仓所有只读连接（correlate_mobile / evidence_bundle / policy_lint /
 gen_targets / rule_coverage_report / static_scan_thirdparty 等）均已带 `?mode=ro` URI，
 不带 URI 的剩余连接全是写库/测试/内存库，属正常。该项无需动作。
 
 ## M035 C1 派生值匹配 + C2 静态/动态覆盖差集（2026-10-16）
 
-**动机**：TWO_DEV_PLAN §3.3 的 C1/C2 是"存在（未做）"档里仅有的两项可纯离线完成、
+**动机**：`archive/TWO_DEV_PLAN.md` §3.3 的 C1/C2 是"存在（未做）"档里仅有的两项可纯离线完成、
 且修的是**静默失真**的功能项（其余 C/E 项需要真机或排期给两人）。
 
 **C1 · 派生值匹配**（`core/collector/derive.py` 平台无关内核 + 三处接线）：
@@ -1596,3 +1596,21 @@ discover 133 全绿；`_risk_test_fixtures.py` 31 行。`hooks_parity` 仍为并
   （createSocket(Socket,String,int,boolean) 可用，createSocket(InetAddress,int) 报
   argument types do not match）→ 触发路径 = 裸 Socket.connect + 工厂包层 + startHandshake。
 - 验收口径：keylog 不做 100% 解密承诺，部分解密 + 未解密帧数如实呈现。
+
+## M057 文档治理：失效文档集中归档 + 根 README 重写（2026-10-21）
+
+- **动机**：大量 md 文档过期或不再需要（一次性复核/验证报告、已完成的计划、过时的
+  回归计数），且根 README 未覆盖两条产品线与 agent 入口，接手者无从下手。
+- **归档**：`TWO_DEV_PLAN.md`、`VERIFY_M031_M032_20261016.md`、`EXPERIMENTS.md`、
+  `PLAN_OPTIMIZATION_20261020.md`、`SAMPLE_RUN_5APPS.md`、`docs/DS60_VERIFY_20261020.md`、
+  `docs/DS60_FIX_20261020.md`、`docs/FIX_VERIFICATION_20261019.md`、
+  `docs/MERGE_NONROOT_AUDIT_20261018.md`、`docs/FUNCTIONAL_FRONTEND_20261019.md`
+  共 10 份移入 `archive/`，理由见 `archive/MANIFEST.md` 第 3 条。遵循「保留证据链」
+  惯例，不硬删；活跃文档的链接已改为 `archive/...` 相对路径。
+- **根 README 重写**：改为「两条产品线 + 平台无关内核」结构，新增产品地图/端口分工/
+  快速开始/Agent 读项目入口/能力边界五节，指向 `AGENTS.md`/`mobile/CLAUDE.md`/
+  `HANDOFF.md`/`mobile/DECISIONS.md`。
+- **计数校正**：`run_mobile_checks.py` 现为 **28 项**（非 24 组），同步修正
+  `AGENTS.md`、`mobile/CLAUDE.md`、`mobile/ARCHITECTURE.md`、`mobile/workbench/README.development.md`。
+- **复验**：`run_mobile_checks.py` 27/28 绿，唯一失败 `hooks_parity` 为既有已知失败
+  （并行通道 hooks 工作区引入，非本次文档改动）；引用扫描确认无悬空链接。

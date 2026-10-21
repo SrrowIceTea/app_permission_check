@@ -1,74 +1,145 @@
-# V-Scanner Mobile
+# V-Scanner（项目根）
 
-移动应用隐私数据与合规评估平台。仅用于已获授权的 APK 和专用测试模拟器。
+移动端 / 车载 App 隐私数据与合规审计平台（杭州师范大学星光计划，2026；移动端对应
+第九届浙江省大学生网络与信息安全竞赛企业命题）。**仅用于授权测试（自有设备与自有 APK）。**
 
-## 当前正确入口
+学术立场（全局硬约束，#2）：工具**不输出违规成立结论**——静态/动态/关联结论以规则封顶
+（候选/已观测/已关联），AI 章节只给「涉嫌」+ 置信度 + 需人工复核；每一处
+`policy_violation` 只能以提示/优先级/人工复核标记存在。
 
-- **首页：`frontend/index.html`；工作台：`frontend/app.html`。**
-- 新前端对应 **`mobile/pipeline/server.py`**，不是 `mobile/workbench/server.py` 的旧页面。
-- 主线保留原有 16 阶段 HTTP/SSE 契约。配置真实模型与正控后，使用共享的静态、采集、政策、三阶段 AI 校验和 PDF 发布核心，不重复实现检测算法。
+## 两条产品线 + 平台无关内核
 
-## 启动新版完整检测
-
-先准备 Android SDK/JDK、JADX、Frida Python、mitmproxy、reportlab/pypdf 和移动钩子的 Node 依赖。
-
-```powershell
-$env:ANDROID_SDK_ROOT = '<本机 Android SDK>'
-$env:ANDROID_HOME = $env:ANDROID_SDK_ROOT
-$env:JAVA_HOME = '<本机 JDK>'
-$env:VSCAN_JADX = '<本机 JADX 目录>'
-$env:PYTHONUTF8 = '1'
-$env:PYTHONIOENCODING = 'utf-8'
-python -B mobile/pipeline/server.py --port 8771 --workdir output/pipe `
-  --audit-config '<源码外模型配置.json>' `
-  --audit-selftest '<同模式同设备真实正控/verification.json>'
+```
+vscanner/
+├── core/           # 平台无关内核（唯一一份）：事件库/流量采集/代码行号/规则契约/Frida驱动/静态内核
+├── vehicle/        # 车载 AAOS 产品线：rules→targets→hooks→traffic→analyze→dashboard→workbench（已交付）
+├── mobile/         # 移动端产品线：规则库/钩子/政策/AI/报告/工具 + 一键审计流水线（当前主战场）
+├── frontend/       # 零构建前端：落地页 index.html + 「一键审计」工作台 app.html（对接 pipeline:8771）
+├── tools/          # 验收 / 回归脚本（run_regressions.py / check_mobile_branch.py）
+├── docs/           # 操作手册（AGENT_TEST_SUITE_RUNBOOK 等）
+└── archive/        # 已归档的过期/一次性文档（含 MANIFEST.md 找回说明）
 ```
 
-另一个终端在仓库根运行：
+> 权威 agent 操作手册见 [AGENTS.md](AGENTS.md)；复现与证据说明见 [COMPLETION.md](COMPLETION.md)；
+> 交付索引见 [DELIVERY_INDEX.md](DELIVERY_INDEX.md)；当前工作状态与下一步见 [HANDOFF.md](HANDOFF.md)。
 
-```powershell
-python -m http.server 8090 --bind 127.0.0.1 --directory frontend
+## 移动端主线（当前主战场，详见 [mobile/CLAUDE.md](mobile/CLAUDE.md)）
+
+把一次检测拆成五段，每段留下可复核的原始证据：
+
+```
+规则库(法规驱动) → 采集(钩子+代理) → 隐私政策 → 关联判定 → AI 研判 → PDF 报告
 ```
 
-浏览器打开本机 8090 端口的 `/index.html`，点击“进入工作台”。选择 APK 会启动实际检测并调用已配置模型；只上传已获授权的样本。
+| 赛题要求 | 本工具对应实现 |
+| --- | --- |
+| 静态分析：识别敏感数据的收集 | APK 清单权限 + dex 代码引用（复用 core/static 事实抽取） |
+| 动态分析：识别存储与传输行为 | Frida 钩子观测敏感 API 签名读取 + 同意时序 |
+| 通信流量：明文/未加密传输 | mitmproxy 抓流 + 设备端 tcpdump + keylog + tshark 重组完整 HTTP 报文 + 形态打标 + 值哈希/派生值匹配 |
+| 风险量化 | 四维乘积评分 v1.3（重复衰减 + 正交置信度），见 mobile/RISK_SCORE_MODEL.md |
+| 基于大模型，结合隐私政策与行为研判 | 三阶段提示词 + 证据包 + 输出校验 |
 
-**Root / 非 root 由启动配置的正控决定，不能混用证明。**
+### 关键目录
 
-- Root 模拟器：安装原始 APK，要求专用模拟器及匹配的 frida-server。
-- 非 root：制备并安装独立 Gadget 重签衍生包；保留原包用于静态与政策身份，不冒充原包字节未变。
-- 本轮 Frida/Gadget 实测版本为 **17.9.11**。根 `requirements.txt` 保留队友 17.18.0 声明，勿混装后复用正控。
-- 正控入口：[非 root](mobile/lab/README.nonroot.md)、[root](mobile/lab/README.root.md)。
-- 第三方政策使用已匹配的本地资料；准备方法见 [本地政策库](mobile/policy/README.local.md)。资料与 APK 不随源码包分发。
+| 目录 | 内容 | 详情 |
+| --- | --- | --- |
+| `mobile/rules/` | 移动规则库 `rules_mobile.db`（`MOB-*` 前缀，扩展表 sensitive_data_types/app_categories/policy_requirements） | 构建：`extract_android_apis.py` + `build_mobile_rules.py` |
+| `mobile/hooks/` | Frida 钩子（privacy/consent/egress/tls + native），`dist/hook_all.bundle.js` | `gen_targets.py` + `build.mjs` |
+| `mobile/hooks/dist/` | 合并 bundle，装载运行时 `core/frida_host/run.py` | 单 agent 合并架构，见 M026 |
+| `mobile/policy/` | 隐私政策抽取/分库/登录 | `policy_fetch.py` / `policy_discover.py` / `policy_library.py` |
+| `mobile/analyze/` | 关联引擎 `correlate_mobile.py`、风险评分 `risk_score.py`、覆盖缺口 `coverage_gap.py` | |
+| `mobile/ai/` | 三阶段提示词 + 证据包 + 输出校验 | `evidence_bundle.py` / `ai_review.py` |
+| `mobile/report/` | 十章节 PDF 报告 | |
+| `mobile/tools/` | 设备端脚本 `device_run.py`/`device_run_thirdparty.py`（+ split 子模块）、`batch_thirdparty.py`、`pcap_capture.py`/`pcap_http.py`、`conn_probe.py`、`run_mobile_checks.py`、`validate_keylog.py` 等 | 入口集合 |
+| `mobile/pipeline/` | 一键审计流水线：`stages.py`(16 阶段)/`runner.py`/`server.py`，SSE 事件流，默认端口 **8771** | |
+| `mobile/workbench/` | 静态工作台 `server.py`，默认端口 **8772**，与新流水线互不抢端口 | |
+| `mobile/lab/` | 实验室交付入口：`core`/`nonroot`/`root`（README.nonroot.md / README.root.md 等） | |
+| `frontend/` | 零构建前端：`index.html` 落地页 + `app.html` 工作台 | 不新增 package.json、不引框架，`python -m http.server` 直接开 |
 
-不传 `--audit-config/--audit-selftest` 时保留队友的旧运行器以兼容已有实验；它不属于本轮“真实 AI 硬门控”验收口径。旧隐私工作台作为兼容工具保留，若需要同时运行请另用 8772 等端口，不能与新流水线抢占 8771。
+### 端口分工（重要）
 
-## 工作台
+| 服务 | 端口 | 入口 |
+| --- | --- | --- |
+| 一键审计流水线 | **8771** | `python -B mobile/pipeline/server.py --port 8771 --workdir output/pipe ...` |
+| 静态工作台（旧） | **8772** | `python -B mobile/workbench/server.py` |
+| 前端静态服务器 | **8090** | `python -m http.server 8090 --bind 127.0.0.1 --directory frontend` |
 
-首页 + 一键审计、源码查看、静态审计、动态审计、AI 报告、PDF 报告六个工作区。
+> 旧文档「都为 8771」已过时。Root / 非 root 由启动配置的正控决定，不能混用证明。
 
-- 新建审计、历史任务切换、服务重启后读取已完成结果。
-- 动态页展示实际读取、归因网络流、同意事件和存储/加密观察。
-- AI 页展示本轮已校验三阶段原始结论与引用；规则风险信号分和 AI 研判分别呈现。
-- PDF 库区分本轮正式报告与历史示例；未通过完整门控不显示为本轮成功。
+## 车载产品线（已交付，保持稳定）
 
-## 本轮验收（2026-10-19）
+`vehicle/*`（rules/targets/hooks/traffic/analyze/dashboard/workbench）是独立交付物，
+移动端不在车内复制实现，而是以 import 复用 `core/` 的代理归因、代码行号、dex 解析、报告字体方案。
+命名对照：Phase 1–7 → `vehicle/{rules,targets,hooks,traffic,analyze,dashboard,workbench}`，
+子目录 `DECISIONS.md` 仍按旧 Phase N / D1xx–D7xx 记录历史决策。
 
-| 样本 | 模式 | 正式链路 | 真实 AI 请求 | PDF |
-|---|---|---|---:|---:|
-| LibChecker 2.5.4 | 非 root Gadget | 通过 | 5（含校验修复） | 13 页 |
-| Read You 0.16.2 | 非 root Gadget | 通过；1 条实际本地公开 RSS 流 | 4 | 14 页 |
-| LibChecker 2.5.4 原始 APK | Root | 通过 | 3 | 13 页 |
-| LibChecker，经新版页面选择 APK 发起 | 非 root Gadget | 页面端到端通过 | 4 | 13 页 |
+## 环境事实（当前主机；入口 environment.ps1）
 
-两种模式真实正控也通过。24 组离线回归通过；前端 21 项契约通过。验收详情见 [改动与测试记录](docs/FUNCTIONAL_FRONTEND_20261019.md)。
+| 项 | 值 |
+| --- | --- |
+| Python | `%LOCALAPPDATA%\Programs\Python\Python313\python.exe`（**只有它**装了 frida/mitmproxy/reportlab；`environment.ps1` 用 `$env:LOCALAPPDATA` 派生，换机不硬编码用户名） |
+| SDK | `D:\Android\SDK`；`JAVA_HOME=D:\Android\JDK`（JDK 21，**不要用 JBR 25**） |
+| 设备 | AAOS 模拟器 `emulator-5554`，Android 15 / API 35 / userdebug；**应用跑在 user 10** |
+| frida-server | 设备 `/data/local/tmp/frida-server -l 127.0.0.1:27043`（**27043 不是 27042**）；spawn 超时，用 attach |
+| 网络 | 设备只走 wifi 且会掉线；宿主机 `dl.google.com` 不通 → maven 用阿里云镜像 |
+| 编译 | Gradle 8.13 / AGP 8.11.1 / Kotlin 2.2.0 / KSP 2.2.0-2.0.2 / Room 2.8.5，compileSdk 36 |
 
-有界场景不代表全部业务覆盖。JADX 部分类反编译失败保持 `partial`，未观测到敏感读取/网络流不代表安全；本轮非 root 检测未启用 VPN，不宣称所有包或所有协议明文已覆盖。签名绑定、加固、多进程及不兼容 APK 仍可能阻断。
+> `.agents/README.md` 记录了当前主机与本文环境表的实测漂移（Python 依赖全缺 → 离线回归会假红；
+> SDK/`android-36` 缺失 → 编译会失败；`D:\Anroid` 实为 `D:\Android` 拼写）——跑不通用例前先读它。
 
-## 离线回归
+## 快速开始
 
 ```powershell
-python -B tools/check_mobile_branch.py
-python .workbuddy/skills/vscanner-frontend-redesign/scripts/check_contract.py
+# 依赖解释器只有那个（装了 reportlab/Pillow/mitmproxy/cryptography/frida/pypdf）
+$py = "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
+
+# 1) 仓库级离线回归（不需要设备/网络/API key）
+& $py tools/run_regressions.py                 # 13 组：completion/rules-contract/event-store/codeloc/correlate/...
+
+# 2) 移动侧离线回归 + 端点干跑（28 项；看 output/mobile-regression-*/verification.json）
+& $py mobile/tools/run_mobile_checks.py
+
+# 3) 移动分支回归（含 workbench / policy / AI / 前端契约）
+& $py tools/check_mobile_branch.py
+
+# 4) 一键审计前端（选 APK 触发全流程；仅上传已授权样本）
+& $py mobile/pipeline/server.py --port 8771 --workdir output/pipe
+python -m http.server 8090 --bind 127.0.0.1 --directory frontend   # 浏览器开 127.0.0.1:8090
 ```
 
-`core/`、`vehicle/`、规则库与队友现有成果保持；模型密钥只放源码外，不提交。
+> **先确认解释器再判红**：若该解释器缺少 `reportlab`/`mitmproxy`/`cryptography`/`frida`/`pypdf`
+> 会冒出 6 处 `ModuleNotFoundError` 假红。先跑 `& $py -c "import reportlab, PIL, mitmproxy, cryptography"`。
+
+## 运行一轮设备审计（可选，需设备）
+
+```bash
+"$PY" mobile/tools/device_run.py --user 10            # 全流程（有 key 时会跑 AI）
+"$PY" mobile/tools/device_run.py --user 10 --skip-ai  # 只到工具结论与报告
+```
+
+产物在 `output/mobile-device-<时间戳>/`：`session/` 原始采集 · `out/findings.jsonl + summary.json`
+工具规则结论 · `out/bundle.json` 证据包 · `out/ai/` AI 三阶段输出 · `out/mobile-report.pdf` ·
+`verification.json` 本轮判据（**看这个判断成败，不要只看目录存在**）。
+
+样本批处理与回归：`mobile/tools/batch_thirdparty.py`（静态 `--static-only` → 动态 `--static-reuse`），
+数据集在 `D:/数据集/数据集/F-Droid-60`（60 个 F-Droid 样本），完整步骤/判据/故障处置见
+[docs/AGENT_TEST_SUITE_RUNBOOK_20261019.md](docs/AGENT_TEST_SUITE_RUNBOOK_20261019.md)。
+
+## Agent 读项目入口（按顺序）
+
+1. **[AGENTS.md](AGENTS.md)** — agent 操作手册：全局约束、环境事实、跑测试集、规则库、产品地图、
+   拆分进度与已完成/未做清单。改任何模块前必读。
+2. **[mobile/CLAUDE.md](mobile/CLAUDE.md)** — 移动端模块级说明（结构 + 关键链路 + 坑位）。
+3. **[mobile/DECISIONS.md](mobile/DECISIONS.md)** — 移动端决策记录 M001–M056（几乎每个坑都是静默失败）。
+4. **[HANDOFF.md](HANDOFF.md)** — 当前工作状态与下一步。
+5. **[core/…/CLAUDE.md](core/collector/CLAUDE.md)** 与 `vehicle/*/CLAUDE.md` — 平台内核对车载模块细节。
+
+**改任何模块前先读对应目录的 DECISIONS**——大多数历史坑都是**静默失败**。
+
+## 能力边界（不得逾越）
+
+- 工具不产出「违规成立」；候选/已观测/已关联封顶，违规需人工复核。
+- 「未采集到」≠「未发生」；缺失写进缺口清单，AI 提示词强制要求「证据不足」输出。
+- 形态 ≠ 事实：报文出现 15 位数字 ≠ IMEI（IMEI/IMSI 同为 15 位），只有值哈希匹配才算「确实传输」。
+- 单文件 ≤300 行（超了按职责拆分，拆后回归验证）；观察不改写；判定可追溯（规则 ID + 依据）。
+- keylog 不做 100% 解密承诺：部分解密 + 未解密帧数如实呈现。
