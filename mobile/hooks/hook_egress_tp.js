@@ -25,7 +25,7 @@
 'use strict';
 import { packages } from './scope.js';
 
-import { makeLogger, procName } from './runtime.js';
+import { makeLogger, procName, NO_STACK } from './runtime.js';
 
 var vlog = makeLogger('egress', '/data/local/tmp/vscan.log');
 
@@ -79,6 +79,7 @@ function describeInet(inet, port) {
 }
 
 function withStack(extra) {
+  if (NO_STACK) { extra.stack = []; extra.app_frames = []; return extra; }
   try {
     var frames = Java.use('java.lang.Thread').currentThread().getStackTrace();
     var context = [], app = [];
@@ -133,6 +134,15 @@ function installLibcoreConnect(cls, sig, hooked) {
 
 function hookLibcoreConnect() {
   var hooked = [];
+  // i2 Native 迁移（2026-10-21）：libcore.io.Linux.connect(fd, InetAddress, int)
+  // 的 Java 方法体是薄壳（直接进 JNI），真正实现是 libopenjdk 导出的
+  // Java_libcore_io_Linux_connect——已迁到 hookNativeLinuxConnect（Interceptor.attach，
+  // 不替换 ArtMethod）。armed 时本层跳过该重载，证据 SKIPPED_JAVA × NATIVE_MIGRATED
+  // 成对留痕；符号未导出则标记不存在，本层原样接管（覆盖率不丢）。
+  // 只跳 1 个重载：BlockGuardOs 两条与 Linux 的 SocketAddress 重载保留——它们能拿
+  // hostname（getHostString/getHostAddress），是 native 层（只有 IP:port）的补充，
+  // 且与 native 事件按 'ip:port' 同键去重，不会双记。
+  var natArmed = globalThis.__vscanNat || {};
   // A6（§8.1）：`libcore.io.Posix` 在 API 37 上不存在（`ClassNotFoundException`，
   // 每轮都记一条 HOOK_MISS，看起来像"钩子坏了"其实是**死目标**）。已移除；
   // BlockGuardOs / Linux 是本镜像上实测挂得上的汇聚点，保留。
@@ -143,6 +153,12 @@ function hookLibcoreConnect() {
     ['libcore.io.Linux', ['java.io.FileDescriptor', 'java.net.InetAddress', 'int']]
   ];
   for (var i = 0; i < combos.length; i++) {
+    var isLinuxInet = combos[i][0] === 'libcore.io.Linux' && combos[i][1].length === 3;
+    if (isLinuxInet && natArmed.linux_connect) {
+      vlog('SKIPPED_JAVA', { where: 'libcore.io.Linux.connect', sig: combos[i][1].join(','),
+                             note: '已由 native.Linux.connect 接管（NATIVE_MIGRATED）。' });
+      continue;
+    }
     installLibcoreConnect(combos[i][0], combos[i][1], hooked);
   }
   return hooked;
@@ -310,6 +326,103 @@ function hookNativeConnect() {
   return hooked;
 }
 
+// ============================================================================
+// native Linux.connect 层（2026-10-21，i2 迁移）：本镜像把 JNI 符号全剥光（实测
+// dynsym/symtab 均无 Java_libcore_io_Linux_connect），改用**只读 ArtMethod** 解析：
+// Java.use('libcore.io.Linux').connect 的 (FileDescriptor, InetAddress, int) 重载
+// handle(+0x10) = entry_point_from_jni_（布局实测见 hook_privacy_native.js 头注释）。
+// 只读、不替换 ArtMethod（A1 崩点收窄）；守卫：入口必须落在已加载模块内且非 libart。
+// 事件格式与 Java 层一致（describeInet 本来就只记 literal_ip，native 侧同样只给
+// target_ip + target_port；hostname 由保留的 BlockGuardOs/SocketAddress 重载补齐）。
+// 去重键 'ip:port' 与 native.connect（libc）同键——同一连接不会双记。只观察不改写。
+// ============================================================================
+function resolveLinuxConnectJni() {
+  var out = [];
+  Java.perform(function () {
+    try {
+      var c = Java.use('libcore.io.Linux');
+      var holder = c['connect'];
+      if (!holder) return;
+      var ovs = holder.overloads || [holder];
+      var mods = Process.enumerateModules();
+      for (var i = 0; i < ovs.length; i++) {
+        var sig = String(ovs[i].argumentTypes);
+        // 只认 (FileDescriptor, InetAddress, int)：另一端（SocketAddress）是纯 Java 壳，
+        // 会先解析 hostname 再落到这条 JNI。
+        if (sig.split(',').length !== 3) continue;
+        var h = ovs[i].handle;
+        if (!h) continue;
+        var p = h.add(0x10).readPointer();
+        if (p.isNull()) continue;
+        var inMod = false;
+        for (var j = 0; j < mods.length; j++) {
+          if (p.compare(mods[j].base) >= 0 && p.compare(mods[j].base.add(mods[j].size)) < 0) {
+            inMod = mods[j].name !== 'libart.so';
+            break;
+          }
+        }
+        if (!inMod) continue;
+        out.push({ addr: p });
+      }
+    } catch (e) {}
+  });
+  return out;
+}
+
+function hookNativeLinuxConnect() {
+  var hooked = [];
+  var hits = resolveLinuxConnectJni();
+  for (var i = 0; i < hits.length; i++) {
+    (function (found) {
+      var key = 'native.Linux.connect@' + found.addr;
+      try {
+        Interceptor.attach(found.addr, {
+          onEnter: function (args) {
+            // Linux.connect(env, thiz, fd, InetAddress, port)：真参自 args[2] 起。
+            try {
+              var port = -1;
+              var ip = null;
+              try { port = args[4].toInt32(); } catch (e) {}
+              try {
+                Java.perform(function () {
+                  try {
+                    var ia = Java.cast(args[3], Cls.InetAddress);
+                    if (ia !== null) {
+                      var v = String(ia.getHostAddress());
+                      ip = v === 'null' || v === null ? null : v;
+                    }
+                  } catch (e2) {}
+                });
+              } catch (e3) {}
+              var now = Date.now();
+              // 与 native.connect（libc）同键 IP:port 去重：Java 层几条重载也会撞这个键。
+              if (remember(hostPort(null, ip, port), now, CFG.dedupMs)) {
+                vlog('EGRESS_CONNECT', withStack({
+                  package: PKG, via: 'native.Linux.connect', target_host: null,
+                  target_port: port, target_ip: ip, outcome: 'ok'
+                }));
+              }
+            } catch (e) {}
+          }
+        });
+        hooked.push(key);
+        vlog('NATIVE_MIGRATED', { key: 'linux_connect', entry: found.addr.toString(),
+                                  api: 'libcore.io.Linux.connect(fd,InetAddress,int)',
+                                  note: '只读 ArtMethod(+0x10) 解析 JNI 入口；对应 Java 层重载已跳过（SKIPPED_JAVA）。' });
+        globalThis.__vscanNat = globalThis.__vscanNat || {};
+        globalThis.__vscanNat.linux_connect = true;
+      } catch (e) {
+        vlog('HOOK_MISS', { where: 'native.Linux.connect', msg: String(e) });
+      }
+    })(hits[i]);
+  }
+  if (hits.length === 0) {
+    vlog('NATIVE_RESOLVE_MISS', { key: 'linux_connect',
+                                  note: '类未加载或 ArtMethod 槽位未通过守卫：Java 层原样接管（HOOK 不丢）。' });
+  }
+  return hooked;
+}
+
 export function main() {
   try {
     Cls.ISA = Java.use('java.net.InetSocketAddress');
@@ -320,8 +433,9 @@ export function main() {
       return;
     }
     vlog('START', { script: 'hook_egress_tp.js', package: PKG, frida: Frida.version });
-    var hooked = hookLibcoreConnect().concat(hookSocketConnect(), hookUriInit(),
-                                             hookNativeConnect());
+    // native Linux.connect 先装配：hookLibcoreConnect 依据 armed 标记决定跳过哪个重载。
+    var hooked = hookNativeLinuxConnect().concat(
+      hookLibcoreConnect(), hookSocketConnect(), hookUriInit(), hookNativeConnect());
     var libcore = hooked.filter(function (h) { return h.indexOf('libcore') === 0; });
     var nativeHooks = hooked.filter(function (h) { return h.indexOf('native.') === 0; });
     vlog('ARMED', { hooks: hooked, count: hooked.length, libcore_hooks: libcore.length,

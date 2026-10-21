@@ -1,29 +1,22 @@
 #!/usr/bin/env python3
-"""报告的非 AI 章节：概览 / 判定依据 / 证据摘要 / 工具规则结论 / 方法与局限 / 附录。
+"""报告的非 AI 章节：概览 / 判定依据 / 证据摘要 / 方法与局限 / 附录。
 
 仅用于授权测试（已获授权的样本与设备）。
 每一节都遵守同一条：**缺输入就写"缺"，不写"无"**。
+
+第四章「工具规则结论」的逐条 finding 卡片在 `finding_cards.py`
+（本文件曾超 300 行硬线，卡片渲染已拆出；这里 re-export 保持引用不变）。
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-from reportlab.lib import colors
 from reportlab.lib.units import mm
-from reportlab.platypus import KeepTogether, PageBreak, Spacer
+from reportlab.platypus import PageBreak, Spacer
 
-from report_common import Paragraph, SEVERITY_COLORS, esc, grid_table, kv_table
+from report_common import Paragraph, esc, grid_table, kv_table
 from report_health import health_state
-from code_loc_text import code_loc_text
-
-LEVEL_ZH = {"candidate": "候选（待复核）", "observed": "已观测",
-            "correlated": "已关联", "policy_violation": "政策违规（本工具不产出）"}
-TYPE_ZH = {
-    "over_permission": "权限必要性", "sensitive_read": "敏感读取",
-    "no_consent_read": "运行时权限时序（政策同意未知）", "data_egress": "读取后外发",
-    "over_collection": "超出必要范围收集", "plaintext_transmission": "明文/未加密传输",
-    "third_party_share": "向第三方外发", "policy_mismatch": "政策未声明即收集",
-}
+from finding_cards import LEVEL_ZH, TYPE_ZH, finding_missing_elements, section_findings
 
 
 def section_overview(bundle: dict, st: dict, font: str, meta: dict) -> list:
@@ -53,6 +46,13 @@ def section_overview(bundle: dict, st: dict, font: str, meta: dict) -> list:
                     "**未取得**：政策相关判定不可用"),
     ]
     out = [Paragraph("一、检测概览", st["h1"]), kv_table(rows, st, font)]
+    out.append(Paragraph("1.1 工具与模型版本（复现口径）", st["h2"]))
+    out.append(kv_table([
+        ("报告生成器", "V-Scanner Mobile（report_mobile.py）"),
+        ("AI 辅助模型", esc(meta.get("ai_model") or "未运行")),
+        ("提示词版本", esc(meta.get("prompt_versions") or "—")),
+        ("中文字体", esc(meta.get("font_note"))),
+    ], st, font))
     if bundle.get("gaps"):
         out.append(Paragraph("本轮证据缺口（影响范围见各节）", st["h2"]))
         for g in bundle["gaps"]:
@@ -91,6 +91,29 @@ def section_basis(bundle: dict, st: dict, font: str) -> list:
         ["已关联 correlated", "多源证据在时间与内容上对齐（如读到后在窗口内外发，且内容匹配）"],
         ["政策违规 policy_violation", "本工具**不产出**；保留给人工/政策判定"],
     ], st, font, widths=[42 * mm, 128 * mm]))
+
+    out.append(Paragraph("2.4 本批结论的规则分布（规则 × 法规条款 × 命中数）", st["h2"]))
+    findings = bundle.get("findings") or []
+    if findings:
+        by_rule: dict[str, dict] = {}
+        for f in findings:
+            rid = f.get("rule_id") or f.get("rule_type") or "?"
+            agg = by_rule.setdefault(rid, {})
+            agg.setdefault("title", f.get("title") or "")
+            agg.setdefault("levels", set()).add(f.get("conclusion_level") or "?")
+            agg.setdefault("clauses", set()).update(
+                f"{b.get('doc')}:{b.get('clause')}" for b in (f.get("basis_refs") or [])
+                if isinstance(b, dict) and b.get("doc") and b.get("clause"))
+            agg["count"] = agg.get("count", 0) + 1
+        rows = [[esc(rid), esc(agg["title"]), esc("、".join(sorted(agg["levels"]))),
+                 str(agg["count"]),
+                 esc("、".join(sorted(agg["clauses"]))) or "—"]
+                for rid, agg in sorted(by_rule.items())]
+        out.append(grid_table(["规则 ID", "名称", "结论等级", "命中数", "依据法规条款"],
+                              rows, st, font,
+                              widths=[28 * mm, 34 * mm, 30 * mm, 14 * mm, 64 * mm]))
+    else:
+        out.append(Paragraph("本轮无规则结论，无矩阵可列。", st["warn"]))
     return out
 
 
@@ -197,121 +220,6 @@ def _consent_desc(c: dict) -> str:
     return str(sig)
 
 
-def section_findings(bundle: dict, st: dict, font: str) -> list:
-    findings = bundle.get("findings") or []
-    out = [PageBreak(), Paragraph(f"四、工具规则结论（{len(findings)} 条）", st["h1"])]
-    if not findings:
-        out.append(Paragraph("本轮无规则结论。见缺口说明——**无结论不等于合规**。", st["warn"]))
-        return out
-    out.append(Paragraph(
-        "逐条展开：等级徽章 / 事实 / 证据 / 依据条款 / 影响 / 整改与复测。"
-        "一页概览见「风险总览」章的发现矩阵。", st["small"]))
-    out.append(Spacer(1, 4))
-    for f in sorted(findings, key=_sev_sort_key):
-        out += _finding_block(f, st, font)
-    return out
-
-
-def _sev_sort_key(f: dict) -> tuple:
-    lvl_order = {"correlated": 0, "observed": 1, "candidate": 2, "policy_violation": 3}
-    sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4, "unrated": 5}
-    return (sev_order.get(f.get("severity"), 5),
-            lvl_order.get(f.get("conclusion_level"), 3))
-
-
-def _finding_block(f: dict, st: dict, font: str) -> list:
-    sev = f.get("severity") or "unrated"
-    sev_zh = {"critical": "严重", "high": "高", "medium": "中", "low": "低",
-              "info": "信息", "unrated": "未评级"}.get(sev, sev)
-    sev_color = SEVERITY_COLORS.get(sev, colors.HexColor("#5f6b7a"))
-    hexc = "#" + (sev_color.hexval()[2:] if sev_color.hexval().startswith("0x")
-                  else sev_color.hexval())
-
-    head = Paragraph(
-        f'<font color="{hexc}"><b>[{esc(sev_zh)}]</b></font>　'
-        f'<b>{esc(f.get("rule_id") or "—")}</b>　{esc(f.get("title") or "")}',
-        st["h2"])
-
-    rows = [
-        ("结论等级", esc(LEVEL_ZH.get(f.get("conclusion_level"),
-                                     f.get("conclusion_level")))),
-        ("规则类型", esc(TYPE_ZH.get(f.get("rule_type"), f.get("rule_type")))),
-        ("数据类别/权限", esc(f.get("data_type") or _perm_of(f) or "—")),
-        ("事实与说明", esc(f.get("note") or "—")),
-        ("证据", esc(_evidence_of(f))),
-        ("代码位置", esc(_code_loc_of(f))),
-        ("依据条款", esc("、".join(f"{b.get('doc')}:{b.get('clause')}"
-                                  for b in (f.get("basis_refs") or [])
-                                  if isinstance(b, dict)) or "—")),
-        ("影响", esc(_impact_of(f))),
-        ("整改与复测", esc(_remediation_of(f))),
-    ]
-    block = [head, kv_table(rows, st, font, col1=30 * mm), Spacer(1, 6)]
-    return block
-
-
-def _code_loc_of(f: dict) -> str:
-    """代码位置一栏：实现在 code_loc_text（report_sections 已超 300 行，不再往里塞）。"""
-    return code_loc_text(f)
-
-
-def _evidence_of(f: dict) -> str:
-    """证据描述：优先外发流（读→发配对），否则退回读取事件索引。"""
-    pairs = f.get("pairs") or []
-    if pairs:
-        parts = []
-        for p in pairs[:3]:
-            host = p.get("flow_host") or "?"
-            method = p.get("flow_method") or "?"
-            path = (p.get("flow_path") or "")[:40]
-            delta = p.get("delta_ms")
-            match = "值级匹配" if p.get("content_match") else "未做值级匹配"
-            parts.append(
-                f"读取事件#{p.get('read_event_id')} → 流#{p.get('flow_event_id')}"
-                f"（{method} {host}{path}"
-                + (f"，Δ{delta}ms" if delta is not None else "")
-                + f"，{match}）")
-        return "；".join(parts)
-    ids = f.get("event_ids") or []
-    return "读取事件索引：" + "、".join(str(i) for i in ids) if ids else "—"
-
-
-_IMPACT = {
-    "sensitive_read": "应用读取了用户敏感数据；若超出功能必要或未经同意，涉嫌过度收集。",
-    "over_permission": "申请或使用了超出功能必要的权限，扩大数据暴露面。",
-    "over_collection": "收集超出功能必要的个人信息，涉嫌违反最小必要原则。",
-    "policy_mismatch": "隐私政策未声明即收集，用户无从知情与同意。",
-    "third_party_share": "数据向第三方外发，接收方与用途不明，存在扩散风险。",
-    "data_egress": "敏感数据被外发至网络，存在泄露与跨域传输风险。",
-    "plaintext_transmission": "数据未加密传输，可被中间人截获。",
-    "no_consent_read": "在同意状态未知情况下读取，无法证明已取得同意。",
-}
-_REMEDIATION = {
-    "sensitive_read": "核对收集必要性，删除超出功能必要的数据项；确需收集则明示并取得同意。",
-    "over_permission": "删除超出必要的权限声明与调用；按需授权、即用即请求。",
-    "over_collection": "裁剪到功能最小必要范围，并在隐私政策中列明收集项与目的。",
-    "policy_mismatch": "在隐私政策中补充该数据项的收集目的、方式与范围，收集前告知。",
-    "third_party_share": "在政策中披露 SDK/接收方与用途；评估能否本地处理替代外发。",
-    "data_egress": "外发通道改用 HTTPS/TLS；停止传输设备标识等敏感值，确需传输则脱敏。",
-    "plaintext_transmission": "全链路启用 TLS，禁用明文回退。",
-    "no_consent_read": "补齐同意时序证据；确认权限弹窗与实际调用顺序后再判定。",
-}
-_RETEST = "复测：按规则 ID 重放同一路径，确认该数据项不再被读取/外发，"
-"或政策已声明并取得同意后重新评估。"
-
-
-def _impact_of(f: dict) -> str:
-    return _IMPACT.get(f.get("rule_type"), "见规则说明与事实描述。")
-
-
-def _remediation_of(f: dict) -> str:
-    return _REMEDIATION.get(f.get("rule_type"), "据事实与依据条款人工评估整改方案。") + _RETEST
-
-
-def _perm_of(f: dict) -> str | None:
-    return f.get("permission")
-
-
 def section_method(bundle: dict, st: dict, font: str, meta: dict) -> list:
     policy = bundle.get("policy") or {}
     out = [PageBreak(), Paragraph("九、方法与局限", st["h1"])]
@@ -347,8 +255,17 @@ def section_method(bundle: dict, st: dict, font: str, meta: dict) -> list:
     for lim in limits:
         out.append(Paragraph("- " + esc(lim), st["body"]))
 
+    out.append(Paragraph("9.2 为什么「不产出 policy_violation」（外部证据）", st["h2"]))
+    out.append(Paragraph(
+        "隐私合规判定是语义任务，自动化方法的准确率有硬上限。GDPR-Bench-Android"
+        "（arXiv:2511.00619，1,951 条人工标注违规、23 条 GDPR 条款、15 个开源仓库）"
+        "横评 8 类方法：最强组合 ReAct agent 的文件级定位 Acc@1 仅 17.38%，"
+        "形式化 AST 方法仅 1.86%——「从代码直判违规/合规」当前整体不可靠。"
+        "因此本报告把政策合规结论留给人工复核；工具侧只产出「涉嫌」级规则结论与证据链，"
+        "AI 辅助输出只作为提示与复核优先级，不参与八谓词判定。见方法章与决策记录。", st["body"]))
+
     if policy.get("available"):
-        out.append(Paragraph("9.2 隐私政策来源", st["h2"]))
+        out.append(Paragraph("9.3 隐私政策来源", st["h2"]))
         out.append(kv_table([
             ("来源", esc(policy.get("source"))),
             ("取得方式", esc(policy.get("source_kind"))),
@@ -357,7 +274,7 @@ def section_method(bundle: dict, st: dict, font: str, meta: dict) -> list:
             ("正文字数", esc(policy.get("chars"))),
         ], st, font, col1=30 * mm))
     else:
-        out.append(Paragraph("9.2 隐私政策：**本轮未取得**，政策相关判定全部不可用。", st["warn"]))
+        out.append(Paragraph("9.3 隐私政策：**本轮未取得**，政策相关判定全部不可用。", st["warn"]))
     return out
 
 
@@ -388,4 +305,15 @@ def section_appendix(bundle: dict, st: dict, font: str, meta: dict) -> list:
             "缺口的含义：这些判定**没有被执行**，不是被执行后判定为合规。", st["small"]))
     else:
         out.append(Paragraph("本轮无缺口记录。", st["body"]))
+
+    out.append(Paragraph("附录 C：证据文件 SHA-256（逐文件）", st["h1"]))
+    hashes = meta.get("evidence_hashes") or []
+    if hashes:
+        out.append(Paragraph(
+            "交付目录内各证据文件逐一取 sha256，保证「报告 ↔ 证据包」同一性可复核。", st["small"]))
+        out.append(grid_table(["文件", "SHA-256"],
+                              [[esc(h.get("name")), esc(h.get("sha256"))] for h in hashes],
+                              st, font, widths=[60 * mm, 110 * mm]))
+    else:
+        out.append(Paragraph("未收集证据文件哈希——复现性依赖交付目录完整。", st["warn"]))
     return out

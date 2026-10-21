@@ -121,10 +121,25 @@ def validate_stage1(out: dict, *, req_ids: list[str], policy_text: str, policy: 
                 warnings.append(f"{a.get('req_id')} 判 met 但无 quote")
             else:
                 problems.extend(quote_problems(q, a, policy, str(a.get("req_id"))))
+    # 条款组 PP-TPL：第三方清单只从政策原文出发，绝不假设集成
+    tpl_refs: list[str] = []
+    for i, tp in enumerate(out.get("third_parties") or []):
+        if not isinstance(tp.get("name"), str) or not tp.get("name").strip():
+            problems.append(f"third_parties[{i}] 缺第三方/SDK 名称")
+        q = tp.get("quote")
+        if not q:
+            problems.append(f"third_parties[{i}] 第三方条目必须有逐字 quote（清单只从政策原文出发）")
+        else:
+            problems.extend(quote_problems(q, tp, policy, f"third_parties[{i}]"))
+        tr = tp.get("tpl_ref")
+        if tr:
+            if tr in tpl_refs:
+                problems.append(f"third_parties[{i}] tpl_ref 重复: {tr}")
+            tpl_refs.append(tr)
     return {"ok": not problems, "problems": problems, "warnings": warnings}
 
 
-def validate_stage2(out: dict, *, bundle: dict) -> dict:
+def validate_stage2(out: dict, *, bundle: dict, stage1: dict | None = None) -> dict:
     problems, warnings = [], []
     if out.get("stage") != "consistency":
         warnings.append(f"stage 字段写成 {out.get('stage')!r}（期望 consistency）")
@@ -132,24 +147,37 @@ def validate_stage2(out: dict, *, bundle: dict) -> dict:
     flows_by_id = {f["evidence_id"]: f for f in bundle.get("traffic", {}).get("flows", [])}
     reads_by_id = {r["evidence_id"]: r for r in bundle.get("dynamic", {}).get("reads", [])}
 
-    valid_assess = {"undisclosed_collection", "over_collection", "read_before_consent",
-                    "plaintext_transmission", "consistent", "insufficient_evidence"}
+    valid_disclosure = {"clear", "vague", "omitted", "incorrect", "ambiguous", "not_applicable"}
+    valid_behavior = {"over_collection", "plaintext_transmission", "read_before_consent_unknown"}
     for i, item in enumerate(out.get("per_data_type") or []):
-        a = item.get("assessment")
-        if a not in valid_assess:
-            problems.append(f"per_data_type[{i}] assessment 越界: {a!r}")
+        ds = item.get("disclosure_status")
+        if ds not in valid_disclosure:
+            problems.append(f"per_data_type[{i}] disclosure_status 越界: {ds!r}（合法："
+                            f"{sorted(valid_disclosure)}）")
+        br = item.get("behavior_risk")
+        if not isinstance(br, list):
+            problems.append(f"per_data_type[{i}] behavior_risk 必须为数组: {br!r}")
+        else:
+            bad = [b for b in br if b not in valid_behavior]
+            if bad:
+                problems.append(f"per_data_type[{i}] behavior_risk 越界: {bad}（合法："
+                                f"{sorted(valid_behavior)}）")
+            if "read_before_consent" in br:
+                problems.append(f"per_data_type[{i}] 无直接政策接受信号，不能用 read_before_consent；"
+                                "只能标 read_before_consent_unknown")
         if item.get("policy_consent_state", "unknown") != "unknown":
             problems.append(f"per_data_type[{i}] 政策接受缺直接信号，状态只能为 unknown")
-        if (item.get("observed_collection") is True
-                or a in ("undisclosed_collection", "over_collection", "consistent")):
+        # 声称收集（观察到、有行为风险、或给出非 not_applicable 的披露判定）必须有
+        # 取得非空数据的读取证据；not_applicable + 未收集的凭据补全条目不要求。
+        claims_collection = (item.get("observed_collection") is True
+                             or bool(br) or (ds is not None and ds != "not_applicable"))
+        if claims_collection:
             read_refs = item.get("read_evidence_refs") or []
             if not any(read_state(reads_by_id.get(ref, {})) == "obtained"
                        and item.get("data_type") in ([reads_by_id[ref].get("data_type")]
                            + (reads_by_id[ref].get("data_types") or [])) for ref in read_refs
                        if ref in reads_by_id):
                 problems.append(f"per_data_type[{i}] 声称收集却无取得非空数据的读取证据")
-        if a == "read_before_consent" or "read_before_consent" in (item.get("also_applicable") or []):
-            problems.append(f"per_data_type[{i}] 无直接政策接受信号，不能判定政策同意前收集")
         for p, ref in _collect_refs(item, f"per_data_type[{i}]"):
             if ref not in refs:
                 problems.append(f"{p} 引用了不存在的证据: {ref}")
@@ -176,6 +204,27 @@ def validate_stage2(out: dict, *, bundle: dict) -> dict:
     for j, ins in enumerate(out.get("insufficient") or []):
         if not ins.get("missing"):
             warnings.append(f"insufficient[{j}] 未说明缺什么")
+    # 阶段二 TPL 矩阵：数据类别 × 收集方（阶段一 TPL-xx）× 披露状态
+    tpl_ids = set()
+    if stage1 is not None:
+        tpl_ids = {tp.get("tpl_ref") for tp in (stage1.get("third_parties") or [])
+                   if tp.get("tpl_ref")}
+    for j, tm in enumerate(out.get("tpl_matrix") or []):
+        if not tm.get("data_type"):
+            problems.append(f"tpl_matrix[{j}] 缺 data_type")
+        cr = tm.get("collector_ref")
+        if not cr:
+            problems.append(f"tpl_matrix[{j}] 缺 collector_ref（应引用阶段一 TPL-xx）")
+        elif tpl_ids and cr not in tpl_ids:
+            problems.append(f"tpl_matrix[{j}] collector_ref 不在阶段一第三方清单里: {cr!r}")
+        elif not tpl_ids:
+            problems.append(f"tpl_matrix[{j}] 阶段一未输出第三方清单，collector_ref 无依据: {cr!r}")
+        if tm.get("disclosure_status") not in valid_disclosure:
+            problems.append(f"tpl_matrix[{j}] disclosure_status 越界: {tm.get('disclosure_status')!r}")
+        sub = {k: v for k, v in tm.items() if k != "collector_ref"}
+        for p, ref in _collect_refs(sub, f"tpl_matrix[{j}]"):
+            if ref not in refs:
+                problems.append(f"{p} 引用了不存在的证据: {ref}")
     return {"ok": not problems, "problems": problems, "warnings": warnings}
 
 

@@ -53,7 +53,9 @@ function maxSensitivity(dts) {
   return best;
 }
 
-function buildExtra(entry, dts, args, ret, outcome, err) {
+// 导出给 hook_privacy_native.js 复用：native 迁移点的事件与 Java 层同格式同字段，
+// 只多 hook='native'/symbol/module/nat_* 附加字段（见该文件头注释）。
+export function buildExtra(entry, dts, args, ret, outcome, err) {
   var extra = {
     api: entry.cls + '.' + entry.method + entry.desc,
     api_role: entry.role,
@@ -79,7 +81,31 @@ function buildExtra(entry, dts, args, ret, outcome, err) {
   return extra;
 }
 
+// ----------------------------------------------------------------------------
+// i2 Native 迁移（2026-10-21）：下列高频 API 已迁到 hook_privacy_native.js
+// （Interceptor.attach 挂 JNI/native 实现，**不替换 ArtMethod**——A1 崩点随替换面
+// 收窄）。armed 标记由 native 模块先装配时写入 globalThis.__vscanNat；
+// 标记存在 → 本层跳过并把证据写成 SKIPPED_JAVA。符号未命中（未导出/被剥）时
+// 标记不存在 → 自动回退 Java 层接管，覆盖率不丢（NATIVE_SYMBOL_MISS 留痕）。
+// 键名与 hook_privacy_native.js 的 TARGETS[].key 一一对应。
+// ----------------------------------------------------------------------------
+var NATIVE_KEY_BY_API = {
+  'android.hardware.SensorManager.registerListener': 'sensor_registerListener',
+  'android.hardware.Camera.open': 'camera_open',
+  'android.media.AudioRecord.startRecording': 'audiorecord_start'
+  // java.net.NetworkInterface.getHardwareAddress 不在此列：API 37 实测纯 Java
+  // 实现（无 JNI），留在 Java 层。
+};
+
 function armOne(entry) {
+  var migrate = NATIVE_KEY_BY_API[entry.cls + '.' + entry.method];
+  var natArmed = globalThis.__vscanNat || {};
+  if (migrate && natArmed[migrate]) {
+    vlog('SKIPPED_JAVA', { cls: entry.cls, api: entry.method, desc: entry.desc,
+                           migrated_key: migrate,
+                           note: '已由 hook_privacy_native 接管（NATIVE_MIGRATED）。' });
+    return;
+  }
   var cls;
   // PackageManager is abstract: hooking its declaration reports ARMED but
   // ApplicationPackageManager overrides bypass it (fixture + LibChecker API 36).

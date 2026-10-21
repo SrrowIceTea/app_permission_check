@@ -9,8 +9,8 @@ function Get-VScanSetting([string]$Name, [string]$Default) {
     else { [Environment]::GetEnvironmentVariable($Name) }
 }
 
-$VScanSdk = Get-VScanSetting 'VSCAN_SDK' 'D:\Anroid\SDK'
-$VScanJdk = Get-VScanSetting 'VSCAN_JDK' 'D:\Anroid\JDK'
+$VScanSdk = Get-VScanSetting 'VSCAN_SDK' "$env:LOCALAPPDATA\Android\Sdk"
+$VScanJdk = Get-VScanSetting 'VSCAN_JDK' 'D:\Android\JDK'
 # 用 LOCALAPPDATA 而不是写死用户名：工程路径本身含非 ASCII，再叠一层用户名容易配错。
 $VScanPython = Get-VScanSetting 'VSCAN_PYTHON' (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe')
 
@@ -26,7 +26,7 @@ if (Test-Path -LiteralPath $VScanJdk) { $env:JAVA_HOME = $VScanJdk }
 
 # JDK 的本地套接字临时目录必须在纯 ASCII 路径下：工程路径含非 ASCII 会让 NIO 直接失败。
 # 目录不存在时 JDK 不报错、只在连本地套接字时炸，所以这里显式建出来。
-$VScanTemp = Get-VScanSetting 'VSCAN_TEMP' 'D:\Anroid\temp'
+$VScanTemp = Get-VScanSetting 'VSCAN_TEMP' 'D:\Android\temp'
 New-Item -ItemType Directory -Force -Path $VScanTemp | Out-Null
 $env:JAVA_TOOL_OPTIONS = "-Djdk.net.unixdomain.tmpdir=$VScanTemp"
 

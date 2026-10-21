@@ -127,3 +127,8 @@ htmlcov/
 
 # ── 采集器运行时事件库（flows.sqlite 每次跑批都变，不是证据）────────
 core/collector/logs/
+# ── DSH：项目级技能目录（见 .agents/README.md）
+# 符号链接是每台机器克隆后自行创建的便捷项：Windows git 默认不还原符号链接，
+# 会落成内容为路径的文本文件 → DSH 静默不加载该技能。所以不入库，各机自链。
+# 只排除这一个链接，.agents/skills/ 下真正的技能目录必须保持可提交。
+.agents/skills/vscanner-frontend-redesign

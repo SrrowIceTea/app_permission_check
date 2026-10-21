@@ -17,7 +17,8 @@ from test_ai import BUNDLE
 STAGE1 = {"stage": "policy_extract", "declared_collection": [],
           "requirement_answers": [{"req_id": "PP-04", "verdict": "unclear"}]}
 STAGE2 = {"stage": "consistency", "per_data_type": [{
-    "data_type": "imei", "assessment": "plaintext_transmission", "observed_collection": True,
+    "data_type": "imei", "disclosure_status": "vague",
+    "behavior_risk": ["plaintext_transmission"], "observed_collection": True,
     "read_evidence_refs": ["R1"], "plaintext_flow_refs": ["F1"],
     "policy_consent_state": "unknown"}], "insufficient": []}
 STAGE3 = {"stage": "assessment", "overall_risk": "insufficient_evidence", "items": [],
@@ -69,7 +70,8 @@ class PipelineGateTest(unittest.TestCase):
 
     def test_stage2_hard_failure_never_calls_stage3(self):
         bad = {"stage": "consistency", "per_data_type": [{
-            "data_type": "imei", "assessment": "consistent", "read_evidence_refs": ["R99"]}]}
+            "data_type": "imei", "disclosure_status": "clear",
+            "behavior_risk": [], "read_evidence_refs": ["R99"]}]}
         result, out, calls, _, _ = self.run_pipeline([STAGE1, bad])
         self.assertEqual(result, 1)
         self.assertEqual([c[0] for c in calls], ["stage1", "stage2"])
@@ -134,10 +136,10 @@ class EvidenceSemanticsTest(unittest.TestCase):
         self.assertTrue(any("无取得非空数据" in p for p in checked["problems"]))
         self.assertTrue(any("无有效值哈希" in p for p in checked["problems"]))
 
-    def test_policy_read_before_consent_is_blocked_even_in_secondary_assessment(self):
-        for main, others in [("read_before_consent", []), ("plaintext_transmission", ["read_before_consent"])]:
+    def test_affirmative_read_before_consent_is_blocked_in_any_position(self):
+        for risks in (["read_before_consent"], ["plaintext_transmission", "read_before_consent"]):
             out = copy.deepcopy(STAGE2)
-            out["per_data_type"][0].update({"assessment": main, "also_applicable": others})
+            out["per_data_type"][0].update({"behavior_risk": risks})
             self.assertFalse(vd.validate_stage2(out, bundle=BUNDLE)["ok"])
 
     def test_unknown_policy_consent_cannot_be_changed_to_accepted(self):

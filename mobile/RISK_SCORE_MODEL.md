@@ -384,6 +384,19 @@ PY="C:/Users/OneKyubey/.workbuddy/binaries/python/envs/default/Scripts/python.ex
 | severity 不二次计权（data_type 存在时） | Zhu'21 | `test_severity_not_double_counted` |
 | 无 data_type 时 severity 映射进 data_weight | — | `test_over_permission_severity_maps_to_data_weight` |
 | 阈值标定取高尾分位（非 40% 进 high） | CNKI'26 | `test_calibrate_bands_uses_high_tail_percentiles` |
+| **ML/LLM 辅助输出只能挂 hint / review_priority / needs_human_review**，不得作为八谓词/风险档位判定输入 | **M046** | 见 M046 的约束与 `review_gates` 的挂接点 |
+
+### 六之二、ML/LLM 输出的输入边界（M046）
+
+GDPR-Bench-Android 端到端语义判定的上限已写进报告方法章（文件级 Acc@1 17.38%）。
+据此给 ML/LLM 输出定一条硬的**输入边界**：
+
+1. 任何模型输出的内容走 `hint`（提示性说明）、`review_priority`（人工复核优先级）、
+   `needs_human_review`（标记需人工复核）三个槽之一；
+2. 八谓词（`conclusion_level`）、`severity`、risk 分数计算、档位切分**只吃证据链派生的事实**，
+   模型输出不得直接映射成这些字段；
+3. AI 一致性章（stage2）与复测章（stage3）的结论是「对齐判断」，不是新的谓词输入；
+4. 违反即视为 `validation.warnings` 违规合并进报告附录，不得静默忽略。
 
 ---
 

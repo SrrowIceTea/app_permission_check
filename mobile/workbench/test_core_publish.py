@@ -34,8 +34,9 @@ class PublishTests(unittest.TestCase):
         self.stages = {
             'stage1': {'stage': 'policy_extract', 'declared_collection': [], 'requirement_answers': []},
             'stage2': {'stage': 'consistency', 'per_data_type': [{
-                'data_type': 'clipboard', 'assessment': 'insufficient_evidence',
-                'read_evidence_refs': ['R1'], 'policy_consent_state': 'unknown'}], 'insufficient': []},
+                'data_type': 'clipboard', 'disclosure_status': 'not_applicable',
+                'behavior_risk': [], 'read_evidence_refs': ['R1'],
+                'policy_consent_state': 'unknown'}], 'insufficient': []},
             'stage3': {'stage': 'assessment', 'overall_risk': 'insufficient_evidence', 'items': [],
                 'recommendations': [], 'uncertainties': [], 'overall_risk_reason': 'unit test only',
                 'coverage_note': 'explicit test evidence'}}

@@ -15,10 +15,13 @@ from report_common import Paragraph, grid_table, kv_table
 
 RISK_ZH = {"high": "高", "medium": "中", "low": "低",
            "insufficient_evidence": "证据不足，无法评估"}
-ASSESS_ZH = {
-    "undisclosed_collection": "未声明即收集", "over_collection": "超出必要范围",
-    "read_before_consent": "同意前/未授权读取", "plaintext_transmission": "明文传输",
-    "consistent": "一致", "insufficient_evidence": "证据不足",
+DISCLOSURE_ZH = {
+    "clear": "已明确声明", "vague": "宽泛声明", "ambiguous": "措辞含糊",
+    "omitted": "未声明", "incorrect": "声明与实际矛盾", "not_applicable": "不适用/证据不足",
+}
+BEHAVIOR_ZH = {
+    "over_collection": "超出必要范围", "plaintext_transmission": "明文传输",
+    "read_before_consent_unknown": "同意时序未知（未判违规）",
 }
 CONCLUSION_ZH = {
     "suspected_noncompliant": "涉嫌不符合", "observed_but_inconclusive": "观测到但不足以定性",
@@ -116,20 +119,23 @@ def section_consistency(stage2: dict | None, st: dict, font: str) -> list:
         return out
     rows = []
     for it in stage2.get("per_data_type") or []:
+        risk_zh = "；".join(BEHAVIOR_ZH.get(b, str(b))
+                            for b in (it.get("behavior_risk") or [])) or "—"
         rows.append([
             it.get("data_type_zh") or it.get("data_type"),
             "是" if it.get("observed_collection") else "否",
             "是" if it.get("declared") else "**否**",
-            ASSESS_ZH.get(it.get("assessment"), it.get("assessment")),
+            DISCLOSURE_ZH.get(it.get("disclosure_status"), it.get("disclosure_status") or "—"),
+            risk_zh,
             _refs(it.get("read_evidence_refs")),
             "；".join(x.get("basis", "") for x in (it.get("value_level_transfer") or [])) or "—",
             it.get("confidence"),
         ])
     if rows:
         out.append(grid_table(
-            ["数据类别", "观测到收集", "政策已声明", "判定", "证据", "值级匹配", "置信度"],
+            ["数据类别", "观测到收集", "政策已声明", "披露状态", "行为风险", "证据", "值级匹配", "置信度"],
             rows, st, font,
-            widths=[26 * mm, 18 * mm, 18 * mm, 30 * mm, 28 * mm, 26 * mm, 14 * mm]))
+            widths=[24 * mm, 16 * mm, 16 * mm, 30 * mm, 34 * mm, 26 * mm, 14 * mm, 10 * mm]))
     else:
         out.append(Paragraph("无可对照条目。", st["body"]))
 

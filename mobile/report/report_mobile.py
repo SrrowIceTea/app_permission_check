@@ -67,6 +67,23 @@ def prompt_versions(ai_dir: Path | None) -> str:
     return "；".join(out) if out else "—"
 
 
+_EVIDENCE_SUFFIXES = {".json", ".jsonl", ".log", ".db"}
+
+
+def evidence_hashes(bundle_path: Path, out: Path) -> list[dict]:
+    """交付目录内与证据同族的文件逐一 sha256（排除输出 PDF 与无关后缀）。
+    → 供附录 C「证据文件逐文件 sha256」，保证报告与证据包同一性可复核。"""
+    rows = []
+    for p in sorted(bundle_path.parent.iterdir()):
+        if p.is_file() and p != out and p.suffix.lower() in _EVIDENCE_SUFFIXES:
+            try:
+                rows.append({"name": p.name,
+                             "sha256": hashlib.sha256(p.read_bytes()).hexdigest()})
+            except OSError:
+                continue
+    return rows
+
+
 def ai_meta(ai_dir: Path | None) -> tuple[str, str]:
     """→ (模型说明, 报告用说明)。调用记录里含模型名与 prompt 哈希。"""
     if not ai_dir:
@@ -170,6 +187,7 @@ def main() -> int:
         "prompt_versions": prompt_versions(ai_dir),
         "session": args.session or "—",
         "prompts_dir": prompts_rel,
+        "evidence_hashes": evidence_hashes(bundle_path, out),
     }
 
     out.parent.mkdir(parents=True, exist_ok=True)

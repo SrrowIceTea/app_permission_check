@@ -32,6 +32,8 @@ from core.evidence.app_classes import load_app_classes  # noqa: E402  R8 混淆�
 from core.io_utils import load_jsonl_counting  # noqa: E402  JSONL 唯一实现（§8.2 B-2）
 import evaluation_mobile as ev  # noqa: E402
 from read_semantics import read_state, read_gaps
+# 同意链四态观测判定拆自本文件（correlate_mobile 曾超 300 行硬线）。
+import correlate_consent  # noqa: E402
 
 def read_jsonl(path: Path | None, gaps: list[str] | None = None) -> list[dict]:
     """统一走 core/io_utils（§8.2 B-2）。
@@ -157,41 +159,8 @@ def main() -> int:
     gaps.append("政策接受缺少直接信号：policy_consent_state=unknown；POLICY_VIEW/PERM_RESULT 不证明接受政策。")
     if not reads:
         gaps.append("reads.jsonl 缺失或为空：无读取证据（不等于没有读取，可能钩子未挂上）")
-    if not consent_raw:
-        gaps.append("consent.jsonl 缺失或为空：**no_consent_read 类结论全部不可判定**")
-        consent = None
-        consent_observation = "no_consent_channel"
-    else:
-        consent = [e for e in consent_raw if e.get("ev") in ev.CONSENT_SIGNALS]
-        # 「有事件」≠「有同意时刻」。PERM_REQ 只是发起请求、PERM_CHECK 只是自查权限，
-        # 两者都不能证明用户做过选择；只有 PERM_RESULT（弹窗结果）与 POLICY_VIEW
-        # （打开政策页）才构成可观测的时刻。把它们混成一个 observed，会让
-        # 「点了允许但没弹窗」与「弹窗被无视」在报告里长得一样。
-        observed_moments = [e for e in consent
-                            if e.get("ev") in ("PERM_RESULT", "POLICY_VIEW")]
-        attempts_only = [e for e in consent if e.get("ev") in ("PERM_REQ", "PERM_CHECK")]
-        if observed_moments:
-            consent_observation = "observed"
-            if not any(e.get("ev") == "POLICY_VIEW" for e in observed_moments):
-                gaps.append("同意链有 PERM_RESULT 但没有 POLICY_VIEW：本轮同意链里未观测到政策告知页面")
-            if not any(e.get("ev") == "PERM_RESULT" for e in observed_moments):
-                gaps.append("同意链只有 POLICY_VIEW、没有 PERM_RESULT：只能证明看过政策页，"
-                            "不能证明用户同意")
-        elif attempts_only:
-            # 应用发起过权限请求/自查，但窗口内没有任何结果回调。
-            # 这是「请求了、没看到结果」，既不是同意，也不是没请求。
-            consent_observation = "requested_only"
-            gaps.append("同意链只有 PERM_REQ/PERM_CHECK（应用发起过权限请求或自查），"
-                        "本轮同意链里没有 PERM_RESULT/POLICY_VIEW——用户是否作出选择**不可判定**；"
-                        "read_before_consent 类规则不适用（≠ 通过），也不能记作「已请求即已同意」")
-        else:
-            # 只有 START/ARMED = 钩子装载成功，但窗口内没有任何同意信号。
-            # 必须与「钩子没装上」分开记：前者是「本次交互路径没有可观测的同意
-            # 时刻」，后者才是「采不到」。两者都写 unknown，报告里长得一模一样。
-            consent_observation = "not_observed"
-            gaps.append("同意链只有 START/ARMED（钩子已装载）：本轮同意链里既没有权限请求/结果，"
-                        "也没有打开疑似政策页——这是「没有可观测的同意时刻」，不是"
-                        "「用户未同意」；read_before_consent 类规则本轮**不适用**（≠ 通过）")
+    consent, consent_observation = correlate_consent.observe_consent(
+        consent_raw, ev.CONSENT_SIGNALS, gaps)
     if not flows:
         gaps.append("flows.jsonl 缺失或为空：无网络流证据（不等于没有外发）")
     else:

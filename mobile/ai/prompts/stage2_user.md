@@ -32,7 +32,9 @@
 
 per_data_type 必须覆盖此清单的每一类，不能只回答成功获得的类别。
 即便该类所有事件均为 empty、denied、error、call_only 或 unknown，也要保留一项，
-observed_collection=false，assessment=insufficient_evidence，说明实际返回状态；不得遗漏，也不得改成已收集。
+observed_collection=false，disclosure_status=not_applicable、behavior_risk=[]，说明实际返回状态；
+不得遗漏，也不得改成已收集。两轴口径、合法取值与 hard 要求见 `stage2_consistency.md`：给不出
+披露判定时必须 not_applicable，不得只填 clear/vague 之一硬押。
 
 ### 同意时序（C#）
 

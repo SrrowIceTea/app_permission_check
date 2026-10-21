@@ -135,8 +135,12 @@ class FormalContractTest(unittest.TestCase):
         bundle = copy.deepcopy(BUNDLE)
         bundle["policy"]["available"] = False
         output = copy.deepcopy(STAGE2)
-        output["per_data_type"][0]["assessment"] = "undisclosed_collection"
+        output["per_data_type"][0]["disclosure_status"] = "omitted"
+        output["per_data_type"][0]["behavior_risk"] = []
         self.assertFalse(validate_stage("stage2", output, bundle)["ok"])
+        # 缺政策正文时唯一合法披露判定是不适用（not_applicable）
+        output["per_data_type"][0]["disclosure_status"] = "not_applicable"
+        self.assertTrue(validate_stage("stage2", output, bundle)["ok"])
 
     def test_tls_flow_cannot_support_plaintext_claim(self):
         bundle = copy.deepcopy(BUNDLE)

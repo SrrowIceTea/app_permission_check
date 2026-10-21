@@ -29,6 +29,21 @@
   这时 `met` 与 `not_met` 都不诚实，必须用 `unclear`。
 - 抽取不到 ≠ 没写。若正文字数明显不足以承载该事项，用 `unclear` 并在 `reason` 说明。
 
+## 条款组 PP-TPL：第三方 SDK 与共享接收方披露（M047 起）
+
+`third_parties` 是 PP-TPL-01/PP-TPL-02 两条条款的结构化输出，与 requirement_answers 里的
+PP-06/PP-07 是同一套事实的两个形态，必须一致、不得自相矛盾：
+
+- **PP-TPL-01**：逐项列明接入的第三方 SDK / 共享接收方的**名称**、处理目的与涉及的
+  **数据类别**（数据类别 × 共享对象 结对）。
+- **PP-TPL-02**：第三方披露不得用宽泛上位词代替结对信息（如"我们可能与第三方共享信息"，
+  未指明接收方与类别，按宽泛披露记 `vague`，不得补造具体名称）。
+
+**第三方清单只从政策原文出发，绝不假设集成**：每一条 `third_parties` 都必须有**逐字** quote
+支撑（"我们发现该 App 集成了某 SDK"这类策略层推断**不得**写入）。政策正文没有逐字提到某
+第三方名称时，不得把该名称写进 `third_parties`；政策只字未提第三方时输出空数组 `[]`。
+`tpl_ref` 用 TPL-01 起序编号，供阶段二矩阵引用。
+
 ## 输出 schema（严格 JSON）
 
 ```json
@@ -45,7 +60,9 @@
     }
   ],
   "third_parties": [
-    {"name": "第三方/SDK 名称", "purpose": "目的", "data": "涉及的信息种类", "quote": "原文片段"}
+    {"tpl_ref": "TPL-01", "name": "第三方/SDK 名称", "purpose": "目的",
+     "data": "涉及的信息种类", "quote": "原文片段（逐字）",
+     "policy_document_ref": "primary 或 SUP-…（随引用来源）"}
   ],
   "user_rights": {
     "access": "met|not_met|unclear", "correct": "…", "delete": "…",

@@ -16,7 +16,7 @@ def digest(value) -> str:
                                     separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
-def validate_stage(stage: str, output, bundle: dict) -> dict:
+def validate_stage(stage: str, output, bundle: dict, stage1: dict | None = None) -> dict:
     if not isinstance(output, dict):
         result = {"ok": False, "problems": ["模型输出必须是 JSON 对象"], "warnings": []}
     else:
@@ -25,6 +25,9 @@ def validate_stage(stage: str, output, bundle: dict) -> dict:
                 policy = bundle.get("policy") or {}
                 req_ids = [c["req_id"] for c in (policy.get("lint") or {}).get("checks", [])]
                 result = vd.validate_stage1(output, req_ids=req_ids, policy_text=policy.get("text") or "", policy=policy)
+            elif stage == "stage2":
+                # TPL 矩阵的 collector_ref 必须存在阶段一的第三方清单里
+                result = vd.validate_stage2(output, bundle=bundle, stage1=stage1)
             else:
                 result = vd.VALIDATORS[stage](output, bundle=bundle)
             result["problems"].extend(contract_problems(stage, output, bundle))
@@ -57,7 +60,9 @@ def load_checked_stages(ai_dir: Path | None, bundle: dict) -> tuple[dict, dict]:
             output = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             output = None
-        checked = validate_stage(stage, output, bundle)
+        stage1 = (json.loads((ai_dir / "stage1.json").read_text(encoding="utf-8"))
+                  if (ai_dir / "stage1.json").exists() else None)
+        checked = validate_stage(stage, output, bundle, stage1=stage1)
         problems = list(checked["problems"])
         warnings = list(checked["warnings"])
         if not isinstance(recorded, dict):

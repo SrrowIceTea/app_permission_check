@@ -9,8 +9,10 @@
 //   2. 不能按位置取前 N 帧，要按归属筛——应用帧恰好在截断点之外。
 //   3. 合成帧（R8/D8 lambda、Synthetic、行号 0）长得像真帧，行号级过滤由下游做。
 // ============================================================================
+import { NO_STACK } from './runtime.js';
 
 export function captureStack(PKG, maxContext, maxApp) {
+  if (NO_STACK) return { stack: [], app_frames: [] };
   try {
     var frames = Java.use('java.lang.Thread').currentThread().getStackTrace();
     var context = [], app = [], skipped = 0;

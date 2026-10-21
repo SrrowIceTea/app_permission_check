@@ -30,19 +30,31 @@
 
 ## 判定口径
 
-对**每个观察到的数据类别**，按下列顺序判定，得到唯一的 `assessment`：
+对**每个观察到的数据类别**，把「政策怎么说的」与「行为有什么风险」拆成两个**正交维度**
+分别判定。两轴独立填写，不再用单一枚举加优先级（旧 `assessment` + `also_applicable`
+把披露状态与行为风险混排，vague/明文传输 谁排前面无法定论；M046 后正式废弃）。
 
-| assessment | 条件 |
+### 披露状态轴 `disclosure_status`（单值，对齐 GNChecker OD/VD 定性）
+
+| 值 | 条件 |
 | --- | --- |
-| `undisclosed_collection` | 观察到读取，且政策**未声明**该类别（阶段一对完整取得的政策确定为未声明；unclear 或未取得政策必须证据不足），且该类别不属于该类目必要范围 |
-| `over_collection` | 观察到读取，政策有声明，但该类目**不属于** `app_category.necessary_data`，且该类目必要范围已知 |
-| `read_before_consent` | 当前输入不支持此判定，禁止输出；政策同意时序只能标记未知 |
-| `plaintext_transmission` | 该类别出现在 `flows` 的敏感标签中，且该流明确 `intercepted_tls=false`（客户端未使用 TLS） |
-| `consistent` | 仅声明与观察的类别一致，且必要范围匹配；不代表政策同意有效、整体合规 |
-| `insufficient_evidence` | 关键输入缺失（见 `gaps`），无法判断 |
+| `clear` | 政策**明确逐项**声明该类别，措辞足以定位到具体数据类型 |
+| `vague` | 政策有声明，但用**宽泛上位词**覆盖具体数据类型（如"必要的信息""其他信息"），无法确定是否包含该类别。GNChecker 判定口径即「政策写宽泛上位词覆盖具体数据类型」；**政策声明层是误报主源**——把 vague 判成"已声明"或"未声明"都可能是错的，不得据此升级为确定结论 |
+| `ambiguous` | 政策措辞模棱两可、可作多种互斥解读（同一句既可读作声明也可读作未声明），与 vague 的区别是存在难以调和的解释冲突 |
+| `omitted` | 政策**未声明**该类别（对完整取得的政策正文逐字核实后未提及；unclear 或未取得政策必须走 not_applicable，不得判 omitted） |
+| `incorrect` | 政策声明与实际观察**矛盾**（如明示"不收集某类信息"，但观察到读取） |
+| `not_applicable` | 无政策正文、观测证据不足（见 `gaps`）、或该类目不适用披露判定——缺输入不硬判 |
 
-一条数据类别可以同时满足多条时，**按上表从上到下取第一条命中的**，
-其余写进 `also_applicable`（例如同时是未声明且存在明文传输）。
+### 行为风险轴 `behavior_risk`（列表，可为空 `[]`，只记录本轮观测到的行为风险，不依赖政策声明）
+
+| 值 | 条件 |
+| --- | --- |
+| `over_collection` | 观察到读取，政策有声明，但该类目**不属于** `app_category.necessary_data`（该类目必要范围已知时） |
+| `plaintext_transmission` | 该类别出现在 `flows` 的敏感标签中，且该流明确 `intercepted_tls=false`（客户端未使用 TLS） |
+| `read_before_consent_unknown` | 存在敏感读取，但**政策接受时序无法判定**（当前采集器没有直接政策接受信号）。只标 unknown，不判违规；**禁止**输出不带 `_unknown` 后缀的肯定式 `read_before_consent` |
+
+某一轴无风险/不适用时写 `not_applicable` / `[]`，两轴互不影响（例如披露 omitted 同时
+行为明文传输：`"disclosure_status": "omitted", "behavior_risk": ["plaintext_transmission"]`）。
 
 ## 输出 schema（严格 JSON）
 
@@ -57,8 +69,8 @@
       "read_evidence_refs": ["R5", "R6"],
       "declared": false,
       "policy_quote": null,
-      "assessment": "undisclosed_collection",
-      "also_applicable": [],
+      "disclosure_status": "vague",
+      "behavior_risk": ["plaintext_transmission"],
       "policy_consent_state": "unknown",
       "consent_gap": {"earliest_read_ts": 1750000000000,
                       "earliest_consent_ts": null,
@@ -88,22 +100,40 @@
      "observed_relevant": true,
      "comment": "政策未逐项列出剪贴板，而实际存在剪贴板读取", "evidence_refs": ["R5"]}
   ],
+  "tpl_matrix": [
+    {"data_type": "clipboard", "collector_ref": "TPL-01",
+     "disclosure_status": "vague",
+     "note": "政策只写'与第三方共享必要信息'，未指明接收方与该类别",
+     "evidence_refs": ["R5"]}
+  ],
   "insufficient": [
     {"item": "SMS 读取", "missing": "consent.jsonl 缺失，无法判断同意时序"}
   ]
 }
 ```
 
+## TPL 矩阵（数据类别 × 收集方 × 披露状态）
+
+`tpl_matrix` 是阶段一 `third_parties`（PP-TPL 条款组，TPL-xx）在一致性层的展开：
+对每条既被政策记录**也被本轮观察到**的「第三方/共享收集」关系，填一行
+`data_type` × `collector_ref`（必须是阶段一真实存在的 TPL-xx）× 该类别对该接收方的
+`disclosure_status`（取值同 disclosure 轴六枚举）。矩阵行只记录观察与声明之间的对位关系；
+政策声明了但本轮没观察到的三方共享不写这里（那是政策侧差异，进 policy_only_declared）。
+
 ## 硬性要求
 
 1. `read_evidence_refs` 等引用必须来自输入里真实存在的 ID，不得自造。
-2. `value_level_transfer` **只在**读取事件的 `value_hash` 与流的某个 `request_tokens`
+2. `disclosure_status` 只能是上面六个值之一；`behavior_risk` 必须为数组、数组元素只能
+   是上面三个值之一，两项缺一不可（缺输入时 disclose 走 not_applicable、risk 写 []）。
+3. **禁止**输出 `read_before_consent`（无 `_unknown` 后缀）：当前没有直接政策接受信号，
+   同意的唯一合法表述是 `read_before_consent_unknown`；`policy_consent_state` 只能为 `unknown`。
+4. `value_level_transfer` **只在**读取事件的 `value_hash` 与流的某个 `request_tokens`
    完全相同时填写，并原样复制那个 token 字符串。**不得**因为"都是 15 位数字"就填。
-3. `policy_only_declared` 是**差异记录**，不是违规：政策声明了但本轮没观察到，
+5. `policy_only_declared` 是**差异记录**，不是违规：政策声明了但本轮没观察到，
    不应写进 `per_data_type` 的违规判定。
-4. 只要 `gaps` 里存在影响本项判定的缺项，相关条目必须走 `insufficient_evidence`
+6. 只要 `gaps` 里存在影响本项判定的缺项，相关条目必须走 `not_applicable` / `[]`
    或写进 `insufficient`，不得硬判。
-5. available=true 时，`storage_crypto_review` 必须为非空列表，并逐条覆盖全部 SCF。
+7. available=true 时，`storage_crypto_review` 必须为非空列表，并逐条覆盖全部 SCF。
    每条 finding_ref 只能是该 SCF 原 ID，evidence_refs 包含该 SCF 和它所有 SC 依据。
    explicit_weak_configuration/repeated_iv_fingerprint 对应 configuration_risk，
    provider_default_mode_unresolved 对应 provider_default_unknown，

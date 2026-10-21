@@ -36,17 +36,19 @@ def contract_problems(stage: str, output: dict, bundle: dict) -> list[str]:
             problems.append(f"per_data_type 遗漏实际观测类别: {sorted(missing)}")
         policy_available = (bundle.get("policy") or {}).get("available") is True
         flows = {f["evidence_id"]: f for f in bundle.get("traffic", {}).get("flows", [])}
+        valid_disclosure = {"clear", "vague", "omitted", "incorrect", "ambiguous", "not_applicable"}
         for index, item in enumerate(items):
-            assessment = item.get("assessment")
             quote = item.get("policy_quote")
             if quote:
                 problems.extend(quote_problems(quote, item, bundle.get("policy") or {},
                                                 f"per_data_type[{index}].policy_quote"))
-            if (not policy_available and assessment in
-                    ("undisclosed_collection", "over_collection", "consistent")):
+            ds = item.get("disclosure_status")
+            if ds not in valid_disclosure:
+                problems.append(f"per_data_type[{index}] disclosure_status 缺省或越界: {ds!r}")
+            if (not policy_available and ds and ds in
+                    ("clear", "vague", "omitted", "incorrect", "ambiguous")):
                 problems.append(f"per_data_type[{index}] 缺政策正文不能判定政策一致性")
-            if (assessment == "plaintext_transmission" or
-                    "plaintext_transmission" in (item.get("also_applicable") or [])):
+            if "plaintext_transmission" in (item.get("behavior_risk") or []):
                 refs = item.get("plaintext_flow_refs") or []
                 if not refs or any(flows.get(ref, {}).get("intercepted_tls") is not False
                                    for ref in refs):

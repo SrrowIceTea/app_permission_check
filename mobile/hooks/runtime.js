@@ -105,7 +105,11 @@ export function procName() {
 // 比较（`"__VSCAN_NO_STACK__" === "1"`）常量折叠成 false，占位符还没来得及被
 // 宿主替换就没了（2026-10-14 实测 477KB bundle 里被折叠为 `var NO_STACK = false`）。
 var THREAD_CLS = null;
-var NO_STACK = parseInt("__VSCAN_NO_STACK__", 10) === 1;
+// 导出给 stack_capture.js / hook_egress_tp.js：NO_STACK=1 时**所有** Java 栈捕获
+// （runtime.stackStr / stack_capture.captureStack / egress withStack）都跳过——
+// 栈捕获（Thread.getStackTrace → WalkStack）是 A1 残留 GetOatQuickMethodHeader
+// abort 的直接触发路径（tombstone_05），这是它的总开关。
+export var NO_STACK = parseInt("__VSCAN_NO_STACK__", 10) === 1;
 
 export function armRuntimeCache() {
   try {

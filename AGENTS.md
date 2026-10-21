@@ -91,6 +91,15 @@ clone 后 `skills/` 下只有两个索引文件。需要时按 [skills/SKILLS.md
 **只拉最小集**（`anthropics-skills` + `lucide`，约 67 MB），其余按表里的判定决定是否要；
 浏览器自动化用 `npx @playwright/mcp@latest`，不必克隆仓库。**不要**全量克隆——会把 1.5 GB 拖进工作区。
 
+## DeepSeek Harness（DSH）技能与插件（2026-10-21）
+
+`.agents/skills/` 是 **DSH 自动发现**的项目级技能根（rank 200；只扫一层，嵌套 `**/SKILL.md` 不生效），
+已放入 5 个技能 + 1 个指向 `.workbuddy/skills/` 的符号链接，共 37 文件 / 573 KB，**随仓库分发**。
+选型判定、加/删技能步骤、本次装的 3 个 DSH 插件（需重启生效）、以及**没做的 MCP 配置**，
+全部见 [.agents/README.md](.agents/README.md)。那里还记录了**当前主机与本文环境表的实测漂移**
+（Python 依赖全缺 → 离线回归会假红；SDK/`android-36` 缺失 → 编译会失败；`D:\Anroid` 实为 `D:\Android` 拼写）——
+换机或跑不通用例前先读它。
+
 ## 离线回归（改完代码先跑，不需要设备）
 
 ```bash

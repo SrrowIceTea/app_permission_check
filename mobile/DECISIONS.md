@@ -1406,6 +1406,193 @@ spawn 不可用（M043 实测 3/3 失败）。这一条不是代码能绕过的�
   `connect_window_ms`，`correlate_mobile` 传 `CONNECT_AGE_MS`——车载路径零影响。
 - 新增 `ConnectAgeWindowTest` 4 例（20 秒前可归因 / 超 120 秒不归因 / 事件晚于流超抖动不归因 /
   无目标校验时仍按 2 秒）；变异验证：窗口改回 2 秒 → 用例变红。
-- `run_regressions.py` 13 组全 0，`run_mobile_checks.py` 28 项全绿。
+
+## M046 ML/LLM 辅助输出的输入边界：只挂 hint/review_priority/needs_human_review（2026-10-21）
+
+**触发**：外部调研 B3 项「ML/LLM 位置约束」。GDPR-Bench-Android（arXiv:2511.00619）
+文件级 Acc@1 仅 17.38%，端到端语义判定不可靠，不能当谓词输入。
+
+**决定**：
+1. 模型输出只进三个槽：`hint` / `review_priority` / `needs_human_review`；
+2. 八谓词（conclusion_level）、severity、risk 分数、档位切分只吃证据链派生事实；
+3. 违反进 `validation.warnings`，原样写进报告附录。
+
+**落点**：`RISK_SCORE_MODEL.md` §六之二；报告方法章 9.2 已引 GDPR-Bench 数据作背书；与既有
+「不产 policy_violation」一致。无代码行为变化（是输入边界声明）。
+
+## M047 阶段二一致性判定改双字段：disclosure_status × behavior_risk（2026-10-21）
+
+**触发**：B1。旧 `assessment` 把披露轴与行为风险轴混排成单枚举，vague/明文传输的优先级
+无法定论；GNChecker 的 OD/VD 定性需要一个干净的披露轴。
+
+**决定**：`per_data_type` 每个条目改两个正交字段——
+- `disclosure_status`：clear | vague | ambiguous | omitted | incorrect | not_applicable
+  （vague 口径 = 政策写宽泛上位词覆盖具体数据类型；政策层是误报主源，不得凭此升级结论）；
+- `behavior_risk`（数组）：over_collection | plaintext_transmission | read_before_consent_unknown。
+  
+废弃 `assessment` / `also_applicable`。**禁止**不带 `_unknown` 后缀的 `read_before_consent`
+（无直接政策接受信号只能标 unknown）。`policy_consent_state` 仍只能 unknown。
+
+**落点**：`stage2_consistency.md` / `stage2_user.md` 判定口径与 schema、`validate.py` 双枚举
+校验、`review_contract.py` stage2 分支、`report_ai_sections.py` 一致性章两列渲染。
+测试：六个 disclosure 值各一示例 + 越界/非数组/肯定式 read_before_consent 被拦 + 声称收集
+必须有取得非空数据的读取证据（64→78 项 AI 测试全绿）。
+
+## M048 PP-TPL 条款组：第三方披露清单只从政策原文出发（2026-10-21）
+
+**触发**：B5-前半。"SDK 清单从政策引用出发，不假设集成"——防编造的第三方面名单。
+
+**决定**：PP 第三个条款组 PP-TPL（在阶段一提示词内生效，PP-TPL-01 逐项列名/目的/数据类别、
+PP-TPL-02 禁止宽泛上位词代替结对信息）。`third_parties` 升级：每条带 `tpl_ref`（TPL-xx）、
+必须有逐字 quote，无 quote 即假（校验拦截）；政策未提第三方则输出空数组。阶段二新增
+`tpl_matrix`（数据类别 × 收集方 TPL-xx × disclosure_status），collector_ref 必须存在于阶段一。
+**不新增 DB 条款行**——避免主链政策条款清单级联改动，PP-TPL 在提示词组生效，
+`validate_stage(stage, output, bundle, stage1=...)` 增加可选 stage1 参数做跨阶段引用校验。
+
+## M049 报告契约：finding 五要素 + 判定依据矩阵 + 版本/哈希附录（2026-10-21）
+
+**触发**：B2/B4/B8。每条 finding 卡片的信息完整性、判定依据的可统计性、复现性。
+
+**决定**：
+1. `finding_missing_elements()` 五要素断言（现象/证据/法规/严重度/整改），缺整改建议渲染
+   ⚠ gap 文案并在卡片下印"五要素缺口"；显式 `remediation` 字段可豁免；
+2. `section_basis` 2.4 新增规则分布矩阵（规则 ID × 结论等级 × 命中数 × 依据法规条款）；
+3. 概览 1.1 工具与模型版本表；附录 C 证据文件逐文件 sha256（`evidence_hashes`，
+   排除输出 PDF 与无关后缀）；方法章 9.2 引 GDPR-Bench-Android 17.38% 作「不产
+   policy_violation」背书。report 测试 16 项全绿。
+
+## M050 SARIF 2.1.0 导出：静态与 AI 校验两 run 严格分桶（2026-10-21）
+
+**触发**：B9-前半。"消费端不能把 dex 引用候选和 AI 校验问题混成同一类结论"。
+
+**决定**：新建 `report/export_sarif.py`（≤300 行），导出 `static_mobile_supplement.json` +
+AI 校验 `validation.json` 为 SARIF 2.1.0：
+- run[0] 静态桶：results 全部 properties.evidence_kind=static_reference，location 指向
+  类/方法（logicalLocations），等级由 severity 映射 error/warning/note，且源侧已压 candidate；
+- run[1] AI 校验桶：problems→warning、warnings→note、全过→ok/none；
+- 两桶绝不混排；partialFingerprints 用哈希保证同一条不重复计数。
+**schema 校验是硬门**：官方 sarif-schema-2.1.0.json 纳入 `report/testdata/` 作离线测试资产
+（SchemaStore 镜像，draft-07），`test_export_sarif.py` 5 例过官方 schema 才放行；
+jsonschema 加入运行依赖。
+
+## M051 本轮 P0-3 离线批收口：报告契约全部落地（2026-10-21）
+
+B1/B2/B3/B4/B5-前半/B8/B9-前半 全部完成并各自配离线单测；`run_mobile_checks.py` 全绿。
+详见 M046–M050。keylog、UI 探索、hooks native 迁移由并行通道执行，本批未触碰其文件。
+
+## M052 本批 P2 工程债 + P0-2 收口（2026-10-21）
+
+报告与评分的两处超 300 行硬线拆除：
+- `report_sections.py` 427 → 290 行：第四章 finding 卡片（`section_findings`/
+  `_finding_block`/五要素断言/映射表）拆入新文件 `finding_cards.py`（151 行）。
+  卡片渲染的所有私有辅助与 `LEVEL_ZH`/`TYPE_ZH` 一并迁走，`report_sections.py`
+  顶部 re-export 保持 `from report_sections import LEVEL_ZH, TYPE_ZH` 等既有引用不变。
+- `analyze/risk_score.py` 530 → 299 行：权重常量表与单维权重函数拆入
+  `risk_weights.py`（89 行）；档位/置信度/自适应标定拆入 `risk_calibrate.py`（110 行）。
+  拆出时不改任何数值与公式，`import risk_score as rs` 的全部符号通过 re-export
+  保持可用，`calibrate_risk_bands --self-check` 与 test_client_tls 均过。
+- P0-2 收口：`policy_library` 的 `store_missing`（库目录不存在）此前只有实现没有测试；
+  `test_policy_library.py` 新增守卫——store 缺失必须返回 `store_missing` 且 gap 含
+  `prepare_local_policies.py` 重建指令，禁止被读成 `not_found`（「该应用没有政策」）。
+
+回归：analyze 89 + report 32 + policy 48 自测全绿；`run_mobile_checks.py` 28 项中唯一
+failed 为 `hooks_parity`——`stack_capture.js`/`runtime.js` 系并行通道正在修改的
+hooks 区文件（vehicle 侧未同步），属并行 agent 收口范围，非本批引入。
+
+## M053 本批 P2 工程债续：policy_fetch / correlate_mobile / test_risk_score 拆分（2026-10-21）
+
+三处超 300 行硬线的零行为改动拆分（纯移动代码，全走"子模块 + re-export"惯例）：
+- `policy/policy_fetch.py` 330 → 239 行：网络层（`UA`/`MAX_BYTES`/`TIMEOUT_S`/
+  `POLICY_HINTS`/`sha256`/`raw_code_url`/`fetch_url`/`score_link`/`discover_policy_links`）
+  拆入 `policy_fetch_net.py`（105 行）。`prepare_fdroid_policies.py` 等外部引用的
+  `from policy_fetch import fetch_url, UA` 全部不变。
+- `analyze/correlate_mobile.py` 318 → 287 行：同意链四态观测
+  （observed / requested_only / not_observed / no_consent_channel）与 gap 文案
+  抽为纯函数 `observe_consent`，拆入 `correlate_consent.py`（48 行），
+  main() 一行调用替换原内联块。四态语义已被 `test_consent_observation.py` 钉死。
+- `analyze/test_risk_score.py` 408 → 267 行：`finding`/`summary`/`SENS` 三个构造
+  helper 抽到 `_risk_test_fixtures.py`（31 行，非 test_ 前缀不参与 discover）；
+  阈值标定/版本回归/标定工具四类（CalibrationTest/V12/V13/CalibrationTool）拆入
+  `test_risk_band.py`（208 行）。两个文件各 `from _risk_test_fixtures import
+  finding, summary, SENS`，38 项测试按主题分家后计数与语义均不变。
+
+配套：`run_mobile_checks.py` 的 analyze 组显式补 `test_risk_score test_risk_band`，
+拆分前这两个文件只在手动 discover 时跑到，现在进入自动化回归。
+
+回归：policy 32 + `mobile.policy.test_policy_bytes` 1 + analyze 89 + analyze 全
+discover 133 全绿；`_risk_test_fixtures.py` 31 行。`hooks_parity` 仍为并行通道
+已知失败，未触碰 hooks 区与 UI/keylog 链路文件。
 
 
+
+## M054 i2 迁移验证收口 + 栈开关决策（2026-10-21）
+
+### i2 落地状态（validate_native_migration.py，_i2val6 全绿 passed）
+- 3 迁移点（sensor_registerListener / camera_open / audiorecord_start）
+  NATIVE_MIGRATED × SKIPPED_JAVA 成对证据齐；native 事件实测：camera 1、sensor 1
+  （data_types 与 Java 层同构），audio 迁移武装已证但镜像 AudioRecord
+  native_setup 不初始化（无麦克风）→ 事件断言降级 warn。
+- **linux_connect 不可迁移（定论）**：libcore.io.Linux.connect 为 @CriticalNative，
+  entry_point_from_jni_ 为空，槽位守卫拒绝（NATIVE_RESOLVE_MISS 预期输出）。
+  egress 的 native 观测由既有 libc connect 层承担（via=native.connect，
+  _i2val6 实测 3 条含回环）；Java 层 Linux.connect/BlockGuardOs 原样兜底，不丢覆盖。
+- 崩点归属判据：fault_addr/pc 与 3 个迁移入口 ±0x1000 比对；
+  _i2val4/5 的 JIT 崩 fault_addr=0x7fe94c400000 距迁移入口 17MB+，非迁移引入。
+
+### A/B 实测与默认决策（用户已确认）
+- 无钩基线 95s 存活；开栈 selftest 2 轮 1 活；关栈（NO_STACK=1）2 轮 0 活；
+  validator 轮次 4 活 3（7~45s 不等，全为 SIGSEGV@Jit thread pool）。
+  WalkStack/GetOatQuickMethodHeader 确定崩（tombstone_05）迁移后不再出现；
+  残余 JIT 崩与栈开关无关、频度约 50-75%。
+- **决策 D-054a：批量默认开栈保归因**（栈捕获保留，NO_STACK 仅深挖/特殊轮显式启用）。
+- **决策 D-054b：残余 JIT 崩接受**，重启+窗口自动分段消化
+  （coverage_window 按死亡分段、observed_s 如实呈现、status=degraded 非静默零事件）。
+
+### 注入harness 实测教训（inject_triggers.py / fixture_trigger.js）
+- frida-python 下 script console.log 直进子进程 stdout、不走 'message' 信号 →
+  判据读 inject-run.log stdout 的 START/DONE。
+- Java wrapper 实例属性跨线程失效（线程本地 wrapper）→ 回调载荷改 hashCode
+  索引的 PENDING 表；合成类只注册一个共享 Runnable（多次各注册新类会放大
+  HBasicBlockBuilder JIT 崩，实测 5 类必现、2 类仍偶发）。
+
+## M055 本批 P2 工程债收口：6 处超 300 行硬线拆分（2026-10-21）
+
+全走「子模块 + 原文件 re-export 薄壳」惯例，外部 `import` 引用面零改动，纯搬移零行为改动。
+
+| 文件 | 原行数 | 拆分产物 | 验收 |
+|---|---|---|---|
+| `tools/test_app_death.py` | 337 | fixture 模块抽出 | py_compile/import 绿 |
+| `tools/pipeline/runner.py` | 305 | 设备启动块出子模块 | 同上 |
+| `tools/conn_probe.py` | 482 | 设备侧脚本/日志路径子模块 | 同上 |
+| `tools/device_run.py` | 478 | 阶段函数子模块 | 同上 |
+| `tools/thirdparty_env.py` | 1196 | 5 子模块（adb/device/pcap/proxy/etc）+ 壳层 | 同上 |
+| `tools/device_run_thirdparty.py` | 1110 | helpers + run1~run6 + 薄壳(191 行) | 同上 |
+
+`device_run_thirdparty.py` 拆分要点：
+- 6 个阶段模块（head/launch/explore/teardown+decode/armed+finalize/verify）串成 main()，
+  `RunCtx`（`__slots__`）在阶段间传值，取代原 main() 巨大局部作用域。
+- 循环导入规避：各 run 模块本地定义 `MOBILE/PY/HOOK_MARGIN_*`，不反向 import 壳层；
+  壳层将 `MOBILE/PY` 定义提前到 import 子模块之前。
+- 行为保真复核点：`app_started` note 的「（回退值：设备解析为空）」需按 head 段解析出的
+  `resolved_activity` 是否为空条件追加（原 line 401），`resolved_activity` 经 RunCtx 贯通
+  run1→run2，未再写死。
+- 复验：8 文件 py_compile + import + `--help` 正常退出（argparse SystemExit 预期）；
+  行数均 ≤300（max：run5=295）。全量回归 `run_mobile_checks.py` 27/28 绿，
+  唯一 failed `hooks_parity` 属并行通道 hooks/* 工作区，非本批拆分引入。
+
+## M056 keylog 采集链验证收口：链路已证通 + hook_all 残余崩边界（2026-10-21）
+
+- 实证双短板修复：dialog 自动清除（uiautomator dump + BACK 兜底，进程内触发已不依赖
+  UI）+ 触发提前（"[tls_meta] ARMED" + 宿主驱动 "collecting" 即注入，不等 58 个 Java API）。
+- **链路证明**：tls_meta 单挂对照轮第 1 轮活到握手 → keys.log 5 行完整 TLS 1.3 密钥
+  （CLIENT/SERVER_HANDSHAKE_TRAFFIC_SECRET、EXPORTER_SECRET、两向 TRAFFIC_SECRET_0）；
+  openmensa 真实样本轮抓到应用自身握手 1 次 + 明文事件 8 + keylog 5 行，之后死于
+  SIGABRT@Thread-9（13s，D-054b 家族）。
+- **边界记录**：hook_all（全栈 Java 替换 + native attach）下，冷进程任何 TLS 活动在
+  connect 窗口 12/12 死亡（SIGSEGV@Jit thread pool @0x7fe94c400000 与 SIGABRT 交替，
+  fix4/fix5/fix6 三轮），与触发方式无关（OkHttp / 裸 SSLSocket 同死）；单挂原生钩子
+  （零 Java 替换）100% 存活。归因 D-054b 残余 JIT 崩，降 JIT 面方向见 HANDOFF.md。
+- 触发实现细节：conscrypt SSLSocketFactory 桥只枚举到 2 个抽象 createSocket 重载
+  （createSocket(Socket,String,int,boolean) 可用，createSocket(InetAddress,int) 报
+  argument types do not match）→ 触发路径 = 裸 Socket.connect + 工厂包层 + startHandshake。
+- 验收口径：keylog 不做 100% 解密承诺，部分解密 + 未解密帧数如实呈现。

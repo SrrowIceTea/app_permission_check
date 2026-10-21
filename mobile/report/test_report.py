@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import copy
 import json
 import subprocess
 import sys
@@ -22,6 +23,7 @@ HERE = Path(__file__).resolve().parent
 PY = sys.executable
 sys.path.insert(0, str(HERE))
 import report_common as rc
+import report_sections as rs
 
 BUNDLE = {
     "bundle_version": "1",
@@ -82,7 +84,7 @@ BUNDLE = {
 STAGE2 = {"stage": "consistency", "per_data_type": [{
     "data_type": "imei", "data_type_zh": "IMEI", "observed_collection": True,
     "read_evidence_refs": ["R1"], "declared": False, "policy_quote": None,
-    "assessment": "plaintext_transmission", "also_applicable": ["undisclosed_collection"],
+    "disclosure_status": "omitted", "behavior_risk": ["plaintext_transmission"],
     "value_level_transfer": [{"read_evidence_ref": "R1", "flow_evidence_ref": "F1",
                               "basis": "value_hash_in_payload",
                               "token": "digit15_shape:abc123"}],
@@ -221,6 +223,97 @@ class ReportFormatTest(unittest.TestCase):
         self.assertEqual(left.style.fontName, "Helvetica")
         self.assertEqual(right.getPlainText(), "第 3 页")
         self.assertEqual(right.style.fontName, "Helvetica")
+
+
+class FindingCardContractTest(unittest.TestCase):
+    """B2：每条 finding 卡片五要素断言 + 缺整改建议渲染 gap 文案 + 2.4 判定依据矩阵。"""
+
+    def _flowable_text(self, flowables) -> str:
+        parts = []
+        for x in flowables:
+            if isinstance(x, rc.Paragraph):
+                parts.append(x.getPlainText())
+            elif hasattr(x, "_cellvalues"):
+                for row in x._cellvalues:
+                    for cell in row:
+                        parts.append(cell.getPlainText()
+                                     if hasattr(cell, "getPlainText") else str(cell))
+        return " ".join(parts)
+
+    def test_every_finding_card_has_all_five_elements(self):
+        st = rc.styles("Helvetica")
+        out = rs.section_findings(BUNDLE, st, "Helvetica")
+        text = self._flowable_text(out)
+        for label in ("事实与说明", "证据", "依据条款", "置信度", "整改与复测", "[高]"):
+            self.assertIn(label, text, f"finding 卡片缺要素 {label}")
+        self.assertEqual(rs.finding_missing_elements(BUNDLE["findings"][0]), [])
+
+    def test_missing_remediation_renders_gap_not_silent_omit(self):
+        st = rc.styles("Helvetica")
+        bundle = copy.deepcopy(BUNDLE)
+        bundle["findings"] = [{
+            "rule_id": "MOB-X", "rule_type": "unknown_type", "severity": "medium",
+            "conclusion_level": "observed", "data_type": "sms",
+            "event_ids": [1], "basis_refs": [{"doc": "pipl-2021", "clause": "29"}],
+            "note": "观测到短信读取"}]
+        self.assertIn("整改", rs.finding_missing_elements(bundle["findings"][0]))
+        out = rs.section_findings(bundle, st, "Helvetica")
+        text = self._flowable_text(out)
+        self.assertIn("⚠", text)
+        self.assertIn("未提供整改建议", text)
+        self.assertIn("五要素缺口", text)
+
+    def test_explicit_remediation_washes_out_the_gap(self):
+        bundle = copy.deepcopy(BUNDLE)
+        bundle["findings"] = [{
+            "rule_id": "MOB-X", "rule_type": "unknown_type", "severity": "medium",
+            "conclusion_level": "observed", "data_type": "sms",
+            "event_ids": [1], "basis_refs": [{"doc": "pipl-2021", "clause": "29"}],
+            "note": "观测到短信读取", "remediation": "本地化处理，不再外发。"}]
+        self.assertEqual(rs.finding_missing_elements(bundle["findings"][0]), [])
+        st = rc.styles("Helvetica")
+        text = self._flowable_text(rs.section_findings(bundle, st, "Helvetica"))
+        self.assertIn("本地化处理", text)
+        self.assertNotIn("五要素缺口", text)
+
+    def test_basis_section_matrix_breaks_down_by_rule_and_regulation(self):
+        bundle = copy.deepcopy(BUNDLE)
+        bundle["findings"] = [dict(BUNDLE["findings"][0]), dict(BUNDLE["findings"][0])]
+        st = rc.styles("Helvetica")
+        out = rs.section_basis(bundle, st, "Helvetica")
+        text = self._flowable_text(out)
+        self.assertIn("2.4 本批结论的规则分布", text)
+        self.assertIn("MOB-E001", text)
+        self.assertIn("yrd-method-2019", text)
+        self.assertIn("2", text)
+
+    def test_overview_versions_table_and_appendix_hashes(self):
+        """B8：概览工具版本表 + 附录 C 逐证据文件 sha256。"""
+        st = rc.styles("Helvetica")
+        meta = {"ai_model": "deepseek-r1-distill", "prompt_versions": "stage1 1.5; stage2 1.4",
+                "font_note": "SimSun",
+                "evidence_hashes": [{"name": "reads.jsonl", "sha256": "ab" * 32}]}
+        text = self._flowable_text(rs.section_overview(BUNDLE, st, "Helvetica", meta))
+        self.assertIn("1.1 工具与模型版本", text)
+        self.assertIn("deepseek-r1-distill", text)
+        self.assertIn("stage1 1.5", text)
+        text2 = self._flowable_text(rs.section_appendix(BUNDLE, st, "Helvetica", meta))
+        self.assertIn("附录 C", text2)
+        self.assertIn("reads.jsonl", text2)
+        self.assertIn("ab" * 32, text2)
+
+    def test_evidence_hashes_excludes_output_and_non_evidence_files(self):
+        import tempfile, report_mobile as rm
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "bundle.json").write_text('{"a":1}', encoding="utf-8")
+            (d / "reads.jsonl").write_text("x\n", encoding="utf-8")
+            (d / "out.pdf").write_text("%PDF", encoding="utf-8")
+            (d / "k.bin").write_bytes(b"\x01")
+            rows = rm.evidence_hashes(d / "bundle.json", d / "out.pdf")
+            names = {r["name"] for r in rows}
+            self.assertEqual(names, {"bundle.json", "reads.jsonl"})
+            self.assertTrue(all(h["sha256"] for h in rows))
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[1]))
 import report_mobile as rm
+import report_sections as rs
 from mobile.ai.review_gates import validate_stage, load_checked_stages
 from test_report import BUNDLE, STAGE2, STAGE3, write
 
@@ -76,6 +77,12 @@ class ReportGateTest(unittest.TestCase):
         accepted, checked = load_checked_stages(self.ai, BUNDLE)
         self.assertNotIn("stage2", accepted)
         self.assertTrue(any("R999" in p for p in checked["stage2"]["problems"]))
+
+    def test_bundle_findings_all_pass_five_element_card_contract(self):
+        """B2：进入报告的每条 finding 都必须五要素齐全（现象/证据/法规/严重度/整改）。"""
+        for f in BUNDLE.get("findings") or []:
+            missing = rs.finding_missing_elements(f)
+            self.assertEqual(missing, [], f"{f.get('rule_id')} 卡片缺要素: {missing}")
 
 
 if __name__ == "__main__":

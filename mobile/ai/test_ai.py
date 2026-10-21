@@ -88,11 +88,38 @@ class Stage1ValidateTest(unittest.TestCase):
         r = vd.validate_stage1(bad, req_ids=["PP-01"], policy_text="x")
         self.assertFalse(r["ok"])
 
+    def test_third_party_entry_needs_real_quote_for_each_name(self):
+        """PP-TPL：第三方清单只从政策原文出发——有名字无逐字引用 = 假设集成，必须拦。"""
+        policy = BUNDLE["policy"]["text"]
+        good = {"stage": "policy_extract", "declared_collection": [], "requirement_answers": [],
+                "third_parties": [{"tpl_ref": "TPL-01", "name": "高德地图",
+                                   "purpose": "定位", "data": "位置信息",
+                                   "quote": "位置信息"}]}
+        r = vd.validate_stage1(good, req_ids=[], policy_text=policy)
+        self.assertTrue(r["ok"], r["problems"])
+        for tp in ({"tpl_ref": "TPL-01", "name": "高德地图", "quote": None},
+                   {"tpl_ref": "TPL-01", "name": "高德地图", "quote": "政策里根本没有这句话"},
+                   {"tpl_ref": "TPL-01", "name": "", "quote": "位置信息"}):
+            bad = {"stage": "policy_extract", "declared_collection": [], "requirement_answers": [],
+                   "third_parties": [tp]}
+            r2 = vd.validate_stage1(bad, req_ids=[], policy_text=policy)
+            self.assertFalse(r2["ok"], f"{tp} 应按 PP-TPL 契约被拦")
+
+    def test_duplicate_tpl_ref_is_caught(self):
+        policy = BUNDLE["policy"]["text"]
+        bad = {"stage": "policy_extract", "declared_collection": [], "requirement_answers": [],
+               "third_parties": [{"tpl_ref": "TPL-01", "name": "A", "quote": "位置信息"},
+                                 {"tpl_ref": "TPL-01", "name": "B", "quote": "位置信息"}]}
+        r = vd.validate_stage1(bad, req_ids=[], policy_text=policy)
+        self.assertFalse(r["ok"])
+        self.assertTrue(any("重复" in p for p in r["problems"]))
+
 
 class Stage2ValidateTest(unittest.TestCase):
     def test_valid_value_level_transfer_passes(self):
         ok = {"stage": "consistency", "per_data_type": [{
-            "data_type": "imei", "assessment": "plaintext_transmission",
+            "data_type": "imei", "disclosure_status": "vague",
+            "behavior_risk": ["plaintext_transmission"],
             "read_evidence_refs": ["R1"],
             "value_level_transfer": [{"read_evidence_ref": "R1", "flow_evidence_ref": "F1",
                                       "basis": "value_hash_in_payload",
@@ -100,10 +127,81 @@ class Stage2ValidateTest(unittest.TestCase):
         r = vd.validate_stage2(ok, bundle=BUNDLE)
         self.assertTrue(r["ok"], r["problems"])
 
+    def test_empty_behavior_risk_passes(self):
+        ok = {"stage": "consistency", "per_data_type": [{
+            "data_type": "imei", "disclosure_status": "not_applicable",
+            "behavior_risk": []}]}
+        r = vd.validate_stage2(ok, bundle=BUNDLE)
+        self.assertTrue(r["ok"], r["problems"])
+
+    def test_each_disclosure_status_accepts_one_example(self):
+        """披露状态六个值各一示例（dry-run 五类 + not_applicable）。非 not_applicable 的
+        披露判定属于"声称收集"，必须带取得非空数据的读取证据。"""
+        for ds in ("clear", "vague", "ambiguous", "omitted", "incorrect"):
+            ok = {"stage": "consistency", "per_data_type": [{
+                "data_type": "imei", "disclosure_status": ds, "behavior_risk": [],
+                "read_evidence_refs": ["R1"]}]}
+            r = vd.validate_stage2(ok, bundle=BUNDLE)
+            self.assertTrue(r["ok"], f"{ds} 不应被拦: {r['problems']}")
+        ok = {"stage": "consistency", "per_data_type": [
+            {"data_type": "imei", "data_type_zh": "IMEI",
+             "observed_collection": False, "disclosure_status": "not_applicable",
+             "behavior_risk": []}]}
+        r = vd.validate_stage2(ok, bundle=BUNDLE)
+        self.assertTrue(r["ok"], f"not_applicable 不应被拦: {r['problems']}")
+
+    def test_out_of_bounds_disclosure_status_is_caught(self):
+        bad = {"stage": "consistency", "per_data_type": [{
+            "data_type": "imei", "disclosure_status": "undisclosed_collection",
+            "behavior_risk": []}]}
+        r = vd.validate_stage2(bad, bundle=BUNDLE)
+        self.assertFalse(r["ok"])
+        self.assertTrue(any("disclosure_status 越界" in p for p in r["problems"]))
+
+    def test_behavior_risk_must_be_a_list(self):
+        bad = {"stage": "consistency", "per_data_type": [{
+            "data_type": "imei", "disclosure_status": "clear",
+            "behavior_risk": "plaintext_transmission"}]}
+        r = vd.validate_stage2(bad, bundle=BUNDLE)
+        self.assertFalse(r["ok"])
+        self.assertTrue(any("必须为数组" in p for p in r["problems"]))
+
+    def test_out_of_bounds_behavior_risk_is_caught(self):
+        bad = {"stage": "consistency", "per_data_type": [{
+            "data_type": "imei", "disclosure_status": "clear",
+            "behavior_risk": ["consistent"]}]}
+        r = vd.validate_stage2(bad, bundle=BUNDLE)
+        self.assertFalse(r["ok"])
+        self.assertTrue(any("behavior_risk 越界" in p for p in r["problems"]))
+
+    def test_affirmative_read_before_consent_is_caught(self):
+        """无直接政策接受信号：肯定式 read_before_consent 必须拦，只能标 _unknown。"""
+        bad = {"stage": "consistency", "per_data_type": [{
+            "data_type": "imei", "disclosure_status": "clear",
+            "behavior_risk": ["read_before_consent"], "read_evidence_refs": ["R1"]}]}
+        r = vd.validate_stage2(bad, bundle=BUNDLE)
+        self.assertFalse(r["ok"])
+        self.assertTrue(any("read_before_consent" in p for p in r["problems"]))
+        ok = {"stage": "consistency", "per_data_type": [{
+            "data_type": "imei", "disclosure_status": "vague",
+            "behavior_risk": ["read_before_consent_unknown"],
+            "read_evidence_refs": ["R1"]}]}
+        r2 = vd.validate_stage2(ok, bundle=BUNDLE)
+        self.assertTrue(r2["ok"], r2["problems"])
+
+    def test_claiming_collection_without_obtained_read_is_caught(self):
+        """声称已收集（非 not_applicable）却无取得非空数据的读取证据 = 必须拦。"""
+        for ds in ("clear", "vague", "omitted", "incorrect", "ambiguous"):
+            bad = {"stage": "consistency", "per_data_type": [{
+                "data_type": "imei", "disclosure_status": ds, "behavior_risk": []}]}
+            r = vd.validate_stage2(bad, bundle=BUNDLE)
+            self.assertFalse(r["ok"], f"{ds} 应因无读取证据被拦")
+
     def test_fabricated_token_is_caught(self):
         """令牌不在该流的 request_tokens 里 = 编造的值级匹配。"""
         bad = {"stage": "consistency", "per_data_type": [{
-            "data_type": "imei", "assessment": "plaintext_transmission",
+            "data_type": "imei", "disclosure_status": "vague",
+            "behavior_risk": ["plaintext_transmission"],
             "value_level_transfer": [{"read_evidence_ref": "R1", "flow_evidence_ref": "F1",
                                       "token": "digit15_shape:deadbeef"}]}]}
         r = vd.validate_stage2(bad, bundle=BUNDLE)
@@ -115,7 +213,8 @@ class Stage2ValidateTest(unittest.TestCase):
         b = json.loads(json.dumps(BUNDLE))
         b["traffic"]["flows"][0]["request_tokens"] = ["digit15_shape:zzz999"]
         bad = {"stage": "consistency", "per_data_type": [{
-            "data_type": "imei", "assessment": "plaintext_transmission",
+            "data_type": "imei", "disclosure_status": "vague",
+            "behavior_risk": ["plaintext_transmission"],
             "value_level_transfer": [{"read_evidence_ref": "R1", "flow_evidence_ref": "F1",
                                       "token": "digit15_shape:zzz999"}]}]}
         r = vd.validate_stage2(bad, bundle=b)
@@ -124,11 +223,39 @@ class Stage2ValidateTest(unittest.TestCase):
 
     def test_unknown_evidence_ref_is_caught(self):
         bad = {"stage": "consistency", "per_data_type": [{
-            "data_type": "imei", "assessment": "consistent",
+            "data_type": "imei", "disclosure_status": "clear", "behavior_risk": [],
             "read_evidence_refs": ["R99"]}]}
         r = vd.validate_stage2(bad, bundle=BUNDLE)
         self.assertFalse(r["ok"])
         self.assertTrue(any("R99" in p for p in r["problems"]))
+
+    def test_tpl_matrix_requires_stage1_collector_ref(self):
+        stage1 = {"stage": "policy_extract", "third_parties": [
+            {"tpl_ref": "TPL-01", "name": "高德", "quote": "位置信息"},
+            {"tpl_ref": "TPL-02", "name": "友盟", "quote": "位置信息"}]}
+        good = {"stage": "consistency", "per_data_type": [], "tpl_matrix": [
+            {"data_type": "location", "collector_ref": "TPL-01",
+             "disclosure_status": "omitted", "evidence_refs": []}]}
+        r = vd.validate_stage2(good, bundle=BUNDLE, stage1=stage1)
+        self.assertTrue(r["ok"], r["problems"])
+        # 引用不存在的 TPL-03 / 缺 collector_ref / disclosure 越界都必须拦
+        for tm in ({"data_type": "location", "collector_ref": "TPL-03",
+                    "disclosure_status": "omitted"},
+                   {"data_type": "location", "disclosure_status": "omitted"},
+                   {"data_type": "location", "collector_ref": "TPL-01",
+                    "disclosure_status": "undisclosed_collection"}):
+            bad = {"stage": "consistency", "per_data_type": [], "tpl_matrix": [tm]}
+            r2 = vd.validate_stage2(bad, bundle=BUNDLE, stage1=stage1)
+            self.assertFalse(r2["ok"], f"{tm} 应按 TPL 矩阵契约被拦")
+
+    def test_tpl_matrix_without_stage1_disclosure_is_unfounded(self):
+        """阶段一没披露任何第三方却填 collector_ref = 无依据。"""
+        bad = {"stage": "consistency", "per_data_type": [], "tpl_matrix": [
+            {"data_type": "location", "collector_ref": "TPL-01",
+             "disclosure_status": "omitted"}]}
+        r = vd.validate_stage2(bad, bundle=BUNDLE, stage1={"stage": "policy_extract"})
+        self.assertFalse(r["ok"])
+        self.assertTrue(any("collector_ref 无依据" in p for p in r["problems"]))
 
 
 class Stage3ValidateTest(unittest.TestCase):

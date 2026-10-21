@@ -32,8 +32,8 @@ const BUNDLES = [
     "import { main as nativeSslMain } from './hook_native_ssl.js';",
     "import { main as nativeCryptoMain } from './hook_native_crypto.js';",
     "import { main as tlsMetaMain } from './hook_tls_meta.js';",
-    "import { main as cipherMain } from './hook_cipher.js';",
     "import { main as flutterSslMain } from './hook_flutter_ssl.js';",
+    "import { main as nativePrivacyMain } from './hook_privacy_native.js';",
     "import { main as privacyMain } from './hook_privacy.js';",
     "import { main as consentMain } from './hook_consent.js';",
     "import { main as egressMain } from './hook_egress_tp.js';",
@@ -49,6 +49,10 @@ const BUNDLES = [
     // （实测 pid 在第 5s 消失并被重启，见 DECISIONS M038 / exp_spawn_keylog.py）。
     // 保留改序的理由是它仍然更正确：privacyMain 若抛异常，keylog 已经装好了。
     "  tlsMetaMain();",
+    // nativePrivacy 必须先于 privacyMain（同为 i2 迁移，2026-10-21）：前者是纯
+    // Interceptor.attach（不替换 ArtMethod、无 A1 崩点），把已命中符号写进
+    // globalThis.__vscanNat；后者据此跳过对应 WATCH 条目（SKIPPED_JAVA）。
+    "  nativePrivacyMain();",
     "  privacyMain();",
     "  consentMain();",
     "  egressMain();",
@@ -56,8 +60,12 @@ const BUNDLES = [
     "  nativeSslMain();",
     // 应用层加密（EVP/AES）与 TLS 元数据（SNI/keylog）：与 nativeSsl 同层，
     // 都是纯 native attach，不替换 Java 方法（A1 单 agent 约束只约束 ArtMethod 替换）。
+    // JCE 层钩子（hook_cipher.js 的 Cipher.update/doFinal 全重载替换）不再并入 hook_all
+    // （i2 迁移，2026-10-21）：其覆盖（自绘加密明文）已由本层 EVP_EncryptUpdate/
+    // EVP_DecryptUpdate 承接，且替换面收窄 = A1 崩点收窄。已知边界：native 侧拿不到
+    // Cipher.getAlgorithm() 的算法名（Java 层有 algorithm 字段、native 层没有）；
+    // 需要时仍可单独挂 dist/hook_cipher.bundle.js 排障。
     "  nativeCryptoMain();",
-    "  cipherMain();",
     // Flutter（静态剥符号 BoringSSL）：没有库就静默返回，扫到就替一条 0x50 锚点。
     "  flutterSslMain();",
     "});"
@@ -66,6 +74,9 @@ const BUNDLES = [
   ['hook_cipher', "import { main } from './hook_cipher.js';\nJava.perform(main);"],
   ['hook_native_ssl', "import { main } from './hook_native_ssl.js';\nJava.perform(main);"],
   ['hook_native_crypto', "import { main } from './hook_native_crypto.js';\nJava.perform(main);"],
+  ['hook_privacy_native', "import { main } from './hook_privacy_native.js';\nJava.perform(main);"],
+  ['fixture_trigger', "import { main } from './fixture_trigger.js';\nJava.perform(main);"],
+  ['keylog_trigger', "import { main } from './keylog_trigger.js';\nJava.perform(main);"],
   ['hook_tls_meta', "import { main } from './hook_tls_meta.js';\nJava.perform(main);"],
   ['hook_flutter_ssl', "import { main } from './hook_flutter_ssl.js';\nJava.perform(main);"]
 ];

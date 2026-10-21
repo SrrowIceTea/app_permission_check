@@ -49,6 +49,20 @@ class LocalPolicyTest(unittest.TestCase):
     def test_requires_version_or_digest(self):
         self.assertFalse(load_policy(self.store, package="example.app")["available"])
 
+    def test_missing_store_is_store_missing_not_not_found(self):
+        """库目录不存在是环境问题（库被清理/没准备），不是「该应用没有政策」。
+
+        store_missing 与 not_found 在报告里长得几乎一样（available 都 False），
+        但含义相反：前者是「我们没准备库」，后者是「库里有这份但包没匹配上」。
+        若把前者读成后者，合规结论就会漏掉整个政策维度。gap 必须给出可执行补救。
+        """
+        gone = self.store / "nonexistent"
+        out = load_policy(gone, package="example.app", version_code="5")
+        self.assertFalse(out["available"])
+        self.assertEqual(out["status"], "store_missing")
+        self.assertTrue(any("prepare_local_policies.py" in g for g in out["gaps"]),
+                        f"gap 需含重建指令，得到 {out['gaps']}")
+
     def test_corrupted_text_not_accepted(self):
         next(self.store.rglob("policy-local.txt")).write_text("tampered", encoding="utf-8")
         self.assertEqual(self.load()["status"], "invalid")
