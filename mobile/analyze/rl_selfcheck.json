@@ -1,0 +1,74 @@
+{
+  "status": "rl_optimized",
+  "method": "Evolution Strategy (reward-weighted random search)",
+  "objective": "Spearman rank correlation vs human risk ranking",
+  "baseline_reward": 1.0,
+  "best_reward": 1.0,
+  "improvement": 0.0,
+  "suggested_weights": {
+    "data_weight": {
+      "sensitive_personal": 3.0,
+      "unknown": 2.0,
+      "personal": 1.0
+    },
+    "path_weight": {
+      "manifest_permission": 0.2,
+      "read_event": 1.0,
+      "flow_sensitive_payload": 2.0,
+      "read_then_egress": 3.0
+    },
+    "evidence_weight": {
+      "candidate": 0.5,
+      "observed": 1.0,
+      "correlated": 1.5,
+      "policy_violation": null
+    },
+    "necessity_weight": {
+      "necessary": 1.0,
+      "unnecessary": 1.5,
+      "unknown": 1.0
+    },
+    "value_bonus": {
+      "raw": 1.3,
+      "digest": 1.2,
+      "shape": 0.7
+    },
+    "decay_alpha": 1.0
+  },
+  "suggested_bands": [
+    [
+      60.0,
+      "critical"
+    ],
+    [
+      25.0,
+      "high"
+    ],
+    [
+      8.0,
+      "medium"
+    ],
+    [
+      2.0,
+      "low"
+    ],
+    [
+      0.0,
+      "info"
+    ]
+  ],
+  "hint": "以上权重/阈值由 RL 在少量人工标注上拟合得到，用于辅助排序与复核；不构成新的合规判据，也不改写 conclusion_level/severity。",
+  "review_priority": "low",
+  "needs_human_review": false,
+  "m046_note": "遵守 M046：模型输出仅落入 hint / review_priority / needs_human_review 槽位，八谓词与风险档位判定仍由证据链派生事实决定。",
+  "convergence": {
+    "start_reward": 1.0,
+    "end_reward": 1.0,
+    "best_reward": 1.0,
+    "steps_to_best": 0,
+    "total_steps": 300
+  },
+  "mode": "self-check（合成场景）",
+  "scenarios": 8,
+  "steps": 300
+}

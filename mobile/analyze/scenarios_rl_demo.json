@@ -1,0 +1,96 @@
+{
+  "A_读安装列表": [
+    {
+      "rule_id": "a1",
+      "rule_type": "sensitive_read",
+      "data_type": "installed_apps",
+      "data_type_zh": "installed_apps",
+      "conclusion_level": "observed",
+      "severity": "high",
+      "evidence_kind": "read_event",
+      "content_match_basis": null,
+      "value_match_form": null,
+      "permission": null
+    }
+  ],
+  "B_越权声明3敏感权限": [
+    {
+      "rule_id": "b1",
+      "rule_type": "sensitive_read",
+      "data_type": null,
+      "data_type_zh": null,
+      "conclusion_level": "candidate",
+      "severity": "high",
+      "evidence_kind": "manifest_permission",
+      "content_match_basis": null,
+      "value_match_form": null,
+      "permission": "android.permission.READ_CONTACTS"
+    },
+    {
+      "rule_id": "b2",
+      "rule_type": "sensitive_read",
+      "data_type": null,
+      "data_type_zh": null,
+      "conclusion_level": "candidate",
+      "severity": "high",
+      "evidence_kind": "manifest_permission",
+      "content_match_basis": null,
+      "value_match_form": null,
+      "permission": "android.permission.ACCESS_FINE_LOCATION"
+    },
+    {
+      "rule_id": "b3",
+      "rule_type": "sensitive_read",
+      "data_type": null,
+      "data_type_zh": null,
+      "conclusion_level": "candidate",
+      "severity": "high",
+      "evidence_kind": "manifest_permission",
+      "content_match_basis": null,
+      "value_match_form": null,
+      "permission": "android.permission.RECORD_AUDIO"
+    }
+  ],
+  "C_IMEI值级外发": [
+    {
+      "rule_id": "c1",
+      "rule_type": "sensitive_read",
+      "data_type": "imei",
+      "data_type_zh": "imei",
+      "conclusion_level": "correlated",
+      "severity": "high",
+      "evidence_kind": "read_then_egress",
+      "content_match_basis": "value_hash_in_payload",
+      "value_match_form": "raw",
+      "permission": null
+    }
+  ],
+  "D_越权声明1敏感权限": [
+    {
+      "rule_id": "d1",
+      "rule_type": "sensitive_read",
+      "data_type": null,
+      "data_type_zh": null,
+      "conclusion_level": "candidate",
+      "severity": "high",
+      "evidence_kind": "manifest_permission",
+      "content_match_basis": null,
+      "value_match_form": null,
+      "permission": "android.permission.READ_CONTACTS"
+    }
+  ],
+  "E_越权读IMEI": [
+    {
+      "rule_id": "e1",
+      "rule_type": "sensitive_read",
+      "data_type": "imei",
+      "data_type_zh": "imei",
+      "conclusion_level": "observed",
+      "severity": "high",
+      "evidence_kind": "read_event",
+      "content_match_basis": null,
+      "value_match_form": null,
+      "permission": null
+    }
+  ]
+}

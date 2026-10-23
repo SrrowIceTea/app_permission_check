@@ -1,0 +1,2096 @@
+{
+  "aq.metallists.loudbang": {
+    "score": 61.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei",
+      "microphone_capture",
+      "screen_capture"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei",
+      "microphone_capture",
+      "screen_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "ip_address"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard",
+      "imei",
+      "microphone_capture",
+      "screen_capture"
+    ],
+    "sensitive_category_count": 5
+  },
+  "ca.asmat.foggymaps": {
+    "score": 37.0,
+    "egress_sensitive": [
+      "camera_capture",
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "camera_capture",
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.FOREGROUND_SERVICE_LOCATION",
+      "android.permission.READ_MEDIA_IMAGES"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "camera_capture",
+      "clipboard"
+    ],
+    "sensitive_category_count": 2
+  },
+  "cc.calliope.mini": {
+    "score": 51.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "bluetooth_info",
+      "clipboard",
+      "imei"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "bluetooth_info",
+      "clipboard",
+      "imei"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.ACCESS_WIFI_STATE",
+      "android.permission.BLUETOOTH",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "bluetooth_info",
+      "clipboard",
+      "imei"
+    ],
+    "sensitive_category_count": 4
+  },
+  "cc.zachy.pulse": {
+    "score": 56.0,
+    "egress_sensitive": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.READ_CALL_LOG",
+      "android.permission.READ_CONTACTS",
+      "android.permission.READ_PHONE_STATE"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.BLUETOOTH",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.QUERY_ALL_PACKAGES",
+      "android.permission.READ_CALENDAR",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "installed_apps"
+    ],
+    "sensitive_categories": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard"
+    ],
+    "sensitive_category_count": 3
+  },
+  "ch.betzengineering.openvine": {
+    "score": 50.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.CAMERA",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "sensitive_category_count": 5
+  },
+  "com.aks_labs.tulsi": {
+    "score": 28.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.READ_MEDIA_IMAGES",
+      "android.permission.READ_MEDIA_VIDEO",
+      "android.permission.USE_BIOMETRIC"
+    ],
+    "overperm_other": [
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.VIBRATE",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard"
+    ],
+    "sensitive_category_count": 2
+  },
+  "com.anindra.messages": {
+    "score": 46.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "sim_info"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "sim_info"
+    ],
+    "overperm_sensitive": [
+      "android.permission.READ_CONTACTS",
+      "android.permission.READ_MEDIA_IMAGES",
+      "android.permission.READ_PHONE_STATE",
+      "android.permission.READ_SMS",
+      "android.permission.USE_BIOMETRIC"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+      "android.permission.USE_FINGERPRINT",
+      "android.permission.WAKE_LOCK",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard",
+      "sim_info"
+    ],
+    "sensitive_category_count": 3
+  },
+  "com.appaparilla.manholer": {
+    "score": 16.0,
+    "egress_sensitive": [
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.INTERNET"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "clipboard"
+    ],
+    "sensitive_category_count": 1
+  },
+  "com.asksakis.freegate": {
+    "score": 52.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei",
+      "wifi_ssid_bssid"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei",
+      "wifi_ssid_bssid"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.ACCESS_WIFI_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+      "android.permission.WAKE_LOCK",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard",
+      "imei",
+      "wifi_ssid_bssid"
+    ],
+    "sensitive_category_count": 4
+  },
+  "com.atharok.barcodescanner": {
+    "score": 29.0,
+    "egress_sensitive": [
+      "camera_capture",
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "camera_capture",
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.READ_CONTACTS"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.ACCESS_WIFI_STATE",
+      "android.permission.CHANGE_WIFI_STATE",
+      "android.permission.INTERNET",
+      "android.permission.VIBRATE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "camera_capture",
+      "clipboard"
+    ],
+    "sensitive_category_count": 2
+  },
+  "com.darkrockstudios.app.securecamera": {
+    "score": 40.0,
+    "egress_sensitive": [
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "read_sensitive": [
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "sensitive_category_count": 3
+  },
+  "com.digital.datamosh": {
+    "score": 41.0,
+    "egress_sensitive": [
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "read_sensitive": [
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.CAMERA",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "sensitive_category_count": 4
+  },
+  "com.domivega.gps_car": {
+    "score": 54.0,
+    "egress_sensitive": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard",
+      "sim_info"
+    ],
+    "read_sensitive": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard",
+      "sim_info"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.FOREGROUND_SERVICE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.BLUETOOTH",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard",
+      "sim_info"
+    ],
+    "sensitive_category_count": 4
+  },
+  "com.dozingcatsoftware.vectorcamera": {
+    "score": 49.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.CAMERA",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [],
+    "general": [],
+    "sensitive_categories": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "sensitive_category_count": 5
+  },
+  "com.espruino.gadgetbridge.banglejs": {
+    "score": 56.0,
+    "egress_sensitive": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.READ_CALL_LOG",
+      "android.permission.READ_CONTACTS",
+      "android.permission.READ_PHONE_STATE"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.BLUETOOTH",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.QUERY_ALL_PACKAGES",
+      "android.permission.READ_CALENDAR",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "installed_apps"
+    ],
+    "sensitive_categories": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard"
+    ],
+    "sensitive_category_count": 3
+  },
+  "com.exner.tools.immichuploader": {
+    "score": 32.0,
+    "egress_sensitive": [
+      "clipboard",
+      "wifi_ssid_bssid"
+    ],
+    "read_sensitive": [
+      "clipboard",
+      "wifi_ssid_bssid"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.READ_MEDIA_IMAGES",
+      "android.permission.READ_MEDIA_VIDEO"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.ACCESS_WIFI_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "clipboard",
+      "wifi_ssid_bssid"
+    ],
+    "sensitive_category_count": 2
+  },
+  "com.github.umer0586.sensagram": {
+    "score": 42.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.ACCESS_WIFI_STATE",
+      "android.permission.CHANGE_WIFI_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.HIGH_SAMPLING_RATE_SENSORS",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "sensitive_category_count": 3
+  },
+  "com.iakmds.librecamera": {
+    "score": 38.0,
+    "egress_sensitive": [
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "read_sensitive": [
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.CAMERA",
+      "android.permission.READ_MEDIA_IMAGES",
+      "android.permission.READ_MEDIA_VIDEO",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "sensitive_category_count": 3
+  },
+  "com.iris.gallery": {
+    "score": 31.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.READ_MEDIA_IMAGES",
+      "android.permission.READ_MEDIA_VIDEO",
+      "android.permission.USE_BIOMETRIC"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.USE_FINGERPRINT",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard"
+    ],
+    "sensitive_category_count": 2
+  },
+  "com.kylecorry.trail_sense": {
+    "score": 35.0,
+    "egress_sensitive": [
+      "camera_capture",
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "camera_capture",
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.FOREGROUND_SERVICE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "camera_capture",
+      "clipboard"
+    ],
+    "sensitive_category_count": 2
+  },
+  "com.lukeneedham.videodiary": {
+    "score": 23.0,
+    "egress_sensitive": [
+      "camera_capture",
+      "microphone_capture"
+    ],
+    "read_sensitive": [
+      "camera_capture",
+      "microphone_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.CAMERA",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "camera_capture",
+      "microphone_capture"
+    ],
+    "sensitive_category_count": 2
+  },
+  "com.milelog": {
+    "score": 23.0,
+    "egress_sensitive": [
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "clipboard"
+    ],
+    "sensitive_category_count": 1
+  },
+  "com.novadial.phone": {
+    "score": 45.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "sim_info"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "sim_info"
+    ],
+    "overperm_sensitive": [
+      "android.permission.READ_CALL_LOG",
+      "android.permission.READ_CONTACTS",
+      "android.permission.READ_PHONE_STATE",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.GET_ACCOUNTS",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "accounts"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard",
+      "sim_info"
+    ],
+    "sensitive_category_count": 3
+  },
+  "com.portio": {
+    "score": 32.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "overperm_sensitive": [
+      "android.permission.CAMERA",
+      "android.permission.READ_MEDIA_IMAGES"
+    ],
+    "overperm_other": [
+      "android.permission.INTERNET"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "sensitive_category_count": 3
+  },
+  "com.qq7te.totalrecall": {
+    "score": 55.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.READ_MEDIA_IMAGES"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "sensitive_category_count": 5
+  },
+  "com.saschl.cameragps": {
+    "score": 45.0,
+    "egress_sensitive": [
+      "bluetooth_info",
+      "clipboard",
+      "wifi_ssid_bssid"
+    ],
+    "read_sensitive": [
+      "bluetooth_info",
+      "clipboard",
+      "wifi_ssid_bssid"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.ACCESS_WIFI_STATE",
+      "android.permission.BLUETOOTH",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.CHANGE_WIFI_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "bluetooth_info",
+      "clipboard",
+      "wifi_ssid_bssid"
+    ],
+    "sensitive_category_count": 3
+  },
+  "com.waist.line": {
+    "score": 42.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei"
+    ],
+    "overperm_sensitive": [
+      "android.permission.CAMERA"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.INTERNET",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei"
+    ],
+    "sensitive_category_count": 4
+  },
+  "cz.mts.phone": {
+    "score": 24.0,
+    "egress_sensitive": [
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.READ_CALL_LOG",
+      "android.permission.READ_CONTACTS",
+      "android.permission.READ_PHONE_STATE",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "accounts"
+    ],
+    "sensitive_categories": [
+      "clipboard"
+    ],
+    "sensitive_category_count": 1
+  },
+  "de.dennisguse.opentracks": {
+    "score": 41.0,
+    "egress_sensitive": [
+      "bluetooth_info",
+      "clipboard",
+      "imei"
+    ],
+    "read_sensitive": [
+      "bluetooth_info",
+      "clipboard",
+      "imei"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.BLUETOOTH",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "bluetooth_info",
+      "clipboard",
+      "imei"
+    ],
+    "sensitive_category_count": 3
+  },
+  "de.dennisguse.opentracks.playstore": {
+    "score": 41.0,
+    "egress_sensitive": [
+      "bluetooth_info",
+      "clipboard",
+      "imei"
+    ],
+    "read_sensitive": [
+      "bluetooth_info",
+      "clipboard",
+      "imei"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.BLUETOOTH",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "bluetooth_info",
+      "clipboard",
+      "imei"
+    ],
+    "sensitive_category_count": 3
+  },
+  "de.markusfisch.android.binaryeye": {
+    "score": 38.0,
+    "egress_sensitive": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_WIFI_STATE",
+      "android.permission.BLUETOOTH",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.CHANGE_WIFI_STATE",
+      "android.permission.INTERNET",
+      "android.permission.VIBRATE",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard"
+    ],
+    "sensitive_category_count": 3
+  },
+  "de.seemoo.at_tracking_detection": {
+    "score": 25.0,
+    "egress_sensitive": [
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.BLUETOOTH",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+      "android.permission.WAKE_LOCK",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "clipboard"
+    ],
+    "sensitive_category_count": 1
+  },
+  "de.tadris.fitness": {
+    "score": 35.0,
+    "egress_sensitive": [
+      "bluetooth_info",
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "bluetooth_info",
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.BLUETOOTH",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "bluetooth_info",
+      "clipboard"
+    ],
+    "sensitive_category_count": 2
+  },
+  "de.uni_potsdam.hpi.openmensa": {
+    "score": 18.0,
+    "egress_sensitive": [
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.ACCESS_WIFI_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "clipboard"
+    ],
+    "sensitive_category_count": 1
+  },
+  "dev.kerballone.spamblocker": {
+    "score": 44.0,
+    "egress_sensitive": [
+      "clipboard",
+      "sim_info"
+    ],
+    "read_sensitive": [
+      "clipboard",
+      "sim_info"
+    ],
+    "overperm_sensitive": [
+      "android.permission.CAMERA",
+      "android.permission.PACKAGE_USAGE_STATS",
+      "android.permission.READ_CALL_LOG",
+      "android.permission.READ_CONTACTS",
+      "android.permission.READ_PHONE_STATE",
+      "android.permission.READ_SMS"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.READ_CALENDAR",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "installed_apps",
+      "usage_stats"
+    ],
+    "sensitive_categories": [
+      "clipboard",
+      "sim_info"
+    ],
+    "sensitive_category_count": 2
+  },
+  "fr.ign.geoportail": {
+    "score": 37.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.WAKE_LOCK",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "sensitive_category_count": 3
+  },
+  "fr.nocle.passegares": {
+    "score": 31.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "sensitive_category_count": 3
+  },
+  "github.paroj.dsub2000": {
+    "score": 43.0,
+    "egress_sensitive": [
+      "clipboard",
+      "mac_address",
+      "wifi_ssid_bssid"
+    ],
+    "read_sensitive": [
+      "clipboard",
+      "mac_address",
+      "wifi_ssid_bssid"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.ACCESS_WIFI_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+      "android.permission.INTERNET",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.WAKE_LOCK",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "ip_address"
+    ],
+    "sensitive_categories": [
+      "clipboard",
+      "mac_address",
+      "wifi_ssid_bssid"
+    ],
+    "sensitive_category_count": 3
+  },
+  "info.zamojski.soft.towercollector": {
+    "score": 44.0,
+    "egress_sensitive": [
+      "clipboard",
+      "imei",
+      "sim_info"
+    ],
+    "read_sensitive": [
+      "clipboard",
+      "imei",
+      "sim_info"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE_LOCATION",
+      "android.permission.READ_PHONE_STATE"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "ip_address"
+    ],
+    "sensitive_categories": [
+      "clipboard",
+      "imei",
+      "sim_info"
+    ],
+    "sensitive_category_count": 3
+  },
+  "io.github.deweyreed.timer.other": {
+    "score": 20.0,
+    "egress_sensitive": [
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.READ_PHONE_STATE"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "clipboard"
+    ],
+    "sensitive_category_count": 1
+  },
+  "io.github.digvijaylp.OpenTeleScopeVR": {
+    "score": 52.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.CAMERA",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "sensitive_category_count": 5
+  },
+  "io.github.udonnko.cliprecorder": {
+    "score": 36.0,
+    "egress_sensitive": [
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "read_sensitive": [
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.READ_MEDIA_VIDEO",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "sensitive_category_count": 3
+  },
+  "io.keepalive.android": {
+    "score": 26.0,
+    "egress_sensitive": [
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.PACKAGE_USAGE_STATS",
+      "android.permission.READ_PHONE_STATE"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.QUERY_ALL_PACKAGES",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "clipboard"
+    ],
+    "sensitive_category_count": 1
+  },
+  "io.keepalive.lite.android": {
+    "score": 25.0,
+    "egress_sensitive": [
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.PACKAGE_USAGE_STATS",
+      "android.permission.READ_PHONE_STATE"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.QUERY_ALL_PACKAGES",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "clipboard"
+    ],
+    "sensitive_category_count": 1
+  },
+  "it.fast4x.riplay": {
+    "score": 50.0,
+    "egress_sensitive": [
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "read_sensitive": [
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.CAMERA",
+      "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.ACCESS_WIFI_STATE",
+      "android.permission.BLUETOOTH",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+      "android.permission.INTERNET",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.QUERY_ALL_PACKAGES",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+      "android.permission.WAKE_LOCK",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "installed_apps",
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "sensitive_category_count": 3
+  },
+  "net.sourceforge.opencamera": {
+    "score": 55.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "sensitive_category_count": 5
+  },
+  "nodomain.freeyourgadget.gadgetbridge": {
+    "score": 55.0,
+    "egress_sensitive": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard"
+    ],
+    "read_sensitive": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.READ_CALL_LOG",
+      "android.permission.READ_CONTACTS",
+      "android.permission.READ_PHONE_STATE"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.BLUETOOTH",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.QUERY_ALL_PACKAGES",
+      "android.permission.READ_CALENDAR",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "installed_apps"
+    ],
+    "sensitive_categories": [
+      "bluetooth_info",
+      "camera_capture",
+      "clipboard"
+    ],
+    "sensitive_category_count": 3
+  },
+  "org.billthefarmer.buses": {
+    "score": 8.0,
+    "egress_sensitive": [],
+    "read_sensitive": [],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.ACCESS_WIFI_STATE",
+      "android.permission.INTERNET",
+      "android.permission.READ_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [],
+    "sensitive_category_count": 0
+  },
+  "org.fossify.camera": {
+    "score": 50.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.READ_MEDIA_IMAGES",
+      "android.permission.READ_MEDIA_VIDEO",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "accounts"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "microphone_capture"
+    ],
+    "sensitive_category_count": 4
+  },
+  "org.fossify.messages": {
+    "score": 49.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "phone_number",
+      "sim_info"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "phone_number",
+      "sim_info"
+    ],
+    "overperm_sensitive": [
+      "android.permission.READ_CONTACTS",
+      "android.permission.READ_PHONE_STATE",
+      "android.permission.READ_SMS"
+    ],
+    "overperm_other": [
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+      "android.permission.USE_FINGERPRINT",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "accounts"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard",
+      "phone_number",
+      "sim_info"
+    ],
+    "sensitive_category_count": 4
+  },
+  "org.fossify.phone": {
+    "score": 42.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "sim_info"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "sim_info"
+    ],
+    "overperm_sensitive": [
+      "android.permission.READ_CALL_LOG",
+      "android.permission.READ_CONTACTS",
+      "android.permission.READ_PHONE_STATE",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "accounts"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard",
+      "sim_info"
+    ],
+    "sensitive_category_count": 3
+  },
+  "org.jimvixx.smsecure": {
+    "score": 52.0,
+    "egress_sensitive": [
+      "camera_capture",
+      "clipboard",
+      "phone_number",
+      "sim_info"
+    ],
+    "read_sensitive": [
+      "camera_capture",
+      "clipboard",
+      "phone_number",
+      "sim_info"
+    ],
+    "overperm_sensitive": [
+      "android.permission.CAMERA",
+      "android.permission.READ_CONTACTS",
+      "android.permission.READ_PHONE_STATE",
+      "android.permission.READ_SMS"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "camera_capture",
+      "clipboard",
+      "phone_number",
+      "sim_info"
+    ],
+    "sensitive_category_count": 4
+  },
+  "org.noise_planet.noisecapture": {
+    "score": 32.0,
+    "egress_sensitive": [
+      "clipboard",
+      "microphone_capture"
+    ],
+    "read_sensitive": [
+      "clipboard",
+      "microphone_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE_LOCATION",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.ACCESS_WIFI_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "clipboard",
+      "microphone_capture"
+    ],
+    "sensitive_category_count": 2
+  },
+  "org.runnerup.free": {
+    "score": 53.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "bluetooth_info",
+      "clipboard",
+      "imei"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "bluetooth_info",
+      "clipboard",
+      "imei"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.BLUETOOTH",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WAKE_LOCK",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "bluetooth_info",
+      "clipboard",
+      "imei"
+    ],
+    "sensitive_category_count": 4
+  },
+  "org.stingle.photos": {
+    "score": 65.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "overperm_sensitive": [
+      "android.permission.CAMERA",
+      "android.permission.READ_MEDIA_IMAGES",
+      "android.permission.READ_MEDIA_VIDEO",
+      "android.permission.RECORD_AUDIO",
+      "android.permission.USE_BIOMETRIC"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.USE_FINGERPRINT",
+      "android.permission.WAKE_LOCK",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei",
+      "microphone_capture"
+    ],
+    "sensitive_category_count": 5
+  },
+  "org.woheller69.eggtimer": {
+    "score": 34.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_FINE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.SCHEDULE_EXACT_ALARM"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "sensitive_category_count": 3
+  },
+  "org.woheller69.spritpreise": {
+    "score": 38.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "sensor_data"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "sensitive_category_count": 3
+  },
+  "org.woheller69.TimeLapseCam": {
+    "score": 51.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei"
+    ],
+    "overperm_sensitive": [
+      "android.permission.CAMERA",
+      "android.permission.RECORD_AUDIO"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+      "android.permission.WAKE_LOCK",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [
+      "ip_address"
+    ],
+    "sensitive_categories": [
+      "biometric_data",
+      "camera_capture",
+      "clipboard",
+      "imei"
+    ],
+    "sensitive_category_count": 4
+  },
+  "spam.blocker": {
+    "score": 39.0,
+    "egress_sensitive": [
+      "clipboard",
+      "sim_info"
+    ],
+    "read_sensitive": [
+      "clipboard",
+      "sim_info"
+    ],
+    "overperm_sensitive": [
+      "android.permission.PACKAGE_USAGE_STATS",
+      "android.permission.READ_CALL_LOG",
+      "android.permission.READ_CONTACTS",
+      "android.permission.READ_PHONE_STATE",
+      "android.permission.READ_SMS"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.READ_CALENDAR",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+      "android.permission.WAKE_LOCK"
+    ],
+    "general": [
+      "usage_stats"
+    ],
+    "sensitive_categories": [
+      "clipboard",
+      "sim_info"
+    ],
+    "sensitive_category_count": 2
+  },
+  "trailence.org": {
+    "score": 41.0,
+    "egress_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "read_sensitive": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "overperm_sensitive": [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE_LOCATION"
+    ],
+    "overperm_other": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.VIBRATE",
+      "android.permission.WRITE_EXTERNAL_STORAGE"
+    ],
+    "general": [],
+    "sensitive_categories": [
+      "biometric_data",
+      "clipboard",
+      "imei"
+    ],
+    "sensitive_category_count": 3
+  }
+}

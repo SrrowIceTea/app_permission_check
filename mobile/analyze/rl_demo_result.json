@@ -1,0 +1,128 @@
+{
+  "status": "rl_optimized",
+  "method": "Evolution Strategy (reward-weighted random search)",
+  "objective": "Spearman rank correlation vs human risk ranking",
+  "baseline_reward": 0.5,
+  "best_reward": 1.0,
+  "improvement": 0.5,
+  "suggested_weights": {
+    "data_weight": {
+      "sensitive_personal": 2.94484366604511,
+      "unknown": 2.6658142507402873,
+      "personal": 1.835229226707427
+    },
+    "path_weight": {
+      "manifest_permission": 0.5058796669114409,
+      "read_event": 0.6372175372877175,
+      "flow_sensitive_payload": 2.7391195351670516,
+      "read_then_egress": 1.5
+    },
+    "evidence_weight": {
+      "candidate": 0.19666216941354903,
+      "observed": 0.3,
+      "correlated": 2.440707347838148,
+      "policy_violation": null
+    },
+    "necessity_weight": {
+      "necessary": 0.9941285403001087,
+      "unnecessary": 0.8,
+      "unknown": 1.0
+    },
+    "value_bonus": {
+      "raw": 1.2615572038950744,
+      "digest": 1.1954243955562274,
+      "shape": 0.5935260802236739
+    },
+    "decay_alpha": 1.1355
+  },
+  "suggested_bands": [
+    [
+      124.49,
+      "critical"
+    ],
+    [
+      25.99,
+      "high"
+    ],
+    [
+      14.16,
+      "medium"
+    ],
+    [
+      5.98,
+      "low"
+    ],
+    [
+      0.0,
+      "info"
+    ]
+  ],
+  "hint": "以上权重/阈值由 RL 在少量人工标注上拟合得到，用于辅助排序与复核；不构成新的合规判据，也不改写 conclusion_level/severity。",
+  "review_priority": "high",
+  "needs_human_review": true,
+  "m046_note": "遵守 M046：模型输出仅落入 hint / review_priority / needs_human_review 槽位，八谓词与风险档位判定仍由证据链派生事实决定。",
+  "convergence": {
+    "start_reward": 0.5,
+    "end_reward": 1.0,
+    "best_reward": 1.0,
+    "steps_to_best": 1,
+    "total_steps": 400
+  },
+  "mode": "rl-train（人工标注演示）",
+  "scenarios": 5,
+  "steps": 400,
+  "ranking_before": {
+    "C_IMEI值级外发": {
+      "score": 26.325,
+      "rank": 1,
+      "human_rank": 1
+    },
+    "E_越权读IMEI": {
+      "score": 4.5,
+      "rank": 2,
+      "human_rank": 3
+    },
+    "A_读安装列表": {
+      "score": 1.5,
+      "rank": 3,
+      "human_rank": 5
+    },
+    "B_越权声明3敏感权限": {
+      "score": 0.6,
+      "rank": 4,
+      "human_rank": 2
+    },
+    "D_越权声明1敏感权限": {
+      "score": 0.2,
+      "rank": 5,
+      "human_rank": 4
+    }
+  },
+  "ranking_after": {
+    "C_IMEI值级外发": {
+      "score": 10.881,
+      "rank": 1,
+      "human_rank": 1
+    },
+    "B_越权声明3敏感权限": {
+      "score": 1.095,
+      "rank": 2,
+      "human_rank": 2
+    },
+    "E_越权读IMEI": {
+      "score": 0.45,
+      "rank": 3,
+      "human_rank": 3
+    },
+    "D_越权声明1敏感权限": {
+      "score": 0.365,
+      "rank": 4,
+      "human_rank": 4
+    },
+    "A_读安装列表": {
+      "score": 0.281,
+      "rank": 5,
+      "human_rank": 5
+    }
+  }
+}

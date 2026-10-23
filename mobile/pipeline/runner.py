@@ -35,7 +35,28 @@ from core import sdk_paths  # noqa: E402
 from mobile.pipeline import stages  # noqa: E402
 from mobile.pipeline import device_boot as dboot  # noqa: E402  设备就绪块（冷启动/代理前置）
 
-BUILD_TOOLS = str(sdk_paths.sdk_dir("build-tools", "36.1.0"))
+def _newest_build_tools() -> str:
+    """探测 SDK 里版本号最大的 build-tools 目录（aapt2 所在）。
+
+    历史硬编码 36.1.0，但换机后本机只有 34/35/36.0.0，硬编码会静默失效
+    （aapt2 不存在 → APK 元数据解析失败）。按目录名数字段取最大，兜底 36.1.0。
+    """
+    import re
+    root = sdk_paths.sdk_dir("build-tools")
+    best: tuple[list[int], Path] | None = None
+    if root.is_dir():
+        for d in root.iterdir():
+            if not d.is_dir():
+                continue
+            ver = [int(x) for x in re.findall(r"\d+", d.name)] or [0]
+            if best is None or ver > best[0]:
+                best = (ver, d)
+    if best:
+        return str(best[1])
+    return str(sdk_paths.sdk_dir("build-tools", "36.1.0"))
+
+
+BUILD_TOOLS = _newest_build_tools()
 
 
 class PipelineJob:
