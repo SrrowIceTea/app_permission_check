@@ -2,7 +2,7 @@
 
 > 仅用于授权测试（已获授权的样本与设备）。
 > 面向第九届浙江省大学生网络与信息安全竞赛企业命题（浙江省质量科学研究院）。
-> 本文档基于 `mobile/CLAUDE.md`、`mobile/README.md`、`mobile/RISK_SCORE_MODEL.md` 与目录实际结构整理，状态截至 2026-10-19。
+> 本文档基于 `mobile/CLAUDE.md`、`mobile/README.md`、`mobile/RISK_SCORE_MODEL.md` 与目录实际结构整理，状态截至 2026-10-24（含风险量化 RL 优化模块）。
 
 ---
 
@@ -89,7 +89,8 @@
 
 ### 3.4 分析层 `analyze/`
 - **关联引擎** `correlate_mobile.py`：八种移动谓词，复用 `core/evidence/codeloc.py` 行号链，每条结论带 `rule_id` + 依据来源（可追溯）。
-- **风险量化** `risk_score.py`（v1.3，38 项回归）：五维乘积 `数据敏感度 × 危害路径 × 证据强度 × 必要性 × 值级加成` + 重复衰减 `1/k` + 正交置信度（**不与分数相乘**）。模型对齐 Peng'12 单调性 / Zhu'21 异常度 / PrivacyGrade / CNKI'26 自适应阈值；`calibrate_risk_bands.py` 一键标定。
+- **风险量化** `risk_score.py`（v1.3，38 项回归）：五维乘积 `数据敏感度 × 危害路径 × 证据强度 × 必要性 × 值级加成` + 重复衰减 `1/k` + 正交置信度（**不与分数相乘**）。模型对齐 Peng'12 单调性 / Zhu'21 异常度 / PrivacyGrade / CNKI'26 自适应阈值；`calibrate_risk_bands.py` 一键标定。权重表拆在 `risk_weights.py`，阈值/置信度标定在 `risk_calibrate.py`。
+- **风险量化 RL 优化**（旁路优化器，不改动核心评分）：`risk_rl.py` 用**进化策略（ES）**以「人工风险排序 vs 模型分数排序」的 Spearman 秩相关为奖励信号，联合微调权重与档位阈值；输出严格落在 `hint` / `review_priority` / `needs_human_review` 三槽（M046），**绝不**改写 `conclusion_level` / `severity`。配套 `gen_rl_demo.py`（合成演示标注）、`build_real_scenarios.py`（静态样本 → RL 场景，60 App / 1004 finding）、`prelabel_expert.py`（专家规则候选预标注，供人工校正为 gold 标准）。方法论文档见 `RISK_SCORE_RL.md`，真实样本落地见 `RISK_SCORE_RL_REAL.md`。
 - **覆盖差集** `coverage_gap.py`：只出缺口不下结论。
 - 派生值匹配 `core/collector/derive.py`（md5/sha*/base64/urlencode/hex/gzip+b64），值为派生形态时不再只认原值哈希。
 
