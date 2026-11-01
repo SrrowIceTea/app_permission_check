@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Authorized tests only. Explicit debug fixture receiver; absent in release. -->
+    <application>
+        <receiver android:name=".AuditScenarioReceiver" android:exported="true" />
+    </application>
+</manifest>

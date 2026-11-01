@@ -1614,3 +1614,9 @@ discover 133 全绿；`_risk_test_fixtures.py` 31 行。`hooks_parity` 仍为并
   `AGENTS.md`、`mobile/CLAUDE.md`、`mobile/ARCHITECTURE.md`、`mobile/workbench/README.development.md`。
 - **复验**：`run_mobile_checks.py` 27/28 绿，唯一失败 `hooks_parity` 为既有已知失败
   （并行通道 hooks 工作区引入，非本次文档改动）；引用扫描确认无悬空链接。
+
+## M058 通用 AI 传输抽取及 Windows 回归漂移修复（2026-11-01）
+
+mobile/ai/llm_client.py 保留配置默认路径与兼容导出，传输实现提到 core/ai/llm_client.py，供车载复用。模型服务与密钥不入库。车载输出校验与证据脱敏独立，未配置时 skipped。真实模型将低风险项 needs_human_review 改为 false 时被拒收，补固定值说明和最多一次校验纠正。
+
+回归还发现已有 hooks_parity 的 NO_STACK 导出白名单过期；记录移动侧 ART 排障开关的真实单侧差异，不放松其他行比对。补 requirements 中 SARIF 验证所需 jsonschema。check_mobile_branch 使用本轮 canonical 临时目录，避免 Windows 8.3 TEMP 与 resolve 后路径混用造成测试夹具假失败。

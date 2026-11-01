@@ -76,6 +76,10 @@ function stackOf() {
 // 把 stackOf() 的两个字段摊平进记录。写成 helper 而不是在每个调用点各摊一次：
 // vlog 的 extra 是逐键拷贝的，摊不平就得在两个分支里各写两遍，容易漏一处。
 function withStack(extra) {
+  try {
+    extra.uid = Java.use('android.os.Process').myUid();
+    extra.user_id = Math.floor(extra.uid / 100000);
+  } catch (e) { extra.identity_error = String(e); }
   var st = stackOf();
   extra.stack = st.stack;
   extra.app_frames = st.app_frames;

@@ -46,6 +46,11 @@ def main() -> int:
     out = ROOT / "output" / ("mobile-branch-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
     out.mkdir(parents=True)
     env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
+    # Windows TEMP may be an 8.3 alias; mixed canonical/short fixture paths can
+    # falsely fail evidence-root and equality checks. Use a canonical run-local tmp.
+    test_tmp = (out / 'tmp').resolve()
+    test_tmp.mkdir()
+    env['TEMP'] = env['TMP'] = str(test_tmp)
     checks = []
     for name, cwd, command in groups:
         try:

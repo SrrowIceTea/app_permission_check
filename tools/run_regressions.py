@@ -16,6 +16,9 @@ CHECKS = [
     ('codeloc', 'core/evidence', [sys.executable, '-m', 'unittest', 'test_codeloc',
                            'test_event_lookup']),
     ('correlate', 'vehicle/analyze', [sys.executable, '-m', 'unittest', 'test_experiment']),
+    ('vehicle-evidence', '.', [sys.executable, '-m', 'unittest',
+                              'vehicle.analyze.test_vehicle_evidence', 'vehicle.analyze.test_context',
+                              'core.collector.test_vehicle_lifecycle']),
     # 归因/载荷/失败流落盘/报文扫描是平台无关的，已抽到 core/collector/；
     # 车载 VHAL 指纹表留在 vehicle/traffic。
     ('collector', 'core/collector', [sys.executable, '-m', 'unittest', 'test_body',

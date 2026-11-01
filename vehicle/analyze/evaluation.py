@@ -5,6 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.collector.attribution import ATTRIB_LOOSE_MS, is_loose  # noqa: E402
+from core.collector.identity import compatible, identity_scope, uid_of, user_of
+from vehicle.analyze.value_match import match_content
 
 
 def evidence(rule, kind, ids, extra):
@@ -35,10 +37,11 @@ def evaluate_sensitive_read(rules, reads):
         for read in reads:
             if (read.get('ev') == 'VHAL_READ' and read.get('outcome') == 'ok'
                     and read.get('prop_id') == prop and read.get('pkg')):
-                grouped.setdefault(read['pkg'], []).append(read)
-        for package, hits in grouped.items():
+                grouped.setdefault((read['pkg'], uid_of(read), read.get('session_id')), []).append(read)
+        for (package, uid, session), hits in grouped.items():
             findings.append(evidence(rule, 'read_event', [h['evt_id'] for h in hits], {
                 'package': package, 'property': hits[0].get('prop_name'),
+                'uid': uid, 'user_id': user_of(hits[0]), 'session_id': session,
                 'read_count': len(hits), 'note': '成功读取；订阅注册本身不算读取。'}))
     return findings
 
@@ -61,6 +64,8 @@ def usable_flow_index(flows):
     """
     index: dict = {}
     for flow in flows:
+        if flow.get('terminal') or flow.get('failure_kind'):
+            continue
         if flow.get('attribution_ambiguous') or flow.get('attribution') in ('unresolved', 'ambiguous'):
             continue
         index.setdefault((flow.get('package'), flow.get('session_id')), []).append(flow)
@@ -89,19 +94,21 @@ def evaluate_data_egress(rules, reads, flows, clock_offset_ms=None, window_overr
             if ts is None:
                 continue
             for flow in flow_index.get((read['pkg'], read.get('session_id')), ()):
+                if not compatible(read, flow):
+                    continue
                 delta = flow['ts'] - ts
                 if not 0 <= delta <= window:
                     continue
                 # 接收内容不能证明外发；属性名/ID命中只是内容线索，不证明值相同。
-                tokens = set(flow.get('request_tokens') or [])
-                hit = read.get('prop_name') in tokens or str(prop) in tokens
-                if not hit:
+                matched = match_content(read, flow)
+                if not matched:
                     continue
                 names[read['pkg']] = read.get('prop_name')
                 grouped.setdefault(read['pkg'], []).append({
                     'read_event_id': read['evt_id'], 'flow_event_id': flow['evt_id'],
                     'delta_ms': delta, 'clock_basis': basis, 'content_match': True,
-                    'content_match_basis': 'request_property_token',
+                    **matched, 'identity_scope': identity_scope(read, flow),
+                    'uid': uid_of(read), 'user_id': user_of(read),
                     'flow_method': flow.get('method'), 'flow_host': flow.get('host'),
                     'flow_path': flow.get('path'), 'client_tls': flow.get('intercepted_tls'),
                     # 归因置信信息（D414）：让"这条配对建立在多紧的归因上"可见。
@@ -114,7 +121,8 @@ def evaluate_data_egress(rules, reads, flows, clock_offset_ms=None, window_overr
                 'package': package, 'property': names[package], 'window_ms': window,
                 'window_declared_ms': declared, 'window_overridden': window != declared,
                 'pair_count': len(pairs), 'pairs': pairs, 'content_match': True,
-                'note': '同包、时间窗内且请求含属性标记；不证明具体值泄露，违规需人工判定。'}
+                'value_match': any(p.get('value_match') for p in pairs),
+                'note': '同包同会话且身份无冲突；逐条列出属性标记或属性值匹配依据。内容相等不证明因果传播，违规需人工复核。'}
             if any(p.get('attribution_loose') for p in pairs):
                 extra['conclusion_level'] = 'candidate'
                 extra['declared_conclusion_level'] = rule['conclusion_level']

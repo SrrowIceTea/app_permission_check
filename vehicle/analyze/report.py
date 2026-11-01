@@ -151,9 +151,11 @@ def build_story(findings: list[dict], summary: dict, rules_meta: dict, font: str
                                      + (f"（规则声明 {finding['window_declared_ms']} ms，"
                                         f"分析时用实测校准值覆盖）"
                                         if finding.get("window_overridden") else "")])
-            detail.append(["内容匹配", "是——外发报文中确实出现了被读取的属性"
+            detail.append(["内容匹配", ("属性实际值或派生值匹配" if finding.get('value_match') else "仅属性标记匹配；无实际值证明")
                                      if finding.get("content_match") else
                                      "否——仅时间相邻，证据不足以上升结论"])
+            scopes = sorted({p.get('identity_scope', 'legacy') for p in finding.get('pairs', [])})
+            detail.append(["身份依据", escape(', '.join(scopes))])
         # 违规代码行号。行号来自运行时栈，另经装机 APK 的 dex 行号表核对（见 D507/D508）。
         locs = [loc for loc in (finding.get("code_locs") or []) if loc.get("line")]
         if locs:
@@ -212,8 +214,8 @@ def build_story(findings: list[dict], summary: dict, rules_meta: dict, font: str
         "结论等级上限由规则库限定。candidate 仅表示『需要复核』，observed 表示『读取事实成立』，"
         "correlated 表示『读取与外发在时间窗内且内容匹配』。**本工具不产出 policy_violation**——"
         "是否构成违规是政策判定，需要人工完成。",
-        "时间相邻本身不构成外泄证据。只有 content_match 为真时，才说明外发报文中确实出现了"
-        "被读取的属性。",
+        "时间相邻本身不构成外泄证据。content_match 可能仅为属性标记；value_match 才表示"
+        "属性绑定的实际值或派生值相等。内容相等仍不证明因果污点传播。",
         "被拒绝的读取（SecurityException）不计入 sensitive_read——那是另一个信号，"
         "表示应用试图获取它拿不到的权限。",
         "覆盖范围限于已挂钩的 Java 路径。native TLS、Cronet、MQTT、QUIC 与未解析的 gRPC"
@@ -224,6 +226,8 @@ def build_story(findings: list[dict], summary: dict, rules_meta: dict, font: str
     ]:
         story.append(Paragraph("· " + line, small))
     story.extend(extra_story(summary, flows or [], ownership or [], image_dir, body, h2, findings))
+    from vehicle.analyze.profile_report import profile_story
+    story.extend(profile_story(summary, body, h2))
     return story
 
 

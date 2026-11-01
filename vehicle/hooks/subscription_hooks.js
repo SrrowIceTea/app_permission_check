@@ -1,5 +1,6 @@
 // 仅用于授权测试。只观察回调，不替换 callback，不改变注册或回调返回值。
 // subscribePropertyEvents 名称与重载来自 device_calibration/cpm-signatures-device35.json。
+import { propertyValue } from './property_value.js';
 export function hookSubscriptions(CPM, vlog, watch, callerInfo, stackStr) {
   const callbacks = new Set();
   function armCallback(callback) {
@@ -19,9 +20,10 @@ export function hookSubscriptions(CPM, vlog, watch, callerInfo, stackStr) {
           if (watch[id]) {
             const caller = callerInfo();
             vlog('VHAL_READ', { ...caller, api: 'subscription.onChangeEvent',
+              user_id: caller.uid >= 0 ? Math.floor(caller.uid / 100000) : null,
               prop_id: id, prop_name: watch[id], area_id: v.getAreaId(),
               outcome: v.getStatus() === 0 && v.getValue() !== null ? 'ok' : 'unavailable',
-              value: String(v.getValue()), stack: stackStr() });
+              value: String(v.getValue()), ...propertyValue(v), stack: stackStr() });
           }
         } catch (e) { vlog('ERROR', { where: 'subscription callback observation', msg: String(e) }); }
         return original.call(this, value);

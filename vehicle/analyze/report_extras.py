@@ -130,4 +130,8 @@ def extra_story(summary, flows, ownership, folder, body, heading, findings):
                 story.append(Image(str(path), width=target_width,
                                    height=height * target_width / width))
                 story.append(Spacer(1, 8))
+    # A trailing Spacer can spill onto a blank page before the next appendix's
+    # PageBreak. It carries no evidence and should not create an empty page.
+    if story and isinstance(story[-1], Spacer):
+        story.pop()
     return story

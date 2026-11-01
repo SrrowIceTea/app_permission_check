@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT / 'tools'))
 import device_acceptance as da  # noqa: E402
 
 # 各验收脚本实际会启动的钩子（改脚本时同步这里；对不上就是本测试该报的）
-DEVICE_ACCEPTANCE_HOOKS = ['hook_vhal', 'hook_egress', 'ssl_pinning_bypass']
+DEVICE_ACCEPTANCE_HOOKS = ['hook_vhal', 'hook_egress', 'ssl_pinning_bypass', 'hook_vehicle_all']
 GADGET_ACCEPTANCE_HOOKS = ['hook_vhal']
 MULTI_ACCEPTANCE_HOOKS = ['fixture_control']
 

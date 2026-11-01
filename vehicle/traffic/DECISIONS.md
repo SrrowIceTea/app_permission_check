@@ -216,3 +216,7 @@ D403 的 `MATCH_TOLERANCE_MS=2000` / `AMBIGUITY_MS=500` 与 D408 的 3000ms 宽�
 `attribution.py` 已迁到 `core/collector/`（平台拆分），后续归因决策记录在
 **`core/collector/DECISIONS.md`**（续 D413 起）：目标地址校验（第二信号）、
 归因置信信息进结论层、保守弃权开关与错峰采样误归因率。改归因逻辑前先读那里。
+
+## D416 延迟归因身份完整性与退出（2026-11-01）
+
+设备测试发现 pending 重试更新包名但遗漏新 UID/user_id，首次即时命中时看不出。抽出 flow_entry.refresh_identity 统一刷新，TimeAttribution 将同包不同用户也作为竞争身份。upstream_failures 独立承载连接级失败证据；addon 保留为 300 行以内入口。VSCAN_STOP_FILE 由 ticker 调用线程安全的 master.shutdown，排空证据后退出，不强杀代理。

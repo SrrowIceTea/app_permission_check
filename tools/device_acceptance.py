@@ -18,6 +18,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from core.collector.collector_server import Collector
+from vehicle.pipeline.device_state import ensure_wifi
+from process_cleanup import stop_workers
 from test_proxy_cert import create
 
 # adb 定位：VSCAN_ADB 覆盖 > PATH 上的 adb > 本机 SDK 默认位置。
@@ -135,11 +137,12 @@ def main():
     out.mkdir(parents=True)
     (ROOT / 'output/latest-device.txt').write_text(str(out), encoding='utf-8')
     env = dict(os.environ, PYTHONUTF8='1', VSCAN_SESSION=session,
+               VSCAN_STOP_FILE=str(out / '.stop'),
                # 白名单已无默认值（§8.2 B-1）：本轮授权监控的就是这两个自有夹具。
                VSCAN_PACKAGES=','.join([PACKAGE, 'com.vscanner.targetapp2']),
                VSCAN_FLOW_LOG=str(out / 'flows.jsonl'),
                VSCAN_EVENT_DB=str(out / 'events.sqlite'),
-               VSCAN_ATTRIB_SOURCES=str(out / 'egress.jsonl'),
+               VSCAN_ATTRIB_SOURCES=str(out / 'reads.jsonl'),
                VSCAN_TAGGING=str(ROOT / 'vehicle/traffic/tagging.py'),
                PATH=str(Path(ADB).parent) + os.pathsep + os.environ['PATH'])
     upstream = ThreadingHTTPServer(('127.0.0.1', 0), Collector)
@@ -177,6 +180,7 @@ def main():
             raise RuntimeError(f'{button} 失败，见 {out / (button + ".txt")}')
 
     try:
+        ensure_wifi(adb)
         launch([sys.executable, '-c', 'from mitmproxy.tools.main import mitmdump; mitmdump()',
                 '-s', str(ROOT / 'core/collector/addon.py'), '--listen-host', '0.0.0.0',
                 '--listen-port', '8888', '--mode', f'reverse:http://127.0.0.1:{upstream.server_port}',
@@ -188,21 +192,24 @@ def main():
         # 三个钩子一条 ARMED 都留不下——而现象与「钩子没挂上」完全一样，排查方向会跑偏。
         # 这一步是必需的：build_delivery 的 APK 哈希校验强制重装夹具，重装后必然是冷启动。
         wait_for(app_pid, 30)
-        for name, script in [('reads', 'hook_vhal'), ('egress', 'hook_egress'), ('tls', 'ssl_pinning_bypass')]:
+        for name, script in [('reads', 'hook_vehicle_all')]:
             launch([sys.executable, str(ROOT / 'core/frida_host/run.py'), '--package', PACKAGE,
                     # --allow-package 已无默认值（§8.2 B-1），必须显式授权。
                     '--allow-package', PACKAGE, '--allow-package', 'com.vscanner.targetapp2',
                     '--script', str(hook_bundle(script)),
+                    '--stop-file', str(out / '.stop'),
                     '--seconds', '150', '--out', str(out / (name + '.jsonl')),
                     '--session', session, '--event-db', str(out / 'events.sqlite')], name)
-        wait_for(lambda: all(any(e.get('ev') == ('PINNING_ARMED' if n == 'tls' else 'ARMED') for e in read_events(out / (n + '.jsonl')))
-                             for n in ('reads', 'egress', 'tls')), 40)
+        wait_for(lambda: all(any(e.get('ev') == ev and e.get('src') == src
+                                for e in read_events(out / 'reads.jsonl'))
+                             for ev, src in (('ARMED', 'vhal'), ('ARMED', 'egress'), ('PINNING_ARMED', 'tls'))), 40)
         trigger('btnSubscribe')
         trigger('btnRead')
         trigger('btnEgressHttp')
         trigger('btnOkHttp')
         wait_for(lambda: len(read_events(out / 'flows.jsonl')) >= 2, 20)
-        reads, tls, flows = (read_events(out / (n + '.jsonl')) for n in ('reads', 'tls', 'flows'))
+        reads, flows = (read_events(out / (n + '.jsonl')) for n in ('reads', 'flows'))
+        tls = [event for event in reads if event.get('src') == 'tls']
         # 无响应请求单独落盘（见 core/collector/addon.py 的 error()）。**必须在这里断言**：
         # 只写文件而没人看，等于换了个地方静默丢弃——而"发出去了但没收到响应"
         # 与"什么都没有发生"对审计是完全不同的两件事。
@@ -223,12 +230,29 @@ def main():
         print(json.dumps(result, ensure_ascii=False), flush=True)
         if not result['passed']:
             raise AssertionError('新增路径未全部通过，参见 verification.json')
+    except Exception as exc:
+        if not (out / 'verification.json').exists():
+            (out / 'verification.json').write_text(json.dumps({
+                'session': session, 'passed': False, 'error': f'{type(exc).__name__}: {exc}'
+            }, ensure_ascii=False, indent=2), encoding='utf-8')
+        raise
     finally:
         (out / 'logcat.txt').write_text(adb('logcat', '-d', '-t', '1000'), encoding='utf-8')
-        for proc in processes:
-            if proc.poll() is None:
-                proc.terminate()
-            proc.wait(timeout=15)
+        cleanup = stop_workers(processes, out / '.stop')
+        for name in ('egress', 'tls'):
+            rows = [r for r in read_events(out / 'reads.jsonl') if r.get('src') == name]
+            (out / (name + '.jsonl')).write_text(''.join(json.dumps(r) + '\n' for r in rows), encoding='utf-8')
+        if (out / 'verification.json').exists():
+            verified = json.loads((out / 'verification.json').read_text(encoding='utf-8'))
+            verified['worker_cleanup'] = cleanup
+            verified.setdefault('checks', {})['workers_stopped_cleanly'] = all(
+                row['exit_code'] == 0 and not row['forced'] for row in cleanup)
+            verified['passed'] = verified['passed'] and verified['checks']['workers_stopped_cleanly']
+            verified['checks']['app_alive_after_detach'] = bool(app_pid())
+            verified['passed'] = verified['passed'] and verified['checks']['app_alive_after_detach']
+            (out / 'verification.json').write_text(json.dumps(verified, indent=2), encoding='utf-8')
+            if not verified['passed']:
+                raise AssertionError('Device capture or graceful cleanup failed; see verification.json')
         for handle in handles:
             handle.close()
         upstream.shutdown(); upstream.server_close(); worker.join()

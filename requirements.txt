@@ -11,6 +11,8 @@ maxminddb==3.2.0
 # tools/test_proxy_cert.py 直接 `from cryptography import x509`，此前未声明 →
 # 按本文件装依赖会 ImportError，CI 上线后该组必挂（§8.2 B-5）。
 cryptography==48.0.0
+# SARIF official-schema validation used by mobile/report regression tests.
+jsonschema==4.26.0
 
 # ── pip freeze 快照（2026-10-14 实测，取自本机 Python 3.13）─────────────────
 # 只列本文件声明项及其直接伴生包，完整的 freeze 随环境变化太大不适合入库。

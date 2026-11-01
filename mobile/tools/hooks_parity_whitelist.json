@@ -230,9 +230,9 @@
       "id": "rt-cache-vars",
       "pair": "runtime",
       "side": "mobile",
-      "lines": ["var THREAD_CLS = null;", "var NO_STACK = parseInt(\"__VSCAN_NO_STACK__\", 10) === 1;"],
+      "lines": ["var THREAD_CLS = null;", "export var NO_STACK = parseInt(\"__VSCAN_NO_STACK__\", 10) === 1;"],
       "reason": "批次 4 · A1：事件期缓存变量与栈开关变量。__VSCAN_NO_STACK__ 与 hook_privacy.js 的 __VSCAN_WATCH_LIMIT__ 同为宿主注入前替换的占位符（core/frida_host/bundle_config.py），车载侧无",
-      "date": "2026-10-14"
+      "date": "2026-11-01"
     },
     {
       "id": "ssl-standalone-entry",
@@ -249,6 +249,22 @@
       "lines": ["var RAW_DEOPTIMIZE = \"__VSCAN_DEOPTIMIZE__\";"],
       "reason": "A1 修复（2026-10-16）：deoptimizeBeforeArm 的开关占位符（宿主注入前替换，core/frida_host/bundle_config.py），随豁免函数一并孤立",
       "date": "2026-10-16"
+    },
+    {
+      "id": "mobile-stack-switch-import",
+      "pair": "stack_capture",
+      "side": "mobile",
+      "lines": ["import { NO_STACK } from './runtime.js';"],
+      "reason": "移动侧既有 ART 排障开关从 runtime 导出；车载侧未引入该开关。仅声明这条已核实的单侧导入，采集逻辑继续逐行检查。",
+      "date": "2026-11-01"
+    },
+    {
+      "id": "mobile-stack-switch-guard",
+      "pair": "stack_capture",
+      "side": "mobile",
+      "lines": ["if (NO_STACK) return { stack: [], app_frames: [] };"],
+      "reason": "与上一条对应，移动侧明确启用 NO_STACK 时跳过栈采集；默认关闭，车载仍采集栈。保留移动侧已知崩溃诊断行为，不将该差异当成未同步的逻辑。",
+      "date": "2026-11-01"
     }
   ]
 }

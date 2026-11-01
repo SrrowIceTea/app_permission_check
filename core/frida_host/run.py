@@ -40,14 +40,10 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent.parent))
 from core.event_store import EventStore
 from core.frida_host.bundle_config import configure
+from core.frida_host.device_target import adb, resolve_pid
 # frida-server on this device is started with `-l 127.0.0.1:27043`, not the default
 # 27042. Connecting to 27042 fails with "connection closed"; the forward is required.
 FRIDA_PORT = 27043
-
-
-def adb(*args: str, timeout: int = 60) -> str:
-    return subprocess.run(["adb", *args], capture_output=True, encoding="utf-8",
-                          errors="replace", timeout=timeout, check=True).stdout.strip()
 
 
 def ensure_forward() -> None:
@@ -63,25 +59,13 @@ def pid_alive(pid: int) -> bool:
     return adb("shell", f"if test -d /proc/{pid}; then echo y; else echo n; fi").strip() == "y"
 
 
-def resolve_pid(package: str) -> int:
-    out = adb("shell", f"pidof {package}")
-    pids = out.split()
-    if not pids:
-        raise SystemExit(
-            f"{package} is not running. Start it first, e.g.\n"
-            f"  adb shell am start -n {package}/.MainActivity\n"
-            "Frida spawn is unreliable on this emulator (times out while the app "
-            "launches normally), so this driver attaches instead."
-        )
-    return int(pids[0])
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--pid", type=int)
     target.add_argument("--package")
+    parser.add_argument('--user', type=int, help='AAOS user ID; reject cross-user attach')
     parser.add_argument("--script", required=True, type=Path,
                         help="a dist/*.bundle.js produced by build.py")
     parser.add_argument("--seconds", type=float, default=30.0)
@@ -178,6 +162,8 @@ def main() -> int:
     if args.gadget:
         pid = device.spawn(["re.frida.Gadget"])
     elif args.spawn:
+        if args.user is not None:
+            raise ValueError('--user requires attach mode; start the app for that user first')
         # spawn 注入（2026-10-18 新增）：attach 模式下应用**启动那一刻**的握手/外发
         # 全在钩子装上之前，实测 F-Droid 首轮 SSL 明文一条没捕到、keylog 也装不上
         # （App 的 SSL_CTX 在我们 attach 前就建好了）。spawn 时钩子在应用跑第一条
@@ -187,7 +173,7 @@ def main() -> int:
             return 2
         pid = device.spawn([args.package])
     else:
-        pid = args.pid or resolve_pid(args.package)
+        pid = args.pid or resolve_pid(args.package, args.user)
     session = device.attach(pid)
     session.on("detached", lambda *info: failed.append("detached: " + str(info)))
     store = EventStore(args.event_db or args.out.with_suffix(".sqlite"))
@@ -217,6 +203,8 @@ def main() -> int:
             # 这个字段让下游（Phase 4 归因）完全绕开跨时钟比较。
             record["host_received_ts"] = int(time.time() * 1000)
             record["session_id"] = session_id
+            if os.environ.get('VSCAN_SERIAL'):
+                record['device_serial'] = os.environ['VSCAN_SERIAL']
             line = json.dumps(record, ensure_ascii=False)
             with args.out.open("a", encoding="utf-8") as handle:
                 handle.write(line + "\n")

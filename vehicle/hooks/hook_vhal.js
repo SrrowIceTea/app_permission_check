@@ -15,6 +15,7 @@
 // ============================================================================
 'use strict';
 import { packages } from './scope.js';
+import { propertyValue } from './property_value.js';
 
 import { hookSubscriptions } from './subscription_hooks.js';
 import { makeLogger, procName } from './vscan_runtime.js';
@@ -128,6 +129,7 @@ function buildExtra(api, propId, areaId, caller, outcome, value, excClass, excMs
     mode: STATE.isSystem ? 'system_process' : 'app',
     api: api,
     pkg: caller.pkg, uid: caller.uid,
+    user_id: caller.uid >= 0 ? Math.floor(caller.uid / 100000) : null,
     prop_id: propId, prop_name: CFG.watch[propId], area_id: areaId,
     outcome: outcome,
     thread_name: threadName(),
@@ -156,11 +158,20 @@ function makeReadImpl(api, propIdx, orig, selfCheck) {
         if (ret !== null && ret.$className === 'android.car.hardware.CarPropertyValue' &&
             ret.getStatus() !== STATUS_AVAILABLE) outcome = 'unavailable';
       } catch (e) {}
-      vlog('VHAL_READ', buildExtra(api, propId, args[propIdx + 1], caller, outcome,
-                                   fmtVal(ret), null, null, selfCheck ? args[1] : undefined));
+      var extra = buildExtra(api, propId, args[propIdx + 1], caller, outcome,
+                            fmtVal(ret), null, null, selfCheck ? args[1] : undefined);
+      Object.assign(extra, propertyValue(ret));
+      if (extra.value_raw === null) extra.outcome = 'unavailable';
+      vlog('VHAL_READ', extra);
       return ret; // 原值返回，不改动
     } catch (e) {
       var cls = String(e.$className || e.name || '?');
+      // The bridge may wrap a Java throwable as JS Error; preserve the observed
+      // Java exception type instead of mislabelling a permission denial as error.
+      var message = String(e.message || e);
+      if (/^(?:Error: )?java\.lang\.SecurityException(?::|$)/.test(message)) {
+        cls = 'java.lang.SecurityException';
+      }
       var out = (cls.indexOf('Security') >= 0) ? 'denied' : 'error';
       vlog('VHAL_READ', buildExtra(api, propId, args[propIdx + 1], caller, out,
                                    null, cls, String(e.message), selfCheck ? args[1] : undefined));

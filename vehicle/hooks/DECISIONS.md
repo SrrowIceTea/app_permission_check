@@ -232,3 +232,8 @@ frida-compile输出含UTF8字节长度头，不能直接向bundle前部拼JS；b
   另记 `native_backtrace`（模块+偏移）做调试线索。
 - **边界**：静态链接自有 BoringSSL 且符号不导出的栈（Cronet 常见）覆盖不到，与 D312 的
   手工加密、手工 XOR 一起，仍是能力边界的下一层。**设备端实测待跑**。
+
+
+## D314 单 Java runtime 采集与收尾稳定性（2026-11-01）
+
+两个独立 bridge 的设备采集本身成功，但正常 detach 后仍稳定出现 DeleteGlobalRef JNI 未附着线程 abort；不能仅凭驱动 exit 0 判验收成功。新增 java_bootstrap + hook_vehicle_all，ESM 顺序先建立 Java global，再装配 VHAL/出站/TLS，共用一份 bridge。停止哨兵触发驱动正常 detach，设备测试必须验证原 PID 仍存活。主动读取/订阅补 value_raw、value_type、user_id；旧 value 展示字段保留。

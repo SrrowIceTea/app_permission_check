@@ -21,6 +21,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.collector.body import body_of  # noqa: E402
 from core.collector.payloads import capture  # noqa: E402
 
+
+def refresh_identity(entry, found):
+    """Update ALL attribution fields together, including delayed collector retries."""
+    entry.update(package=found.package, uid=found.uid, user_id=found.user_id,
+        attribution=found.label, attribution_source=found.source,
+        attribution_delta_ms=found.delta_ms, attribution_ambiguous=found.ambiguous,
+        attribution_runner_up=found.runner_up, attribution_candidates=list(found.candidates))
+
+
+def target(flow):
+    peer = getattr(flow, 'server_conn', None)
+    address = getattr(peer, 'peername', None)
+    return {'host': getattr(flow.request, 'host', None), 'ip': address[0] if address else None}
+
 # **系统自身的连通性探测**（2026-10-19 实测）：每次联网 Android 自己都会打
 # `connectivitycheck.gstatic.com/generate_204`，跟被测应用毫无关系。它走明文 HTTP，
 # 所以 `ignore_hosts`（只管 TLS 拦截）拦不住，会落进 unattributed 通道。
@@ -61,6 +75,8 @@ def _common(flow, found, ts_ms: int, session: str) -> dict:
         "evt_id": None,          # 由 _emit 分配
         "ts": ts_ms,
         "package": found.package,
+        "uid": found.uid,
+        "user_id": found.user_id,
         "attribution": found.label,
         "attribution_source": found.source,
         "attribution_delta_ms": found.delta_ms,

@@ -1,19 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""V-Scanner Phase 4 — 代理流 → 包名的时间归因。
+"""主机时钟下的流量归因；仅用于授权测试（自有设备与自有 APK）。
 
-仅用于授权测试（自有设备与自有 APK）/ For authorized testing on owned devices and APKs only.
-
-**为什么不能靠端口**：模拟器的 SLIRP 是用户态 NAT，不保留源端口。设备侧连接
-`10.0.2.16:54950 → 10.0.2.2:8888` 在宿主侧表现为 `127.0.0.1:33012`，两侧端口没有
-任何对应关系，回查 `/proc/net/tcp` 取 UID 的方案实测失效（DECISIONS D402）。
-
-因此**唯一可用的信号是时间**：Phase 3 的 `hook_egress.js` 在应用进程内挂钩
-`Socket.connect`，包名是确定的，不是推断的；本模块把代理流按就近时间对到这些事件上。
-
-两边都用**主机时钟**：egress 事件用 run.py 落盘时打的 `host_received_ts`，
-流用 addon 收到请求的时刻。不假设设备与主机时钟同步——实测偏移会漂移
-（曾从"设备快 530ms"漂到"设备慢 1731ms"），任何固定偏移假设都会静默失效。
+SLIRP 不保留源端口，因此用应用进程内 Socket 事件配对并保留歧义。
+历史实验依据见 vehicle/traffic/DECISIONS.md D402、D408、D413–D415。
 """
 from __future__ import annotations
 
@@ -22,6 +12,7 @@ import os
 from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import urlsplit
+from core.collector.identity import uid_of, user_of
 
 # 时间配对的容差：事件与流的间距在此之内才认为是同一次外发。
 MATCH_TOLERANCE_MS = 2000
@@ -143,6 +134,8 @@ class Attribution(NamedTuple):
     ambiguous: bool = False
     runner_up: str | None = None
     candidates: tuple = ()
+    uid: int | None = None
+    user_id: int | None = None
 
     @property
     def resolved(self) -> bool:
@@ -169,32 +162,17 @@ class Attribution(NamedTuple):
 
 
 class TimeAttribution:
-    """按时间就近把代理流归属到包名。
-
-    两个来源，**优先用前者**：
-
-    * `egress_events.jsonl` — Phase 3 的 `hook_egress.js` 在**应用进程内**挂钩
-      `Socket.connect` 得到的记录，包名是确定的，不是推断的。这是现在的主路径。
-    * `uid_events.jsonl` — `uid_sampler.py` 的系统层采样。保留作为兜底，
-      但实测它在应用连接上抓不到（见 DECISIONS D402）。
-
-    增量读取：只 seek 到上次读到的位置，因此 `resolve()` 可以反复调用。
-    """
+    """增量读取应用出站/系统采样事件，保留时间、目标及用户身份歧义。"""
 
     def __init__(self, paths: list[Path] | None = None, target_check: bool = False,
                  conservative: bool = False,
                  events: list[tuple[int, str, str, dict | None]] | None = None) -> None:
         self.paths = paths or []
-        # 每个事件：(ts, package, source, target)。target 只有 egress_hook 来源有，
-        # 是 `{"host": target_host, "ip": target_ip, "port": target_port}`；uid_sampler 为 None。
-        # `events` 直接注入（离线实验/测试用）时绕过文件增量读取，resolve 的排序与
-        # 歧义/弃权/目标校验逻辑**完全不变**——只是"事件从哪来"这一环被省掉。
+        # target 保存地址和 UID 元数据；events 可注入离线实验事件。
         self.events: list[tuple[int, str, str, dict | None]] = (
             list(events) if events is not None else [])
         self._offsets: dict[Path, int] = {p: 0 for p in self.paths}
-        # 目标校验开关。**默认关**：reverse 模式下所有 App 都寻址同一代理端口，
-        # 目标校验会把整场归因静默变成 unresolved。只在常规代理模式（移动端第三方样本）
-        # 由 addon 按 VSCAN_ATTRIB_TARGET_CHECK 显式打开。
+        # reverse 模式无原始目标锚点；仅显式开启普通代理的目标校验。
         self.target_check = target_check
         # 保守弃权开关。**默认关**：见 DECISIONS D415——开启后只要容差窗口内存在
         # 另一个包名的候选就标 ambiguous（宁可错杀，不可静默串包）。代价是 D407 的
@@ -202,22 +180,7 @@ class TimeAttribution:
         self.conservative = conservative
 
     def _refresh(self) -> None:
-        """增量读取事件文件。**只在读到完整行之后才推进偏移。**
-
-        这里有个会**静默永久丢记录**的坑：事件文件是 run.py 在另一个进程里边跑边追加的，
-        而本方法与它并发。如果在追加到一半时去读，最后一行会是半截的。
-        原来的写法用 `for line in handle` 然后 `handle.tell()`，
-        读到半截行时 `tell()` 已经越过它了——下轮 `seek()` 从那半截的**中间**开始，
-        读出来的两半都解析失败，**这条记录就再也找不回来了**。
-        症状极具误导性：文件里那条记录明明完整，addon 却永远看不到，
-        于是 flow 一直是 `package=null`，看起来像归因算法失灵。
-
-        实测命中：B 的出站事件比它的流早 10ms 打时间戳（`host_received_ts` 在
-        `json.dumps`/`open`/`write` **之前**取），流到达时代理恰好读到了半截行。
-
-        所以改成 `readline()` 逐行读，**行尾没有换行符就停在那里不推进偏移**，
-        下次从头再读这一行。代价是可能重复解析，收益是不会丢。
-        """
+        """只在完整换行后推进偏移；半行保留到下一轮，避免永久丢记录。"""
         for path in self.paths:
             if not path.exists():
                 continue
@@ -291,6 +254,8 @@ class TimeAttribution:
                         if host is not None or ip is not None:
                             target = {"host": host, "ip": ip, "port": port}
                     if package and ts is not None:
+                        if uid_of(record) is not None or user_of(record) is not None:
+                            target = dict(target or {}, uid=uid_of(record), user_id=user_of(record))
                         self.events.append((ts, package, source, target))
                 self._offsets[path] = consumed
 
@@ -298,26 +263,26 @@ class TimeAttribution:
         self._refresh()
         # 有目标锚定时才放开"连接年龄"窗口，见 CONNECT_AGE_MS 的说明。
         window = CONNECT_AGE_MS if self.target_check else MATCH_TOLERANCE_MS
-        ranked = sorted(
+        ranked = sorted((
             (abs(event_ts - ts_ms), package, source, target)
             for event_ts, package, source, target in self.events
             # 有符号判据：事件早于流（差值为正）最多 window；允许晚 MATCH_TOLERANCE_MS
             # 以内的时钟抖动。旧写法 `abs(...) <= 2000` 会把"连接比请求早 20 秒"
             # 这种最常见的情形全部排除掉。
             if -MATCH_TOLERANCE_MS <= (ts_ms - event_ts) <= window
-        )
+        ), key=lambda row: (row[0], row[1], row[2]))
         if self.target_check:
             ranked = [r for r in ranked if target_match(r[3], flow_target)]
         if not ranked:
             return Attribution()
 
         delta, package, source, _target = ranked[0]
-        # 亚军只在**包名不同**时才构成歧义；同一包名的两条事件只是同一个 App
-        # 连了两次，仍然确定是它。
+        winner_identity = (package, uid_of(_target or {}), user_of(_target or {}))
+        # 包名或 UID/用户不同均构成竞争身份，防止同包跨用户串归因。
         runner_up = None
         ambiguous = False
-        for delta2, package2, _, _ in ranked[1:]:
-            if package2 != package:
+        for delta2, package2, _, target2 in ranked[1:]:
+            if (package2, uid_of(target2 or {}), user_of(target2 or {})) != winner_identity:
                 runner_up = package2
                 # 保守模式：只要存在另一个包的竞争候选就弃权（不管离得多远）；
                 # 默认模式：只在亚军贴近到 AMBIGUITY_MS 之内才标歧义（D415）。
@@ -326,7 +291,9 @@ class TimeAttribution:
         # Top-K 候选：只存亚军不够取证，扩成候选列表（纯增量，见 DECISIONS D414）。
         # 只留前 5 个，避免把容差窗口里的噪声全写进报告。
         candidates = tuple(
-            {"package": p, "delta_ms": d, "source": s}
-            for d, p, s, _ in ranked[:5]
+            {"package": p, "delta_ms": d, "source": s,
+             "uid": uid_of(t or {}), "user_id": user_of(t or {})}
+            for d, p, s, t in ranked[:5]
         )
-        return Attribution(package, delta, source, ambiguous, runner_up, candidates)
+        return Attribution(package, delta, source, ambiguous, runner_up, candidates,
+                           uid_of(_target or {}), user_of(_target or {}))
