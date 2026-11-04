@@ -44,11 +44,12 @@ class RulesSchemaValidationTest {
         assertEquals(6, counts.permissions)
         assertEquals(8, counts.vhalProperties)
         assertEquals(3, counts.dangerousApis)
-        assertEquals(22, counts.riskRules)
-        assertEquals(39, counts.total)
-        // 16 of 24 enabled (8 over_permission + 8 sensitive_read); the eight data_egress
-        // rules stay disabled. Asserted so an accidental enable or disable is caught.
-        assertEquals(22, counts.enabledRules)
+        assertEquals(29, counts.riskRules)
+        assertEquals(46, counts.total)
+        // All 29 enabled per version: 6 over_permission + 13 sensitive_read (8 VHAL +
+        // 5 VSC-GR) + 10 data_egress (8 VHAL + 2 VSC-GE). Asserted so an accidental
+        // enable or disable is caught.
+        assertEquals(29, counts.enabledRules)
     }
 
     @Test
@@ -66,11 +67,8 @@ class RulesSchemaValidationTest {
         assertEquals(146, counts.permissions)
         assertEquals(8, counts.vhalProperties)
         assertEquals(3, counts.dangerousApis)
-        assertEquals(22, counts.riskRules)
-        // 16 of the 24: 8 over_permission + 8 sensitive_read. The data_egress rules stay
-        // disabled because their window_ms is known to be an order of magnitude too
-        // small. See BaselineExpectation.
-        assertEquals(22, counts.enabledRules)
+        assertEquals(29, counts.riskRules)
+        assertEquals(29, counts.enabledRules)
     }
 
     @Test
@@ -95,7 +93,7 @@ class RulesSchemaValidationTest {
             "SELECT rule_id, source_refs_json, basis_refs_json FROM risk_rules" +
                 " WHERE android_version = '15'"
         ).use { cursor ->
-            assertEquals(22, cursor.count)
+            assertEquals(29, cursor.count)
             while (cursor.moveToNext()) {
                 val ruleId = cursor.getString(0)
                 val sourceRefs = cursor.getString(1)

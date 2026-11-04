@@ -2,11 +2,12 @@
 import json
 import re
 from datetime import datetime
-from vehicle_scenario_acceptance import adb, run_case
+from vehicle_scenario_acceptance import adb, probe_adb, run_case
 from device_acceptance import ROOT, PACKAGE, SERIAL, read_events, wait_for
 from vehicle.analyze.correlate import load_rules
 from vehicle.analyze.evaluation import evaluate_data_egress
 from vehicle.pipeline.user_lifecycle import switch_user, remove_test_user
+from vehicle.pipeline.device_state import wait_device_ready, wait_framework_ready
 
 
 def main():
@@ -24,12 +25,24 @@ def main():
         if not match:
             raise RuntimeError('could not create isolated test user: ' + response)
         created = match[1]
-        adb('shell', 'am', 'start-user', '-w', created)
+        result.update(original_user=original, test_user=created, status='running')
+        (out / 'verification.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
         adb('shell', 'cmd', 'package', 'install-existing', '--user', created, PACKAGE)
         a = run_case(out, 'original-user', 'plain', original, session_id=out.name)
+        queued = run_case(out, 'original-cache-seed', 'cache-isolation-seed', original, session_id=out.name)
+        if not a['passed'] or not queued['passed']:
+            raise RuntimeError('Original-user positive control failed; stop dependent user tests')
+        adb('shell', 'am', 'start-user', '-w', created)
         switch_user(adb, created)
+        result['start_user_device_wait_ms'] = wait_device_ready(probe_adb)
+        result['start_user_framework_wait_ms'] = wait_framework_ready(probe_adb)
         adb('shell', 'wm', 'dismiss-keyguard')
         b = run_case(out, 'ephemeral-user', 'plain', created, session_id=out.name)
+        empty = run_case(out, 'ephemeral-cache', 'cache_flush', created, session_id=out.name)
+        switch_user(adb, original)
+        result['restore_user_device_wait_ms'] = wait_device_ready(probe_adb)
+        result['restore_user_framework_wait_ms'] = wait_framework_ready(probe_adb)
+        returned = run_case(out, 'original-cache-return', 'cache_flush', original, session_id=out.name)
         reads_a = read_events(out / 'original-user/reads.jsonl')
         flows_a = read_events(out / 'original-user/flows.jsonl')
         reads_b = read_events(out / 'ephemeral-user/reads.jsonl')
@@ -40,6 +53,10 @@ def main():
         counterfactual_reads = [{k:v for k,v in r.items() if k not in ('uid', 'user_id')} for r in reads_a]
         counterfactual_flows = [{k:v for k,v in r.items() if k not in ('uid', 'user_id')} for r in flows_b]
         checks = {'both_users_have_real_positive_controls': a['passed'] and b['passed'],
+            'original_cache_was_seeded': queued['passed'],
+            'new_user_cannot_read_original_cache': empty['passed'] and empty['flows'] == 0 and
+                empty.get('fixture_results', [{}])[-1].get('cache_empty') is True,
+            'original_cache_survives_user_switch': returned['passed'] and returned['flows'] > 0,
             'original_user_flow_identity': bool(flows_a) and all(f.get('user_id') == int(original) for f in flows_a),
             'second_user_flow_identity': bool(flows_b) and all(f.get('user_id') == int(created) for f in flows_b),
             'different_runtime_uid': bool(flows_a and flows_b) and flows_a[0]['uid'] != flows_b[0]['uid'],
@@ -61,8 +78,14 @@ def main():
             except Exception as error:
                 result['cleanup_error'] = f'{type(error).__name__}: {error}'
                 result['passed'] = False
-        adb('reverse', '--remove', 'tcp:8888')
+        try:
+            adb('reverse', '--remove', 'tcp:8888')
+            result['checks']['reverse_mapping_removed'] = True
+        except Exception as error:
+            result['checks']['reverse_mapping_removed'] = False
+            result['reverse_cleanup_error'] = f'{type(error).__name__}: {error}'
         result['passed'] = result['passed'] and all(result['checks'].values())
+        result['status'] = 'completed' if result['passed'] else 'failed'
         (out / 'verification.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
     print(json.dumps(result), flush=True)
     print('Evidence: ' + str(out), flush=True)

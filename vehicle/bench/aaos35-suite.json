@@ -1,0 +1,208 @@
+{
+  "schema": 1,
+  "purpose": "Reproduce evidence from previously authorized AAOS 35 lab cases",
+  "cases": [
+    {
+      "family": "ha",
+      "package": "io.homeassistant.companion.android.minimal",
+      "apk": {
+        "path": "output/vehicle-samples-20261102/home-assistant-automotive-minimal/sample.apk",
+        "sha256": "0a6ecb8634c9995aa7cbad9e81b6497eaab2234e0996590b77860fa619b94847",
+        "source_url": "https://github.com/home-assistant/android/releases/download/2026.10.1/automotive-minimal-release.apk",
+        "release_tag": "2026.10.1",
+        "signature_verified": true,
+        "signer_certificate_sha256": [
+          "11194ba809b42ddf0e1a7dec6842a59c7ff1119c5482e95febffd5c6014daa5a"
+        ],
+        "publisher_certificate_independently_pinned": false
+      },
+      "authorization": "previously_authorized_public_sample_in_owned_isolated_lab",
+      "id": "ha-battery",
+      "kind": "ha_battery",
+      "artifacts": {
+        "business": {
+          "path": "output/ha-body-20261103/repair-001/verification.json",
+          "sha256": "3d35156fe174d0e858b05e3449882d2044e803aa48d85567bba91397c05ae150"
+        },
+        "capture_manifest": {
+          "path": "output/ha-body-20261103/repair-001/capture/session-manifest.json",
+          "sha256": "51f6ac0211429a79d9d403a9ed46f540e9a17c9df6de2fa1c4e9050efba6e920"
+        }
+      },
+      "capture_session_id": "capture-6fc014cb6b7649f6a26d19d2a9bcceea"
+    },
+    {
+      "family": "ha",
+      "package": "io.homeassistant.companion.android.minimal",
+      "apk": {
+        "path": "output/vehicle-samples-20261102/home-assistant-automotive-minimal/sample.apk",
+        "sha256": "0a6ecb8634c9995aa7cbad9e81b6497eaab2234e0996590b77860fa619b94847",
+        "source_url": "https://github.com/home-assistant/android/releases/download/2026.10.1/automotive-minimal-release.apk",
+        "release_tag": "2026.10.1",
+        "signature_verified": true,
+        "signer_certificate_sha256": [
+          "11194ba809b42ddf0e1a7dec6842a59c7ff1119c5482e95febffd5c6014daa5a"
+        ],
+        "publisher_certificate_independently_pinned": false
+      },
+      "authorization": "previously_authorized_public_sample_in_owned_isolated_lab",
+      "id": "ha-control",
+      "kind": "ha_control",
+      "artifacts": {
+        "business": {
+          "path": "output/ha-socket-20261103-r6/verification.json",
+          "sha256": "ba2c1f797aa6fb572a484c5c7dd7980cffd793cd4e1af87ffe6897076957e8c3"
+        },
+        "capture_manifest": {
+          "path": "output/ha-socket-20261103-r6/capture/session-manifest.json",
+          "sha256": "dfe96c915bd405ceb75d4da14c7ea7166fcf05a9d8fbb6287bbb25546eb78918"
+        }
+      },
+      "capture_session_id": "capture-bc98f375762f46d8ab6ca7d645da4f11"
+    },
+    {
+      "family": "ha",
+      "package": "io.homeassistant.companion.android.minimal",
+      "apk": {
+        "path": "output/vehicle-samples-20261102/home-assistant-automotive-minimal/sample.apk",
+        "sha256": "0a6ecb8634c9995aa7cbad9e81b6497eaab2234e0996590b77860fa619b94847",
+        "source_url": "https://github.com/home-assistant/android/releases/download/2026.10.1/automotive-minimal-release.apk",
+        "release_tag": "2026.10.1",
+        "signature_verified": true,
+        "signer_certificate_sha256": [
+          "11194ba809b42ddf0e1a7dec6842a59c7ff1119c5482e95febffd5c6014daa5a"
+        ],
+        "publisher_certificate_independently_pinned": false
+      },
+      "authorization": "previously_authorized_public_sample_in_owned_isolated_lab",
+      "id": "ha-control-failure",
+      "kind": "ha_control_failure",
+      "artifacts": {
+        "business": {
+          "path": "output/ha-control-503-repair-002/verification.json",
+          "sha256": "fbede32eec47f7e206c2454f96df4185a83ae31841634d80a968c6686857abc5"
+        },
+        "capture_manifest": {
+          "path": "output/ha-control-503-repair-002/negative/capture/session-manifest.json",
+          "sha256": "5dbd4254f56b4a411ea88b5728f895f7bf9691dd5bb0025776d80446e0f8879a"
+        }
+      },
+      "capture_session_id": "capture-49539f0bd0c946b998caef42c5482318"
+    },
+    {
+      "family": "mg4",
+      "package": "com.tommasov.mg4browser",
+      "apk": {
+        "path": "output/p1p2-runtime/browser.apk",
+        "sha256": "376b931673869c0ac6a23fb719a4b642252eae6cab0fd1fc436d182ded4cf396",
+        "source_url": "https://github.com/Tommasov/MG4_WebBrowser/releases/download/1.0.2/com.tommasov.mg4browser-3.apk",
+        "release_tag": "1.0.2",
+        "signature_verified": true,
+        "signer_certificate_sha256": [
+          "0ac986e02538037d52c3abc7a84492a2cb2809944e630899f887cddd70045d34"
+        ],
+        "publisher_certificate_independently_pinned": false
+      },
+      "authorization": "previously_authorized_public_sample_in_owned_isolated_lab",
+      "id": "mg4-post",
+      "kind": "mg4_post",
+      "artifacts": {
+        "business": {
+          "path": "output/vehicle-browser-repair-001/business.json",
+          "sha256": "4f972fafd284d766ef443b42485c3a9fcefcb106068a0d288d7187aa285029cb"
+        },
+        "capture_manifest": {
+          "path": "output/vehicle-browser-repair-001/capture/session-manifest.json",
+          "sha256": "5cc2e90e4b7da2dad38c6eb14c9d84fb61bdcba0c685a2f8bdc5a6319495f78b"
+        }
+      },
+      "capture_session_id": "capture-eb1a4d0c9d074954bb24bff1d5c4076b"
+    },
+    {
+      "family": "mg4",
+      "package": "com.tommasov.mg4browser",
+      "apk": {
+        "path": "output/p1p2-runtime/browser.apk",
+        "sha256": "376b931673869c0ac6a23fb719a4b642252eae6cab0fd1fc436d182ded4cf396",
+        "source_url": "https://github.com/Tommasov/MG4_WebBrowser/releases/download/1.0.2/com.tommasov.mg4browser-3.apk",
+        "release_tag": "1.0.2",
+        "signature_verified": true,
+        "signer_certificate_sha256": [
+          "0ac986e02538037d52c3abc7a84492a2cb2809944e630899f887cddd70045d34"
+        ],
+        "publisher_certificate_independently_pinned": false
+      },
+      "authorization": "previously_authorized_public_sample_in_owned_isolated_lab",
+      "id": "mg4-webview-post",
+      "kind": "mg4_webview_post",
+      "artifacts": {
+        "business": {
+          "path": "output/vehicle-mg4-webview-004/business.json",
+          "sha256": "dd1b5a522585ae0433a46e7665d3808d6abe4491fd5ce097c47d85cc3c45a0c4"
+        },
+        "capture_manifest": {
+          "path": "output/vehicle-mg4-webview-004/capture/session-manifest.json",
+          "sha256": "e458990d474876d2d88843dc863b56125c3850a705c81c3a1a0ac4db87e072b4"
+        }
+      },
+      "capture_session_id": "capture-78a13c7f0f2040da94457fc2f0b60261"
+    },
+    {
+      "family": "yaabsa",
+      "package": "de.vito0912.yaabsa",
+      "apk": {
+        "path": "output/p1p2-runtime/yaabsa.apk",
+        "sha256": "3860d29741dd6f67fc79f03bb34132143da11e99c048ae4206863879505f68e1",
+        "source_url": "https://github.com/Vito0912/yaabsa/releases/download/v1.16.0/android-automotive-apk-yaabsa_AAOS_app-x86_64-automotive_v1.16.0.apk",
+        "release_tag": "v1.16.0",
+        "signature_verified": true,
+        "signer_certificate_sha256": [
+          "cb368cfd7f38497e731996af51aa10611a89326d9c0fda292f959faaaa019d15"
+        ],
+        "publisher_certificate_independently_pinned": false
+      },
+      "authorization": "previously_authorized_public_sample_in_owned_isolated_lab",
+      "id": "yaabsa-playback",
+      "kind": "yaabsa_playback",
+      "artifacts": {
+        "business": {
+          "path": "output/vehicle-yaabsa-send-fix-003/playback-acceptance.json",
+          "sha256": "26d381fb15408ac7a689df8c9b50f184bc0f36ed3af264d7b4e004e96e4f89ad"
+        },
+        "syncs": {
+          "path": "output/vehicle-yaabsa-send-fix-003/sync-requests.json",
+          "sha256": "7508ebdd4e047a19ea6de4d5ce9fcab1d67086477e5c8ff3606601be4d1d52fd"
+        }
+      }
+    },
+    {
+      "family": "yaabsa",
+      "package": "de.vito0912.yaabsa",
+      "apk": {
+        "path": "output/p1p2-runtime/yaabsa.apk",
+        "sha256": "3860d29741dd6f67fc79f03bb34132143da11e99c048ae4206863879505f68e1",
+        "source_url": "https://github.com/Vito0912/yaabsa/releases/download/v1.16.0/android-automotive-apk-yaabsa_AAOS_app-x86_64-automotive_v1.16.0.apk",
+        "release_tag": "v1.16.0",
+        "signature_verified": true,
+        "signer_certificate_sha256": [
+          "cb368cfd7f38497e731996af51aa10611a89326d9c0fda292f959faaaa019d15"
+        ],
+        "publisher_certificate_independently_pinned": false
+      },
+      "authorization": "previously_authorized_public_sample_in_owned_isolated_lab",
+      "id": "yaabsa-send",
+      "kind": "yaabsa_send",
+      "artifacts": {
+        "business": {
+          "path": "output/vehicle-yaabsa-audit-send-001/verification.json",
+          "sha256": "e91c25b326fb984c74f921a07fdb72310d4a30b7dc4b430fb7e48f772e1cf6a1"
+        },
+        "capture_manifest": {
+          "path": "output/vehicle-yaabsa-audit-send-001/capture/session-manifest.json",
+          "sha256": "969f2b1ceabd736028aa022a90058545d845eb9d28dc30b82739e164f88e66db"
+        }
+      },
+      "capture_session_id": "capture-c34e35348e18466fb8c8dc61f1e5fae0"
+    }
+  ]
+}

@@ -9,9 +9,12 @@ def calibrate(db, window_ms):
         raise ValueError('本校准记录只批准 30000ms；其他值需新的校准依据')
     policy = Path(__file__).resolve().parents[1] / 'EGRESS_CALIBRATION.md'
     digest = hashlib.sha256(policy.read_bytes()).hexdigest()
+    # E1 is the VHAL egress calibration. VSC-GE-* general-privacy rules get their 30s
+    # window from vehicle/privacy/catalog.py and their own POLICY.md basis; stamping
+    # them with E1 would claim a revision they never had.
     for rule_id, version, revision, refs in db.execute(
             'SELECT rule_id,android_version,rule_revision,basis_refs_json FROM risk_rules '
-            "WHERE rule_type='data_egress'").fetchall():
+            "WHERE rule_type='data_egress' AND rule_id LIKE 'VSC-E%'").fetchall():
         basis = json.loads(refs)
         marker = {'kind': 'project_policy', 'path': 'vehicle/rules/EGRESS_CALIBRATION.md',
                   'version': '2026-09-24', 'clause': 'E1', 'sha256': digest,

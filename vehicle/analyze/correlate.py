@@ -40,12 +40,16 @@ import hashlib
 import json
 import sqlite3
 import sys
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.evidence import codeloc  # noqa: E402  # 违规代码行号：从运行时栈取应用自己的帧（见 codeloc.py）
+from core.collector.parse_stats import body_parse_totals  # noqa: E402
 from core.io_utils import load_jsonl  # noqa: E402  # JSONL 唯一实现（§8.2 B-2）
+from vehicle.pipeline.contracts import digest, read_json, write_json
+from vehicle.pipeline.evidence_manifest import INPUT_NAMES, fingerprints, input_manifest, verify_refs
 
 # 默认同用主机时间。旧日志只能显式提供校准偏移；不猜固定偏移。
 DEFAULT_CLOCK_OFFSET_MS = None
@@ -100,6 +104,8 @@ def main() -> int:
     parser.add_argument("--egress", type=Path)
     parser.add_argument("--flows", type=Path, required=True)
     parser.add_argument("--permissions", type=Path)
+    parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--coverage", type=Path)
     parser.add_argument("--android-version", default="15")
     parser.add_argument("--session", help="显式选择会话，禁止混合采集批次")
     parser.add_argument("--package", default="com.vscanner.targetapp")
@@ -116,6 +122,12 @@ def main() -> int:
             print(json.dumps({"status": "failed", "message": f"拒绝覆盖 {target}"}), file=sys.stderr)
             return 1
 
+    paths = {key: getattr(args, key) for key in INPUT_NAMES}
+    snapshot = input_manifest(paths, inspect=False)
+    if not all(snapshot['inputs'][key]['exists'] for key in ('reads', 'flows')):
+        args.summary.parent.mkdir(parents=True, exist_ok=True)
+        write_json(args.summary, {'status': 'failed', 'input_completeness': input_manifest(paths)})
+        return 1
     try:
         rules = load_rules(args.rules, args.android_version)
     except (ValueError, sqlite3.Error) as exc:
@@ -126,13 +138,17 @@ def main() -> int:
     reads = load_jsonl(args.reads)
     flows = load_jsonl(args.flows)
     egress = load_jsonl(args.egress)
-    if args.session:
-        reads = [r for r in reads if r.get("session_id") == args.session]
-        flows = [f for f in flows if f.get("session_id") == args.session]
-        egress = [e for e in egress if e.get("session_id") == args.session]
     sessions = {r.get("session_id") for r in reads + flows + egress}
-    if len(sessions) > 1:
-        parser.error("输入跨会话或混有无会话的旧事件，请提供同一批次输入或 --session")
+    if len(sessions) > 1 or (args.session and sessions and sessions != {args.session}):
+        parser.error("输入跨会话或混有无会话的旧事件，请提供同一批次输入")
+    if args.manifest:
+        manifest = read_json(args.manifest)
+        expected = manifest.get('input_sha256') or {}
+        if (sessions != {manifest.get('session')} or args.package not in manifest.get('packages', [])
+                or manifest.get('rules_sha256') != digest(args.rules)
+                or any(snapshot['inputs'][key]['sha256'] != expected[name]
+                       for key, name in INPUT_NAMES.items() if name in expected)):
+            parser.error("会话、目标或输入摘要与采集清单不一致")
     permissions = []
     if args.permissions and args.permissions.exists():
         permissions = [l.strip() for l in args.permissions.read_text(encoding="utf-8").splitlines()
@@ -175,6 +191,8 @@ def main() -> int:
     findings += evaluate_data_egress(rules, reads, flows, args.clock_offset_ms,
                                      args.window_override_ms)
     findings = codeloc.attach(findings, reads, flows, egress, args.package)
+    completeness = input_manifest(paths)
+    verify_refs(snapshot['inputs'])
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("x", encoding="utf-8") as handle:
@@ -198,9 +216,11 @@ def main() -> int:
             "reads_path_sha256": hashlib.sha256(args.reads.read_bytes()).hexdigest()[:16],
             "flows_path_sha256": hashlib.sha256(args.flows.read_bytes()).hexdigest()[:16],
             **body_scan_totals(flows),
+            "parsing": body_parse_totals(flows),
         },
         "findings_total": len(findings),
         "findings_by_conclusion_level": by_level,
+        "findings_by_class": dict(Counter(f["finding_class"] for f in findings)),
         "code_locs": codeloc.summarize(findings),
         "clock_offset_ms": args.clock_offset_ms,
         "clock_basis": "host_received_ts; explicit offset only for legacy logs",
@@ -209,6 +229,8 @@ def main() -> int:
         "caveat": "结论上限由规则自身设定；时间相关性不构成外泄证明。"
                   "policy_violation 需人工判定，本工具不产出该级别结论。",
     }
+    summary.update(fingerprints(args.rules, args.android_version, completeness,
+                                coverage=args.coverage, findings=args.out))
     args.summary.parent.mkdir(parents=True, exist_ok=True)
     args.summary.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
                             encoding="utf-8")

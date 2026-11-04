@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "samples": [
+    {
+      "id": "home-assistant-automotive-minimal",
+      "family": "home-assistant",
+      "repo": "home-assistant/android",
+      "asset_pattern": "^automotive-minimal-release\\.apk$",
+      "classification": "upstream_aaos_variant",
+      "category": "iot",
+      "license_path": "LICENSE.md",
+      "support_source": "https://contributors.home-assistant.io/companion/android/get-started/",
+      "needs_backend": true
+    },
+    {
+      "id": "yaabsa-aaos-x86-64",
+      "family": "yaabsa",
+      "repo": "Vito0912/yaabsa",
+      "asset_pattern": "^android-automotive-apk-yaabsa_AAOS_app-x86_64-automotive_v[0-9.]+\\.apk$",
+      "classification": "upstream_aaos_variant",
+      "category": "media",
+      "license_path": "LICENSE",
+      "support_source": "https://github.com/Vito0912/yaabsa",
+      "needs_backend": true
+    },
+    {
+      "id": "mg4-webbrowser",
+      "family": "mg4-webbrowser",
+      "repo": "Tommasov/MG4_WebBrowser",
+      "asset_pattern": "^com\\.tommasov\\.mg4browser-[0-9]+\\.apk$",
+      "classification": "upstream_aaos_app",
+      "category": "browser",
+      "license_path": "LICENSE",
+      "support_source": "https://github.com/Tommasov/MG4_WebBrowser",
+      "needs_backend": false
+    },
+    {
+      "id": "audiowagon",
+      "family": "audiowagon",
+      "repo": "MoleMan1024/audiowagon",
+      "asset_pattern": "(?i)^.*\\.apk$",
+      "classification": "upstream_aaos_app",
+      "category": "media",
+      "license_path": "LICENSE",
+      "support_source": "https://moleman1024.github.io/audiowagon/faq.html",
+      "needs_usb_media": true
+    }
+  ]
+}

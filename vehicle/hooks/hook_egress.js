@@ -17,11 +17,13 @@
 import { packages } from './scope.js';
 
 import { makeLogger, procName } from './vscan_runtime.js';
+import { hookRequestTargets } from '../../core/frida_host/request_targets.js';
 
 // 事件记录格式与进程名取自共用运行时。本文件那份原先把日志路径**写死**在
 // 函数体里、不走 CFG.logPath，console 行也少了 extras——同一件事的第三、四种写法。
 // 见 vscan_runtime.js 顶部说明。
 var vlog = makeLogger('egress', '/data/local/tmp/vscan.log');
+export const logEgress = vlog;
 
 var CFG = {
   // 只记录这些包名的出站连接。留空则本进程内的全部记录
@@ -159,7 +161,7 @@ Java.perform(function () {
       return;
     }
     vlog('START', { script: 'hook_egress.js', package: PKG, frida: Frida.version });
-    var hooked = hookSocketConnect();
+    var hooked = hookSocketConnect().concat(hookRequestTargets(PKG, vlog, withStack));
     vlog('ARMED', { hooks: hooked, count: hooked.length });
     console.log('[egress] ARMED in ' + PKG + ' (' + hooked.length + ' overloads)');
   } catch (e) {

@@ -86,12 +86,14 @@ def property_values(document, read):
 def match_content(read, flow):
     """Return evidence metadata or None. No preview or response-side matching."""
     payload = flow.get('request_payload') or {}
+    if (flow.get('request_parse') or {}).get('heuristic'):
+        return None
     value = raw_value(read)
     if value is None and 'value_raw' in read:
         return None
     text = payload.get('text')
     if value is not None and text:
-        if len(text) > MAX_TEXT or payload.get('decode_error'):
+        if len(text) > MAX_TEXT or payload.get('decode_error') or payload.get('text_truncated'):
             return None
         try:
             document = json.loads(text)

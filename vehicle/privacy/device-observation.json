@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "device_api_level": 35,
+  "device_fingerprint": "google/sdk_gcar_x86_64/emulator_car64_x86_64:15/AAI5.260516.001.A6/16618942:userdebug/test-keys",
+  "apk_sha256": "feb03391fc7b178a9383366a845c0fde373b9aced68a20df14703c8cf39c9868",
+  "privacy_catalog_sha256": "6d6b96c7cfbf2cbb6682c7d06795c1dbfe9ebb80206357c7b456db4ccf4a0cec",
+  "captures": [
+    {
+      "session_id": "capture-8be8a65f82c941cda0f007acb96b857b",
+      "device_fingerprint": "google/sdk_gcar_x86_64/emulator_car64_x86_64:15/AAI5.260516.001.A6/16618942:userdebug/test-keys",
+      "manifest": {
+        "path": "output/vehicle-privacy-device-unique-20261102/capture/session-manifest.json",
+        "sha256": "4d0d91ff429f90dc80862de297e35b171d8455de8a47aa195f2e96601f75197d"
+      },
+      "reads": {
+        "path": "output/vehicle-privacy-device-unique-20261102/capture/reads.jsonl",
+        "sha256": "e738ff3554f98352acb0c7600957da716995d4200e62103b135db5cf03bddd21"
+      },
+      "verification": {
+        "path": "output/vehicle-privacy-device-unique-20261102/capture/verification.json",
+        "sha256": "4edf33dea23e7d2f727fa5e64a19e1ce825402496ace3d833fd33c383158a9be"
+      }
+    },
+    {
+      "session_id": "denied-capture-9b4181dbe57d48dda7168cb34ba9477d",
+      "device_fingerprint": "google/sdk_gcar_x86_64/emulator_car64_x86_64:15/AAI5.260516.001.A6/16618942:userdebug/test-keys",
+      "manifest": {
+        "path": "output/vehicle-privacy-device-unique-20261102/denied-capture/session-manifest.json",
+        "sha256": "045be2fe302cdbcac113c24179730ac1bfaf15c75fa88b1f51f55d95e5e70d22"
+      },
+      "reads": {
+        "path": "output/vehicle-privacy-device-unique-20261102/denied-capture/reads.jsonl",
+        "sha256": "99f1f6f41b90c3d0b96f94bcd38312f8c6c5fd016696247de6dce7746184bee5"
+      },
+      "verification": {
+        "path": "output/vehicle-privacy-device-unique-20261102/denied-capture/verification.json",
+        "sha256": "c7baea573c05e7aea6eedb461743495aed7ffa86c61975d91ede141f920b2f85"
+      }
+    }
+  ],
+  "observed_states": {
+    "location": {
+      "denied": 1,
+      "obtained": 1
+    },
+    "microphone": {
+      "call_only": 1,
+      "obtained": 1
+    },
+    "contacts": {
+      "call_only": 6,
+      "denied": 3,
+      "obtained": 1
+    },
+    "android_id": {
+      "obtained": 2
+    }
+  },
+  "scope": "captured_fixture_evidence_not_OEM_or_other_API_validation"
+}

@@ -53,3 +53,22 @@ def tag_sensitive(text: str) -> tuple[list[str], list[str]]:
             labels.add(label)
             tokens.add(match.group(0))
     return sorted(labels), sorted(tokens)
+
+
+VEHICLE_KEYS = {'vin', 'speed', 'gear', 'rpm', 'odometer', 'fuel', 'battery',
+                'vehiclespeed', 'gearselection'}
+
+
+def tag_fields(fields: list[dict]) -> tuple[list[str], list[str]]:
+    """Only explicit vehicle field names can contribute structured clues."""
+    labels, tokens = set(), set()
+    for field in fields:
+        key = field['path']
+        for label, pattern in SENSITIVE[:2]:
+            if pattern.fullmatch(key):
+                labels.add(label)
+                tokens.add(key)
+        if key.casefold() in VEHICLE_KEYS:
+            labels.add('json_key_vehicle')
+            tokens.add(key)
+    return sorted(labels), sorted(tokens)

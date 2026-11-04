@@ -28,11 +28,16 @@ def remove_test_user(adb, created, original):
     except subprocess.SubprocessError:
         if pattern.search(adb('shell', 'pm', 'list', 'users')):
             raise
-    if pattern.search(adb('shell', 'pm', 'list', 'users')):
-        adb('shell', 'pm', 'remove-user', str(created))
-    deadline = time.monotonic() + 20
+    # `pm remove-user` can fail transiently right after stop-user while the
+    # system finalises the user; retry bounded, then still fail honestly.
+    deadline = time.monotonic() + 30
+    last_error = None
     while time.monotonic() < deadline:
         if not pattern.search(adb('shell', 'pm', 'list', 'users')):
             return 'verified removed'
-        time.sleep(.5)
-    raise RuntimeError(f'temporary audit user {created} still exists')
+        try:
+            adb('shell', 'pm', 'remove-user', str(created))
+        except subprocess.SubprocessError as error:
+            last_error = f'{type(error).__name__}: {error}'
+        time.sleep(1)
+    raise RuntimeError(f'temporary audit user {created} still exists: {last_error}')

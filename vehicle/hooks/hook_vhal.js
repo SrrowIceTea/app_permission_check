@@ -18,7 +18,8 @@ import { packages } from './scope.js';
 import { propertyValue } from './property_value.js';
 
 import { hookSubscriptions } from './subscription_hooks.js';
-import { makeLogger, procName } from './vscan_runtime.js';
+import { makeLogger, procName, transportEnabled } from './vscan_runtime.js';
+import { createReadScope, recordDelegate } from './vhal_read_scope.js';
 
 // 事件记录格式与进程名取自共用运行时。抽出来的首要理由不是省代码：
 // 这四份拷贝**已经漂移**了，而本文件那份原先没有外层 try/catch——
@@ -38,17 +39,28 @@ var CFG = {
   }
 };
 
-function threadName() {
-  try { return String(Java.use('java.lang.Thread').currentThread().getName()); }
+let ThreadClass;
+function currentThread() {
+  if (!ThreadClass) ThreadClass = Java.use('java.lang.Thread');
+  return ThreadClass.currentThread();
+}
+
+function threadName(thread) {
+  try { return String(thread.getName()); }
   catch (e) { return '(unavailable)'; }
 }
 
 // 任务书指定：Thread.currentThread().getStackTrace()
-function stackStr() {
+function stackStr(pkg, thread) {
   try {
-    var el = Java.use('java.lang.Thread').currentThread().getStackTrace();
+    var el = (thread || currentThread()).getStackTrace();
     var lines = [];
-    for (var i = 0; i < el.length; i++) lines.push(String(el[i].toString()));
+    var prefix = pkg && transportEnabled() ? pkg + '.' : null;
+    for (var i = 0; i < el.length; i++) {
+      var frame = el[i];
+      if (!prefix || i < 12 || String(frame.getClassName()).startsWith(prefix))
+        lines.push(String(frame.toString()));
+    }
     return lines.join('\n');
   } catch (e) { return '(stack unavailable: ' + e + ')'; }
 }
@@ -121,10 +133,9 @@ function whitelisted(pkg) {
   return false;
 }
 
-var STATUS_AVAILABLE = 0;
-try { STATUS_AVAILABLE = Java.use('android.car.hardware.CarPropertyValue').STATUS_AVAILABLE.value; } catch (e) {}
-
 function buildExtra(api, propId, areaId, caller, outcome, value, excClass, excMsg, intArg1) {
+  var thread;
+  try { thread = currentThread(); } catch (e) {}
   var ex = {
     mode: STATE.isSystem ? 'system_process' : 'app',
     api: api,
@@ -132,8 +143,8 @@ function buildExtra(api, propId, areaId, caller, outcome, value, excClass, excMs
     user_id: caller.uid >= 0 ? Math.floor(caller.uid / 100000) : null,
     prop_id: propId, prop_name: CFG.watch[propId], area_id: areaId,
     outcome: outcome,
-    thread_name: threadName(),
-    stack: stackStr()
+    thread_name: threadName(thread),
+    stack: stackStr(caller.pkg, thread)
   };
   if (intArg1 !== undefined) ex.int_arg_1 = intArg1; // 服务侧(propId,areaId) 次序自校准用
   if (value !== undefined && value !== null) ex.value = value;
@@ -141,42 +152,56 @@ function buildExtra(api, propId, areaId, caller, outcome, value, excClass, excMs
   return ex;
 }
 
-// 通用读取钩子工厂：propIdx 为属性 ID 的参数下标（dangerous_apis 表 property_arg_index：
-// getProperty(II)=0, getProperty(Class,II)=1, getFloatProperty(II)=0）
+const readScope = createReadScope();
+
 function makeReadImpl(api, propIdx, orig, selfCheck) {
   return function () {
     var args = Array.prototype.slice.call(arguments);
     var propId = args[propIdx];
+    if (!CFG.watch[propId]) return orig.apply(this, args);
+    var area = args[propIdx + 1];
     var caller = callerInfo();
-    if (!CFG.watch[propId] || !whitelisted(caller.pkg)) {
-      return orig.apply(this, args); // 白名单外/未关注属性：照常执行，不记录
+    if (!whitelisted(caller.pkg)) return orig.apply(this, args);
+    var frame = transportEnabled() && !STATE.isSystem && api.startsWith('cpm.')
+      ? readScope.enter(Process.getCurrentThreadId(), api, propId, area) : null;
+    var ret, thrown, threw = false;
+    try {
+      ret = orig.apply(this, args);
+    } catch (e) {
+      thrown = e;
+      threw = true;
+    } finally {
+      if (frame) readScope.leave(frame);
     }
     try {
-      var ret = orig.apply(this, args);
-      var outcome = 'ok';
-      try {
-        if (ret !== null && ret.$className === 'android.car.hardware.CarPropertyValue' &&
-            ret.getStatus() !== STATUS_AVAILABLE) outcome = 'unavailable';
-      } catch (e) {}
-      var extra = buildExtra(api, propId, args[propIdx + 1], caller, outcome,
-                            fmtVal(ret), null, null, selfCheck ? args[1] : undefined);
-      Object.assign(extra, propertyValue(ret));
-      if (extra.value_raw === null) extra.outcome = 'unavailable';
-      vlog('VHAL_READ', extra);
-      return ret; // 原值返回，不改动
-    } catch (e) {
-      var cls = String(e.$className || e.name || '?');
-      // The bridge may wrap a Java throwable as JS Error; preserve the observed
-      // Java exception type instead of mislabelling a permission denial as error.
-      var message = String(e.message || e);
-      if (/^(?:Error: )?java\.lang\.SecurityException(?::|$)/.test(message)) {
+      var cls = threw ? String(thrown.$className || thrown.name || '?') : null;
+      var message = threw ? String(thrown.message || thrown) : null;
+      if (threw && /^(?:Error: )?java\.lang\.SecurityException(?::|$)/.test(message)) {
         cls = 'java.lang.SecurityException';
       }
-      var out = (cls.indexOf('Security') >= 0) ? 'denied' : 'error';
-      vlog('VHAL_READ', buildExtra(api, propId, args[propIdx + 1], caller, out,
-                                   null, cls, String(e.message), selfCheck ? args[1] : undefined));
-      throw e; // 异常原样重抛：不改变应用可观察行为
+      var value = threw ? {} : propertyValue(ret, frame && !frame.merged ? fmtVal : null);
+      var outcome = threw ? (cls.includes('Security') ? 'denied' : 'error')
+        : value.value_raw === null ? 'unavailable' : 'ok';
+      if (frame && frame.merged) {
+        recordDelegate(frame.outer, api, outcome);
+      } else {
+        // A scalar wrapper can return a default even when its canonical read failed.
+        var fallback = !threw && frame && frame.delegate && frame.delegate !== 'ok';
+        var extra = buildExtra(api, propId, area, caller, fallback ? 'unavailable' : outcome,
+                              threw ? null : value.value ?? fmtVal(ret), cls, message, selfCheck ? args[1] : undefined);
+        Object.assign(extra, value);
+        if (frame && frame.nested_suppressed) extra.nested_suppressed = frame.nested_suppressed;
+        if (fallback) {
+          extra.nested_outcome = frame.delegate;
+          extra.value_raw = null;
+        }
+        vlog('VHAL_READ', extra);
+      }
+    } catch (e) {
+      vlog('ERROR', { where: 'VHAL read observation', msg: String(e) });
     }
+    if (threw) throw thrown;
+    return ret;
   };
 }
 

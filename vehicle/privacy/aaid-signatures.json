@@ -1,0 +1,10 @@
+{
+  "artifact": "com.google.android.gms:play-services-ads-identifier:18.2.0",
+  "aar_sha256": "704979bbe096c698443632fed18152af7f6bf184126bca42a3d8808cd3d101d6",
+  "classes_jar_sha256": "b746301f1c5861213acc71675d15aaa8b455457ae56edec45ff1c63fdc45221e",
+  "method": "javap -s on the Google Maven AAR classes.jar",
+  "signatures": [
+    "com.google.android.gms.ads.identifier.AdvertisingIdClient.getAdvertisingIdInfo(Landroid/content/Context;)Lcom/google/android/gms/ads/identifier/AdvertisingIdClient$Info;",
+    "com.google.android.gms.ads.identifier.AdvertisingIdClient$Info.getId()Ljava/lang/String;"
+  ]
+}

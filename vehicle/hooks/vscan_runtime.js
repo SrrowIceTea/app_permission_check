@@ -22,6 +22,16 @@
 //   var vlog = makeLogger('egress', '/data/local/tmp/vscan.log');
 // ============================================================================
 
+let transport = null;
+
+export function setTransport(next) {
+  transport = next;
+}
+
+export function transportEnabled() {
+  return transport !== null;
+}
+
 // 事件序号按 logger 各自计数。四个钩子是四个独立的 Frida 会话，本来就不共享
 // JS 上下文；即便将来同进程加载两个，各记各的也比混在一起好——
 // 下游按 (src, evt_id) 定位事件，串号会让结论指向错误的事件。
@@ -47,6 +57,10 @@ export function makeLogger(src, logPath) {
       rec.pid = Process.id;
       rec.tid = Process.getCurrentThreadId();
       var line = JSON.stringify(rec);
+      if (transport !== null) {
+        transport.emit(src, ev, line);
+        return;
+      }
       // 主通道：send() 回传，由宿主机落盘。
       // 设备端副本是尽力而为——实测本设备 SELinux 禁止 untrusted_app 追加写
       // shell_data_file (/data/local/tmp)，permissive=0；而读取观察只能发生在
@@ -63,7 +77,10 @@ export function makeLogger(src, logPath) {
       console.log('[' + src + '] ' + ev +
                   (sent ? '' : ' SEND_FAIL') + (persisted ? '' : ' DEVICE_WRITE_DENIED') +
                   ' ' + JSON.stringify(extra || {}).slice(0, 400));
-    } catch (e) { console.log('[' + src + '] VLOG_FAIL: ' + e); }
+    } catch (e) {
+      if (transport !== null) transport.fail();
+      else console.log('[' + src + '] VLOG_FAIL: ' + e);
+    }
   };
 }
 

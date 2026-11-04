@@ -1,103 +1,151 @@
-"""Reproducible vehicle evidence → correlation → profile → AI → report pipeline.
+"""Validated vehicle capture → evidence → context → policy → AI → report.
 
-Authorized tests only. Capture is performed by the existing Frida/collector tools.
+仅用于授权测试（自有设备与已授权 APK）。 Failed runs retain partial artifacts;
+summary.json is committed only after all requested stages succeed.
 """
 import argparse
-import hashlib
 import json
-import subprocess
 import sys
-import time
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from core.io_utils import load_jsonl
 from vehicle.analyze.context_profile import build_profile
+from vehicle.analyze.finding_class import classify
 from vehicle.analyze.risk_triage import rank_findings
+from vehicle.compatibility import os_version
+from vehicle.pipeline.contracts import AuditError, digest, read_json, write_json
+from vehicle.pipeline.execution import Execution
+from vehicle.pipeline.evidence_manifest import capture_paths, fingerprints, input_manifest, verify_document, verify_refs
+from vehicle.pipeline.preflight import validate_capture
+from vehicle.pipeline.scenarios import load_scenarios
+from vehicle.policy.assessment import assess_policy
 
 
-def run_audit(capture, output, package, version='15', scenarios=None, ai_config=None, pdf=True, apk=None):
-    capture, output = Path(capture), Path(output)
+def run_audit(capture, output, package, version='15', scenarios=None, ai_config=None,
+              pdf=True, apk=None, policy=None):
+    capture, output = Path(capture).resolve(), Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
-    events = output / 'events.jsonl'
-
-    def stage(name, action):
-        def emit(status, message=''):
-            with events.open('a', encoding='utf-8') as handle:
-                handle.write(json.dumps({'ts': time.time(), 'stage': name,
-                                         'status': status, 'message': message}) + '\n')
-        emit('running')
-        try:
-            result = action()
-        except Exception as error:
-            emit('failed', str(error)); raise
-        emit('done')
+    execution = Execution(output)
+    snapshot = None
+    try:
+        snapshot = input_manifest(capture_paths(capture), inspect=False)
+        result = _audit(execution, capture, output, package, os_version(version),
+                        scenarios, ai_config, pdf, Path(apk) if apk else None, policy, snapshot)
+        execution.run('verify_evidence', lambda: verify_document(result))
+        if pdf:
+            (output / 'vehicle-audit.pending.pdf').replace(output / 'vehicle-audit.pdf')
+        result['pipeline_status'] = 'completed'
+        write_json(output / 'summary.json', result)
+        write_json(output / 'run-status.json', {'status': 'completed',
+                   'result_status': result['status'], 'gaps': result['capture_validation']['gaps']})
         return result
+    except BaseException as error:
+        execution.failed(error, snapshot)
+        raise
 
-    def command(args):
-        result = subprocess.run([sys.executable, *map(str, args)], cwd=ROOT,
-            capture_output=True, encoding='utf-8', errors='replace', timeout=120)
-        (output / (Path(args[0]).stem + '.log')).write_text(result.stdout + result.stderr, encoding='utf-8')
-        if result.returncode:
-            raise RuntimeError(f'{Path(args[0]).name} failed ({result.returncode}); see pipeline log')
 
+def _audit(execution, capture, output, package, version, scenarios, ai_config, pdf, apk, policy, snapshot):
+    stage = execution.run
     rules = ROOT / 'vehicle/rules/rules_library/rules.db'
-    findings, summary = output / 'findings.jsonl', output / 'summary.json'
-    reads, flows = load_jsonl(capture / 'reads.jsonl'), load_jsonl(capture / 'flows.jsonl')
-    sessions = {e.get('session_id') for e in reads + flows}
-    if len(sessions) != 1 or None in sessions:
-        raise ValueError('one explicit capture session is required')
-    session = next(iter(sessions))
-    args = [ROOT / 'vehicle/analyze/correlate.py', '--rules', rules,
-        '--reads', capture / 'reads.jsonl', '--flows', capture / 'flows.jsonl',
-        '--package', package, '--session', session, '--android-version', version,
-        '--out', findings, '--summary', summary]
-    for flag, filename in (('--egress', 'egress.jsonl'), ('--permissions', 'requested-permissions.txt')):
-        if (capture / filename).exists():
-            args.extend([flag, capture / filename])
-    stage('correlate', lambda: command(args))
-    static_result = None
-    if apk:
+    validated = stage('preflight', lambda: validate_capture(capture, package, version, rules, apk))
+    session = validated['session_id']
+    journal = stage('scenarios', lambda: load_scenarios(scenarios, capture, package, session))
+    from vehicle.coverage.export import export_coverage
+    chain = stage('coverage', lambda: export_coverage(output / 'coverage', version))
+    coverage_file = output / 'coverage/coverage.json'
+    findings, correlation = output / 'findings.jsonl', output / 'correlation-summary.json'
+    if validated['data_scope'] == 'general':
+        from vehicle.privacy.pipeline import initial_summary
+        stage('correlate', lambda: initial_summary(capture, output, package, version, session))
+    elif validated['target_read_events']:
+        args = [ROOT / 'vehicle/analyze/correlate.py', '--rules', rules,
+            '--reads', capture / 'reads.jsonl', '--flows', capture / 'flows.jsonl',
+            '--package', package, '--session', session, '--android-version', version,
+            '--out', findings, '--summary', correlation, '--coverage', coverage_file,
+            '--manifest', capture / 'session-manifest.json']
+        for flag, name in (('--egress', 'egress.jsonl'), ('--permissions', 'requested-permissions.txt')):
+            if (capture / name).exists():
+                args.extend([flag, capture / name])
+        stage('correlate', lambda: execution.command(args))
+    else:
+        from vehicle.pipeline.empty_observation import analyze_empty
+        stage('correlate', lambda: analyze_empty(capture, output, package, version, rules, session))
+    document = read_json(correlation)
+    from vehicle.privacy.pipeline import append_general
+    document = stage('general_privacy', lambda: append_general(document, output, capture, package, session, version))
+    document['capture_validation'] = {k: v for k, v in validated.items() if k != 'manifest'}
+    document['rules_sha256'] = validated['manifest']['rules_sha256']
+    document['target_scope'] = 'ordinary_third_party_app'
+    document['coverage_chain'] = {'artifact': 'coverage/coverage.json',
+        'sha256': digest(coverage_file),
+        'rows': len(chain['rows']), 'profile': chain['profile'],
+        'unconnected_types': [r['data_type'] for r in chain['rows']
+                              if r['hook_coverage']['status'] != 'implemented']}
+    document['static_analysis'] = {'status': 'skipped', 'reason': '未提供装机版本对应 APK。'}
+    if apk and validated['data_scope'] == 'general':
+        from vehicle.privacy.pipeline import scan_general_manifest
+        document['static_analysis'] = stage('static', lambda: scan_general_manifest(apk, output / 'static', package))
+    elif apk:
         from core.static.analysis import scan_static
-        apk = Path(apk)
-        provenance = capture / 'session-manifest.json'
-        if not provenance.exists():
-            raise ValueError('APK/static cross-check requires the capture session manifest')
-        manifest = json.loads(provenance.read_text(encoding='utf-8'))
-        if hashlib.sha256(apk.read_bytes()).hexdigest() != manifest.get('installed_apk_sha256'):
-            raise ValueError('APK differs from the version actually installed during capture')
         static_dir = output / 'static'
         static_dir.mkdir()
-        static_result = stage('static', lambda: scan_static(apk, rules, version, static_dir))
-        if static_result['apk']['package'] != package:
-            raise ValueError('static APK package differs from audited package')
-    journal = json.loads(Path(scenarios).read_text(encoding='utf-8')) if scenarios else []
-    profile = stage('context_profile', lambda: build_profile(
-        [r for r in reads if r.get('pkg') == package],
-        [f for f in flows if f.get('package') == package], journal))
-    document = json.loads(summary.read_text(encoding='utf-8'))
+        static = stage('static', lambda: scan_static(apk, rules, version, static_dir))
+        if static['apk']['package'] != package:
+            raise AuditError('static_package_mismatch', '静态 APK 包名与目标不一致。', '提供本轮 APK。')
+        static['findings'] = [classify({**finding, 'evidence_kind': 'static'}) for finding in static['findings']]
+        write_json(static_dir / 'static.json', static)
+        document['static_analysis'] = {'status': 'completed', 'findings': len(static['findings']),
+            'artifact': 'static/static.json', 'scope': 'candidate_only',
+            'apk_sha256': validated['manifest']['installed_apk_sha256']}
+    reads = [r for r in load_jsonl(capture / 'reads.jsonl') if r.get('pkg') == package]
+    flows = [f for f in load_jsonl(capture / 'flows.jsonl') if f.get('package') == package]
+    profile = stage('context_profile', lambda: build_profile(reads, flows, journal))
     document['vehicle_profile'] = profile
-    document['static_analysis'] = ({'status': 'completed', 'findings': len(static_result['findings']),
-        'artifact': 'static/static.json', 'scope': 'candidate_only',
-        'apk_sha256': hashlib.sha256(apk.read_bytes()).hexdigest()} if static_result is not None
-        else {'status': 'skipped', 'reason': 'APK was not supplied for version-verified static cross-check'})
-    document['review_order'] = rank_findings(load_jsonl(findings))
+    records = load_jsonl(findings)
+    document['findings_by_class'] = dict(Counter(row['finding_class'] for row in records))
+    document['evidence_counts'] = {
+        'manifest_permission_candidates': sum(r.get('evidence_kind') == 'manifest_permission' for r in records),
+        'runtime_read_findings': sum(r.get('evidence_kind') == 'read_event' for r in records),
+        'runtime_content_correlations': sum(r.get('evidence_kind') == 'read_then_egress'
+            and any(pair.get('value_match') is True for pair in r.get('pairs', [])) for r in records),
+        'static_candidates': document['static_analysis'].get('findings'),
+    }
+    document['policy_assessment'] = stage('policy', lambda: assess_policy(policy, package,
+        validated['manifest']['installed_apk_sha256'], records, output / 'policy'))
+    completeness = input_manifest(capture_paths(capture))
+    verify_refs(snapshot['inputs'])
+    completeness.update({
+        'capture_integrity': 'sealed' if validated['manifest'].get('input_sha256') else 'legacy_unsealed',
+        'apk': 'verified' if apk else 'not_supplied',
+        'static': document['static_analysis']['status'], 'policy': document['policy_assessment']['status'],
+        'scenarios': 'supplied' if scenarios else 'not_supplied',
+        'proxy_body_observation': 'available' if any((f.get('request_payload') or {}).get('text') for f in flows)
+                                  else 'no_text_observed',
+    })
+    document.update(fingerprints(rules, version, completeness, coverage=coverage_file, findings=findings))
+    if document['rules_sha'] != document['rules_sha256']:
+        raise AuditError('rules_mismatch', '审计期间规则库摘要发生变化。', '核对规则库后重试。')
+    write_json(correlation, document)
+    document['review_order'] = rank_findings(records)
     document['review_order_caveat'] = 'Experimental engineering weights; not calibrated risk probability.'
     document['ai_review'] = {'status': 'skipped', 'reason': 'AI configuration not supplied'}
     if ai_config:
         from vehicle.ai.review import review
-        document['ai_review'] = stage('ai_review', lambda: review(
-            load_jsonl(findings), profile, Path(ai_config), output / 'ai'))
-    summary.write_text(json.dumps(document, ensure_ascii=False, indent=2), encoding='utf-8')
+        document['ai_review'] = stage('ai_review', lambda: review(records, profile,
+            Path(ai_config), output / 'ai', policy=document['policy_assessment']))
     if pdf:
-        stage('report', lambda: command([ROOT / 'vehicle/analyze/report.py', '--findings', findings,
-            '--summary', summary, '--rules', rules, '--flows', capture / 'flows.jsonl',
-            '--out', output / 'vehicle-audit.pdf']))
+        report_input = output / 'report-input.json'
+        write_json(report_input, document)
+        stage('report', lambda: execution.command([ROOT / 'vehicle/analyze/report.py',
+            '--findings', findings, '--summary', report_input, '--rules', rules,
+            '--flows', capture / 'flows.jsonl', '--out', output / 'vehicle-audit.pending.pdf']))
     return document
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--capture', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
@@ -106,12 +154,20 @@ def main():
     parser.add_argument('--scenarios', type=Path)
     parser.add_argument('--ai-config', type=Path)
     parser.add_argument('--no-pdf', action='store_true')
-    parser.add_argument('--apk', type=Path, help='must match capture-time installed APK hash')
-    args = parser.parse_args()
-    result = run_audit(args.capture, args.out, args.package, args.android_version,
-                       args.scenarios, args.ai_config, not args.no_pdf, args.apk)
-    print(json.dumps({'status': 'ok', 'findings': result['findings_total'], 'out': str(args.out)}))
+    parser.add_argument('--apk', type=Path)
+    parser.add_argument('--policy', type=Path, help='APK-bound local policy metadata JSON')
+    args = parser.parse_args(argv)
+    try:
+        result = run_audit(args.capture, args.out, args.package, args.android_version,
+            args.scenarios, args.ai_config, not args.no_pdf, args.apk, args.policy)
+    except (AuditError, OSError, ValueError) as error:
+        detail = error.record() if isinstance(error, AuditError) else {'message': str(error)}
+        print(json.dumps({'status': 'failed', 'error': detail}, ensure_ascii=False), file=sys.stderr)
+        return 1
+    print(json.dumps({'status': result['pipeline_status'], 'findings': result['findings_total'],
+                      'out': str(args.out)}, ensure_ascii=False))
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

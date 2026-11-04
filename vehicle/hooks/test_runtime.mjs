@@ -41,7 +41,10 @@ function installStubs({ fileThrows = false, sendThrows = false } = {}) {
   return sent;
 }
 
-const { makeLogger } = await import('./vscan_runtime.js');
+const { makeLogger, setTransport } = await import('./vscan_runtime.js');
+const { createBufferedTransport } = await import('./buffered_transport.js');
+const { createReadScope, recordDelegate } = await import('./vhal_read_scope.js');
+const { propertyValue } = await import('./property_value.js');
 
 // ---- 1. 记录形状 ----------------------------------------------------------
 
@@ -149,6 +152,67 @@ check('四个 src 的记录形状逐字一致', () => {
   assert(new Set(keys).size === 1, `四个 src 的记录字段不一致：${JSON.stringify([...new Set(keys)])}`);
   assert(sent.map((m) => JSON.parse(m.line).src).join(',') === 'vhal,egress,tls,recon',
          'src 应各自如实记录');
+});
+
+check('车载批量记录先于出站事件，收尾刷盘后停止接收', () => {
+  const sent = installStubs();
+  const transport = createBufferedTransport();
+  setTransport(transport);
+  try {
+    const read = makeLogger('vhal', '/x');
+    const egress = makeLogger('egress', '/x');
+    read('VHAL_READ', { value_raw: 4 });
+    assert(sent.length === 0, '读取应先进入队列');
+    egress('EGRESS_URL');
+    assert(JSON.parse(sent[0].lines[0]).value_raw === 4, '读取应先于出站发送');
+    assert(JSON.parse(sent[1].line).ev === 'EGRESS_URL', '出站应立即发送');
+    read('VHAL_READ');
+    const stats = transport.close();
+    read('VHAL_READ');
+    assert(stats.delivered === 3 && stats.buffered_events === 2 && sent.length === 3, '尾批对账失败');
+    assert(JSON.parse(sent[2].lines[0]).evt_id === 2, '读取序号应保持');
+  } finally { setTransport(null); }
+});
+
+check('批次上限和发送失败都计入回执', () => {
+  const sent = installStubs();
+  const transport = createBufferedTransport();
+  for (let i = 0; i < 20; i++) transport.emit('vhal', 'VHAL_READ', '{}');
+  assert(sent.length === 1 && sent[0].lines.length === 20, '批次上限失效');
+  transport.emit('vhal', 'VHAL_READ', '{}');
+  globalThis.send = () => { throw new Error('no host'); };
+  const stats = transport.close();
+  assert(stats.delivered === 20 && stats.failed === 1, '丢失事件必须可见');
+});
+
+check('嵌套合并限制在相同线程、属性、区域和已知委托链', () => {
+  const scope = createReadScope();
+  const outer = scope.enter(7, 'cpm.getFloatProperty(II)', 1, 0);
+  const inner = scope.enter(7, 'cpm.getProperty(II)', 1, 0);
+  assert(inner.merged && inner.outer === outer && outer.nested_suppressed === 1, '委托链未合并');
+  recordDelegate(outer, 'cpm.getProperty(II)', 'unavailable');
+  recordDelegate(outer, 'cpm.getProperty(Class,II)', 'ok');
+  assert(outer.delegate === 'unavailable', '较外层返回值不能覆盖内层不可用');
+  for (const [thread, property, area] of [[8, 1, 0], [7, 2, 0], [7, 1, 2], [7, 1, 0]]) {
+    const separate = scope.enter(thread, 'cpm.getProperty(II)', property, area);
+    assert(!separate.merged, '独立调用不得合并');
+    scope.leave(separate);
+  }
+  scope.leave(outer);
+  assert(!scope.enter(7, 'cpm.getProperty(II)', 1, 0).merged, '收尾必须清理线程上下文');
+});
+
+check('原始值和展示值共用一次读取；不可用属性不尝试取值', () => {
+  let status = 0, statuses = 0, reads = 0;
+  const value = { $className: 'android.car.hardware.CarPropertyValue',
+    getStatus: () => { statuses++; return status; }, getValue: () => { reads++; return 0; } };
+  const available = propertyValue(value, String);
+  assert(available.value_raw === 0 && available.value === 'CarPropertyValue{status=0,value=0}', '数值零丢失');
+  assert(statuses === 1 && reads === 1, '可用值应只探测一次');
+  status = 1;
+  const unavailable = propertyValue(value, String);
+  assert(unavailable.value_raw === null && unavailable.value_status === 1 && reads === 1 &&
+    unavailable.value === 'CarPropertyValue{status=1,value=null}', '不可用值不应再探测或展示');
 });
 
 // ---- 汇总 -----------------------------------------------------------------

@@ -25,3 +25,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "vscanner-target-app"
 include(":app")
+if (providers.gradleProperty("aaidFixture").orNull == "true") include(":aaid-fixture")

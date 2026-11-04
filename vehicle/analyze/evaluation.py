@@ -7,6 +7,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.collector.attribution import ATTRIB_LOOSE_MS, is_loose  # noqa: E402
 from core.collector.identity import compatible, identity_scope, uid_of, user_of
 from vehicle.analyze.value_match import match_content
+from vehicle.analyze.pair_ambiguity import annotate_candidates
+from vehicle.analyze.batch_pairing import PAIRING_MODES, batch_index, claim_match, select_pairs
+from vehicle.analyze.finding_class import classify
 
 
 def evidence(rule, kind, ids, extra):
@@ -17,7 +20,7 @@ def evidence(rule, kind, ids, extra):
                   basis_refs=json.loads(rule['basis_refs_json']),
                   source_refs=json.loads(rule['source_refs_json']))
     result.update(extra)
-    return result
+    return classify(result)
 
 
 def evaluate_over_permission(rules, permissions, package):
@@ -72,9 +75,12 @@ def usable_flow_index(flows):
     return index
 
 
-def evaluate_data_egress(rules, reads, flows, clock_offset_ms=None, window_override_ms=None):
+def evaluate_data_egress(rules, reads, flows, clock_offset_ms=None, window_override_ms=None, *, pairing='window'):
+    if pairing not in PAIRING_MODES:
+        raise ValueError('invalid pairing mode')
     findings = []
     flow_index = usable_flow_index(flows)
+    batches = batch_index(flow for bucket in flow_index.values() for flow in bucket) if pairing != 'window' else {}
     # condition_json 每条规则只解析一次（预解析），不在内层重复 json.loads。
     egress_rules = [(r, json.loads(r['condition_json']))
                     for r in rules if r['enabled'] and r['rule_type'] == 'data_egress']
@@ -97,17 +103,18 @@ def evaluate_data_egress(rules, reads, flows, clock_offset_ms=None, window_overr
                 if not compatible(read, flow):
                     continue
                 delta = flow['ts'] - ts
-                if not 0 <= delta <= window:
+                if delta < 0:
                     continue
-                # 接收内容不能证明外发；属性名/ID命中只是内容线索，不证明值相同。
-                matched = match_content(read, flow)
-                if not matched:
+                claim = claim_match(read, flow, batches.get(id(flow)))
+                within_window = match_content(read, flow) if pairing != 'token' and delta <= window else None
+                if not claim and not within_window:
                     continue
                 names[read['pkg']] = read.get('prop_name')
-                grouped.setdefault(read['pkg'], []).append({
+                pair = {
                     'read_event_id': read['evt_id'], 'flow_event_id': flow['evt_id'],
+                    'read_src': read.get('src') or 'vhal', 'flow_src': flow.get('src') or 'proxy',
                     'delta_ms': delta, 'clock_basis': basis, 'content_match': True,
-                    **matched, 'identity_scope': identity_scope(read, flow),
+                    'identity_scope': identity_scope(read, flow),
                     'uid': uid_of(read), 'user_id': user_of(read),
                     'flow_method': flow.get('method'), 'flow_host': flow.get('host'),
                     'flow_path': flow.get('path'), 'client_tls': flow.get('intercepted_tls'),
@@ -115,14 +122,25 @@ def evaluate_data_egress(rules, reads, flows, clock_offset_ms=None, window_overr
                     'attribution_delta_ms': flow.get('attribution_delta_ms'),
                     'attribution_runner_up': flow.get('attribution_runner_up'),
                     'attribution_candidates': flow.get('attribution_candidates'),
-                    'attribution_loose': is_loose(flow)})
-        for package, pairs in grouped.items():
+                    'attribution_loose': is_loose(flow)}
+                grouped.setdefault(read['pkg'], []).append((pair, claim, within_window))
+        for package, options in grouped.items():
+            pairs = select_pairs(options, pairing)
+            if not pairs:
+                continue
+            ambiguous_sources = annotate_candidates(pairs)
             extra = {
                 'package': package, 'property': names[package], 'window_ms': window,
                 'window_declared_ms': declared, 'window_overridden': window != declared,
                 'pair_count': len(pairs), 'pairs': pairs, 'content_match': True,
                 'value_match': any(p.get('value_match') for p in pairs),
+                'source_ambiguous_flows': ambiguous_sources,
+                'correlation_scope': 'matching_content_candidates_origin_unproven',
                 'note': '同包同会话且身份无冲突；逐条列出属性标记或属性值匹配依据。内容相等不证明因果传播，违规需人工复核。'}
+            if any(pair['origin_proven'] for pair in pairs):
+                extra['correlation_scope'] = 'fixture_body_claim_corroborated'
+                extra['note'] += (' 令牌配对表明请求正文中的批次与主读取 Hook 记录相符，'
+                                  '设备时钟下读取时间差不超过 50ms。')
             if any(p.get('attribution_loose') for p in pairs):
                 extra['conclusion_level'] = 'candidate'
                 extra['declared_conclusion_level'] = rule['conclusion_level']

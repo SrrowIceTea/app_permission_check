@@ -8,6 +8,19 @@ def profile_story(summary, body, heading):
     if not profile:
         return []
     story = [PageBreak(), Paragraph('七、车载场景与证据覆盖', heading)]
+    general = summary.get('general_privacy')
+    if general:
+        story.append(Paragraph(escape('通用隐私来源返回值状态：' + str(general['states'])), body))
+        for dtype, states in general['by_data_type'].items():
+            story.append(Paragraph(escape(dtype + '：' + str(states)), body))
+        for gap in general['caveats']:
+            story.append(Paragraph(escape(gap), body))
+    for gap in summary.get('capture_validation', {}).get('gaps', []):
+        story.append(Paragraph(escape('采集范围：' + gap), body))
+    chain = summary.get('coverage_chain', {})
+    if chain:
+        story.append(Paragraph(escape('尚未接入的类别：' + '、'.join(chain['unconnected_types']) +
+                                     '；完整覆盖链见 coverage/coverage.json。'), body))
     static = summary.get('static_analysis', {})
     story.append(Paragraph(escape('静态核对：' + static.get('status', 'not_requested') + '；' +
         (str(static.get('findings')) + ' 条候选，候选不证明实际采集。' if static.get('status') == 'completed'
@@ -33,6 +46,17 @@ def profile_story(summary, body, heading):
             f"关注分 {row['attention_score']}；证据 {row['evidence_confidence']}；"
             f"UID 核验 {row['identity_verified']}。"), body))
     ai = summary.get('ai_review', {})
+    policy = summary.get('policy_assessment', {})
+    if policy:
+        story.append(Paragraph(escape('政策复核状态：' + policy['status']), body))
+        for row in policy.get('reviews', []):
+            story.append(Paragraph(escape(f"{row['finding_id']}：{row['disclosure_signal']}；"
+                '必要性需人工复核。'), body))
+            for reference in row['policy_refs'][:2]:
+                story.append(Paragraph(escape(f"policy/policy.txt 字符 {reference['start']}–"
+                    f"{reference['end']}：{reference['text']}"), body))
+        for gap in policy.get('gaps', []):
+            story.append(Paragraph(escape(gap), body))
     story.append(Spacer(1, 8))
     story.append(Paragraph('AI 研判状态：' + escape(ai.get('status', 'not_requested')), body))
     if ai.get('reason'):

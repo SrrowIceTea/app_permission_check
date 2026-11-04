@@ -32,6 +32,8 @@ from pathlib import Path
 
 from device_rows import DEVICE_VERSION, build_device_rows
 from egress_calibration import calibrate
+from privacy_rows import insert_privacy_rules
+from privacy_observation import DEFAULT_OBSERVATION
 
 TABLES = ("permissions", "vhal_properties", "dangerous_apis", "risk_rules")
 SOURCE_VERSION = "14"
@@ -94,6 +96,8 @@ def main() -> int:
     parser.add_argument("--property-ids", type=Path, required=True)
     parser.add_argument("--cpm-signatures", type=Path, required=True)
     parser.add_argument("--device-facts", type=Path)
+    parser.add_argument("--privacy-observation", type=Path, default=DEFAULT_OBSERVATION,
+                        help="通用隐私来源独立实测快照；不得使用旧 VHAL device-facts 代替")
     parser.add_argument("--enable-types", default="",
                         help="逗号分隔的 rule_type，这些类型的规则置 enabled=1。"
                              "留空则全部保持禁用。data_egress 还必须指定"
@@ -121,6 +125,10 @@ def main() -> int:
 
     counts[DEVICE_VERSION] = build_device_rows(dst, args.calibration, args.property_ids,
                                                args.cpm_signatures, device_facts)
+    # General-privacy rules are registered after the device rows on purpose: they are
+    # project-policy rules about Android SDK sources, so insert_device_rules must not
+    # mirror them (its device provenance records car permissions/dexdump evidence).
+    privacy = insert_privacy_rules(dst, args.privacy_observation)
     enabled_types = {t.strip() for t in args.enable_types.split(",") if t.strip()}
     if "data_egress" in enabled_types and args.egress_window_ms is None:
         raise ValueError("启用 data_egress 必须显式指定 --egress-window-ms 30000")
@@ -141,6 +149,7 @@ def main() -> int:
         "status": "dual_version_library",
         "counts": actual,
         "enabled_rules": enabled,
+        "privacy_rules": privacy,
         "android15_source": "device_observation",
         "android15_rule_policy": "policy_mirrored_from_android14_with_device_provenance",
         "enablement": enablement,

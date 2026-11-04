@@ -1,0 +1,19 @@
+{"api_level": 36, "source": "installed SDK android-36/android.jar; javap -s", "jar_sha256": "d9eb9da824d9e247a352f570f01e1169e725b2954bca9e283a71786c59b59f9a", "caveat": "SDK declarations, not proof of OEM implementation or API33/34 device validation", "methods": [
+{"class": "android.location.LocationManager", "declaration": "public android.location.Location getLastKnownLocation(java.lang.String);", "descriptor": "descriptor: (Ljava/lang/String;)Landroid/location/Location;"},
+{"class": "android.media.AudioRecord", "declaration": "public int read(byte[], int, int);", "descriptor": "descriptor: ([BII)I"},
+{"class": "android.media.AudioRecord", "declaration": "public int read(byte[], int, int, int);", "descriptor": "descriptor: ([BIII)I"},
+{"class": "android.media.AudioRecord", "declaration": "public int read(float[], int, int, int);", "descriptor": "descriptor: ([FIII)I"},
+{"class": "android.media.AudioRecord", "declaration": "public int read(java.nio.ByteBuffer, int);", "descriptor": "descriptor: (Ljava/nio/ByteBuffer;I)I"},
+{"class": "android.media.AudioRecord", "declaration": "public int read(java.nio.ByteBuffer, int, int);", "descriptor": "descriptor: (Ljava/nio/ByteBuffer;II)I"},
+{"class": "android.media.AudioRecord", "declaration": "public int read(short[], int, int);", "descriptor": "descriptor: ([SII)I"},
+{"class": "android.media.AudioRecord", "declaration": "public int read(short[], int, int, int);", "descriptor": "descriptor: ([SIII)I"},
+{"class": "android.media.AudioRecord", "declaration": "public void startRecording() throws java.lang.IllegalStateException;", "descriptor": "descriptor: ()V"},
+{"class": "android.media.AudioRecord", "declaration": "public void startRecording(android.media.MediaSyncEvent) throws java.lang.IllegalStateException;", "descriptor": "descriptor: (Landroid/media/MediaSyncEvent;)V"},
+{"class": "android.media.MediaRecorder", "declaration": "public native void start() throws java.lang.IllegalStateException;", "descriptor": "descriptor: ()V"},
+{"class": "android.content.ContentResolver", "declaration": "public final android.database.Cursor query(android.net.Uri, java.lang.String[], android.os.Bundle, android.os.CancellationSignal);", "descriptor": "descriptor: (Landroid/net/Uri;[Ljava/lang/String;Landroid/os/Bundle;Landroid/os/CancellationSignal;)Landroid/database/Cursor;"},
+{"class": "android.content.ContentResolver", "declaration": "public final android.database.Cursor query(android.net.Uri, java.lang.String[], java.lang.String, java.lang.String[], java.lang.String);", "descriptor": "descriptor: (Landroid/net/Uri;[Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)Landroid/database/Cursor;"},
+{"class": "android.content.ContentResolver", "declaration": "public final android.database.Cursor query(android.net.Uri, java.lang.String[], java.lang.String, java.lang.String[], java.lang.String, android.os.CancellationSignal);", "descriptor": "descriptor: (Landroid/net/Uri;[Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;Landroid/os/CancellationSignal;)Landroid/database/Cursor;"},
+{"class": "android.provider.Settings$Secure", "declaration": "public static java.lang.String getString(android.content.ContentResolver, java.lang.String);", "descriptor": "descriptor: (Landroid/content/ContentResolver;Ljava/lang/String;)Ljava/lang/String;"},
+{"class": "android.database.Cursor", "declaration": "public abstract java.lang.String getColumnName(int);", "descriptor": "descriptor: (I)Ljava/lang/String;"},
+{"class": "android.database.Cursor", "declaration": "public abstract java.lang.String getString(int);", "descriptor": "descriptor: (I)Ljava/lang/String;"}
+]}

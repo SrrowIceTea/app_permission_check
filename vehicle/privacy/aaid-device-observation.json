@@ -1,0 +1,127 @@
+{
+  "scope": "owned_fixture_only",
+  "device_api_level": 35,
+  "device_fingerprint": "google/sdk_gcar_x86_64/emulator_car64_x86_64:15/AAI5.260516.001.A6/16618942:userdebug/test-keys",
+  "hook_bundle_sha256": "f15befbb1347edcae44ecad9a5ed971ab2227e3a63a94509e382c6e3a2f380b8",
+  "human_signoff": "pending",
+  "cases": {
+    "obtained": {
+      "session": "aaid-3986201831274d43afa5920c4a8e9956",
+      "package": "com.vscanner.aaidprobe",
+      "installed_apk_sha256": "284282b5683decf76ad3f0b27fd3341423e93705c18cce5d9e4e84ef89b70fe4",
+      "user_id": 10,
+      "ad_id_declared": true,
+      "gms_enabled": true,
+      "gms_installed": true,
+      "events": [
+        {
+          "src": "privacy",
+          "evt_id": 2,
+          "api": "com.google.android.gms.ads.identifier.AdvertisingIdClient.getAdvertisingIdInfo(Landroid/content/Context;)Lcom/google/android/gms/ads/identifier/AdvertisingIdClient$Info;",
+          "outcome": "ok"
+        },
+        {
+          "src": "privacy",
+          "evt_id": 3,
+          "api": "com.google.android.gms.ads.identifier.AdvertisingIdClient$Info.getId()Ljava/lang/String;",
+          "outcome": "ok"
+        }
+      ],
+      "verification": {
+        "path": "output/o6-aaid-final-20261104-140405/obtained/verification.json",
+        "sha256": "145a6abea8f9fd89af6be45a32c56273a400f295f1edee771ccf169e69300119"
+      },
+      "receipt": {
+        "path": "output/o6-aaid-final-20261104-140405/obtained/receipt.json",
+        "sha256": "8926d0841c09e39c262bd5f27c91873c19ac17ee266be31274b9f32d7f562746"
+      }
+    },
+    "denied": {
+      "session": "aaid-d031dfe8e2ce40dd90e6c0cd65a2842a",
+      "package": "com.vscanner.aaidprobe.omitted",
+      "installed_apk_sha256": "a3779c2b0b377abb34fbf4a6c77697371becadf9fabd72889f777ad6ec12df7d",
+      "user_id": 10,
+      "ad_id_declared": false,
+      "gms_enabled": true,
+      "gms_installed": true,
+      "events": [
+        {
+          "src": "privacy",
+          "evt_id": 2,
+          "api": "com.google.android.gms.ads.identifier.AdvertisingIdClient.getAdvertisingIdInfo(Landroid/content/Context;)Lcom/google/android/gms/ads/identifier/AdvertisingIdClient$Info;",
+          "outcome": "ok"
+        },
+        {
+          "src": "privacy",
+          "evt_id": 3,
+          "api": "com.google.android.gms.ads.identifier.AdvertisingIdClient$Info.getId()Ljava/lang/String;",
+          "outcome": "denied"
+        }
+      ],
+      "verification": {
+        "path": "output/o6-aaid-final-20261104-140405/denied/verification.json",
+        "sha256": "de5af9daf6276594db20d5c8a797ea09cb020a1c094ecada67728ae5d6b1c9e4"
+      },
+      "receipt": {
+        "path": "output/o6-aaid-final-20261104-140405/denied/receipt.json",
+        "sha256": "63dcd9fa6e43b153d1e0ce8ca2dbca059bd22e29f4901ca3b7b5574270bfc639"
+      }
+    },
+    "empty": {
+      "session": "aaid-d53f6c6dc805485caa21b50b4bc43baf",
+      "package": "com.vscanner.aaidprobe",
+      "installed_apk_sha256": "284282b5683decf76ad3f0b27fd3341423e93705c18cce5d9e4e84ef89b70fe4",
+      "user_id": 11,
+      "ad_id_declared": true,
+      "gms_enabled": true,
+      "gms_installed": true,
+      "events": [
+        {
+          "src": "privacy",
+          "evt_id": 2,
+          "api": "com.google.android.gms.ads.identifier.AdvertisingIdClient.getAdvertisingIdInfo(Landroid/content/Context;)Lcom/google/android/gms/ads/identifier/AdvertisingIdClient$Info;",
+          "outcome": "ok"
+        },
+        {
+          "src": "privacy",
+          "evt_id": 3,
+          "api": "com.google.android.gms.ads.identifier.AdvertisingIdClient$Info.getId()Ljava/lang/String;",
+          "outcome": "ok"
+        }
+      ],
+      "verification": {
+        "path": "output/o6-aaid-isolated-20261104-135316/empty-final/verification.json",
+        "sha256": "38bd90c24024eb3b3c3e7701c703a8ffe769a7a48f3458ee73ecf806050d13b6"
+      },
+      "receipt": {
+        "path": "output/o6-aaid-isolated-20261104-135316/empty-final/receipt.json",
+        "sha256": "0b0a72dafbe3e2df79a1c28e4651528129701ea919e20e975b51e1914d515692"
+      }
+    },
+    "unavailable": {
+      "session": "aaid-c0bc91fb6d84463ca45804a47b379d38",
+      "package": "com.vscanner.aaidprobe",
+      "installed_apk_sha256": "284282b5683decf76ad3f0b27fd3341423e93705c18cce5d9e4e84ef89b70fe4",
+      "user_id": 11,
+      "ad_id_declared": true,
+      "gms_enabled": false,
+      "gms_installed": false,
+      "events": [
+        {
+          "src": "privacy",
+          "evt_id": 2,
+          "api": "com.google.android.gms.ads.identifier.AdvertisingIdClient.getAdvertisingIdInfo(Landroid/content/Context;)Lcom/google/android/gms/ads/identifier/AdvertisingIdClient$Info;",
+          "outcome": "unavailable"
+        }
+      ],
+      "verification": {
+        "path": "output/o6-aaid-isolated-20261104-135316/unavailable-retry/verification.json",
+        "sha256": "3356478251fe54ec487d752188acb8c1aee38cf2c2bcdf3bc9bbfa826008f0ae"
+      },
+      "receipt": {
+        "path": "output/o6-aaid-isolated-20261104-135316/unavailable-retry/receipt.json",
+        "sha256": "1f81c6dda2ebc02728623de726bf61aaee1107c3d368df0ed19e8a21727f8c53"
+      }
+    }
+  }
+}

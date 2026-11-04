@@ -26,10 +26,9 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from core.io_utils import load_jsonl  # noqa: E402  JSONL 唯一实现（§8.2 B-2）
 from core.rules_contract import rules_db_meta  # noqa: E402  规则库元信息（§8.2 B-2）
 
-from report_extras import FONT_CANDIDATES, extra_story, footer
+from report_extras import FONT_CANDIDATES, evidence_summary, extra_story, fingerprint_rows, footer, load_report_evidence
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
@@ -94,26 +93,26 @@ def build_story(findings: list[dict], summary: dict, rules_meta: dict, font: str
     story.append(Spacer(1, 6))
 
     meta = [
-        ["生成时间", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")],
+        ["生成时间", summary.get("generated_at") or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")],
         ["受检包名", summary.get("package", "-")],
         ["采集会话", summary.get("session_id") or "旧数据：未验证会话"],
         ["规则库版本", ", ".join(rules_meta["rule_versions"])],
-        ["规则库摘要", f"{rules_meta['sha256'][:32]}…"],
+        ["规则库摘要", summary.get('rules_sha') or f"{rules_meta['sha256'][:32]}…"],
         ["规则总数 / 已启用", f"{rules_meta['rules_total']} / {rules_meta['rules_enabled']}"],
         ["时间基准", summary.get("clock_basis", "旧数据：须复核时钟校准")],
         ["输入规模", f"读取 {summary['inputs']['reads']} 条 / "
                      f"外发 {summary['inputs']['proxy_flows']} 条 / "
                      f"清单权限 {summary['inputs']['requested_permissions']} 条"],
-    ]
+    ] + fingerprint_rows(summary)
     story.append(Table([[Paragraph(k, cell), Paragraph(str(v), cell)] for k, v in meta],
                        colWidths=[38 * mm, 132 * mm],
                        style=TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"),
                                          ("BOTTOMPADDING", (0, 0), (-1, -1), 2)])))
 
-    story.append(Paragraph("一、结论汇总", h2))
+    story.append(Paragraph("一、证据汇总", h2))
     by_level = summary.get("findings_by_conclusion_level", {})
     story.append(Paragraph(
-        f"共 {summary['findings_total']} 条结论："
+        evidence_summary(summary)
         + "；".join(f"{LEVEL_LABEL.get(k, k)} {v} 条" for k, v in sorted(by_level.items())), body))
     locs = summary.get("code_locs") or {}
     if locs:
@@ -140,7 +139,7 @@ def build_story(findings: list[dict], summary: dict, rules_meta: dict, font: str
             body))
         detail = [
             ["谓词", finding.get("predicate", "-")],
-            ["证据类型", f"{finding.get('evidence_kind')}（事件 {len(finding.get('event_ids', []))} 条）"],
+            ["证据类型", f"{finding.get('finding_class', 'legacy')} / {finding.get('evidence_kind')}（事件 {len(finding.get('event_ids', []))} 条）"],
         ]
         if finding.get("permission"):
             detail.append(["涉及权限", finding["permission"]])
@@ -180,6 +179,12 @@ def build_story(findings: list[dict], summary: dict, rules_meta: dict, font: str
                                              ("BOTTOMPADDING", (0, 0), (-1, -1), 1)])))
 
         for pair in finding.get("pairs", []):
+            if pair.get('flow_src') == 'ha_transport':
+                story.append(Paragraph(
+                    f"&nbsp;&nbsp;· 读取 #{pair['read_event_id']} / scale #{pair['scale_event_id']}"
+                    f" → HA HTTP 事件 #{pair['flow_event_id']} ｜ 电量 {pair['battery_percent']}%"
+                    f" ｜ HTTP {pair['http_status']} ｜ 间隔 {pair['delta_ms']} ms", cell_small))
+                continue
             story.append(Paragraph(
                 f"&nbsp;&nbsp;· 读取事件 #{pair['read_event_id']} → 外发事件 #{pair['flow_event_id']}"
                 f" ｜ 间隔 {pair['delta_ms']} ms ｜ TLS 拦截 "
@@ -199,10 +204,24 @@ def build_story(findings: list[dict], summary: dict, rules_meta: dict, font: str
     story.append(PageBreak())
     story.append(Paragraph("三、方法与可追溯性", h2))
     story.append(Paragraph(
-        "读取行为由 Phase 3 的 Frida 钩子在<b>应用进程内</b>观测 "
-        "(CarPropertyManager 主动读取或订阅回调)，包名由进程自身给出，非推断。"
-        "外发行为经 Mitmproxy 反向代理捕获，包名归因同样来自应用进程内的 "
-        "Socket.connect 观测，按时间就近配对。", body))
+        "读取由 Frida 在<b>应用进程内</b>观察，包名取自进程。"
+        "代理流的归因结合应用进程出站观测与代理流量。", body))
+    if summary.get('ha_webhook'):
+        ha = summary['ha_webhook']
+        story.append(Paragraph(
+            "HA 实验通过同进程 OkHttp 请求写入与对应响应观察电量字段，事件在 reads.jsonl。"
+            f"匹配请求 {ha['matched_requests']} 条，契约 SHA-256 {ha['contract_sha256']}。", body))
+        if ha['body_gap_reasons']:
+            story.append(Paragraph("正文缺口 " + escape(json.dumps(ha['body_gap_reasons'])), body))
+    if summary.get('ha_websocket'):
+        ws = summary['ha_websocket']
+        story.append(Paragraph(
+            f"HA WebSocket 实验观察到 {len(ws['pairs'])} 组同连接请求与成功响应，"
+            f"{len(ws['state_events'])} 条测试实体状态消息。", body))
+        story.append(Paragraph(
+            f"HA 控制侧（HTTP webhook）观察到 {len(ws.get('controls', []))} 条测试实体操作，"
+            f"判定缺口 {escape(json.dumps(ws.get('control_gap_counts', {})))}，采集缺口 "
+            f"{escape(json.dumps(ws.get('capture_gap_counts', {})))}。", body))
     story.append(Paragraph(
         f"规则库 {rules_meta['path']} 全文 SHA-256：{rules_meta['sha256']}", small))
     story.append(Paragraph(
@@ -251,12 +270,10 @@ def main() -> int:
                   file=sys.stderr)
             return 1
 
-    findings = load_jsonl(args.findings)
-    summary = json.loads(args.summary.read_text(encoding="utf-8"))
+    findings, summary, flows = load_report_evidence(args)
     meta = rules_db_meta(args.rules)
     if summary.get('rules_sha256') and summary['rules_sha256'] != meta['sha256']:
         raise ValueError('报告规则库与关联时摘要不一致')
-    flows = [json.loads(l) for l in args.flows.read_text(encoding="utf-8").splitlines() if l.strip()] if args.flows else []
     ownership = json.loads(args.ownership.read_text(encoding="utf-8")) if args.ownership else []
     font = register_font()
 

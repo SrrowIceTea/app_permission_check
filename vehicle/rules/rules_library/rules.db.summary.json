@@ -5,23 +5,27 @@
       "permissions": 6,
       "vhal_properties": 8,
       "dangerous_apis": 3,
-      "risk_rules": 22
+      "risk_rules": 29
     },
     "15": {
       "permissions": 146,
       "vhal_properties": 8,
       "dangerous_apis": 3,
-      "risk_rules": 22
+      "risk_rules": 29
     }
   },
-  "enabled_rules": 44,
+  "enabled_rules": 58,
+  "privacy_rules": {
+    "14": 7,
+    "15": 7
+  },
   "android15_source": "device_observation",
   "android15_rule_policy": "policy_mirrored_from_android14_with_device_provenance",
   "enablement": {
     "before": {
       "over_permission": 0,
-      "sensitive_read": 0,
-      "data_egress": 0
+      "sensitive_read": 10,
+      "data_egress": 4
     },
     "after": {
       "over_permission": {
@@ -29,15 +33,15 @@
         "enabled": 12
       },
       "sensitive_read": {
-        "total": 16,
-        "enabled": 16
+        "total": 26,
+        "enabled": 26
       },
       "data_egress": {
-        "total": 16,
-        "enabled": 16
+        "total": 20,
+        "enabled": 20
       }
     }
   },
-  "database_sha256": "c4297ac72e1a9f31a02dcbc4eea7e24ec7cc31185ebee56e1bf3b7e8dfd83bae",
+  "database_sha256": "4bf51ba0aadb0234aefb80dfc197429347d748c38fb36f567e90c2d928bff824",
   "note": "android-15 rows are device observations (definition_status=pending). They are not source extractions and must not be reported as such."
 }
