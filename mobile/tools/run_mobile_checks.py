@@ -91,6 +91,9 @@ def main() -> int:
         # 以及"多个 worker 真的同时在跑"。这三类错误都是静默的（复用永不命中 /
         # 半成品被当已完成 / 60 个样本只有一个真跑），只能靠离线断言钉住。
         ("batch_static", MOBILE / "tools", [PY, "-m", "unittest", "test_batch_static"]),
+        # 样本 runner 的还原口径（2026-11-04）：只删自己插入的 _id、还原必须回读比对。
+        # "发了还原命令"曾被当成"已还原"，这份守卫把断言钉在回读值上。
+        ("sample_runtime", MOBILE / "tools", [PY, "-m", "unittest", "test_sample_runtime"]),
     ]
     for name, cwd, cmd in unit:
         if not cwd.exists():

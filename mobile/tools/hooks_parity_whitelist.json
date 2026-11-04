@@ -148,6 +148,15 @@
       "date": "2026-10-14"
     },
     {
+      "id": "vehicle-buffered-failure",
+      "pair": "runtime",
+      "kind": "block",
+      "mobile_lines": ["} catch (e) { console.log('[' + src + '] VLOG_FAIL: ' + e); }"],
+      "vehicle_lines": ["} catch (e) {", "if (transport !== null) transport.fail();", "else console.log('[' + src + '] VLOG_FAIL: ' + e);", "}"],
+      "reason": "O4 车载全量 bundle 使用宿主刷盘回执报告序列化失败；旧传输仍沿用同一日志。",
+      "date": "2026-11-04"
+    },
+    {
       "id": "ssl-main-export",
       "pair": "ssl_pinning",
       "kind": "sub",
@@ -200,6 +209,22 @@
     }
   ],
   "drop": [
+    {
+      "id": "vehicle-buffered-switch",
+      "pair": "runtime",
+      "side": "vehicle",
+      "lines": ["let transport = null;", "export function setTransport(next) {", "transport = next;", "}", "export function transportEnabled() {", "return transport !== null;", "}"],
+      "reason": "O4 只有车载全量 bundle 注册批传输；移动侧继续单条回传。",
+      "date": "2026-11-04"
+    },
+    {
+      "id": "vehicle-buffered-dispatch",
+      "pair": "runtime",
+      "side": "vehicle",
+      "lines": ["if (transport !== null) {", "transport.emit(src, ev, line);", "return;", "}"],
+      "reason": "O4 车载全量 bundle 优先走批传输；其余单条回传逻辑继续逐行检查。",
+      "date": "2026-11-04"
+    },
     {
       "id": "hv-callsite",
       "pair": "tls_bypasses",

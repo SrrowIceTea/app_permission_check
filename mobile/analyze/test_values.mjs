@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../hooks/values.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../../core/privacy/values.js', import.meta.url), 'utf8');
 
 let javaTouched = 0;
 Object.defineProperty(globalThis, 'Java', {
@@ -15,6 +15,9 @@ Object.defineProperty(globalThis, 'Java', {
 
 const { describe, armValueCache, argsOnly } = await import(
   'data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+const legacy = await import('../hooks/values.js');
+assert.deepEqual(legacy.describe([], {}, 'compatibility-test'), describe([], {}, 'compatibility-test'),
+  '移动兼容入口必须保持共享实现的值摘要语义');
 
 assert.equal(argsOnly(), false);
 assert.equal(armValueCache(), true, '不再需要解析 Java 类，挂载即就绪');

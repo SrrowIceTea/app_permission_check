@@ -19,16 +19,35 @@ CHECKS = [
     ('vehicle-evidence', '.', [sys.executable, '-m', 'unittest',
                               'vehicle.analyze.test_vehicle_evidence', 'vehicle.analyze.test_context',
                               'core.collector.test_vehicle_lifecycle']),
+    ('vehicle-pipeline', '.', [sys.executable, '-m', 'unittest',
+        'vehicle.pipeline.test_preflight', 'vehicle.pipeline.test_audit',
+        'vehicle.pipeline.test_scenarios', 'vehicle.coverage.test_coverage',
+        'vehicle.policy.test_assessment', 'vehicle.bench.test_metrics', 'vehicle.bench.test_suite',
+        'vehicle.bench.test_blind_round',
+        'vehicle.bench.test_overhead',
+        'core.frida_host.test_message_stream',
+        'vehicle.bench.test_window_calibration',
+        'core.collector.test_scope', 'core.collector.test_response_capture', 'core.collector.test_health',
+        'core.collector.test_parse',
+        'vehicle.pipeline.test_environment', 'vehicle.pipeline.test_acceptance',
+        'vehicle.pipeline.test_diagnostics', 'vehicle.privacy.test_evaluation', 'vehicle.privacy.test_versions',
+        'vehicle.pipeline.test_capture_lifecycle',
+        'vehicle.pipeline.test_capture_proxy',
+        'vehicle.privacy.test_observation', 'vehicle.privacy.test_ha_evaluation',
+        'vehicle.lab.test_evidence_repairs', 'vehicle.lab.test_owntracks_run',
+        'vehicle.privacy.test_ha_socket_evidence']),
     # 归因/载荷/失败流落盘/报文扫描是平台无关的，已抽到 core/collector/；
     # 车载 VHAL 指纹表留在 vehicle/traffic。
     ('collector', 'core/collector', [sys.executable, '-m', 'unittest', 'test_body',
                                      'test_attribution', 'test_unanswered',
+                                     'test_redaction',
                                      'test_system_probe',
                                      'test_experiment', 'test_montecarlo',
-                                     'test_uid_sampler']),
+                                     'test_uid_sampler', 'test_targets']),
     ('tagging-vehicle', 'vehicle/traffic', [sys.executable, '-m', 'unittest', 'test_tagging']),
     ('dashboard', 'vehicle/dashboard', [sys.executable, '-m', 'unittest', 'test_dashboard']),
     ('runtime', 'vehicle/hooks', ['node', 'test_runtime.mjs']),
+    ('privacy-runtime', 'vehicle/hooks', ['node', 'test_privacy.mjs']),
     ('parity', 'vehicle/rules', [sys.executable, 'android/tools/verify_schema_parity.py']),
     # core/static 的用例全部离线（不需要 jadx、不需要设备、不需要 APK）。
     # 需要真的反编译的验证在 tools/workbench_acceptance.py，那里慢，不进回归。
@@ -45,7 +64,7 @@ CHECKS = [
      [sys.executable, '-m', 'unittest', 'test_bundle_config']),
 ]
 
-# 工程-7（2026-10-16 定语义）：`--mobile` 时在 13 组之后追加移动侧 23 项检查。
+# 工程-7（2026-10-16 定语义）：`--mobile` 时在 16 组之后追加移动侧 29 项检查。
 # 语义定为：**移动侧失败 = 根回归失败（非零退出）**——"根回归绿了但移动端已经烂了"
 # 的静默状态正是文档状态列不可信教训的来源；不想让移动侧影响结论时，
 # 直接跑本入口（不带 --mobile）或单独跑 mobile/tools/run_mobile_checks.py 即可。
@@ -58,7 +77,7 @@ MOBILE_TIMEOUT = 600
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--mobile', action='store_true',
-                    help='追加跑移动侧 23 项检查（mobile/tools/run_mobile_checks.py），'
+                    help='追加跑移动侧 29 项检查（mobile/tools/run_mobile_checks.py），'
                          '失败计入根回归失败（语义见 MOBILE_GROUP 注释）')
     args = ap.parse_args()
     out = ROOT / 'output' / ('regression-' + datetime.now().strftime('%Y%m%d-%H%M%S'))

@@ -11,8 +11,12 @@ function Get-VScanSetting([string]$Name, [string]$Default) {
 
 $VScanSdk = Get-VScanSetting 'VSCAN_SDK' "$env:LOCALAPPDATA\Android\Sdk"
 $VScanJdk = Get-VScanSetting 'VSCAN_JDK' 'D:\Android\JDK'
-# 用 LOCALAPPDATA 而不是写死用户名：工程路径本身含非 ASCII，再叠一层用户名容易配错。
-$VScanPython = Get-VScanSetting 'VSCAN_PYTHON' (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe')
+# 显式覆盖 > 项目虚拟环境 > 已有实际解释器，禁止回退 WindowsApps 别名。
+$VScanDefaultPython = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe'
+if (Test-Path -LiteralPath (Join-Path $PSScriptRoot '.venv/Scripts/python.exe')) {
+    $VScanDefaultPython = Join-Path $PSScriptRoot '.venv/Scripts/python.exe'
+}
+$VScanPython = Get-VScanSetting 'VSCAN_PYTHON' $VScanDefaultPython
 
 foreach ($probe in @(@($VScanSdk, 'ANDROID SDK'), @($VScanJdk, 'JDK'), @($VScanPython, 'Python'))) {
     if (-not (Test-Path -LiteralPath $probe[0])) {
@@ -26,7 +30,7 @@ if (Test-Path -LiteralPath $VScanJdk) { $env:JAVA_HOME = $VScanJdk }
 
 # JDK 的本地套接字临时目录必须在纯 ASCII 路径下：工程路径含非 ASCII 会让 NIO 直接失败。
 # 目录不存在时 JDK 不报错、只在连本地套接字时炸，所以这里显式建出来。
-$VScanTemp = Get-VScanSetting 'VSCAN_TEMP' 'D:\Android\temp'
+$VScanTemp = Get-VScanSetting 'VSCAN_TEMP' (Join-Path $PSScriptRoot 'output/java-temp')
 New-Item -ItemType Directory -Force -Path $VScanTemp | Out-Null
 $env:JAVA_TOOL_OPTIONS = "-Djdk.net.unixdomain.tmpdir=$VScanTemp"
 
