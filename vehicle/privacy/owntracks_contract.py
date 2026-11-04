@@ -1,4 +1,4 @@
-"""Pinned scope for the owned OwnTracks HTTP test. 仅用于授权测试。"""
+"""Pinned scope for the owned OwnTracks HTTP test (local 198.18.0.1 or 10/8 receiver). 仅用于授权测试。"""
 from vehicle.pipeline.contracts import ROOT, digest
 
 PACKAGE = 'org.owntracks.android'

@@ -61,3 +61,11 @@ OwnTracks 下载线程发生原生崩溃，采集健康检查失败。冷启动�
 & $VScanPython -m core.frida_host.build --platform vehicle --only hook_vehicle_owntracks.js
 & $VScanPython -m vehicle.lab.owntracks_run --out <新输出目录> --config <本轮配置文件> --apk <原版APK路径>
 ```
+
+## 新镜像续验（2026-11-04）
+
+用户提供的 AAOS 35 revision 4 镜像已启动，实际指纹为 A6。
+[同伴续验](COMPANION_FOLLOWUP_20261104.md)封存 OwnTracks 前台与后台不同新测试点、真实 HTTP 503 和完整健康校验，均通过。
+GPSLogger 138 的实际 GeneralLocationListener 异步回调在前后台各捕获一个新值，驱动正常退出且原 PID 存活。
+两者单列侧载对照层；GPSLogger 是读取诊断，不是其外发或负控验收。
+MG4 逐流映射和新增原生 AAOS 外发路径仍保留缺口。

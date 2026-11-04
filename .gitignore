@@ -134,3 +134,6 @@ core/collector/logs/
 # 会落成内容为路径的文本文件 → DSH 静默不加载该技能。所以不入库，各机自链。
 # 只排除这一个链接，.agents/skills/ 下真正的技能目录必须保持可提交。
 .agents/skills/vscanner-frontend-redesign
+
+# Local user-provided AAOS system image; retain on disk, exclude large binaries.
+/x86_64/

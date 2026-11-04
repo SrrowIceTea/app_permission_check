@@ -35,6 +35,7 @@ CHECKS = [
         'vehicle.pipeline.test_capture_proxy',
         'vehicle.privacy.test_observation', 'vehicle.privacy.test_ha_evaluation',
         'vehicle.lab.test_evidence_repairs', 'vehicle.lab.test_owntracks_run',
+        'vehicle.lab.test_companion', 'vehicle.lab.test_gpslogger_probe', 'vehicle.lab.test_owntracks_multiple',
         'vehicle.privacy.test_ha_socket_evidence']),
     # 归因/载荷/失败流落盘/报文扫描是平台无关的，已抽到 core/collector/；
     # 车载 VHAL 指纹表留在 vehicle/traffic。
