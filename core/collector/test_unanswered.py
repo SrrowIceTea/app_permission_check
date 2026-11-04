@@ -81,7 +81,7 @@ class UnansweredEntryTest(unittest.TestCase):
         entry = flow_entry.unanswered(_Flow(), FOUND, 1_000_000, "s1", "timeout")
         self.assertEqual("error", entry["terminal"])   # addon._emit 按它选文件
         self.assertIsNone(entry["status_code"])
-        self.assertEqual("timeout", entry["failure"])
+        self.assertEqual("upstream_timeout", entry["failure"])
         self.assertIsNone(entry["response_payload"])
 
     def test_key_set_matches_the_answered_entry(self) -> None:
@@ -160,6 +160,36 @@ class EmitRoutingTest(unittest.TestCase):
             self.assertEqual([], unanswered[0]["request_tokens"])
             # evt_id 由 _emit 统一分配，两个文件共用一个序列，便于对齐
             self.assertNotEqual(flows[0]["evt_id"], unanswered[0]["evt_id"])
+
+
+class FlowTargetTest(unittest.TestCase):
+    """reverse 模式下 `request.host` 被改写成上游，锚定必须用 Host 头（D417）。
+
+    离线重连夹具寻址 `10.0.2.2:8888`，改写后的 `request.host` 是
+    `127.0.0.1`；若拿它做目标校验，整条流 unresolved 后被严格范围丢弃。
+    """
+
+    def test_prefers_client_facing_host(self) -> None:
+        """离线夹具寻址 10.0.2.2：Host 头是锚点，上游 IP 不得参与。"""
+        flow = _Flow()
+        flow.client_conn.proxy_mode = types.SimpleNamespace(type_name='reverse')
+        flow.request.pretty_host = '10.0.2.2'
+        flow.request.host = '127.0.0.1'
+        self.assertEqual({'host': '10.0.2.2', 'ip': None}, flow_entry.target(flow))
+
+    def test_keeps_ip_when_host_was_not_rewritten(self) -> None:
+        """常规代理模式（Host 头与 URL host 一致）保留 peername 作为第二信号。"""
+        flow = _Flow()
+        flow.request.pretty_host = '127.0.0.1'
+        flow.request.host = '127.0.0.1'
+        self.assertEqual({'host': '127.0.0.1', 'ip': '127.0.0.1'},
+                         flow_entry.target(flow))
+
+    def test_falls_back_to_request_host(self) -> None:
+        flow = _Flow()
+        flow.request.pretty_host = None
+        flow.request.host = 'api.example.com'
+        self.assertEqual('api.example.com', flow_entry.target(flow)['host'])
 
 
 if __name__ == "__main__":

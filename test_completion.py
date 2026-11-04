@@ -1,5 +1,4 @@
 """新增功能离线验收，含跨包/时钟/禁用规则反例与真实双应用流回放。"""
-import base64
 import hashlib
 import json
 import socket
@@ -150,7 +149,9 @@ class CaptureTests(unittest.TestCase):
         result = capture(Message())
         self.assertTrue(result['raw_truncated'])
         self.assertEqual(hashlib.sha256(Message.raw_content).hexdigest(), result['raw_sha256'])
-        self.assertEqual(1024 * 1024, len(base64.b64decode(result['raw_base64'])))
+        self.assertEqual(len(Message.raw_content), result['raw_bytes'])
+        self.assertEqual('omitted_size_limit', result['retention'])
+        self.assertEqual(('', ''), (result['raw_base64'], result['text']))
 
     def test_legacy_screenshot(self):
         with tempfile.TemporaryDirectory() as tmp:

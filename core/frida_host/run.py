@@ -41,6 +41,7 @@ sys.path.insert(0, str(HERE.parent.parent))
 from core.event_store import EventStore
 from core.frida_host.bundle_config import configure
 from core.frida_host.device_target import adb, resolve_pid
+from core.frida_host.message_stream import MessageStream, TRANSPORT
 # frida-server on this device is started with `-l 127.0.0.1:27043`, not the default
 # 27042. Connecting to 27042 fails with "connection closed"; the forward is required.
 FRIDA_PORT = 27043
@@ -134,9 +135,6 @@ def main() -> int:
     if args.gadget and not args.package:
         parser.error("Gadget 模式必须使用 --package")
     session_id = args.session or uuid.uuid4().hex
-    failed = []
-    lock = threading.Lock()
-
     try:
         import frida  # noqa: PLC0415
     except ImportError:
@@ -175,8 +173,15 @@ def main() -> int:
     else:
         pid = args.pid or resolve_pid(args.package, args.user)
     session = device.attach(pid)
-    session.on("detached", lambda *info: failed.append("detached: " + str(info)))
     store = EventStore(args.event_db or args.out.with_suffix(".sqlite"))
+    stream = MessageStream(args.out, session_id, store, label=args.label, serial=os.environ.get('VSCAN_SERIAL'))
+    shutting_down = False
+
+    def detached(*_info):
+        if not shutting_down:
+            stream.failed.append('unexpected_detach')
+
+    session.on('detached', detached)
     script = session.create_script(
         configure(body, allowed, watch_limit=args.watch_limit, no_stack=no_stack,
                   args_only=args_only, deoptimize=args.deoptimize))
@@ -185,57 +190,7 @@ def main() -> int:
         print(f"分档模式：watch_limit={args.watch_limit} no_stack={no_stack} "
               f"args_only={args_only} deoptimize={args.deoptimize}", flush=True)
 
-    counts: dict[str, int] = {}
-    records = 0
-
-    def process_message(message, _data):
-        nonlocal records
-        if message.get("type") == "send":
-            payload = message.get("payload") or {}
-            line = payload.get("line")
-            if not line:
-                return
-            record = json.loads(line)
-            if args.label:
-                record["run_label"] = args.label
-            # 主机收到该事件的时刻。**设备与主机的时钟偏移会漂移**（实测曾从
-            # "设备快 530ms"漂到"设备慢 1731ms"），任何固定偏移假设都会静默失效。
-            # 这个字段让下游（Phase 4 归因）完全绕开跨时钟比较。
-            record["host_received_ts"] = int(time.time() * 1000)
-            record["session_id"] = session_id
-            if os.environ.get('VSCAN_SERIAL'):
-                record['device_serial'] = os.environ['VSCAN_SERIAL']
-            line = json.dumps(record, ensure_ascii=False)
-            with args.out.open("a", encoding="utf-8") as handle:
-                handle.write(line + "\n")
-            with lock:
-                store.append(session_id, str(args.out.resolve()), record)
-            records += 1
-            event = json.loads(line).get("ev", "?")
-            counts[event] = counts.get(event, 0) + 1
-        elif message.get("type") == "error":
-            failed.append("script_error")
-            record = {"ev": "SCRIPT_ERROR", "src": "driver", "session_id": session_id,
-                      "host_received_ts": int(time.time() * 1000), "message": message}
-            with args.out.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-            print("SCRIPT ERROR " + json.dumps(message, ensure_ascii=False)[:400], flush=True)
-
-    def on_message(message, data):
-        try:
-            process_message(message, data)
-        except Exception as exc:
-            failed.append("capture_error: " + str(exc))
-            error = {"ev": "CAPTURE_ERROR", "src": "driver", "session_id": session_id,
-                     "host_received_ts": int(time.time() * 1000), "error": str(exc)}
-            print(json.dumps(error, ensure_ascii=False), file=sys.stderr, flush=True)
-            try:
-                with args.out.open("a", encoding="utf-8") as handle:
-                    handle.write(json.dumps(error, ensure_ascii=False) + "\n")
-            except OSError:
-                pass  # stderr 与非零退出码仍保留故障，不能伪装成零事件。
-
-    script.on("message", on_message)
+    script.on("message", stream.on_message)
     script.load()
     if args.gadget or args.spawn:
         device.resume(pid)
@@ -251,7 +206,7 @@ def main() -> int:
     try:
         while time.monotonic() < deadline:
             time.sleep(1.0)
-            if failed:
+            if stream.failed:
                 break
             if args.stop_file is not None and args.stop_file.exists():
                 # 优雅停止（2026-10-16）：调用方以文件哨兵收尾而非 taskkill——
@@ -269,21 +224,32 @@ def main() -> int:
     except KeyboardInterrupt:
         print("interrupted", flush=True)
     finally:
-        unhealthy = bool(failed) or died_at is not None
-        run_catching(session.detach, "detach")
-        store.close()
+        if TRANSPORT in body and 'vscanFlush' in body and not stream.failed and died_at is None:
+            try:
+                with frida.Cancellable() as cancellation:
+                    timer = threading.Timer(5, cancellation.cancel)
+                    timer.start()
+                    try:
+                        stats = script.exports_sync.vscan_flush()
+                    finally:
+                        timer.cancel()
+                if stream.acknowledge(stats):
+                    print("VSCAN_TRANSPORT " + json.dumps(stats), flush=True)
+            except Exception as error:
+                stream.flush_failed(error)
+        shutting_down = True
+        try:
+            session.detach()
+        except Exception as error:
+            stream.failed.append('detach_failed')
+            print(f"detach: {error}", flush=True)
+        with stream.ready:
+            store.close()
 
-    print(f"\ncollected {records} JSONL records")
-    for event in sorted(counts):
-        print(f"  {counts[event]:5}  {event}")
-    return 1 if unhealthy else 0
-
-
-def run_catching(fn, what: str) -> None:
-    try:
-        fn()
-    except Exception as exc:  # noqa: BLE001
-        print(f"{what}: {exc}", flush=True)
+    print(f"\ncollected {sum(stream.counts.values())} JSONL records")
+    for event, count in sorted(stream.counts.items()):
+        print(f"  {count:5}  {event}")
+    return 1 if stream.failed or died_at is not None else 0
 
 
 if __name__ == "__main__":

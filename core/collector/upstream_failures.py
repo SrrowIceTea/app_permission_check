@@ -46,7 +46,7 @@ class UpstreamFailures:
         record = {'v': '1', 'src': 'proxy', 'session_id': self.session, 'ev': 'CONNECT_ERROR',
             'scope': 'connection', 'ts': int(time.time() * 1000),
             'server_address': f'{host}:{address[1]}' if address else None,
-            'failure': message or 'unknown', 'failure_kind': kind, 'connect_ms': connect_ms,
+            'failure': kind, 'failure_kind': kind, 'connect_ms': connect_ms,
             'note': '连接未建立；不能证明请求发送，也不能据此断言应用未外发。'}
         with self.lock:
             try:

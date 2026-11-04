@@ -18,8 +18,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from core.collector.body import body_of  # noqa: E402
+from core.collector.parse import parse_body, parse_summary  # noqa: E402
 from core.collector.payloads import capture  # noqa: E402
+from core.collector.redaction import redact_path  # noqa: E402
+from core.collector.upstream_failures import classify_upstream_failure  # noqa: E402
 
 
 def refresh_identity(entry, found):
@@ -31,9 +33,28 @@ def refresh_identity(entry, found):
 
 
 def target(flow):
+    """Use the actual proxy mode, never infer reverse mode from a custom Host.
+
+    Reverse rewrites the network destination to its upstream: only there use the
+    preserved Host, without the upstream peer IP. Regular uses the URL/peer.
+    """
+    req = flow.request
+    addressed, raw_host = getattr(req, 'pretty_host', None), getattr(req, 'host', None)
     peer = getattr(flow, 'server_conn', None)
     address = getattr(peer, 'peername', None)
-    return {'host': getattr(flow.request, 'host', None), 'ip': address[0] if address else None}
+    mode = getattr(getattr(flow, 'client_conn', None), 'proxy_mode', None)
+    reverse = getattr(mode, 'type_name', None) == 'reverse'
+    return {'host': (addressed or raw_host) if reverse else (raw_host or addressed),
+            'ip': address[0] if address and not reverse else None}
+
+
+def recorded_target(entry):
+    """Use the same anchor in delayed retries as in the original callback."""
+    saved = entry.get('attribution_target')
+    if isinstance(saved, dict):
+        return saved
+    # A legacy/minimal record has no mode; do not guess from its Host or peer IP.
+    return {'host': entry.get('target_host') or entry.get('host'), 'ip': None}
 
 # **系统自身的连通性探测**（2026-10-19 实测）：每次联网 Android 自己都会打
 # `connectivitycheck.gstatic.com/generate_204`，跟被测应用毫无关系。它走明文 HTTP，
@@ -64,10 +85,9 @@ def _common(flow, found, ts_ms: int, session: str) -> dict:
     """两种记录共有的字段。
 
     **不在这里放 `terminal`**：只有失败记录才带它，`addon._emit` 据此分流。
-    成功记录保持原样，`flows.jsonl` 的字段集与加固前逐字一致——它是对外证据契约，
-    "字段看起来没坏"不等于下游没人在按固定形状解析。
     """
     req = flow.request
+    request_payload = capture(req)
     return {
         "v": "1",
         "src": "proxy",
@@ -86,15 +106,17 @@ def _common(flow, found, ts_ms: int, session: str) -> dict:
         "scheme": req.scheme,
         "method": req.method,
         "host": req.pretty_host,
-        # 目标地址（供目标校验 / 取证）。`host` 保留 pretty_host 不变（对外证据契约），
-        # 这里另存**原始** host 与 port：与 hook 侧的 getHostString()/getAddress() 口径一致。
+        # 取证用：另存**原始** host 与 port（reverse 模式下 host 是上游地址）。
+        # 目标校验锚定的是上面的 `host`（pretty_host），见 target() 与 D417。
         # 用 getattr：测试/假 flow 的最小报文可能只有 pretty_host 而没有 host/port。
         "target_host": getattr(req, "host", None),
         "target_port": getattr(req, "port", None),
+        "attribution_target": target(flow),
         "server_ip": (flow.server_conn.peername or (None,))[0],
-        "path": req.path,
+        "path": redact_path(req.path),
         "intercepted_tls": client_tls(flow),
-        "request_preview": body_of(req)[:400],
+        "request_payload": request_payload,
+        "request_preview": request_payload["text"][:400],
     }
 
 
@@ -112,9 +134,23 @@ def client_tls(flow) -> bool:
     return False
 
 
-def answered(flow, found, ts_ms: int, session: str, tags: dict, scans: dict) -> dict:
+def parse_side(message) -> dict:
+    return {**parse_summary(parse_body(message)), "scan_basis": "not_scanned"}
+
+
+def parsing(flow, parses: dict | None = None) -> dict:
+    """两个构造器共用：请求/响应都带 parser + parse_status，缺一不可。"""
+    if parses is not None:
+        return {key: parses[key] for key in ("request_parse", "response_parse")}
+    return {"request_parse": parse_side(flow.request),
+            "response_parse": parse_side(getattr(flow, "response", None))}
+
+
+def answered(flow, found, ts_ms: int, session: str, tags: dict, scans: dict,
+             parses: dict | None = None) -> dict:
     """一次**拿到了响应**的外发。"""
     req, resp = flow.request, flow.response
+    response_payload = capture(resp)
     entry = _common(flow, found, ts_ms, session)
     entry.update({
         "status_code": resp.status_code if resp else None,
@@ -124,20 +160,23 @@ def answered(flow, found, ts_ms: int, session: str, tags: dict, scans: dict) -> 
         "response_tokens": tags["response_tokens"],
         "request_bytes": len(req.raw_content or b""),
         "response_bytes": len(resp.raw_content or b"") if resp else 0,
-        "request_payload": capture(req),
-        "response_payload": capture(resp),
-        "response_preview": body_of(resp)[:200] if resp else "",
+        "response_payload": response_payload,
+        "response_preview": response_payload["text"][:200],
         # 扫描状态：**"没打上标签"与"内容没被完整看过"必须能分开**。
         # truncated=true 时标签为空只说明"已扫的部分没有"，不代表整条报文不含敏感字段。
         "request_scan": scans["request_scan"],
         "response_scan": scans["response_scan"],
+        # 解析状态：multipart/protobuf/二进制解析不出来时这里必须留痕，
+        # 不能只留下空标签让人误读成"没有敏感字段"。
+        **parsing(flow, parses),
     })
     return entry
 
 
 def unanswered(flow, found, ts_ms: int, session: str, failure: str,
                failure_kind: str | None = None,
-               connect_ms: int | None = None) -> dict:
+               connect_ms: int | None = None,
+               parses: dict | None = None) -> dict:
     """一次**没拿到响应**的尝试（上游连接失败 / 超时 / 协议错误）。
 
     `request_tokens` / `response_tags` 一律为空：`vehicle/analyze/evaluation.py` 的外发判定
@@ -150,19 +189,21 @@ def unanswered(flow, found, ts_ms: int, session: str, failure: str,
     报告据此会写"应用没打算外发"。类别见 `addon.classify_upstream_failure`。
     """
     entry = _common(flow, found, ts_ms, session)
+    kind = failure_kind or classify_upstream_failure(failure, connect_ms)
     entry.update({
         "terminal": "error",   # addon._emit 按它选文件；成功记录不带这个键
         "status_code": None,
-        "failure": failure,
-        "failure_kind": failure_kind,
+        "failure": kind,
+        "failure_kind": kind,
         "connect_ms": connect_ms,
         "request_tags": [], "request_tokens": [],
         "response_tags": [], "response_tokens": [],
         "request_scan": None, "response_scan": None,
         "request_bytes": len(flow.request.raw_content or b""),
         "response_bytes": 0,
-        "request_payload": capture(flow.request),
         "response_payload": None,
         "response_preview": "",
+        # 失败流同样要能回答"请求体是什么格式、解析出来没有"。
+        **parsing(flow, parses),
     })
     return entry

@@ -1,6 +1,5 @@
 "Mitmproxy capture and delayed attribution; authorized tests only. See vehicle/traffic/DECISIONS.md."
 from __future__ import annotations
-
 import importlib.util
 import json
 import os
@@ -14,12 +13,11 @@ from mitmproxy import ctx, http
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from core.collector.attribution import ATTRIB_SOURCES, Attribution, TimeAttribution  # noqa: E402
-from core.collector.body import scan_body  # noqa: E402
-from core.collector import flow_entry  # noqa: E402
+from core.collector.inspection import inspect_body  # noqa: E402
+from core.collector import flow_entry, scope, health  # noqa: E402
 from core.event_store import EventStore  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-
 def _load_tagging():
     "加载**平台专有**的打标表；文件路径由 `VSCAN_TAGGING` 给出。"
     path = os.environ.get("VSCAN_TAGGING")
@@ -39,11 +37,13 @@ def _load_tagging():
         raise SystemExit(f"[fatal] {src} 缺少 tag_sensitive(text)->(labels,tokens)")
     return module
 
-tag_sensitive = _load_tagging().tag_sensitive
+TAGGING = _load_tagging()
+tag_sensitive = TAGGING.tag_sensitive
+# 平台打标表可以按解析后的字段补扫（form/multipart/WS 文本）；没有就退回原文扫描。
+tag_fields = getattr(TAGGING, "tag_fields", None)
 
 FLOW_LOG = Path(os.environ.get("VSCAN_FLOW_LOG") or (HERE / "logs" / "flows.jsonl"))
-# 请求被观察到、但没拿到响应的流。**必须与 flows.jsonl 分开**：前者是"一次外发"，
-# 后者是"一次尝试"。混在一起会让"没收到响应"与"没有发送请求"这两种情况互相掩盖。
+# Keep failed attempts separate from answered flows.
 UNANSWERED_LOG = Path(os.environ.get("VSCAN_UNANSWERED_LOG")
                       or FLOW_LOG.with_name(FLOW_LOG.stem + "-unanswered.jsonl"))
 # 上游**连接建立失败**（2026-10-19 实测）：只落在 mitmproxy 的文本日志里
@@ -53,7 +53,6 @@ CONNECT_ERROR_LOG = Path(os.environ.get("VSCAN_CONNECT_ERROR_LOG")
 UNATTRIBUTED_LOG = Path(os.environ.get("VSCAN_UNATTRIBUTED_LOG")
                         or FLOW_LOG.with_name(FLOW_LOG.stem + "-unattributed.jsonl"))
 
-# 白名单**没有默认值**（§8.2 B-1）。平台无关内核曾把车载夹具包名
 WHITELIST = {p.strip() for p in os.environ.get("VSCAN_PACKAGES", "").split(",") if p.strip()}
 if not WHITELIST:
     raise SystemExit(
@@ -90,6 +89,8 @@ server_connect_error = UPSTREAM.server_connect_error
 def _emit(entry: dict) -> None:
     "真正落盘。`evt_id` 在这里才分配，因此它是**写入顺序**而非收到顺序——"
     global FLOW_SEQ
+    if not scope.persist(entry, WHITELIST, FLOW_LOG, SESSION):
+        return
     FLOW_SEQ += 1
     entry["evt_id"] = FLOW_SEQ
     if entry.get("terminal") == "error":
@@ -131,9 +132,7 @@ def _flush(force: bool = False) -> None:
             if not force and now - entry['ts'] < GRACE_MS:
                 keep.append(entry)
                 continue
-            found = ATTRIB.resolve(entry["ts"],
-                                   {"host": entry.get("target_host"),
-                                    "ip": entry.get("server_ip")})
+            found = ATTRIB.resolve(entry["ts"], flow_entry.recorded_target(entry))
             if found.resolved:
                 flow_entry.refresh_identity(entry, found)
                 if entry["package"] in WHITELIST:
@@ -163,6 +162,9 @@ def _ticker() -> None:
         except Exception as exc:  # noqa: BLE001
             ctx.log.warn(f"[vscan] 定时冲刷出错：{exc}")
 
+def _inspect(message):
+    return inspect_body(message, tag_sensitive, tag_fields)
+
 def request(flow: http.HTTPFlow) -> None:
     _flush()
     ts_ms = int(time.time() * 1000)
@@ -171,13 +173,11 @@ def request(flow: http.HTTPFlow) -> None:
     flow.metadata["vscan_found"] = found
     if found.package not in WHITELIST:
         return
-    # 请求体只在这里扫一次；**扫描状态与标签一起缓存**。response() 里若重新算一次状态，
-    # 就会拿"请求侧的扫描状态"去描述响应，两边串不起来。
-    text, scan = scan_body(flow.request)
-    labels, tokens = tag_sensitive(text)
+    scan, summary, labels, tokens = _inspect(flow.request)
     flow.metadata["vscan_request_tags"] = labels
     flow.metadata["vscan_request_tokens"] = tokens
     flow.metadata["vscan_request_scan"] = scan
+    flow.metadata["vscan_request_parse"] = summary
 
 def response(flow: http.HTTPFlow) -> None:
     _flush()
@@ -190,18 +190,17 @@ def response(flow: http.HTTPFlow) -> None:
     request_tags = flow.metadata.get("vscan_request_tags")
     request_tokens = flow.metadata.get("vscan_request_tokens")
     request_scan = flow.metadata.get("vscan_request_scan")
+    request_parse = flow.metadata.get("vscan_request_parse")
     if request_tags is None:   # 未经 request()（例如白名单外或直接复用）时补扫一次
-        text, request_scan = scan_body(req)
-        request_tags, request_tokens = tag_sensitive(text)
+        request_scan, request_parse, request_tags, request_tokens = _inspect(req)
     if resp:
-        text, response_scan = scan_body(resp)
-        response_tags, response_tokens = tag_sensitive(text)
+        response_scan, response_parse, response_tags, response_tokens = _inspect(resp)
     else:
         response_tags, response_tokens, response_scan = [], [], None
+        response_parse = flow_entry.parse_side(None)
     all_tags = set(request_tags) | set(response_tags)
-
-    # 单包兜底归因（2026-10-19）：egress 钩子对 WebView 应用（网络在 Chromium
-    if not found.resolved and len(WHITELIST) == 1:
+    if (not found.resolved and len(WHITELIST) == 1
+            and os.environ.get('VSCAN_STRICT_PACKAGE_SCOPE') != '1'):
         sole = next(iter(WHITELIST))
         # is_system_probe 只看 host + path，用 flow 直接构造最小判据即可。
         if not flow_entry.is_system_probe({
@@ -214,7 +213,8 @@ def response(flow: http.HTTPFlow) -> None:
         flow, found, ts_ms, SESSION,
         tags=dict(request_tags=request_tags, request_tokens=request_tokens,
                   response_tags=response_tags, response_tokens=response_tokens),
-        scans=dict(request_scan=request_scan, response_scan=response_scan))
+        scans=dict(request_scan=request_scan, response_scan=response_scan),
+        parses=dict(request_parse=request_parse, response_parse=response_parse))
 
     flow.metadata["vscan_terminal"] = "response"
 
@@ -222,10 +222,7 @@ def response(flow: http.HTTPFlow) -> None:
         with _LOCK:
             PENDING.append(entry)
     elif not found.resolved:
-        # 归因不到就**单独留痕**，不丢：这是"代理看到了但钩子没覆盖"的唯一证据。
         entry["unattributed"] = True
-        # 打标记而不丢：系统探测仍然留痕（它是设备侧"联网正常"的证据），
-        # 但下游统计「是否可能存在未捕获的外发」时必须把它排除。
         entry["system_probe"] = flow_entry.is_system_probe(entry)
         with _LOCK:
             _emit(entry)
@@ -244,15 +241,17 @@ def error(flow: http.HTTPFlow) -> None:
     if found.package not in WHITELIST:
         return   # 白名单外的失败记下来只会淹没真正要看的（D403 的边界）
 
-    # `server_connect_error` 先于 `error` 触发（实测），失败分类与耗时由它带过来；
-    # 没走到那个钩子的情况（协议错误等）在这里就地补一次分类，保证字段不缺席。
     msg = getattr(flow.error, "msg", None) or "unknown"
     upstream = _UPSTREAM_FAIL.pop(id(flow.server_conn), None) or {}
     if "failure_kind" not in upstream:
         upstream["failure_kind"] = classify_upstream_failure(msg, None)
 
+    request_parse = flow.metadata.get("vscan_request_parse")
+    if request_parse is None:
+        _, request_parse, _, _ = _inspect(flow.request)
     entry = flow_entry.unanswered(
-        flow, found, ts_ms, SESSION, failure=msg, **upstream)
+        flow, found, ts_ms, SESSION, failure=msg, parses=dict(
+            request_parse=request_parse, response_parse=flow_entry.parse_side(None)), **upstream)
     with _LOCK:
         PENDING.append(entry)
 
@@ -297,3 +296,4 @@ def done() -> None:
         # 连接都没建起来（上游黑洞/拒连）。HTTP/2 场景下 error() 不会为每条流派发，
         # 只有这个文件能证明"代理试过、但连不上"。
         ctx.log.warn(f"[vscan] {connect_err} 次**上游连接失败**记录在 {CONNECT_ERROR_LOG}")
+health.install(globals(), FLOW_LOG, SESSION)

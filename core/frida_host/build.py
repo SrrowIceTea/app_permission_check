@@ -28,6 +28,9 @@ MOBILE_SCRIPTS = (
 VEHICLE_SCRIPTS = (
     "recon_cpm.js", "hook_vhal.js", "ssl_pinning_bypass.js", "hook_egress.js",
     "hook_cipher.js", "hook_native_ssl.js", "fixture_control.js", "hook_vehicle_all.js",
+    "hook_privacy.js", "hook_vehicle_general.js", "hook_vehicle_ha.js", "hook_vehicle_ha_socket.js",
+    "hook_vehicle_mg4.js", "hook_yaabsa_send.js", "hook_vehicle_abs_send.js",
+    "hook_vehicle_owntracks.js",
 )
 SHARED_SCRIPTS = ("ssl_pinning_bypass.js", "hook_egress.js")
 SCRIPT_GROUPS = {"mobile": MOBILE_SCRIPTS, "shared": SHARED_SCRIPTS,
