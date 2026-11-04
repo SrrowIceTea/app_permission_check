@@ -50,6 +50,7 @@ vscanner/
 | 目录 | 内容 | 详情 |
 | --- | --- | --- |
 | `core/` | 平台无关内核（车载/移动共用） | `event_store.py` 时序事件库；`collector/` 流量采集；`evidence/` 代码行号+dex 核对；`rules_contract.py` 规则库契约 |
+| `core/privacy/` | 通用隐私来源的规则与设备观测冻结（车载/移动共用） | [core/privacy/DECISIONS.md](core/privacy/DECISIONS.md) |
 | `vehicle/rules/` | 车载规则库（VSC-*，双版本 rules.db）+ Room 工程 | [vehicle/rules/CLAUDE.md](vehicle/rules/CLAUDE.md) |
 | `vehicle/targets/` | 靶子 App×2（被测对象）+ trigger.py | [vehicle/targets/CLAUDE.md](vehicle/targets/CLAUDE.md) |
 | `vehicle/hooks/` | Frida 钩子（VHAL 读取/出站/TLS 绕过/内存明文/侦察） | [vehicle/hooks/CLAUDE.md](vehicle/hooks/CLAUDE.md) |
@@ -57,6 +58,13 @@ vscanner/
 | `vehicle/analyze/` | 关联引擎 + PDF 报告（代码行号已抽到 core/evidence） | [vehicle/analyze/CLAUDE.md](vehicle/analyze/CLAUDE.md) |
 | `vehicle/dashboard/` | Web 可视化预警看板（交付物 B，静态单文件） | [vehicle/dashboard/CLAUDE.md](vehicle/dashboard/CLAUDE.md) |
 | `vehicle/workbench/` | APK 静态反编译工作台（server + static_rules + crosscheck） | [vehicle/workbench/CLAUDE.md](vehicle/workbench/CLAUDE.md) |
+| `vehicle/pipeline/` | 车载审计流水线：preflight→capture→audit→acceptance（`vehicle.ps1` 的实现层） | `vehicle/pipeline/audit.py` |
+| `vehicle/scenarios/` | 夹具场景目录与触发套件 | [vehicle/scenarios/CATALOG.md](vehicle/scenarios/CATALOG.md) |
+| `vehicle/coverage/` | 规则覆盖链生成与设备观测导出 | `vehicle/coverage/export.py`、[generated/COVERAGE.md](vehicle/coverage/generated/COVERAGE.md) |
+| `vehicle/policy/` | 隐私政策条款匹配与复核结论评估 | [vehicle/policy/REVIEW_POLICY.md](vehicle/policy/REVIEW_POLICY.md) |
+| `vehicle/privacy/` | 通用隐私来源（定位/麦克风/联系人/Android ID/AAID）规则与设备验收 | [vehicle/privacy/README.md](vehicle/privacy/README.md) |
+| `vehicle/bench/` | 基准/盲测套件与窗口标定（B1–B3 指标） | [vehicle/bench/README.md](vehicle/bench/README.md) |
+| `vehicle/lab/` | 一次性实验与第三方设备验收记录（root/non-root、HA、API 34 等） | `vehicle/lab/P1_P2_RESULTS.md` |
 | `mobile/` | 移动端产品线（MOB-* 规则库/钩子/政策/AI/报告/工具）+ `pipeline/` 一键审计（16 阶段 + SSE）+ `workbench/` 静态工作台 | [mobile/CLAUDE.md](mobile/CLAUDE.md) |
 | `frontend/` | 零构建前端：`index.html` 落地页 + `app.html`「一键审计」工作台 | [frontend/README.md](frontend/README.md) |
 
@@ -104,12 +112,13 @@ clone 后 `skills/` 下只有两个索引文件。需要时按 [skills/SKILLS.md
 
 ```bash
 PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
-"$PY" tools/run_regressions.py        # 13 组：completion/rules-contract/event-store/codeloc/
-                                      #       correlate/collector/tagging-vehicle/dashboard/
-                                      #       runtime/parity/workbench/hook-bundles/frida-bundle-config
+"$PY" tools/run_regressions.py        # 16 组：completion/rules-contract/event-store/codeloc/correlate/
+                                      #       vehicle-evidence/vehicle-pipeline/collector/tagging-vehicle/
+                                      #       dashboard/runtime/privacy-runtime/parity/workbench/
+                                      #       hook-bundles/frida-bundle-config
 
-"$PY" mobile/tools/run_mobile_checks.py   # 移动侧 28 项（另一条入口，改 mobile 后必须跑）
-"$PY" tools/check_mobile_branch.py        # 移动分支 22 组（含 workbench / policy / AI / 7 个前端契约）
+"$PY" mobile/tools/run_mobile_checks.py   # 移动侧 29 项（另一条入口，改 mobile 后必须跑）
+"$PY" tools/check_mobile_branch.py        # 移动分支 24 组（含 workbench / policy / AI / 7 个前端契约）
 ```
 
 > **先确认解释器再判红**：这两条都依赖 `requirements.txt`（`reportlab`/`Pillow`/`mitmproxy`/
@@ -157,7 +166,8 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
   `--resume` 额外复用本批次 `_static/` 已完成产物（判据是 `static-manifest.json`）。
   实测 3 样本并行 7m42s、同批 `--resume` 3.1s。
 
-仍**未做**（勿当成已完成）：B1 窗口校准（`WINDOW_CALIBRATION.md` 仍不存在）、
+仍**未做**（勿当成已完成）：B1 窗口校准**已出初评**（见
+[vehicle/bench/WINDOW_CALIBRATION.md](vehicle/bench/WINDOW_CALIBRATION.md)），人工签核待完成；
 A5-1 protectionLevel 标定（库内 `protection_level_raw` 仍 0/40）、B2 VScanBench、
 F1 类加载归因（无 `hook_classload.js`）、G1 UI 探索覆盖率度量、A4 分段自愈。
 
@@ -186,11 +196,10 @@ F1 类加载归因（无 `hook_classload.js`）、G1 UI 探索覆盖率度量、
   新增离线守卫 `tools/test_hook_bundles.py`（已并入 `run_regressions.py`）
 
 **待办**：拆分主体已完成。
-- ✅ `output/` 历史产物已清空（2026-10-19）——删除 208 项历史跑批目录与 `latest-*.txt` 指针；
-  仅保留 `dataset-quality-20261019/`、`frontend-shots/`、`pdf/`、`frontend-review/`、`completion/`
-  与 10 个指向 `D:/vscanner-tp` 的 `tp-*` 符号链接（删链不影响外部批次数据）。
-  `output/` 在 `.gitignore` 中、git 不跟踪，且所有工具用 `mkdir(parents=True)` 自建目录，
-  清空不影响任何入口；历史结论的引用改为"按需重跑"，见 `DELIVERY_INDEX.md`。
+- ✅ `output/` 历史产物清理（2026-10-19，**历史事件**）——当时删除 208 项历史跑批目录与
+  `latest-*.txt` 指针，`output/` 随后按轮次重新积累新产物。
+  `output/` 在 `.gitignore` 中、git 不跟踪，且所有工具用 `mkdir(parents=True)` 自建目录；
+  历史结论的引用改为"按需重跑"，见 `DELIVERY_INDEX.md`。**不要按本条去删 `output/` 里的现存内容。**
 
 边界仍须保留：native TLS/未解析协议无明文能力；Gadget 需要自有源码与安装授权，
 不支持无条件注入任意第三方 APK；统计归因遇歧义不关联；代码行号不证明违规语义。

@@ -12,16 +12,14 @@
 
 ### 车载（AAOS）
 
-- [审计报告 PDF](output/pdf/vscanner-audit-report.pdf)：12 页、含真实载荷截图与结论。
-- [审计复核工作台](output/frontend-review/dashboard.html)：单文件，双击可离线打开（需启用 JavaScript）。
-- [前端验证结果](output/frontend-review/verification.json) 与
-  [手机视口验证](output/frontend-review/viewport-verification.json)。
-- [验收原始材料](output/completion/)：`findings.jsonl`、`summary.json`、`room-verification.json`、
-  `rdap-smoke.json`、`geo-smoke.json`、`payload-images/`、PDF 逐页截图。
-- 夹具 APK：
-  - [主夹具 Debug](vehicle/targets/target-app/app/build/outputs/apk/debug/app-debug.apk)
-  - [第二夹具 Debug](vehicle/targets/target-app2/app/build/outputs/apk/debug/app-debug.apk)
-  - [主夹具 Gadget](vehicle/targets/target-app/app/build/outputs/apk/gadget/app-gadget.apk)
+- [审计报告 PDF](frontend/pdfs/car-audit-report.pdf)：12 页、含真实载荷截图与结论。
+- 审计复核工作台：`vehicle/dashboard/` 的**生成物**，按轮次写入 `output/<轮次>/`（不在库里）；
+  仓库内保留的静态示例见 [evidence/dashboard-refactor.html](vehicle/dashboard/evidence/dashboard-refactor.html)。
+- 前端验证结果（`verification.json` / `viewport-verification.json`）与验收原始材料（`output/completion/`）：
+  原目录已随 `output/` 重建清理，**按需重跑**下方「复现」里的 `tools/build_delivery.py`、
+  `tools/verify_presentation.py`；不要引用已不存在的目录路径。
+- 夹具 APK：`app/build/outputs/` 的构建产物不入库，需在 `vehicle/targets/target-app/`、
+  `vehicle/targets/target-app2/` 本地构建（Debug 与 Gadget 变体）。
 - [规则库](vehicle/rules/rules_library/rules.db)：双版本 44 条风险规则全部启用，
   外发规则每版 8 条、窗口 30000ms、revision=2（依据见 `vehicle/rules/EGRESS_CALIBRATION.md`）。
 
@@ -45,22 +43,22 @@
 - 政策库（含《用户协议》分册）：[mobile/policy/README.local.md](mobile/policy/README.local.md)
 - 非 root / root / 真机实验：[mobile/lab/README.core.md](mobile/lab/README.core.md)、
   [README.nonroot.md](mobile/lab/README.nonroot.md)、[README.root.md](mobile/lab/README.root.md)
-- 决策与踩坑：[mobile/DECISIONS.md](mobile/DECISIONS.md)（M001–M040）
+- 决策与踩坑：[mobile/DECISIONS.md](mobile/DECISIONS.md)（M001–M058）
 
-### 2026-10-19 新产物（保留）
+### 2026-10-19 后的产物
 
-- [测试集质量分析](output/dataset-quality-20261019/质量分析-20261019.md)
-  + `batch-quality.csv` / `batch-quality.json` / `policy-inventory.json`
-- [前端界面截图](output/frontend-shots/)
+2026-10-19 之后 `output/` 按轮次重新积累（当前为 11-02~11-04 的新跑批），旧目录不可再引用；
+需要质量分析或前端截图时按需重跑（质量分析走 `mobile/tools/batch_thirdparty.py`，
+前端截图按 [frontend/README.md](frontend/README.md) 的说明）。
 
 ## 复现
 
 先按 [COMPLETION.md](COMPLETION.md) 初始化 `environment.ps1`，再按需运行：
 
 ```powershell
-& $VScanPython tools/run_regressions.py          # 根回归 13 组
-& $VScanPython mobile/tools/run_mobile_checks.py # 移动侧 24 组
-& $VScanPython tools/check_mobile_branch.py      # 移动分支 22 组（含 workbench/policy/AI/前端契约）
+& $VScanPython tools/run_regressions.py          # 根回归 16 组
+& $VScanPython mobile/tools/run_mobile_checks.py # 移动侧 29 项
+& $VScanPython tools/check_mobile_branch.py      # 移动分支 24 组（含 workbench/policy/AI/前端契约）
 & $VScanPython tools/device_acceptance.py
 & $VScanPython tools/gadget_acceptance.py
 & $VScanPython tools/multi_acceptance.py

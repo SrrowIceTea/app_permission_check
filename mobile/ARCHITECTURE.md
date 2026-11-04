@@ -16,7 +16,7 @@
 | 入口 | 前端 `frontend/index.html` → 工作台 `frontend/app.html` → `mobile/pipeline/server.py`（端口 **8771**） |
 | 兼容旧端 | `mobile/workbench/server.py`（端口 **8772**，旧隐私工作台，可并行） |
 | 运行模式 | Root 模拟器（frida-server 直挂）/ 非 root Gadget 重签衍生包（两轮正控均已通过） |
-| 离线优先 | 绝大多数能力无需设备即可回归（`run_mobile_checks.py` 28 项、`check_mobile_branch.py` 22 组） |
+| 离线优先 | 绝大多数能力无需设备即可回归（`run_mobile_checks.py` 29 项、`check_mobile_branch.py` 24 组） |
 
 ---
 

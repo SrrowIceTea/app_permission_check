@@ -190,3 +190,17 @@ EV_BATTERY_LEVEL 同受 CAR_ENERGY 管辖）产生**两条一模一样的结论*
 完整结果：../output/completion/room-verification.json。校准依据见EGRESS_CALIBRATION.md。
 核对修改前备份assets-before.db，R001–R008已经存在且启用，CURRENT_GEAR=R004；
 旧的“仅3属性有规则”描述不适用于本次实际工作区，不能据此另造重复规则。
+
+## D012 通用隐私来源独立冻结实测依据（2026-11-02）
+
+通用 VSC-G* 规则不得复用旧 VHAL device-facts 的指纹。privacy_observation.py 从已通过的
+正控/拒绝会话提取真实指纹和逐类型 read_state 计数；核对输入摘要、会话、API 与 Hook 契约。
+固化到 vehicle/privacy/device-observation.json，带 manifest/reads/verification 摘要，支持离线重建。
+构建器使用 --privacy-observation（默认此快照）；旧 --device-facts 仅供原 VHAL 校准。
+本次仅 6 条 Android15 通用规则的 source_refs_json 改变；所有 VHAL 行及其他字段逐项核对不变。
+同步库、Android 资产与 RulesVerifier SHA；14 版仅引用 SDK，仍不冒充设备实测。
+
+## D013 AAID 独立读取规则（2026-11-04）
+
+两版本分别登记 VSC-GR-advertising_id。API 35 行引用同镜像、同 Hook 的四态封存记录；
+Android 14 行引用 Google SDK 依据。逐表核对既有行一致，规则库与 Room 资产同步。

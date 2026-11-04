@@ -63,6 +63,8 @@ local.properties
 *.aab
 *.ap_
 *.dex
+# 夹具工程的 Gradle 产物（`**/app/build/` 覆盖不到 target-app/build 与 aaid-fixture/build）
+vehicle/targets/**/build/
 
 # ── 日志 ────────────────────────────────────────────────────────
 *.log

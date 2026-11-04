@@ -4,10 +4,11 @@
 
 当前内容：四表 SQL、Room Entity、只查询 DAO、源码解析、离线校准和合成演示。
 android-14 部分是从 AOSP `android-14.0.0_r1` 抽取的 41 条（24 规则覆盖全部 8 个 VHAL 属性，P 按权限去重），见 [种子库说明](baseline_android14/README.md)。
-android-15 部分是**设备实测**的 179 条，见 [设备校准说明](device_calibration/README.md)。
+android-15 部分是**设备实测**的 185 条，见 [设备校准说明](device_calibration/README.md)。
 `android/` 已是可编译的 Gradle 工程，双版本规则库已在真实 AAOS 设备上验证加载成功（见下）。
-每版本启用 14 条规则（over_permission 6 条 + sensitive_read 8 条）；`data_egress` 8 条因 `window_ms`
-待校准而未启用，见 D010。
+每版本启用 29 条规则：over_permission 6 条 + sensitive_read 13 条（8 VHAL + 5 `VSC-GR-*`）
++ data_egress 10 条（8 VHAL + 2 `VSC-GE-*`）。2026-11-02 通用隐私规则正式登记，见
+[privacy/POLICY.md](../privacy/POLICY.md)；VHAL 外发窗口依据见 D010 / EGRESS_CALIBRATION.md。
 测试样例全部使用 TEST_ONLY 标识，不代表 AOSP 常量，也不能部署用于正式审计。
 
 ```text
@@ -15,7 +16,7 @@ vehicle/rules/
   schema.sql                    四表契约
   baseline_android14/           android-14 源码抽取基线（41 条，已锁定）
   device_calibration/           android-15 设备实测证据（146 权限 / 254 属性 / 96 签名）
-  rules_library/rules.db        双版本规则库产物（'14' 39 条 + '15' 179 条）
+  rules_library/rules.db        双版本规则库产物（'14' 45 条 + '15' 185 条）
   android/                      可编译的 Gradle 工程
     settings.gradle.kts         仓库源：阿里云优先
     gradle/libs.versions.toml   版本目录
@@ -229,13 +230,14 @@ adb root && adb pull /data/user/10/com.vscanner.rules/files/verification.json
 `classify()` 里仍保留 `SQLiteDatabaseCorruptException` / `SQLiteException` 分支，
 作为尚未观测到的形态的防线，但它不是这几种情况的判据。
 
-实测结果：`state=OK`，SHA-256 匹配，双版本条数均符合预期，每个版本启用规则 14/22
-（over_permission 6 条 + sensitive_read 8 条；data_egress 8 条因 `window_ms` 待校准而未启用，见 D010）：
+实测结果：`state=OK`，SHA-256 匹配，双版本条数均符合预期，每个版本启用规则 28 条
+（over_permission 6 条 + sensitive_read 12 条 + data_egress 10 条；通用隐私 `VSC-G*` 6 条
+2026-11-02 登记，其余 VHAL 规则依据见 D010 / EGRESS_CALIBRATION.md）：
 
 | android_version | 权限 | 属性 | API | 规则 | 启用 | 合计 | 来源 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 14 | 6 | 8 | 3 | 22 | 14 | 39 | AOSP `android-14.0.0_r1` 源码抽取 |
-| 15 | 146 | 8 | 3 | 22 | 14 | 179 | 设备实测（API 35） |
+| 14 | 6 | 8 | 3 | 28 | 28 | 45 | AOSP `android-14.0.0_r1` 源码抽取 |
+| 15 | 146 | 8 | 3 | 28 | 28 | 185 | 设备实测（API 35） |
 
 两版本来源不同，这是**刻意的**：`definition_status` 只有源码抽取才配 `source_verified`，
 设备观测一律 `pending`，出处记在 `device_calibration_json`。

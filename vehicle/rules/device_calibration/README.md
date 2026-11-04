@@ -85,11 +85,11 @@ python python/build_multiversion_rules.py \
   --out rules_library/rules.db --summary rules_library/rules.db.summary.json
 ```
 
-产物 `rules_library/rules.db`：'14' 39 条（源码，`source_verified`）+
-'15' 179 条（设备，`pending`），每版本启用规则 14/22（over_permission 与 sensitive_read；
-data_egress 因 `window_ms` 待校准而未启用，见 DECISIONS D010）。
+产物 `rules_library/rules.db`：'14' 46 条、'15' 186 条，每版本启用规则 29/29
+（6 over_permission + 13 sensitive_read + 10 data_egress）。通用隐私 `VSC-G*` 共 7 条，
+包含 O6 新增的 AAID 读取规则。
 
-'15' 的 22 条规则是镜像 android-14 的策略草案，但溯源拆开处理（DECISIONS D009）：
+'15' 的 VHAL 规则沿用 android-14 的策略并独立登记设备来源（DECISIONS D009）：
 `basis_refs_json`（POLICY.md，项目策略，与版本无关）原样保留；
 `source_refs_json`（AOSP android-14 的 commit 与行号）**不保留**，改为记录本目录采集到的
 设备实测值——否则等于给 android-15 的规则安上 android-14 的出处。
@@ -97,3 +97,7 @@ data_egress 因 `window_ms` 待校准而未启用，见 DECISIONS D010）。
 
 复制进 `android/app/src/main/assets/rules.db` 后，`RulesVerifier.BaselineExpectation`
 的条数与 SHA-256 必须同步更新，否则验证页会如实报 schema 不匹配。
+
+2026-11-02 修正：本目录 device-facts 只用于原 VHAL 校准。通用隐私 VSC-G* 来源独立取自
+`vehicle/privacy/device-observation.json`，通过 `python/privacy_observation.py` 从真实通过且
+输入摘要匹配的采集冻结，指纹和状态逐类型记录，不能沿用本目录旧镜像的信息。

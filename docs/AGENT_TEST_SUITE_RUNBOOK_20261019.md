@@ -375,8 +375,8 @@ print([r[0] for r in c.execute('select category_key from app_categories order by
 > （`/api/v2/canteens?page=1..N`，200，归因 `single_package_fallback`）、
 > `consent_observation=not_observed`。回归基准请以修复后的批次为准。
 
-> 修复后的端到端复核结论、证据链与仍开放项，见
-> [文档归档前版本](archive/FIX_VERIFICATION_20261019.md)。
+> 修复后的端到端复核结论、证据链与仍开放项，原文见归档说明
+> [archive/MANIFEST.md](../archive/MANIFEST.md)（`FIX_VERIFICATION_20261019.md` 已不随工作区分发）。
 > 其中修复后重新生成的报告是 `D:/vscanner-tp/regen-openmensa-1019/out/mobile-report-v2.pdf`
 > （14 页，含"单包排除法/封顶 candidate"披露）；19:40 与 19:54 那两份 PDF 是修复前产物，
 > 不能当证据引用。

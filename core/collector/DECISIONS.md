@@ -145,3 +145,54 @@ D407 锚点 24ms/15ms，σ=20ms 抖动）：
 - **P2 确定性归属**：设备侧代理 + per-uid iptables REDIRECT + SO_ORIGINAL_DST
   （`mobile/traffic/transparent.py:84-100` 已留接口），唯一能给"确定性归属"的路线。
   车载可用双夹具独立监听端口（8888/8889）当验证基准，但不是产品能力。
+
+## D416 普通第三方严格范围与回调健康（2026-11-02）
+
+新版 vehicle capture 显式启用目标核对、保守归因与 VSCAN_STRICT_PACKAGE_SCOPE。
+严格模式禁止单包兜底：一个包在白名单里不能证明设备中每条流都属于它。非白名单、缺 UID 或歧义
+请求的正文不持久化，只留丢弃计数；既有移动默认策略保持兼容。严格模式不承诺确定性归属。
+车载场景夹具也显式启用相同三项约束，防止新用户初始化的系统 CONNECT 被时间邻近误归给夹具。
+health 模块包装采集回调和延迟 flush；异常保留结构化 failed 状态并重抛，done 不得洗掉先前失败。
+本轮曾误删 response 的有效 request_tokens/request_scan 初始化，导致上游 200 而无流量落盘；
+失败设备轮保留。补真实 request-response-flush 测试及元数据断言，修复后重跑设备验收。
+
+## D417 reverse 模式目标锚定：用 pretty_host，不关 target_check（2026-11-02）
+
+### 问题
+
+车载场景夹具用 **reverse** 模式（`--mode reverse:http://127.0.0.1:<ephemeral>` +
+`keep_host_header=true` + `adb reverse tcp:8888`）。mitmproxy 会把 `request.host`
+改写成上游地址，客户端实际寻址的 host 只剩在 Host 头（`pretty_host`）里。
+`flow_entry.target()` 原先取 `request.host`，于是：
+
+- 夹具寻址 `10.0.2.2:8888`（离线重连场景），流的目标锚点是 `127.0.0.1`；
+- egress 事件的目标是 `10.0.2.2`；
+- `target_match` 失败 → unresolved → `VSCAN_STRICT_PACKAGE_SCOPE` 丢弃正文
+  → `flows.jsonl` 0 字节；mitm.log 报「归因超时 … 已知事件 3 条」。
+
+临时把 `VSCAN_ATTRIB_TARGET_CHECK` 关掉能跑通，但那是**用时间邻近掩盖目标失配**：
+检查结束后系统连通性探测（`connectivitycheck.gstatic.com` 等）会被归给夹具，
+与 D416「场景夹具也启用相同三项约束」直接冲突。不采用。
+
+### 解法（两处，平台无关内核）
+
+1. `flow_entry.target()` 优先取 `pretty_host`（Host 头，即客户端寻址目标），
+   缺失时回退 `request.host`。
+2. `addon._flush()` 的延迟重试同步改用 `entry["host"]`（pretty_host），
+   不再用 `target_host`（reverse 下是上游地址）。
+
+初版没有按实际代理模式区分；regular 自定义 Host 时也会错误使用 pretty_host，
+并可能匹配另一个应用。该边界已在 D418 修复，不能沿用初版的“只会 unresolved”判断。
+
+### 验证
+
+`core/collector/test_unanswered.py` 新增 `FlowTargetTest`（pretty_host 优先 / 回退）；
+`tools/vehicle_scenario_acceptance.py` 恢复 `VSCAN_ATTRIB_TARGET_CHECK=1` 并复跑
+6 个场景。结果与证据路径记入 `vehicle/P0_P1_DELIVERY.md` 与 `vehicle/scenarios/CATALOG.md`。
+
+## D418 按真实代理模式固定目标，延迟重试保持一致（2026-11-02）
+
+从 client_conn.proxy_mode.type_name 判 reverse；不根据 Host 与 URL 是否相同推断。
+regular 保留 request.host 与实际 peer IP；reverse 才用 pretty_host，并排除上游 peer IP。
+每条记录保存 attribution_target，_flush 直接复用，避免第一次和延迟重试使用不同目标。
+真实 mitmproxy Request 的自定义 Host 正反例、两模式回调及延迟落盘已加入离线回归。

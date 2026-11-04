@@ -49,10 +49,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 根回归（13 组）
+      - name: 根回归（16 组）
         run: python tools/run_regressions.py
 
-      - name: 移动侧回归（23 项）
+      - name: 移动侧回归（29 项）
         run: python mobile/tools/run_mobile_checks.py
 
       - name: 回归判据落盘（失败运行同样保留）

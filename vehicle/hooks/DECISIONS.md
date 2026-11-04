@@ -237,3 +237,56 @@ frida-compile输出含UTF8字节长度头，不能直接向bundle前部拼JS；b
 ## D314 单 Java runtime 采集与收尾稳定性（2026-11-01）
 
 两个独立 bridge 的设备采集本身成功，但正常 detach 后仍稳定出现 DeleteGlobalRef JNI 未附着线程 abort；不能仅凭驱动 exit 0 判验收成功。新增 java_bootstrap + hook_vehicle_all，ESM 顺序先建立 Java global，再装配 VHAL/出站/TLS，共用一份 bridge。停止哨兵触发驱动正常 detach，设备测试必须验证原 PID 仍存活。主动读取/订阅补 value_raw、value_type、user_id；旧 value 展示字段保留。
+
+## D315 普通代理的请求目标候选（2026-11-02）
+
+普通 App 使用系统 HTTP 代理时，Socket.connect 可能只指向代理，不能据此与真实目的主机核对。
+新增共享 request_targets 观察 java.net.URL.openConnection 与可解析的 OkHttp Request.Builder.build，
+只记录 host/UID/栈，复用同一 egress logger，避免同 src 事件编号撞号；不记录 URL 查询值。
+它们是请求目标候选，不是已经发送。必须有实际代理请求、目标相符及现有时间/身份/内容条件才关联。
+保留可选类缺失缺口；不改写参数/返回值，不保证 native/WebView 子进程、所有 HTTP 栈或连接复用覆盖。
+
+## D316 HA 电源来源的实测边界（2026-11-03）
+
+独立实验 Hook 只观察 `ACTION_BATTERY_CHANGED` 的四个 `Intent.getIntExtra` 返回字段。HA 运行时栈和上游固定版本源码一致，73%、61% 与自有服务实体的新状态对齐。普通车载审计规则仍有电源路径缺口。API 34 的四类通用来源验收使用独立 Frida 端口与设备序列号，VHAL 不套用 API 35 结果。
+
+## D317 HA 电量 HTTP 正文与响应同请求绑定（2026-11-03）
+
+指定 APK、隔离回环 webhook 和常规采集的 opt-in bundle。只观察 OkHttp 实际写入与同次响应。按请求体对象和实际 Sink 对象绑定，不回放序列化。持久化字段限制为电量与必要的诊断元数据。找不到完整正文时保留具体缺口。设备验收及适用范围见 [HA 电量 HTTP 正文](../lab/HA_WEBHOOK_VALIDATION.md)。
+
+## D318 会话封存实际执行的 bundle（2026-11-03）
+
+常规 capture 将 bundle 复制到会话目录后，从副本启动驱动。审计核对副本摘要，构建目录可以独立更新。旧会话可补存与清单摘要相同的原文件。HA r4 已补存，更早的电量 run-006 缺少原文件并保留原清单。
+
+## D319 MG4 自有表单的 WebView 宿主请求（2026-11-03）
+
+反编译装机 APK 确认样本 WebViewClient 未覆盖 shouldInterceptRequest，专用 bundle 只观察原回调并原样返回。
+测试页在 URL 和完整表单正文中使用同一随机标记，绑定宿主包 UID、请求事件与独立服务端回执。
+代理只提供同路由佐证，截断的日志标记仅核对可见前缀。逐流代理身份仍按原严格规则处理。
+
+## D320 YAABSA 实际发送的进程证据（2026-11-03）
+
+诊断轮实际命中 `libcronet.147.0.7727.49.so → sendto`。最终 bundle 仅在固定 APK 白名单进程、
+该模块、隔离 ABS 回环端点观察成功写入。完整正文须为三个数值字段，日志仅保留摘要和连接信息。
+用回环抓包中的请求正文摘要、源端口、设备发送时间绑定一对一候选。未归因正文在标准入口丢弃。
+覆盖限定为此样本的完整单次写入，跨写入分片、TLS、其他库版本与协议保留缺口。
+
+## D321 车载全量 Hook 批传输与同步委托合并（2026-11-04）
+
+全量 bundle 将 VHAL 记录按 20 条或 50 ms 批传，非 VHAL 读取事件发送前先排空待发记录。
+宿主保留设备时间戳与事件编号，退出前核对 JSONL 与 SQLite 已写数量；丢失或异常进入采集失败。
+只合并同线程、同属性和区域的已知同步 CPM 委托。同一签名重复调用及订阅回调仍分别记录。
+内层拒绝或不可用保留语义，防止外层默认值被当作获得数据。保留应用栈和前 12 帧，
+独立旧 bundle 与移动端仍支持单条回传。当前实测边界见 [开销复测](../bench/README.md)。
+
+## D322 AAID 使用实际返回值与 GMS 可用性（2026-11-04）
+
+固定 Google Maven 客户端版本核对 Info 与 getId 签名。Info 返回只记调用。全零结合目标 SDK 与
+AD_ID 实际授予区分权限拒绝和空值。GMS 缺失时本镜像的 SDK 抛 IOException，额外核对调用方
+可见性后登记 unavailable。普通连接错误保持 error，事件只保留状态和长度。见 [设备验收](../lab/O6_DEVICE_ACCEPTANCE.md)。
+
+## D323 OwnTracks 定位外发按固定 APK 验收（2026-11-04）
+
+固定 APK 的 OkHttp 构造方法经过重命名。独立 bundle 观察实际定位回调与应用 HTTP 请求构造，
+请求构造只作为目标候选，必须结合代理 POST 和隔离接收端的正文摘要。隔离 HTTP 不装载 TLS 绕过。
+APK 哈希和 Hook 契约在采集与导入时核验。见 [样本运行记录](../lab/SAMPLE_RUNTIME_REVIEW.md)。

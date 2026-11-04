@@ -11,7 +11,7 @@
 | `schema.sql` | 四表契约（permissions / vhal_properties / dangerous_apis / risk_rules），**不要动** |
 | `baseline_android14/` | android-14 源码抽取基线（已锁定，41 条，`source_verified`） |
 | `device_calibration/` | android-15 设备实测证据（146 权限 / 254 属性 / 96 签名） |
-| `rules_library/rules.db` | 双版本产物（'14' 39 条 + '15' 179 条，每版启用 14/22） |
+| `rules_library/rules.db` | 双版本产物（'14' 46 条 + '15' 186 条，每版启用 29/29） |
 | `android/` | Gradle 工程：Room 实体/DAO、RulesVerifier、验证页、设备侧测试 |
 | `python/` | 抽取/校准/构建流水线（全部零第三方依赖） |
 | `archive/research/RELATED_WORK.md` | 研究文档（已归档到 archive/，改算法前先读） |
@@ -60,6 +60,9 @@ adb shell am start -n com.vscanner.rules/.MainActivity
 
 已完成双版本规则库、Room验证与schema parity。当前资产SHA256与RulesVerifier同步。
 2026-09-24启用每版8条data_egress规则，window_ms=30000、revision=2；见EGRESS_CALIBRATION.md。
+2026-11-02 通用隐私规则 `VSC-GR-*`/`VSC-GE-*` 正式登记（每版 6 条），规则 ID 可在 rules.db 查回；
+Android 14/15 之外（平台 13/16）在求值时映射到最近登记行并在结论里写明 `rule_android_version`，
+不把行改标到未登记版本。
 核对修改前备份库，8个属性已有读取规则（CURRENT_GEAR=R004）；旧的3/8描述不准确。
 报告/看板按输入规则动态计算覆盖缺口，不预设存在或不存在。
 不得将Android15设备观测的pending来源改成源码已核实。

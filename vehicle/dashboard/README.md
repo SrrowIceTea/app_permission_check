@@ -4,7 +4,8 @@
 
 ## 打开与使用
 
-当前前端：[审计复核工作台](../../output/frontend-review/dashboard.html)。双击 HTML 可离线打开，需要启用 JavaScript。
+当前前端是**生成物**：跑 `vehicle/dashboard/dashboard.py` 后按轮次写入 `output/<轮次>/`，不在库里。
+仓库内保留的静态示例见 [evidence/dashboard-refactor.html](evidence/dashboard-refactor.html)，双击可离线打开，需要启用 JavaScript。
 
 - 搜索规则 ID、权限、属性、源码文件或方法，并组合规则类型与结论等级筛选。
 - 展开“代码位置”查看读取处/外发处、事件级 dex 核对及定位缺口；带缺口的结论在折叠标题中提示。

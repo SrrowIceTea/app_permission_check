@@ -12,8 +12,8 @@
 ```
 vscanner/
 ├── core/           # 平台无关内核（唯一一份）：事件库/流量采集/代码行号/规则契约/Frida驱动/静态内核
-├── vehicle/        # 车载 AAOS 产品线：rules→targets→hooks→traffic→analyze→dashboard→workbench（已交付）
-├── mobile/         # 移动端产品线：规则库/钩子/政策/AI/报告/工具 + 一键审计流水线（当前主战场）
+├── vehicle/        # 普通第三方车载审计：独立入口/覆盖链/场景/政策/样本评估 + 原车载工具
+├── mobile/         # 移动端产品线：规则库/钩子/政策/AI/报告/工具 + 一键审计流水线
 ├── frontend/       # 零构建前端：落地页 index.html + 「一键审计」工作台 app.html（对接 pipeline:8771）
 ├── tools/          # 验收 / 回归脚本（run_regressions.py / check_mobile_branch.py）
 ├── docs/           # 操作手册（AGENT_TEST_SUITE_RUNBOOK 等）
@@ -21,9 +21,17 @@ vscanner/
 ```
 
 > 权威 agent 操作手册见 [AGENTS.md](AGENTS.md)；复现与证据说明见 [COMPLETION.md](COMPLETION.md)；
-> 交付索引见 [DELIVERY_INDEX.md](DELIVERY_INDEX.md)；当前工作状态与下一步见 [HANDOFF.md](HANDOFF.md)。
+> 交付索引与当前状态见 [DELIVERY_INDEX.md](DELIVERY_INDEX.md)。
 
-## 移动端主线（当前主战场，详见 [mobile/CLAUDE.md](mobile/CLAUDE.md)）
+## 普通第三方车载开发（2026-11-02）
+
+统一入口：`./vehicle.ps1 prepare --install-deps`、`coverage`、`profiles`、`capture`、`audit`、`samples`、`benchmark`。
+当前以 AAOS 35 为动态基线，版本/车型范围见 [vehicle/COMPATIBILITY.md](vehicle/COMPATIBILITY.md)，
+运行步骤见 [vehicle/README.md](vehicle/README.md)，[覆盖链](vehicle/coverage/generated/COVERAGE.md)、
+[车载场景](vehicle/scenarios/CATALOG.md)、[独立样本评估](vehicle/bench/README.md) 分别保留验收范围。
+移动端前端仍对接 mobile/pipeline；车载入口独立，不能把移动端任务当成车载测试。
+
+## 移动端能力（详见 [mobile/CLAUDE.md](mobile/CLAUDE.md)）
 
 把一次检测拆成五段，每段留下可复核的原始证据：
 
@@ -94,9 +102,9 @@ vscanner/
 $py = "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
 
 # 1) 仓库级离线回归（不需要设备/网络/API key）
-& $py tools/run_regressions.py                 # 13 组：completion/rules-contract/event-store/codeloc/correlate/...
+& $py tools/run_regressions.py                 # 16 组：completion/rules-contract/event-store/codeloc/correlate/...
 
-# 2) 移动侧离线回归 + 端点干跑（28 项；看 output/mobile-regression-*/verification.json）
+# 2) 移动侧离线回归 + 端点干跑（29 项；看 output/mobile-regression-*/verification.json）
 & $py mobile/tools/run_mobile_checks.py
 
 # 3) 移动分支回归（含 workbench / policy / AI / 前端契约）
@@ -130,9 +138,9 @@ python -m http.server 8090 --bind 127.0.0.1 --directory frontend   # 浏览器�
 1. **[AGENTS.md](AGENTS.md)** — agent 操作手册：全局约束、环境事实、跑测试集、规则库、产品地图、
    拆分进度与已完成/未做清单。改任何模块前必读。
 2. **[mobile/CLAUDE.md](mobile/CLAUDE.md)** — 移动端模块级说明（结构 + 关键链路 + 坑位）。
-3. **[mobile/DECISIONS.md](mobile/DECISIONS.md)** — 移动端决策记录 M001–M056（几乎每个坑都是静默失败）。
-4. **[HANDOFF.md](HANDOFF.md)** — 当前工作状态与下一步。
-5. **[core/…/CLAUDE.md](core/collector/CLAUDE.md)** 与 `vehicle/*/CLAUDE.md` — 平台内核对车载模块细节。
+3. **[mobile/DECISIONS.md](mobile/DECISIONS.md)** — 移动端决策记录 M001–M058（几乎每个坑都是静默失败）。
+4. **[DELIVERY_INDEX.md](DELIVERY_INDEX.md)** — 交付物现状、文档入口清单与复现命令。
+5. **[core/collector/DECISIONS.md](core/collector/DECISIONS.md)** 与 `vehicle/*/CLAUDE.md` — 平台内核与车载模块细节。
 
 **改任何模块前先读对应目录的 DECISIONS**——大多数历史坑都是**静默失败**。
 
