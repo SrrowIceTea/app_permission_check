@@ -45,10 +45,10 @@ def grant_state(snapshot, permission):
     return 'declared_but_not_granted' if permission in snapshot['declared'] else 'not_declared'
 
 
-def attach_observations(data, capture):
+def attach_observations(data, capture, catalog_snapshot=None):
     capture = Path(capture)
     rules = ROOT / 'vehicle/rules/rules_library/rules.db'
-    validated = validate_capture(capture, FIXTURE, '15', rules)
+    validated = validate_capture(capture, FIXTURE, '15', rules, catalog_snapshot=catalog_snapshot)
     manifest = validated['manifest']
     inputs = manifest.get('input_sha256', {})
     if (data['profile']['api_level'] != 35 or validated['data_scope'] != 'all'
@@ -62,6 +62,9 @@ def attach_observations(data, capture):
             indexed[row.get('prop_id')].append(row)
     snapshot = (grant_snapshot(capture, manifest.get('user_id', 10)) if (capture / 'dumpsys-package.txt').is_file()
                 else None)
+    if snapshot:
+        snapshot['binding'] = ('capture_manifest' if 'dumpsys-package.txt' in inputs
+                               else 'local_snapshot_not_in_capture_manifest')
     for entry in data['rows']:
         if 'property_id' not in entry:
             continue
@@ -95,5 +98,6 @@ def attach_observations(data, capture):
         'requested_permissions': (capture / 'requested-permissions.txt').read_text(encoding='utf-8').splitlines(),
         'grant_snapshot': snapshot,
         'capture_manifest_sha256': digest(capture / 'session-manifest.json'),
+        'capture_privacy_catalog_sha256': manifest.get('privacy_catalog_sha256'),
         'scope': 'owned_fixture_only'}
     return data

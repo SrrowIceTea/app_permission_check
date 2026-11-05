@@ -104,7 +104,11 @@ def adjudicated_labels(label, apk_sha, session, sample_origin, *, refs=None, roo
     if (not isinstance(reviews, list) or len(reviews) != 2
             or not all(isinstance(review, dict) for review in reviews) or not isinstance(adjudication, dict)):
         reject('必须提供两份独立标注及一份仲裁记录。')
-    if len({_person(record) for record in [*reviews, adjudication]}) != 3:
+    people = [*reviews, adjudication]
+    typed = any('reviewer_kind' in record for record in people)
+    if label.get('reviewer_kind') == 'ai' or (typed and any(record.get('reviewer_kind') != 'human' for record in people)):
+        reject('AI 或身份未确认的复核记录不能用于人工签核计分。')
+    if len({_person(record) for record in people}) != 3:
         reject('两位标注人与仲裁人必须分别具名。')
     first, second = (_decisions(review, universe) for review in reviews)
     disagreements = {pair for pair in universe if first[pair] != second[pair]}
@@ -112,5 +116,10 @@ def adjudicated_labels(label, apk_sha, session, sample_origin, *, refs=None, roo
     positives = {pair for pair in universe if resolved.get(pair, first[pair])}
     if positives & controls:
         reject('已确认负控与仲裁后的正例冲突。')
+    if 'expected_pairs' in label:
+        expected = label['expected_pairs']
+        if (not isinstance(expected, list) or len(expected) != len(positives)
+                or {pair_key(pair) for pair in expected} != positives):
+            reject('expected_pairs 必须与双人标注和仲裁确定的正例一致。')
     return {'universe': universe, 'positive': positives, 'negative_controls': controls,
             'reviewer_a': first, 'reviewer_b': second, 'label_set_sha256': canonical_sha(label)}

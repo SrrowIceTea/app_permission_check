@@ -139,6 +139,26 @@ class StratifiedBenchmarkTests(unittest.TestCase):
             stratified_metrics([], self.label(), 'a' * 64, 's1', 'independent',
                                root=self.root, capture=self.root)
 
+    def test_explicit_ai_origin_cannot_be_signed_as_human(self):
+        label = self.label()
+        label['reviews'][0]['reviewer_kind'] = 'ai'
+        label['reviews'][1]['reviewer_kind'] = 'human'
+        label['adjudication']['reviewer_kind'] = 'human'
+        with self.assertRaisesRegex(AuditError, 'AI 或身份未确认'):
+            self.score(label)
+        label['human_signoff'] = 'pending'
+        with self.assertRaisesRegex(AuditError, '标签版本、签核状态'):
+            pair_metrics([], label, 'a' * 64, 's1')
+
+    def test_declared_expected_pairs_must_match_adjudicated_positives(self):
+        label = self.label()
+        a, b, _, d = self.pairs
+        label['expected_pairs'] = [a, b, d]
+        self.assertEqual('measured', self.score(label)['status'])
+        label['expected_pairs'] = [a, d, d]
+        with self.assertRaisesRegex(AuditError, 'expected_pairs'):
+            self.score(label)
+
 
 if __name__ == '__main__':
     unittest.main()

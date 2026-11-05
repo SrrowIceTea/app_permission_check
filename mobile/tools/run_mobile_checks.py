@@ -9,21 +9,23 @@
   2) 跑一遍**端到端干跑**：合成会话 → 关联 → 证据包 → 提示词渲染 →
      报告（无 AI 章节）。干跑能抓住"单测都过、串起来对不上"的字段契约问题。
 
-产物写在 output/mobile-regression-<时间戳>/，其中 verification.json 是判据。
+产物写在 output/mobile-regression-<时间戳>-<随机后缀>/，其中 verification.json 是判据。
 `latest-mobile.txt` 指向最近一次尝试——**通过与否必须读该目录的 verification.json**，
 不能只看目录存在（这是本项目的老规矩：失败运行同样保留）。
 """
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 MOBILE = ROOT / "mobile"
 PY = sys.executable
+sys.path.insert(0, str(ROOT))
+from core.regression_output import create_output, publish_latest
 
 
 def run(cmd: list[str], cwd: Path, log: Path, timeout: int = 600) -> int:
@@ -35,9 +37,10 @@ def run(cmd: list[str], cwd: Path, log: Path, timeout: int = 600) -> int:
 
 
 def main() -> int:
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    out = ROOT / "output" / f"mobile-regression-{stamp}"
-    out.mkdir(parents=True, exist_ok=True)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", type=Path, help="本轮独占的新输出目录")
+    args = parser.parse_args()
+    out = create_output(ROOT, "mobile-regression", args.out)
     checks: list[dict] = []
 
     unit = [
@@ -161,7 +164,7 @@ def main() -> int:
     (out / "verification.json").write_text(json.dumps(
         {"passed": passed, "checks": checks, "failed": failed}, ensure_ascii=False, indent=2),
         encoding="utf-8")
-    (ROOT / "output" / "latest-mobile.txt").write_text(str(out), encoding="utf-8")
+    publish_latest(ROOT / "output" / "latest-mobile.txt", out)
     print(json.dumps({"status": "passed" if passed else "failed", "out": str(out),
                       "checks": len(checks), "failed": failed}, ensure_ascii=False, indent=2))
     return 0 if passed else 1

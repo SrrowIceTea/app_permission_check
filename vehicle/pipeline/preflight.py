@@ -8,6 +8,7 @@ from pathlib import Path
 from core.io_utils import load_jsonl
 from vehicle.compatibility import profile
 from vehicle.pipeline.contracts import AuditError, ROOT, digest, read_json
+from vehicle.pipeline.evidence_manifest import INPUT_NAMES, artifact_ref
 from vehicle.privacy import ha_contract as ha
 from vehicle.privacy import ha_socket_evidence as ha_socket
 from vehicle.privacy import mg4_contract as mg4
@@ -22,7 +23,7 @@ def reject(code, message, **details):
     raise AuditError(code, message, '修复原因后创建新采集会话；不要修改失败证据为通过。', **details)
 
 
-def validate_capture(capture, package, version, rules, apk=None):
+def validate_capture(capture, package, version, rules, apk=None, *, catalog_snapshot=None):
     capture = Path(capture)
     selected = profile(version)
     manifest = read_json(capture / 'session-manifest.json')
@@ -31,7 +32,9 @@ def validate_capture(capture, package, version, rules, apk=None):
         reject('invalid_data_scope', '未知的数据采集范围。')
     if not selected['dynamic_verified'] and scope != 'general':
         reject('version_not_validated', selected['reason'])
-    verification = read_json(capture / 'verification.json')
+    verification_path = capture / 'verification.json'
+    evidence = {'capture/verification.json': artifact_ref(verification_path)}
+    verification = read_json(verification_path)
     if not isinstance(manifest, dict) or not isinstance(verification, dict):
         reject('invalid_capture_contract', '采集清单与验收结果必须是 JSON 对象。')
     checks = verification.get('checks', {})
@@ -96,9 +99,11 @@ def validate_capture(capture, package, version, rules, apk=None):
         archived = capture / 'hook-bundles' / name
         candidates = (archived,) if manifest.get('hook_archive') == 'hook-bundles' or archived.exists() \
             else tuple(folder / name for folder in HOOK_DIRS)
-        if not any(p.is_file() and digest(p) == bundles.get(name) for p in candidates):
+        matched = next((p for p in candidates if p.is_file() and digest(p) == bundles.get(name)), None)
+        if matched is None:
             raise AuditError('hook_mismatch', f'缺少与采集摘要一致的钩子：{name}',
                              '恢复原始 bundle 到采集目录的 hook-bundles，或重新采集。')
+        evidence[f'hook/{name}'] = artifact_ref(matched, sha256=bundles[name])
     for name in ('reads.jsonl', 'flows.jsonl'):
         if not (capture / name).is_file():
             reject('missing_capture_input', f'缺少采集输入：{name}')
@@ -110,7 +115,9 @@ def validate_capture(capture, package, version, rules, apk=None):
     if verification.get('session', session) != session:
         reject('verification_session_mismatch', '验收记录属于另一会话。')
     if manifest.get('capture_mode') in ('attach_system_proxy', 'attach_preserve_proxy'):
-        health = read_json(capture / 'collector-health.json')
+        health_path = capture / 'collector-health.json'
+        evidence['capture/collector-health.json'] = artifact_ref(health_path)
+        health = read_json(health_path)
         if health.get('status') != 'completed' or health.get('session_id') != session:
             reject('collector_unhealthy', '代理回调有错误或未正常收尾，不能当作正常零流量。')
     errors = [r for r in rows['reads.jsonl'] if r.get('ev') in ERROR_EVENTS]
@@ -124,10 +131,12 @@ def validate_capture(capture, package, version, rules, apk=None):
     if scope == 'all':
         required.add(('vhal', 'ARMED'))
     catalog = manifest.get('privacy_catalog_sha256')
-    if catalog is not None or scope == 'general':
-        from vehicle.privacy.catalog import catalog_hash
+    if catalog is not None or scope == 'general' or catalog_snapshot is not None:
+        from vehicle.privacy.catalog import catalog_hash, matches_catalog_snapshot
         required.add(('privacy', 'ARMED'))
-        if catalog not in (catalog_hash(1), catalog_hash()) or not any(r.get('src') == 'privacy' and r.get('ev') == 'ARMED'
+        catalog_valid = (matches_catalog_snapshot(read_json(catalog_snapshot), catalog) if catalog_snapshot
+                         else catalog in (catalog_hash(1), catalog_hash()))
+        if not catalog_valid or not any(r.get('src') == 'privacy' and r.get('ev') == 'ARMED'
                 and r.get('pkg') == package and r.get('privacy_catalog_sha256') == catalog
                 and r.get('sdk') == selected['api_level'] for r in rows['reads.jsonl']):
             reject('privacy_catalog_mismatch', '通用隐私规则/Hook 契约与采集时不同或缺少对应就绪记录。')
@@ -142,8 +151,14 @@ def validate_capture(capture, package, version, rules, apk=None):
         if not all(name in hashes for name in ('reads.jsonl', 'flows.jsonl', 'verification.json')):
             reject('incomplete_input_hashes', '新采集清单缺少必要输入摘要。')
         for name, expected in hashes.items():
-            if Path(name).name != name or not (capture / name).is_file() or digest(capture / name) != expected:
+            path = capture / name
+            if Path(name).name != name or not path.is_file() or digest(path) != expected:
                 reject('input_mismatch', f'采集输入摘要不一致：{name}')
+            if name not in INPUT_NAMES.values():
+                key = f'capture/{name}'
+                ref = evidence.setdefault(key, artifact_ref(path, sha256=expected))
+                if ref['sha256'] != expected:
+                    reject('input_mismatch', f'采集输入摘要不一致：{name}')
     installed = manifest.get('installed_apk_sha256')
     if not isinstance(installed, str) or not re.fullmatch('[0-9a-f]{64}', installed):
         reject('missing_apk_identity', '缺少采集时装机 APK 的完整摘要。')
@@ -169,4 +184,5 @@ def validate_capture(capture, package, version, rules, apk=None):
     if not target:
         gaps.append('健康采集期间未观测到覆盖范围内的车辆属性读取；不代表 App 无其他隐私行为。')
     return {'status': 'passed', 'session_id': session, 'manifest': manifest,
-            'profile': selected, 'data_scope': scope, 'target_read_events': len(target), 'gaps': gaps}
+            'profile': selected, 'data_scope': scope, 'target_read_events': len(target), 'gaps': gaps,
+            'evidence_artifacts': evidence}

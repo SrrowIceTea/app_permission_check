@@ -1,7 +1,6 @@
 """Owned AAOS 35 OwnTracks HTTP acceptance. 仅用于授权测试。"""
 import argparse
 import hashlib
-import json
 import re
 import subprocess
 import sys
@@ -11,40 +10,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from core.collector.attribution import is_loose
 from core.io_utils import load_jsonl
 from vehicle.lab.ui import UI
 from vehicle.pipeline.capture_device import wait_until
 from vehicle.pipeline.contracts import ROOT, digest, read_json, write_json
 from vehicle.pipeline.preflight import validate_capture
 from vehicle.privacy.owntracks_contract import PACKAGE
+from vehicle.privacy.owntracks_evidence import WINDOW_MS, coordinate_digest, location_post, location_read, matches, summarize_body
 
 TEST_POINTS = ((30.3125, 120.1875), (30.5625, 120.4375))
 RULES = ROOT / 'vehicle/rules/rules_library/rules.db'
-PAIR_WINDOW_MS = 30_000
-
-
-def coordinate_digest(values):
-    clean = []
-    for value, limit in zip(values, (90, 180), strict=True):
-        if type(value) not in (float, int) or not -limit <= value <= limit:
-            return None
-        rounded = round(value, 6)
-        clean.append(int(rounded) if int(rounded) == rounded else rounded)
-    return hashlib.sha256(json.dumps(clean, separators=(',', ':')).encode()).hexdigest()[:16]
-
-
-def summarize_body(raw):
-    try:
-        data = json.loads(raw)
-    except (TypeError, ValueError):
-        return {}
-    if not isinstance(data, dict) or data.get('_type') != 'location':
-        return {}
-    key = coordinate_digest((data.get('lat'), data.get('lon')))
-    if key is None or type(data.get('tst')) is not int:
-        return {}
-    return {'coordinate_sha256_16': key, 'location_timestamp_seconds': data['tst']}
 
 
 def receiver(endpoint, receipts):
@@ -78,33 +53,20 @@ def pairs(reads, flows, receipts, session, endpoint, step):
     options = []
     for flow in flows:
         payload = flow.get('request_payload') or {}
-        body = summarize_body(payload.get('text'))
-        if (flow.get('session_id') != session or flow.get('package') != PACKAGE
-                or type(flow.get('uid')) is not int or flow.get('user_id') != 10
-                or flow.get('attribution') != 'app_process_hook'
-                or type(flow.get('attribution_delta_ms')) is not int
-                or is_loose(flow) or flow.get('attribution_ambiguous')
-                or flow.get('method') != 'POST' or flow.get('host') != endpoint.hostname
+        body = location_post(flow, session, 10)
+        if (flow.get('host') != endpoint.hostname
                 or flow.get('target_port') != endpoint.port or flow.get('path') != endpoint.path
-                or flow.get('status_code') != 200 or any(payload.get(k) for k in
-                    ('raw_truncated', 'text_truncated', 'decode_error'))
                 or body.get('coordinate_sha256_16') != key):
             continue
         matching_receipts = [r for r in receipts if r.get('body_sha256') == payload.get('raw_sha256')
                              and r.get('path') == endpoint.path and step['ts'] <= r['ts']
                              and r.get('coordinate_sha256_16') == key
                              and r.get('location_timestamp_seconds') == body['location_timestamp_seconds']
-                             and 0 <= r['ts'] - flow['ts'] <= PAIR_WINDOW_MS]
+                             and 0 <= r['ts'] - flow['ts'] <= WINDOW_MS]
         if len(matching_receipts) != 1:
             continue
-        candidates = [r for r in reads if r.get('ev') == 'OWNTRACKS_LOCATION'
-                      and r.get('src') == 'owntracks_location' and r.get('pkg') == PACKAGE
-                      and r.get('session_id') == session and r.get('uid') == flow['uid']
-                      and r.get('user_id') == 10 and r.get('coordinate_sha256_16') == key
-                      and type(r.get('location_time_ms')) is int
-                      and r['location_time_ms'] // 1000 == body['location_timestamp_seconds']
-                      and step['ts'] <= r['host_received_ts'] <= flow['ts']
-                      <= r['host_received_ts'] + PAIR_WINDOW_MS]
+        candidates = [r for r in reads if location_read(r, session, 10)
+                      and step['ts'] <= r['host_received_ts'] and matches(r, flow, body)]
         if candidates and len({(r['pid'], r['location_time_ms']) for r in candidates}) == 1:
             options.append({'read_refs': [{'src': r['src'], 'evt_id': r['evt_id']} for r in candidates],
                             'flow_ref': {'src': flow.get('src', 'proxy'), 'evt_id': flow['evt_id']},

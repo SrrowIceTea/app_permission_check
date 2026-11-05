@@ -71,6 +71,8 @@ data class VerificationReport(
     val causes: List<String>,
     val deviceApiLevel: Int,
     val elapsedMs: Long,
+    /** Whether the runtime copy still matches the database packaged in this APK. */
+    val install: InstallReport,
 ) {
     fun toJson(): String {
         val root = JSONObject()
@@ -82,6 +84,7 @@ data class VerificationReport(
             put("expected", sha256Expected)
             put("match", sha256Match)
         })
+        root.put("install", install.toJson())
         root.put("counts", countsJson(counts))
         root.put("expected", countsJson(expected))
         root.put("deviceApiLevel", deviceApiLevel)
@@ -132,6 +135,10 @@ class RulesVerifier(private val context: Context) {
     ): VerificationReport {
         val started = System.nanoTime()
         val digest = tryHash(source)
+        // Room only copies the asset while the target file is absent, so an APK
+        // update that changed rules.db but not the schema version would keep the
+        // old copy. The installer decides on the digest, not on the schema version.
+        val install = RulesDbInstaller(context).ensureInstalled(source, databaseName)
 
         val db = RulesDatabase.open(context, source, databaseName)
         return try {
@@ -144,9 +151,9 @@ class RulesVerifier(private val context: Context) {
             for (version in (BaselineExpectation.VERSIONS.keys + present).sorted()) {
                 counts[version] = dao.counts(version)
             }
-            success(counts, digest, started)
+            success(counts, digest, started, install)
         } catch (t: Throwable) {
-            failure(t, digest, started)
+            failure(t, digest, started, install)
         } finally {
             runCatching { db.close() }
         }
@@ -156,6 +163,7 @@ class RulesVerifier(private val context: Context) {
         counts: Map<String, VersionCounts>,
         digest: String?,
         started: Long,
+        install: InstallReport,
     ): VerificationReport {
         val expected = BaselineExpectation.VERSIONS
         val shaMatch = digest == BaselineExpectation.SHA256
@@ -197,10 +205,16 @@ class RulesVerifier(private val context: Context) {
             causes = emptyList(),
             deviceApiLevel = Build.VERSION.SDK_INT,
             elapsedMs = (System.nanoTime() - started) / 1_000_000,
+            install = install,
         )
     }
 
-    private fun failure(t: Throwable, digest: String?, started: Long): VerificationReport {
+    private fun failure(
+        t: Throwable,
+        digest: String?,
+        started: Long,
+        install: InstallReport,
+    ): VerificationReport {
         val state = classify(t)
         return VerificationReport(
             state = state,
@@ -215,6 +229,7 @@ class RulesVerifier(private val context: Context) {
             causes = generateSequence(t) { it.cause }.take(8).map { it.javaClass.name }.toList(),
             deviceApiLevel = Build.VERSION.SDK_INT,
             elapsedMs = (System.nanoTime() - started) / 1_000_000,
+            install = install,
         )
     }
 

@@ -204,3 +204,44 @@ EV_BATTERY_LEVEL 同受 CAR_ENERGY 管辖）产生**两条一模一样的结论*
 
 两版本分别登记 VSC-GR-advertising_id。API 35 行引用同镜像、同 Hook 的四态封存记录；
 Android 14 行引用 Google SDK 依据。逐表核对既有行一致，规则库与 Room 资产同步。
+
+## D014 规则库升级以摘要判定（2026-11-05）
+
+**缺陷（设备实测复现）**：Room `createFromAsset` 只在运行副本缺失时复制。APK 升级换了
+同 schema 的 `rules.db`（只改一条 notes，counts 不变）后，设备仍加载旧副本：
+运行时文件 SHA-256 保持旧值，验证页 `sha256.actual` 却是新资产摘要，状态落到
+`SCHEMA_MISMATCH`（"条数符合"），足以误导排查。复现证据在
+`output/rules-db-upgrade-20261105/repro/`。
+
+**修复**：新增 `RulesDbInstaller`，以资产原始 SHA-256 + schema 版本 + 四表内容摘要判定
+是否重建，不再看 schema 版本单一信号。升级先写暂存文件，校验摘要、四表内容与 Room schema
+（用一次性库名打开），再备份旧库并替换；新资产校验失败保留旧库，报告
+`UPGRADE_FAILED_KEEPING_OLD`。返回的 `InstallReport` 含生效库摘要（安装字节的原始
+SHA-256）与内容摘要，写入验证页 JSON 的 `install` 节点。
+
+集成复核纠正边界：当前替换先删除再重命名，不能称为原子切换。磁盘写入异常、升级中断和并发安装
+不在本次验收范围；正常升级后的重启不证明切换中断安全，替换异常会报告 `INSTALL_ERROR`。
+
+**为何不用原始文件摘要判定**：Room 首次打开会追加 `room_master_table`/`android_metadata`，
+运行文件摘要从 `4bf51b…` 变为 `e0ce73…`，而规则内容不变。因此"是否仍是同一份规则"必须
+用四表内容摘要（`vscanner-rules-content-v2`，含 `PRAGMA user_version`）；原始摘要只作为
+"这一版是哪份资产"的身份标识。
+
+**验收**：设备侧 `RulesDbUpgradeTest` 四例全过（首次安装=包内摘要、同 schema 内容变更升级、
+升级失败沿用旧库且仍可读、重启不回退旧库）；E2E 证据见
+`output/rules-db-upgrade-20261105/acceptance/`，该轮使用 API 37 手机模拟器和 App 重启。既有 `RulesVerifierStateTest` /
+`RulesSchemaValidationTest` 断言未改动、全部通过。
+
+## D015 AAOS 35 规则库升级与整机重启复验（2026-11-05）
+
+项目专用 `VScanner_AAOS_35_P1` 的 AVD 与镜像在 `output/vehicle-device-setup/`。
+临时将 `ANDROID_AVD_HOME` 指向其中的 `avd`，使用现有 SDK 模拟器启动。设备指纹与 11 月 4 日
+封存会话一致，API 35。测试在单独创建的用户 11 中执行，原用户 10 的夹具 APK 与运行库摘要在收尾时核对。
+
+三份封存 APK 分别验证首次安装、同 schema 升级和损坏资产回退。升级成功后及损坏资产回退后各执行一次
+`adb reboot`，分别等到新的内核 boot ID、系统启动完成及测试用户解锁，再启动 App 读取新生成的验证 JSON。
+五个阶段均从设备取回实际运行库，并核对 SQLite 完整性、schema、条数、标记和生效摘要。
+成功升级后重启为 `UNCHANGED`，损坏资产下重启仍为 `UPGRADE_FAILED_KEEPING_OLD`，均读取同一份已升级规则。
+原用户 APK 恢复且运行库字节不变，测试用户已移除。证据见
+[`verification.json`](../../output/rules-db-upgrade-aaos35-20261105-120531/verification.json)。
+本轮范围为指定 AAOS 35 模拟器和自有规则库夹具。

@@ -3,6 +3,7 @@ import unittest
 from urllib.parse import urlsplit
 
 from vehicle.lab.owntracks_run import PACKAGE, pairs, summarize_body
+from vehicle.privacy.owntracks_evidence import BODY_RULE, READ_RULE, coordinate_digest, evaluate
 
 
 class OwnTracksPairTests(unittest.TestCase):
@@ -19,7 +20,7 @@ class OwnTracksPairTests(unittest.TestCase):
                      'location_time_ms': 2100, 'host_received_ts': 2200}
         self.flow = {**identity, 'package': PACKAGE, 'evt_id': 1, 'ts': 2500,
                      'attribution': 'app_process_hook', 'attribution_delta_ms': 20,
-                     'method': 'POST', 'status_code': 200, 'host': self.endpoint.hostname,
+                     'scheme': 'http', 'method': 'POST', 'status_code': 200, 'host': self.endpoint.hostname,
                      'path': self.endpoint.path, 'target_port': self.endpoint.port,
                      'request_payload': {'text': raw, 'raw_sha256': checksum}}
         self.receipt = {**body, 'path': self.endpoint.path, 'ts': 2600, 'body_sha256': checksum}
@@ -28,6 +29,42 @@ class OwnTracksPairTests(unittest.TestCase):
         result = pairs([self.read], [self.flow], [self.receipt], 'test-session', self.endpoint, self.step)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]['read_refs'], [{'src': 'owntracks_location', 'evt_id': 2}])
+
+    def test_audit_keeps_value_match_as_candidate_without_copying_coordinates(self):
+        findings, summary = evaluate([self.read], [self.flow], 'test-session', 10)
+        direct, candidate = findings
+        self.assertEqual((READ_RULE, 'observed'), (direct['rule_id'], direct['conclusion_level']))
+        self.assertEqual((BODY_RULE, 'candidate'), (candidate['rule_id'], candidate['conclusion_level']))
+        self.assertEqual((2, 1), (candidate['pairs'][0]['read_event_id'], candidate['pairs'][0]['flow_event_id']))
+        self.assertFalse(candidate['pairs'][0]['origin_proven'])
+        self.assertEqual((1, 'workflow_only'), (summary['matched_requests'], summary['scoring']))
+        self.assertNotIn(self.read['coordinate_sha256_16'], str(findings))
+        self.assertNotIn('30.3125', str(findings))
+
+    def test_audit_preserves_read_without_qualifying_post(self):
+        cases = {
+            'other_user': {'uid': 1110258},
+            'other_app_same_user': {'uid': 1010259},
+            'other_session': {'session_id': 'other'},
+            'tls': {'intercepted_tls': True},
+            'wrong_path': {'path': '/other'},
+            'failed_response': {'status_code': 503},
+            'ambiguous_attribution': {'attribution_ambiguous': True},
+            'outside_window': {'ts': self.read['host_received_ts'] + 30001},
+            'truncated': {'request_payload': dict(self.flow['request_payload'], text_truncated=True)},
+            'different_fix_time': {'request_payload': dict(self.flow['request_payload'],
+                text=self.flow['request_payload']['text'].replace('"tst":2', '"tst":3'))},
+        }
+        for name, change in cases.items():
+            with self.subTest(name=name):
+                findings, summary = evaluate([self.read], [self.flow | change], 'test-session', 10)
+                self.assertEqual([READ_RULE], [f['rule_id'] for f in findings])
+                self.assertEqual(0, summary['matched_requests'])
+
+    def test_body_rejects_duplicate_fields_and_uses_hook_coordinate_format(self):
+        self.assertEqual({}, summarize_body('{"_type":"location","lat":30,"lat":31,"lon":120,"tst":2}'))
+        expected = hashlib.sha256(b'[-0.007813,0.000001]').hexdigest()[:16]
+        self.assertEqual(expected, coordinate_digest((-0.0078125, 0.000001)))
 
     def test_stale_weak_or_mismatched_evidence_cannot_pass(self):
         cases = {

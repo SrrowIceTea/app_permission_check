@@ -17,6 +17,7 @@ from vehicle.analyze.finding_class import classify
 from vehicle.analyze.risk_triage import rank_findings
 from vehicle.compatibility import os_version
 from vehicle.pipeline.contracts import AuditError, digest, read_json, write_json
+from vehicle.pipeline.bundle import package_evidence
 from vehicle.pipeline.execution import Execution
 from vehicle.pipeline.evidence_manifest import capture_paths, fingerprints, input_manifest, verify_document, verify_refs
 from vehicle.pipeline.preflight import validate_capture
@@ -25,16 +26,18 @@ from vehicle.policy.assessment import assess_policy
 
 
 def run_audit(capture, output, package, version='15', scenarios=None, ai_config=None,
-              pdf=True, apk=None, policy=None):
+              pdf=True, apk=None, policy=None, *, rules_path=None, catalog_snapshot=None):
     capture, output = Path(capture).resolve(), Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
     execution = Execution(output)
     snapshot = None
     try:
         snapshot = input_manifest(capture_paths(capture), inspect=False)
+        rules = Path(rules_path).resolve() if rules_path is not None else ROOT / 'vehicle/rules/rules_library/rules.db'
         result = _audit(execution, capture, output, package, os_version(version),
-                        scenarios, ai_config, pdf, Path(apk) if apk else None, policy, snapshot)
-        execution.run('verify_evidence', lambda: verify_document(result))
+                        scenarios, ai_config, pdf, Path(apk) if apk else None, policy, snapshot, rules,
+                        Path(catalog_snapshot).resolve() if catalog_snapshot else None)
+        execution.run('verify_evidence', lambda: verify_document(result, base=output))
         if pdf:
             (output / 'vehicle-audit.pending.pdf').replace(output / 'vehicle-audit.pdf')
         result['pipeline_status'] = 'completed'
@@ -47,14 +50,15 @@ def run_audit(capture, output, package, version='15', scenarios=None, ai_config=
         raise
 
 
-def _audit(execution, capture, output, package, version, scenarios, ai_config, pdf, apk, policy, snapshot):
+def _audit(execution, capture, output, package, version, scenarios, ai_config, pdf, apk, policy, snapshot, rules,
+           catalog_snapshot):
     stage = execution.run
-    rules = ROOT / 'vehicle/rules/rules_library/rules.db'
-    validated = stage('preflight', lambda: validate_capture(capture, package, version, rules, apk))
+    validated = stage('preflight', lambda: validate_capture(capture, package, version, rules, apk,
+                      catalog_snapshot=catalog_snapshot))
     session = validated['session_id']
     journal = stage('scenarios', lambda: load_scenarios(scenarios, capture, package, session))
     from vehicle.coverage.export import export_coverage
-    chain = stage('coverage', lambda: export_coverage(output / 'coverage', version))
+    chain = stage('coverage', lambda: export_coverage(output / 'coverage', version, rules_path=rules))
     coverage_file = output / 'coverage/coverage.json'
     findings, correlation = output / 'findings.jsonl', output / 'correlation-summary.json'
     if validated['data_scope'] == 'general':
@@ -75,8 +79,9 @@ def _audit(execution, capture, output, package, version, scenarios, ai_config, p
         stage('correlate', lambda: analyze_empty(capture, output, package, version, rules, session))
     document = read_json(correlation)
     from vehicle.privacy.pipeline import append_general
-    document = stage('general_privacy', lambda: append_general(document, output, capture, package, session, version))
-    document['capture_validation'] = {k: v for k, v in validated.items() if k != 'manifest'}
+    document, privacy_refs = stage('general_privacy', lambda: append_general(document, output, capture, package, session, version,
+                     rules_path=rules, catalog_snapshot=catalog_snapshot))
+    document['capture_validation'] = {k: v for k, v in validated.items() if k not in ('manifest', 'evidence_artifacts')}
     document['rules_sha256'] = validated['manifest']['rules_sha256']
     document['target_scope'] = 'ordinary_third_party_app'
     document['coverage_chain'] = {'artifact': 'coverage/coverage.json',
@@ -126,8 +131,13 @@ def _audit(execution, capture, output, package, version, scenarios, ai_config, p
                                   else 'no_text_observed',
     })
     document.update(fingerprints(rules, version, completeness, coverage=coverage_file, findings=findings))
+    document['evidence_artifacts'].update(validated['evidence_artifacts'])
+    document['evidence_artifacts'].update(privacy_refs)
     if document['rules_sha'] != document['rules_sha256']:
         raise AuditError('rules_mismatch', '审计期间规则库摘要发生变化。', '核对规则库后重试。')
+    # New products become self-contained and relocatable; historical products keep
+    # their absolute paths and verify_bundle reports them as legacy.
+    stage('bundle', lambda: package_evidence(document, output))
     write_json(correlation, document)
     document['review_order'] = rank_findings(records)
     document['review_order_caveat'] = 'Experimental engineering weights; not calibrated risk probability.'
@@ -156,10 +166,12 @@ def main(argv=None):
     parser.add_argument('--no-pdf', action='store_true')
     parser.add_argument('--apk', type=Path)
     parser.add_argument('--policy', type=Path, help='APK-bound local policy metadata JSON')
+    parser.add_argument('--capture-catalog', type=Path, help='封存的隐私目录 JSON，旁边须有配套政策与签名文件')
     args = parser.parse_args(argv)
     try:
         result = run_audit(args.capture, args.out, args.package, args.android_version,
-            args.scenarios, args.ai_config, not args.no_pdf, args.apk, args.policy)
+            args.scenarios, args.ai_config, not args.no_pdf, args.apk, args.policy,
+            catalog_snapshot=args.capture_catalog)
     except (AuditError, OSError, ValueError) as error:
         detail = error.record() if isinstance(error, AuditError) else {'message': str(error)}
         print(json.dumps({'status': 'failed', 'error': detail}, ensure_ascii=False), file=sys.stderr)

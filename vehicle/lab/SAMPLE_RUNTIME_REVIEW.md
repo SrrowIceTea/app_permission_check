@@ -61,3 +61,22 @@ OwnTracks 下载线程发生原生崩溃，采集健康检查失败。冷启动�
 & $VScanPython -m core.frida_host.build --platform vehicle --only hook_vehicle_owntracks.js
 & $VScanPython -m vehicle.lab.owntracks_run --out <新输出目录> --config <本轮配置文件> --apk <原版APK路径>
 ```
+
+## 常规审计重放（2026-11-05）
+
+已通过前置校验的 OwnTracks 专用采集可由 `vehicle.ps1 audit` 处理。
+`VSC-LAB-OWNTRACKS-LOCATION-001` 记录定位回调，`VSC-LAB-OWNTRACKS-HTTP-001` 记录完整 HTTP 正文的同值候选。
+候选要求同 UID、用户和会话，定位时间及坐标摘要一致，并满足 30 秒窗口。
+PDF 和结论文件仅展示事件引用和关联结果。三侧核对（回调、代理、独立回执）仍由本页的业务验收入口执行。
+此路径属于侧载对照，计分资格为 `workflow_only`。
+
+历史采集使用 `--capture-catalog` 提供当时的目录快照，配套政策和签名文件保留在快照同目录。
+
+```powershell
+./vehicle.ps1 audit `
+  --capture output/owntracks-vehicle-retest-20261104/run-003/capture `
+  --capture-catalog output/o6-device-acceptance-20261104/aaid-audit/privacy-catalog.json `
+  --package org.owntracks.android `
+  --apk output/sample-acquisition-20261103/org.owntracks.android/sample.apk `
+  --out <新输出目录>
+```

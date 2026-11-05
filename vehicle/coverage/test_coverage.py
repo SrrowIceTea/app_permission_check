@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from vehicle.coverage.export import build_coverage, export_coverage
+from vehicle.privacy.owntracks_evidence import BODY_RULE, READ_RULE
 
 
 class CoverageTests(unittest.TestCase):
@@ -31,6 +32,13 @@ class CoverageTests(unittest.TestCase):
             self.assertEqual({'location', 'microphone', 'contacts', 'android_id', 'advertising_id'},
                              {row['data_type_key'] for row in rows if 'data_type_key' in row})
             self.assertTrue(any(r['hook_coverage']['status'] == 'not_validated_for_version' for r in rows))
+
+    def test_owntracks_experiment_is_not_reported_as_a_general_rule(self):
+        rows = build_coverage()['rows']
+        owntracks = next(r for r in rows if r['data_type'] == '位置/轨迹（OwnTracks 样本）')
+        self.assertEqual([READ_RULE, BODY_RULE], owntracks['rule_ids'])
+        self.assertEqual('sample_opt_in', owntracks['hook_coverage']['status'])
+        self.assertNotIn(owntracks['data_type'], {r['data_type'] for r in build_coverage('14')['rows']})
 
     def test_export_keeps_line_cap_and_machine_readable_provenance(self):
         import json

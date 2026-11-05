@@ -51,4 +51,13 @@ sealed interface RulesDbSource {
         override fun openStream(context: Context): InputStream =
             throw FileNotFoundException(path)
     }
+
+    /** Used to validate a staged copy through Room before it replaces the live file. */
+    class FromFile(private val file: java.io.File) : RulesDbSource {
+        override fun applyTo(builder: RoomDatabase.Builder<RulesDatabase>) {
+            builder.createFromFile(file)
+        }
+
+        override fun openStream(context: Context): InputStream = file.inputStream()
+    }
 }

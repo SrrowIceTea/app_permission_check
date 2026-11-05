@@ -60,8 +60,12 @@ O4 同负载复测使用同一 AAOS 35 指纹和同一装机 APK：
 
 ### 重放已有的三家样本
 
-`./vehicle.ps1 benchmark --suite vehicle/bench/aaos35-suite.json`
-读取本地封存证据和 APK。输入路径相对于项目根，摘要不匹配时对应案例失败。需先有清单指定的本地文件，尤其是未随 Git 分发的 `output/` 证据。
+```powershell
+./vehicle.ps1 benchmark --suite vehicle/bench/aaos35-suite.json `
+  --rules output/o6-device-acceptance-20261104/rules-before-o6.db
+```
+
+此入口读取本地封存证据和 APK，并使用该轮采集绑定的历史规则库。输入路径相对于项目根，摘要不匹配时对应案例失败。需先有清单指定的本地文件，尤其是未随 Git 分发的 `output/` 证据。
 APK 的签名验证与发布方证书独立核验分列。HA 与 MG4 重跑常规审计，YAABSA 核对脱敏请求、服务端会话和暂停记录。
 `completion=complete` 表示各案例已按各自证据口径复核，MG4 仍可登记正文归因缺口。
 摘要分列业务、采集健康、身份归因、正文匹配和人工签核。
@@ -72,6 +76,7 @@ HA 控制、MG4 与 YAABSA 的业务回执按各自证据口径登记。使用�
 
 ```powershell
 ./vehicle.ps1 benchmark --suite vehicle/bench/aaos35-suite.json `
+  --rules output/o6-device-acceptance-20261104/rules-before-o6.db `
   --fixture-capture output/vehicle-offline-window-20261103-002/capture `
   --fixture-labels output/o2-batch-pairing-20261103/primary-labels.json
 ```
@@ -92,6 +97,8 @@ HA 控制、MG4 与 YAABSA 的业务回执按各自证据口径登记。使用�
 忽略系统代理、WebView 子进程、native/二进制协议与连接复用仍可能造成覆盖缺口。
 
 ## 独立标注
+
+当前双人任务的盲审包、OwnTracks 评分资格和脱敏重放入口见 [双人交接与首轮盲评](../../docs/VEHICLE_TEAM_HANDOFF.md)。
 
 首轮试标从封存记录生成两个审阅包和一份组织者材料。组织者只分发 `reviewer-A.zip`
 与 `reviewer-B.zip`，保留 `organizer-only/`。审阅包只含必要的原始观测字段和独立回执，

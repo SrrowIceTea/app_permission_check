@@ -1,17 +1,4 @@
-# 离线回归 CI —— 两条入口均纯离线、不需要设备、不需要 AI key。
-#
-# 对应 mobile/RESEARCH_OUTLOOK.md §8.2 B-5「全项目无任何 CI」（最高优先级项）：
-# 改完忘记跑回归 = 静默劣化，而这两条入口本来就不用设备，直接挂到 push/PR 即可。
-#
-# runner 选 windows-latest 的原因：仓库是 Windows 单机工程（SDK 路径、winpath 的 \\?\ 扩展
-# 长度路径、test_jobs.LongPathTest 都只在 Windows 上成立），换 Linux 会假绿。
-#
-# ⚠️ 本仓库主远端是 **Gitee**（git@gitee.com:mao-yuqi-12/mobile-app-permission-check.git），
-# 而 Gitee **不执行** `.github/workflows/`（那是 GitHub Actions 的目录）。所以这份 workflow
-# 现在只是"接 GitHub 就能用"的现成件，真正生效要二者之一：
-#   ① 加一个 GitHub 远端并推送（Actions 免费额度够用）；
-#   ② 把同样的两步搬进 Gitee Go（`.workflow/` 目录或 Gitee 网页端流水线）。
-# 在那之前，两条回归仍然只能手动跑——记得先确认解释器装了 requirements.txt（见文件末尾注释）。
+# Windows 回归保留 WinPath 覆盖。Gitee 接入见 docs/REGRESSION_CI.md。
 name: offline-regressions
 
 on:
@@ -42,23 +29,20 @@ jobs:
       # hooks_dispatch / runtime 两组是 node 测试（test_dispatch.mjs / test_runtime.mjs）。
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: 安装 Python 依赖
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 根回归（16 组）
-        run: python tools/run_regressions.py
-
-      - name: 移动侧回归（29 项）
-        run: python mobile/tools/run_mobile_checks.py
+      - name: 构建 Hook 并运行车载与移动回归
+        run: python tools/run_regressions.py --prepare --mobile --out output/ci
 
       - name: 回归判据落盘（失败运行同样保留）
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: regression-output
-          path: output/
+          path: output/ci/
           if-no-files-found: warn

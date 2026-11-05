@@ -18,8 +18,11 @@ def capture_paths(folder):
     return {name: Path(folder) / file for name, file in INPUT_NAMES.items()}
 
 
-def artifact_ref(path):
+def artifact_ref(path, *, sha256=None):
+    """Reference a file, reusing a digest already established by its producer."""
     path = Path(path).resolve() if path is not None else None
+    if sha256 is not None:
+        return {'path': str(path), 'exists': True, 'sha256': sha256}
     exists = path is not None and path.is_file()
     return {'path': str(path) if path else None, 'exists': exists,
             'sha256': digest(path) if exists else None}
@@ -50,9 +53,27 @@ def input_manifest(paths, *, inspect=True):
     return {'inputs': refs, 'complete': not missing, 'missing': missing}
 
 
-def verify_refs(refs):
+def ref_path(ref, base=None):
+    """Resolve a manifest reference.
+
+    New bundles store paths relative to the bundle root; historical products store
+    absolute paths. ``source_path`` only keeps local replay of new products working
+    when no base directory is supplied.
+    """
+    path = (ref or {}).get('path')
+    if not path:
+        return None
+    resolved = Path(path)
+    if resolved.is_absolute():
+        return resolved
+    if base is not None:
+        return Path(base) / resolved
+    return Path(ref['source_path']) if ref.get('source_path') else resolved
+
+
+def verify_refs(refs, base=None):
     for name, ref in refs.items():
-        current = artifact_ref(ref['path'])
+        current = artifact_ref(ref_path(ref, base))
         if current['exists'] != ref['exists'] or current['sha256'] != ref['sha256']:
             raise AuditError('artifact_digest_mismatch', '证据文件缺失或摘要发生变化。',
                              '核对原始产物后新建一轮审计。', artifact=name)
@@ -74,7 +95,7 @@ def fingerprints(rules, version, completeness, *, coverage=None, findings=None):
             'input_completeness': completeness, 'evidence_artifacts': refs}
 
 
-def verify_document(document, *, rules=None, findings=None, flows=None):
+def verify_document(document, *, rules=None, findings=None, flows=None, base=None):
     """Render only the evidence referenced by a versioned audit document."""
     if document.get('status') == 'failed':
         raise AuditError('report_source_failed', '本轮分析失败，无法生成正常报告。', '检查失败摘要。')
@@ -84,14 +105,14 @@ def verify_document(document, *, rules=None, findings=None, flows=None):
         raise AuditError('report_schema_unknown', '报告证据契约版本不受支持。', '使用本轮完整摘要。')
     refs = document['evidence_artifacts']
     inputs = document['input_completeness']['inputs']
-    verify_refs(refs)
-    verify_refs(inputs)
+    verify_refs(refs, base)
+    verify_refs(inputs, base)
     for name, path, ref in (('rules', rules, refs['rules']), ('findings', findings, refs.get('findings')),
                             ('flows', flows, inputs['flows'])):
         if path is not None and (not ref or artifact_ref(path)['sha256'] != ref['sha256']):
             raise AuditError('report_input_mismatch', '报告输入与证据摘要不一致。', '使用本轮封存文件。', artifact=name)
     expected_coverage = (refs['coverage']['sha256'] if 'coverage' in refs else fingerprints(
-        refs['rules']['path'], document['coverage_version'], document['input_completeness'])['coverage_sha'])
+        ref_path(refs['rules'], base), document['coverage_version'], document['input_completeness'])['coverage_sha'])
     if (document['rules_sha'] != refs['rules']['sha256'] or document['coverage_sha'] != expected_coverage
             or document.get('rules_sha256', document['rules_sha']) != document['rules_sha']):
         raise AuditError('report_digest_mismatch', '摘要字段与证据清单不一致。', '重新生成审计摘要。')
