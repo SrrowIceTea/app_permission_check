@@ -6,7 +6,7 @@ from core.collector.parse_stats import body_parse_totals
 from core.io_utils import load_jsonl
 from vehicle.analyze.finding_class import classify
 from vehicle.privacy.evaluation import evaluate
-from vehicle.privacy.catalog import AAID_POLICY, AAID_SIGNATURES, catalog_hash, general_profile, contract, HERE
+from vehicle.privacy.catalog import AAID_POLICY, AAID_SIGNATURES, catalog_hash, general_profile, contract, policy_path, HERE
 from vehicle.pipeline.contracts import digest, read_json, write_json
 from vehicle.privacy import ha_contract
 from vehicle.privacy import ha_socket_evidence as ha_socket
@@ -49,7 +49,7 @@ def append_general(summary, output, capture, package, session, version='15'):
     revision = 1 if manifest.get('privacy_catalog_sha256') == catalog_hash(1) else 2
     (output / 'privacy-catalog.json').write_text(json.dumps(contract(revision), ensure_ascii=False) + '\n',
                                                   encoding='utf-8')
-    (output / 'privacy-policy.md').write_bytes((HERE / 'POLICY.md').read_bytes())
+    (output / 'privacy-policy.md').write_bytes(policy_path(revision).read_bytes())
     (output / 'privacy-sdk36-signatures.json').write_bytes((HERE / 'sdk36-signatures.json').read_bytes())
     if revision == 2:
         for name in (AAID_POLICY, AAID_SIGNATURES):

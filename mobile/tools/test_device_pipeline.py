@@ -109,41 +109,51 @@ class PipelineContracts(unittest.TestCase):
         self.assertEqual(trigger.SWIPE_TOP_Y, 324)
         self.assertEqual(trigger.SWIPE_BOTTOM_Y, 842)
 
+    def _assert_gadget_plan(self, out):
+        (out / "session").mkdir()
+        apk = out / "fixture.apk"
+        apk.write_bytes(b"fixture-only")
+        bundle = out / "bundle.js"
+        bundle.write_text("frida-java-bridge", encoding="utf-8")
+        client = Mock(side_effect=lambda *args, **kwargs: result(
+            "Success" if args[0] == "install" else "null" if "http_proxy" in args else ""))
+        client.serial, client.executable = "A", "adb"
+        client.select_device.return_value = "A"
+        profile = {"identity_exit_code": 0, "shell_uid": 2000, "nonroot_shell_observed": True}
+        args = pipeline.parse_args(["--apk", str(apk), "--skip-ai"])
+        replacements = {"AdbClient": lambda *args: client, "resolve_adb": lambda arg: "adb",
+                        "wait_boot": lambda adb: True, "collect_device_profile": lambda *a: profile,
+                        "inspect_gadget": lambda *a: {}, "host_frida_version": lambda: "17.9.11",
+                        "HOOKS": [{"name": "test", "script": bundle}],
+                        "permission_snapshot": lambda *a: "", "start_services": lambda *a: True,
+                        "wait_for_app": lambda *a: "123", "start_hooks": lambda *a: [],
+                        "wait_hooks": lambda *a: [{"exit_code": 0}],
+                        "trigger_sequence": lambda *a: None, "stop_capture": lambda *a: [],
+                        "hook_readiness": lambda *a: [], "traffic_checks": lambda *a: [],
+                        "generate_artifacts": lambda *a: None}
+        with patch.multiple(pipeline, **replacements):
+            checks, metadata = [], {}
+            pipeline.execute(args, out, checks, metadata)
+        commands = [call.args for call in client.call_args_list]
+        install = next(command for command in commands if command[0] == "install")
+        self.assertNotIn("-g", install)
+        self.assertFalse(any(command[0] == "root" for command in commands))
+        self.assertFalse(any(Path(token).name.startswith("frida-server")
+                             for command in commands for token in command))
+        self.assertFalse(any("su" in command for command in commands))
+        self.assertFalse(any(command[:3] == ("shell", "settings", "put") for command in commands))
+        self.assertTrue(all(check["exit_code"] == 0 for check in checks))
+
     def test_full_gadget_plan_has_no_privilege_mutations_or_pregrant(self):
         with tempfile.TemporaryDirectory() as tmp:
-            out = Path(tmp)
-            (out / "session").mkdir()
-            apk = out / "fixture.apk"
-            apk.write_bytes(b"fixture-only")
-            bundle = out / "bundle.js"
-            bundle.write_text("frida-java-bridge", encoding="utf-8")
-            client = Mock(side_effect=lambda *args, **kwargs: result(
-                "Success" if args[0] == "install" else "null" if "http_proxy" in args else ""))
-            client.serial, client.executable = "A", "adb"
-            client.select_device.return_value = "A"
-            profile = {"identity_exit_code": 0, "shell_uid": 2000, "nonroot_shell_observed": True}
-            args = pipeline.parse_args(["--apk", str(apk), "--skip-ai"])
-            replacements = {"AdbClient": lambda *args: client, "resolve_adb": lambda arg: "adb",
-                            "wait_boot": lambda adb: True, "collect_device_profile": lambda *a: profile,
-                            "inspect_gadget": lambda *a: {}, "host_frida_version": lambda: "17.9.11",
-                            "HOOKS": [{"name": "test", "script": bundle}],
-                            "permission_snapshot": lambda *a: "", "start_services": lambda *a: True,
-                            "wait_for_app": lambda *a: "123", "start_hooks": lambda *a: [],
-                            "wait_hooks": lambda *a: [{"exit_code": 0}],
-                            "trigger_sequence": lambda *a: None, "stop_capture": lambda *a: [],
-                            "hook_readiness": lambda *a: [], "traffic_checks": lambda *a: [],
-                            "generate_artifacts": lambda *a: None}
-            with patch.multiple(pipeline, **replacements):
-                checks, metadata = [], {}
-                pipeline.execute(args, out, checks, metadata)
-            commands = [call.args for call in client.call_args_list]
-            install = next(command for command in commands if command[0] == "install")
-            self.assertNotIn("-g", install)
-            self.assertFalse(any(command[0] == "root" for command in commands))
-            self.assertNotIn("frida-server", str(commands))
-            self.assertNotIn("su", str(commands))
-            self.assertFalse(any(command[:3] == ("shell", "settings", "put") for command in commands))
-            self.assertTrue(all(check["exit_code"] == 0 for check in checks))
+            self._assert_gadget_plan(Path(tmp))
+
+    def test_sensitive_temp_directory_name_does_not_change_result(self):
+        with tempfile.TemporaryDirectory(prefix="root_admin_su_") as tmp:
+            self.assertIn("su", Path(tmp).name)
+            self.assertIn("root", Path(tmp).name)
+            self.assertIn("admin", Path(tmp).name)
+            self._assert_gadget_plan(Path(tmp))
 
     def test_gadget_is_default_root_is_explicit(self):
         self.assertEqual(pipeline.parse_args([]).mode, "gadget")

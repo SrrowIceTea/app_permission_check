@@ -13,6 +13,7 @@ AAID = 'advertising_id'
 AAID_STATES = ('obtained', 'denied', 'empty', 'unavailable')
 AAID_SIGNATURES = 'aaid-signatures.json'
 AAID_POLICY = 'AAID_POLICY.md'
+LEGACY_POLICY = 'POLICY_20261102.md'
 AAID_PERMISSION = 'com.google.android.gms.permission.AD_ID'
 AAID_CLIENT = 'com.google.android.gms.ads.identifier.AdvertisingIdClient'
 
@@ -81,11 +82,15 @@ TARGETS.extend([
 ])
 
 
+def policy_path(revision):
+    return HERE / (LEGACY_POLICY if revision == 1 else 'POLICY.md')
+
+
 def contract(revision=2):
     base = {'schema_version': 1, 'api_levels': [33, 34, 35, 36], 'types': TYPES,
         'targets': TARGETS, 'sources': SOURCES, 'revision': revision,
         'policy': 'vehicle/privacy/POLICY.md', 'egress_window_ms': 30000,
-        'policy_sha256': hashlib.sha256((HERE / 'POLICY.md').read_bytes()).hexdigest(),
+        'policy_sha256': hashlib.sha256(policy_path(revision).read_bytes()).hexdigest(),
         'signature_evidence': 'vehicle/privacy/sdk36-signatures.json',
         'signature_evidence_sha256': hashlib.sha256((HERE / 'sdk36-signatures.json').read_bytes()).hexdigest()}
     if revision == 1:

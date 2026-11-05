@@ -4,7 +4,9 @@ from __future__ import annotations
 import copy
 import json
 import re
+import sys
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[2]
 TASK_ID = re.compile(r"^[0-9a-f]{12}$")
 CACHE_KEY = re.compile(r"^[0-9a-f]{24}--[0-9a-f]{64}$")
 STAGES = ("static", "decompile", "dynamic", "ai", "report")
+REPLACE_ATTEMPTS = 10 if sys.platform == "win32" else 1
+REPLACE_DELAY = 0.02
 
 
 def now() -> str:
@@ -26,14 +30,32 @@ def read_json(path: Path, default=None):
         return default
 
 
+def _atomic_replace(temporary: Path, path: Path) -> None:
+    """Windows 上 os.replace 会被短暂占用；有界重试，耗尽后原文件不变。"""
+    for attempt in range(REPLACE_ATTEMPTS):
+        try:
+            temporary.replace(path)
+            return
+        except PermissionError as error:
+            if attempt + 1 >= REPLACE_ATTEMPTS:
+                raise PermissionError(
+                    error.errno,
+                    f"无法原子写入 {path}：文件被占用，原文件保持不变，临时文件 {temporary} 未替换。",
+                    str(path)) from error
+            time.sleep(REPLACE_DELAY * (attempt + 1))
+
+
 def write_json(path: Path, value) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
     try:
         temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
-        temporary.replace(path)
+        _atomic_replace(temporary, path)
     finally:
-        temporary.unlink(missing_ok=True)
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 class Store:

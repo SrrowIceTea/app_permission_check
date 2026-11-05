@@ -8,7 +8,7 @@ from vehicle.pipeline.test_support import make_capture, seal_capture, PACKAGE
 from vehicle.pipeline.contracts import digest, write_json, read_json, AuditError
 from vehicle.pipeline.audit import run_audit
 from vehicle.pipeline.preflight import validate_capture
-from vehicle.privacy.catalog import catalog_hash
+from vehicle.privacy.catalog import catalog_hash, contract
 
 
 class GeneralVersionTests(unittest.TestCase):
@@ -52,6 +52,16 @@ class GeneralVersionTests(unittest.TestCase):
         with self.assertRaises(AuditError) as caught:
             run_audit(self.capture, self.root / 'mixed', PACKAGE, version='16', pdf=False)
         self.assertEqual('vhal_outside_scope', caught.exception.code)
+
+    def test_legacy_catalog_exports_the_frozen_policy_bytes(self):
+        expected = catalog_hash(1)
+        self.manifest['privacy_catalog_sha256'] = expected
+        self.events[-1]['privacy_catalog_sha256'] = expected
+        self.save()
+        output = self.root / 'legacy'
+        result = run_audit(self.capture, output, PACKAGE, version='16', pdf=False)
+        self.assertEqual(expected, result['privacy_catalog_sha256'])
+        self.assertEqual(contract(1)['policy_sha256'], digest(output / 'privacy-policy.md'))
 
 
 if __name__ == '__main__':
