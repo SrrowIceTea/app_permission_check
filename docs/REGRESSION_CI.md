@@ -13,6 +13,9 @@ python tools/run_regressions.py --prepare --mobile --out output/ci-local
 准备失败时停止本轮测试，保存 `prepare.log`、准备阶段的独立日志和 `verification.json`。
 准备成功后运行 16 组根回归及 1 组移动侧检查。每次运行使用新目录。GitHub Actions 和 Jenkins 共用此入口。
 
+隐私目录中按字节计算摘要的来源文件由 `.gitattributes` 固定换行格式。
+第一版目录使用封存的 `POLICY_20261102.md`，审计导出采用同一份政策，便于干净检出时复核旧观测摘要。
+
 ## 并行与产物隔离
 
 三个回归入口的默认目录均在时间戳后增加由文件系统独占创建的随机后缀。
