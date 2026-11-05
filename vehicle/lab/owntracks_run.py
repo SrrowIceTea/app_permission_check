@@ -22,7 +22,7 @@ TEST_POINTS = ((30.3125, 120.1875), (30.5625, 120.4375))
 RULES = ROOT / 'vehicle/rules/rules_library/rules.db'
 
 
-def receiver(endpoint, receipts):
+def receiver(endpoint, receipts, response_status=lambda: 200):
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             length = self.headers.get('Content-Length', '')
@@ -33,9 +33,10 @@ def receiver(endpoint, receipts):
                 self.send_error(413)
                 return
             raw = self.rfile.read(int(length))
-            entry = {'ts': int(time.time() * 1000), 'path': self.path,
+            status = response_status()
+            entry = {'ts': int(time.time() * 1000), 'path': self.path, 'status': status,
                      'body_sha256': hashlib.sha256(raw).hexdigest(), **summarize_body(raw)}
-            self.send_response(200)
+            self.send_response(status)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', '2')
             self.end_headers()

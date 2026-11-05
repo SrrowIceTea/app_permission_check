@@ -3,6 +3,7 @@ import './java_bootstrap.js';
 import './hook_privacy.js';
 import { packages } from './scope.js';
 import { makeLogger, procName } from './vscan_runtime.js';
+import { armNativeForm } from './hook_mg4_send.js';
 
 const PKG = 'com.tommasov.mg4browser';
 const log = makeLogger('mg4_webview', '/data/local/tmp/vscan-mg4-webview.log');
@@ -12,6 +13,7 @@ Java.perform(() => {
   try {
     const uid = Number(Java.use('android.os.Process').myUid());
     const identity = {pkg: PKG, uid, user_id: Math.floor(uid / 100000)};
+    armNativeForm(identity);
     const observe = Java.use('android.webkit.WebViewClient').shouldInterceptRequest
       .overload('android.webkit.WebView', 'android.webkit.WebResourceRequest');
     observe.implementation = function (view, request) {

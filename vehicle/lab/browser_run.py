@@ -15,6 +15,7 @@ from urllib.parse import parse_qs
 from core.collector.identity import uid_of
 from core.io_utils import load_jsonl
 from vehicle.lab.ui import UI
+from vehicle.lab.browser_control import send_control
 from vehicle.pipeline.contracts import ROOT, digest, write_json, read_json
 from vehicle.privacy import mg4_contract as mg4
 
@@ -68,10 +69,12 @@ def proxy_post_line(line, host, post_path):
             and expected.startswith(observed[:-1]) and len(observed.rsplit('=', 1)[-1]) >= 13))
 
 
-def run(out, webview_probe=False):
+def run(out, webview_probe=False, native_control=False):
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=False)
     host, marker = host_ip(), secrets.token_hex(8)
+    if native_control and not webview_probe:
+        raise ValueError('native control requires --webview-probe')
     post_path = f'/submit?vscan_id={marker}' if webview_probe else '/submit'
     receipts, actions = [], []
     class Handler(BaseHTTPRequestHandler):
@@ -147,6 +150,9 @@ def run(out, webview_probe=False):
         xml = snap('04-back', 'VScanner owned AAOS page')
         ui.tap(xml, resource=PKG + ':id/button_reload'); time.sleep(1)
         xml = snap('05-reload', 'VScanner owned AAOS page')
+        control = None
+        if native_control:
+            control = send_control(ui.device, host, post_path, secrets.token_hex(8))
         submitted_ms = int(time.time() * 1000)
         ui.tap(xml, text='Submit synthetic form')
         deadline = time.monotonic() + 8
@@ -178,6 +184,17 @@ def run(out, webview_probe=False):
                       and str(f.get('path', '')).split('?')[0] == '/submit']
         session = read_json(capture / 'session-manifest.json')['session']
         attributed = [f for f in post_flows if post and matching_post(f, host, marker, post, session, submitted_ms)]
+        control_ok = None
+        if control:
+            control_receipts = [r for r in receipts if r.get('body_sha256') == control['body_sha256']
+                                and r['path'] == post_path and r['ts_ms'] >= control['ts_ms']]
+            control_ok = (len(control_receipts) == 1 and bool(re.match(r'HTTP/1\.[01] 200\b', control['response_status']))
+                and all(control['uid'] != uid_of(f) and control['pid'] !=
+                    (f.get('native_write_ref') or {}).get('pid') for f in attributed)
+                and control['exit_code'] == 0 and all((f.get('request_payload') or {}).get('raw_sha256')
+                    != control['body_sha256'] for f in flows))
+            control.update(receipt_count=len(control_receipts), attributed_to_mg4=False if control_ok else None,
+                           passed=control_ok)
         linked = []
         webview_uid = None
         if webview_probe and post:
@@ -215,6 +232,7 @@ def run(out, webview_probe=False):
             'proxy_observed_post': bool(proxy_post), 'proxy_post_lines': proxy_post,
             'post_flow_count': len(post_flows), 'post_flow_attributed': len(attributed),
             'attribution_basis': basis,
+            'native_write_refs': [f.get('native_write_ref') for f in attributed if f.get('native_write_ref')],
             'attribution_substitution': {**mg4.SUBSTITUTION, 'used': substitution},
             'webview_request_refs': [{'src': r['src'], 'evt_id': r['evt_id']} for r in linked],
             'server_host': host, 'submitted_ms': submitted_ms, 'webview_package_uid': webview_uid,
@@ -223,9 +241,11 @@ def run(out, webview_probe=False):
                                          'attribution': f.get('attribution')} for f in post_flows
                                         if f.get('package') != PKG],
             'capture_healthy': read_json(capture / 'verification.json')['passed'],
+            'negative_control': control,
             'scope': 'Owned HTTP page: GET navigate/link/back/reload; random-marker POST; '
                      'favourite UI/background/resume', 'gaps': gaps})
-        return status in ('workflow_complete', 'webview_receipt_linked')
+        return (status == 'workflow_complete' and bool(control_ok)) if native_control else status in (
+            'workflow_complete', 'webview_receipt_linked')
     except Exception as error:
         write_json(out / 'business.json', {'status': 'failed', 'error': str(error),
                                           'actions': actions, 'server_receipts': receipts})
@@ -244,5 +264,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--webview-probe', action='store_true')
+    parser.add_argument('--native-control', action='store_true')
     args = parser.parse_args()
-    raise SystemExit(0 if run(args.out, args.webview_probe) else 1)
+    raise SystemExit(0 if run(args.out, args.webview_probe, args.native_control) else 1)

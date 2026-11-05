@@ -104,6 +104,8 @@ def append_general(summary, output, capture, package, session, version='15', *, 
         summary['ha_websocket'] = add_capture_gaps(ha_socket.summarize(reads, session, user),
                                                   reads, session, user)
     if manifest.get(mg4.MANIFEST_KEY) == mg4.contract_hash():
+        from vehicle.privacy.mg4_write_evidence import audit as audit_mg4_writes
+        summary['mg4_native_http'] = audit_mg4_writes(capture, session)
         summary['mg4_webview'] = {'request_refs': [{'src': r['src'], 'evt_id': r['evt_id']} for r in reads
             if r.get('src') == 'mg4_webview' and r.get('ev') == 'WEBVIEW_POST_REQUEST'
             and r.get('pkg') == package and r.get('session_id') == session],
@@ -114,7 +116,7 @@ def append_general(summary, output, capture, package, session, version='15', *, 
     if manifest.get(owntracks.MANIFEST_KEY) == owntracks.contract_hash():
         from vehicle.privacy import owntracks_evidence
         location_records, summary['owntracks_location'] = owntracks_evidence.evaluate(
-            reads, flows, session, manifest['user_id'])
+            reads, flows, session, manifest['user_id'], manifest.get('owntracks_endpoint_host', '198.18.0.1'))
         records.extend(codeloc.attach(location_records, reads, flows, [], package))
         summary['owntracks_location']['evaluator_sha256'] = digest(owntracks_evidence.__file__)
         summary['inputs']['reads'] += summary['owntracks_location']['callback_events']

@@ -103,7 +103,10 @@ def _finding(reads, rule_id):
             'basis_refs': SOURCES, 'source_refs': SOURCES}
 
 
-def evaluate(reads, flows, session, user):
+def evaluate(reads, flows, session, user, endpoint_host='198.18.0.1'):
+    from vehicle.privacy.owntracks_endpoint import allowed_host
+    if not allowed_host(endpoint_host):
+        raise ValueError('invalid owned OwnTracks receiver host')
     grouped = defaultdict(list)
     for read in reads:
         if location_read(read, session, user):
@@ -112,7 +115,7 @@ def evaluate(reads, flows, session, user):
     for flow in flows:
         path = flow.get('path')
         if (flow.get('scheme') != 'http' or flow.get('intercepted_tls')
-                or flow.get('host') != '198.18.0.1' or flow.get('target_port') != 18145
+                or flow.get('host') != endpoint_host or flow.get('target_port') != 18145
                 or not isinstance(path, str) or not re.fullmatch('/owntracks/[a-f0-9]{16}', path)):
             continue
         body = location_post(flow, session, user)

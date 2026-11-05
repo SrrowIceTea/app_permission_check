@@ -80,3 +80,10 @@ PDF 和结论文件仅展示事件引用和关联结果。三侧核对（回调�
   --apk output/sample-acquisition-20261103/org.owntracks.android/sample.apk `
   --out <新输出目录>
 ```
+
+## 第三方业务补测（2026-11-05）
+
+新一轮 AAOS 35 采集已补 MG4 实际写入与代理逐流正文身份，并用独立设备进程做同端点负控。
+OwnTracks 的前台、后台、真实断网重连和 HTTP 503 四项通过；503 后正常恢复的上传单列。
+详见 [主线集成与第三方车机补测](../../docs/VEHICLE_MAIN_CLOSEOUT_20261105.md)。
+历史 MG4 替代关系与 OwnTracks 原接收地址证据保持原范围，不因新轮次通过而升级。

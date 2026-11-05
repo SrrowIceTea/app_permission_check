@@ -7,6 +7,18 @@ from vehicle.privacy.owntracks_evidence import BODY_RULE, READ_RULE, coordinate_
 
 
 class OwnTracksPairTests(unittest.TestCase):
+    def test_configured_owned_endpoint_cannot_accept_another_host(self):
+        from vehicle.privacy.owntracks_endpoint import allowed_host
+        self.assertTrue(allowed_host('10.18.80.25'))
+        for host in ('8.8.8.8', '127.0.0.1', '10.999.1.1', 'https://10.1.1.1', None):
+            self.assertFalse(allowed_host(host))
+        flow = {**self.flow, 'host': '10.18.80.25'}
+        self.assertEqual(0, evaluate([self.read], [flow], 'test-session', 10)[1]['matched_requests'])
+        self.assertEqual(1, evaluate([self.read], [flow], 'test-session', 10,
+                                    endpoint_host='10.18.80.25')[1]['matched_requests'])
+        with self.assertRaises(ValueError):
+            evaluate([self.read], [flow], 'test-session', 10, endpoint_host='8.8.8.8')
+
     def setUp(self):
         self.endpoint = urlsplit('http://198.18.0.1:18145/owntracks/0123456789abcdef')
         raw = '{"_type":"location","lat":30.3125,"lon":120.1875,"tst":2}'

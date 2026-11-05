@@ -290,3 +290,8 @@ AD_ID 实际授予区分权限拒绝和空值。GMS 缺失时本镜像的 SDK �
 固定 APK 的 OkHttp 构造方法经过重命名。独立 bundle 观察实际定位回调与应用 HTTP 请求构造，
 请求构造只作为目标候选，必须结合代理 POST 和隔离接收端的正文摘要。隔离 HTTP 不装载 TLS 绕过。
 APK 哈希和 Hook 契约在采集与导入时核验。见 [样本运行记录](../lab/SAMPLE_RUNTIME_REVIEW.md)。
+
+## D324–D325 第三方实际写入与真实网络场景（2026-11-05）
+
+MG4 Chromium 逐流身份、OwnTracks 自有接收地址及真实断网验收，见
+[第三方决策](DECISIONS_THIRDPARTY.md)。按职责分档，主索引保持 300 行以内。

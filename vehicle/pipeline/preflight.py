@@ -68,6 +68,9 @@ def validate_capture(capture, package, version, rules, apk=None, *, catalog_snap
     abs_enabled = abs_scope.BUNDLE in used or abs_scope.MANIFEST_KEY in manifest
     owntracks_enabled = owntracks.BUNDLE in used or owntracks.MANIFEST_KEY in manifest
     if owntracks_enabled:
+        from vehicle.privacy.owntracks_endpoint import allowed_host
+        if not allowed_host(manifest.get('owntracks_endpoint_host', '198.18.0.1')):
+            reject('owntracks_endpoint_invalid', 'OwnTracks 接收端必须为已声明的自有测试地址。')
         if (ha_modes or mg4_enabled or abs_enabled or not owntracks.supports(package, manifest)
                 or manifest.get('capture_mode') != 'attach_system_proxy'
                 or manifest.get(owntracks.MANIFEST_KEY) != owntracks.contract_hash()):

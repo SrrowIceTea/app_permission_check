@@ -68,3 +68,12 @@ Windows 节点 `windows-local` 有两个执行器，控制节点不执行构建�
 准备步骤和 17 组回归全部通过。
 自动触发判据见 [automatic-verification.json](../output/jenkins/gitee-acceptance/automatic-verification.json)，
 原始轮询日志与构建日志保存在同目录。
+
+## 主线接管（2026-11-05）
+
+CI 分支已合并并推送到 `main`，保留双方提交历史。任务现跟踪 `*/main`，仍每五分钟轮询。
+[第 3 次构建](http://127.0.0.1:8080/job/vscanner-gitee/3/) 是切换后的手动基线，检出 `3431ee4` 并通过。
+Pipeline 的轮询使用上次运行登记的 SCM，因此切换分支后必须先建立此基线。
+后续主线真实提交的自动触发证据独立保存在
+[主线自动验收](../output/main-closeout-20261105/automatic-verification.json)，须核对 SCM 触发原因、
+实际提交、准备步骤及 17 组结果；不能把第 3 次手动基线当作自动触发证明。

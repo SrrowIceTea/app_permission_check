@@ -18,9 +18,10 @@ Java.perform(() => {
       const result = original.call(this, configuration, message);
       try {
         const url = String(configuration.getUrl());
-        if (/^http:\/\/198\.18\.0\.1:18145\/owntracks\/[a-f0-9]{16}$/.test(url))
+        const match = /^http:\/\/(198\.18\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}):18145\/owntracks\/[a-f0-9]{16}$/.exec(url);
+        if (match && match[1].split('.').every(x => Number(x) <= 255))
           logEgress('EGRESS_URL', {...identity, outcome: 'candidate',
-            target_host: '198.18.0.1', target_port: 18145, via: CLASS + '.getRequest',
+            target_host: match[1], target_port: 18145, via: CLASS + '.getRequest',
             evidence_role: 'request_target_candidate'});
       } catch (_) {
         logEgress('ERROR', {...identity, where: 'owntracks_request_target'});

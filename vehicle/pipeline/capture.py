@@ -31,7 +31,7 @@ from vehicle.privacy import owntracks_contract as owntracks
 
 def capture_app(package, serial, user, seconds, output, activity=None, scope='all',
                 preserve_system_proxy=False, frida_port=27043, ha_webhook=False, ha_websocket=False,
-                mg4_webview=False, abs_send=False, owntracks_location=False):
+                mg4_webview=False, abs_send=False, owntracks_location=False, owntracks_host='198.18.0.1'):
     if not re.fullmatch(r'[A-Za-z]\w*(?:\.\w+)+', package) or seconds <= 0:
         raise AuditError('invalid_capture_target', '包名无效或采集时长非正数。', '明确指定授权包名与时长。')
     if sum((ha_webhook, ha_websocket, mg4_webview, abs_send, owntracks_location)) > 1:
@@ -66,6 +66,11 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
 
     try:
         identity = device.ordinary_identity(package, user, scope)
+        if owntracks_location:
+            from vehicle.privacy.owntracks_endpoint import allowed_host
+            if not allowed_host(owntracks_host):
+                raise ValueError('OwnTracks requires an explicit owned private receiver host')
+            identity['owntracks_endpoint_host'] = owntracks_host
         if owntracks_location and (preserve_system_proxy or not owntracks.supports(package, identity)
                                    or device.call('shell', 'getprop', 'ro.kernel.qemu') != '1'):
             raise AuditError('owntracks_target_mismatch', '定位回调实验只支持指定 OwnTracks APK 和 AAOS 35 模拟器。',
@@ -100,6 +105,9 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
             VSCAN_ATTRIB_SOURCES=str(output / 'reads.jsonl'),
             VSCAN_TAGGING=str(ROOT / 'vehicle/traffic/tagging.py'),
             PATH=str(Path(device.adb).parent) + os.pathsep + os.environ['PATH'])
+        env.pop('VSCAN_NATIVE_HTTP_PACKAGE', None)
+        if mg4_webview:
+            env['VSCAN_NATIVE_HTTP_PACKAGE'] = package
         proxy = subprocess.Popen([sys.executable, '-u', '-c', 'from mitmproxy.tools.main import mitmdump; mitmdump()',
             '-s', str(ROOT / 'core/collector/addon.py'), '--listen-host', '127.0.0.1',
             '--listen-port', '8888', '--mode', 'regular', '--set', 'flow_detail=1',
@@ -147,6 +155,8 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
             from vehicle.privacy.catalog import catalog_hash
             required = {('privacy', 'ARMED')}
             required.update(sample_mode.REQUIRED if sample_mode else {('egress', 'ARMED'), ('tls', 'PINNING_ARMED')})
+            if mg4_webview:
+                required.add(('http_write', 'ARMED'))
             if scope == 'all':
                 required.add(('vhal', 'ARMED'))
             matching_catalog = any(r.get('src') == 'privacy' and r.get('ev') == 'ARMED'
@@ -197,7 +207,8 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
             alive = initial_pid is not None and device.call('shell', 'test', '-d', f'/proc/{initial_pid}') == ''
             verification['checks']['original_process_alive'] = alive
             if identity:
-                verification['checks']['apk_unchanged'] = identity == device.ordinary_identity(package, user, scope)
+                apk_identity = {k: v for k, v in identity.items() if k != 'owntracks_endpoint_host'}
+                verification['checks']['apk_unchanged'] = apk_identity == device.ordinary_identity(package, user, scope)
         except Exception as error:
             verification['checks']['device_cleanup_and_identity'] = False
             verification['cleanup_error'] = type(error).__name__
@@ -247,6 +258,7 @@ def main(argv=None):
     parser.add_argument('--out', type=Path)
     parser.add_argument('--activity')
     parser.add_argument('--frida-port', type=int, default=27043)
+    parser.add_argument('--owntracks-host', default='198.18.0.1', help='自有局域网接收端 IPv4 地址')
     ha_modes = parser.add_mutually_exclusive_group()
     ha_modes.add_argument('--ha-webhook', action='store_true', help='采集隔离 HA 样本的电量 webhook 字段')
     ha_modes.add_argument('--ha-websocket', action='store_true', help='采集隔离 HA 样本的订阅与测试实体状态消息')
@@ -263,7 +275,7 @@ def main(argv=None):
                          args.scope, preserve_system_proxy=args.preserve_system_proxy,
                          frida_port=args.frida_port, ha_webhook=args.ha_webhook, ha_websocket=args.ha_websocket,
                          mg4_webview=args.mg4_webview, abs_send=args.abs_send,
-                         owntracks_location=args.owntracks_location)
+                         owntracks_location=args.owntracks_location, owntracks_host=args.owntracks_host)
     print(json.dumps({'passed': result['passed'], 'out': str(output)}, ensure_ascii=False))
     return 0 if result['passed'] else 1
 

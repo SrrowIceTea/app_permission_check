@@ -38,7 +38,7 @@ CHECKS = [
         'vehicle.pipeline.test_capture_lifecycle',
         'vehicle.pipeline.test_capture_proxy',
         'vehicle.privacy.test_observation', 'vehicle.privacy.test_ha_evaluation',
-        'vehicle.lab.test_evidence_repairs', 'vehicle.lab.test_owntracks_run',
+        'vehicle.lab.test_evidence_repairs', 'vehicle.lab.test_owntracks_run', 'vehicle.lab.test_mg4_write',
         'vehicle.privacy.test_ha_socket_evidence']),
     # 归因/载荷/失败流落盘/报文扫描是平台无关的，已抽到 core/collector/；
     # 车载 VHAL 指纹表留在 vehicle/traffic。
@@ -47,7 +47,7 @@ CHECKS = [
                                      'test_redaction',
                                      'test_system_probe',
                                      'test_experiment', 'test_montecarlo',
-                                     'test_uid_sampler', 'test_targets']),
+                                     'test_uid_sampler', 'test_targets', 'test_native_write']),
     ('tagging-vehicle', 'vehicle/traffic', [sys.executable, '-m', 'unittest', 'test_tagging']),
     ('dashboard', 'vehicle/dashboard', [sys.executable, '-m', 'unittest', 'test_dashboard']),
     ('runtime', 'vehicle/hooks', ['node', 'test_runtime.mjs']),
