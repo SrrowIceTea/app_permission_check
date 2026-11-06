@@ -151,8 +151,8 @@ python python/calibrate_permissions.py --db draft/rules.db --pm-output /path/to/
 供审计侧核对。原始文件摘要会因 Room 追加 `room_master_table`/`android_metadata` 而变化，
 所以"是否仍是同一份规则"由四表内容摘要判定，而不是原始文件摘要。
 
-已验收正常升级、损坏资产和升级后的整机重启。替换过程中磁盘写入异常、断电及并发安装尚未验收；
-当前替换实现不能保证这些情况下自动恢复旧库，不能将正常重启通过解释为升级中断安全。
+2026-11-05 新增切换意图、刷盘、备份恢复与安装/读取互斥，已补真实进程终止与重启验收；
+当前机制、复跑方法和实测边界见 [升级恢复](RECOVERY.md)，历史 D014/D015 不追溯升级。
 
 依赖变更单列：
 
@@ -197,6 +197,9 @@ adb root && adb pull /data/user/10/com.vscanner.rules/files/verification.json
 ```
 
 三条运维约束，违反会得到误导性结果：
+
+以下粘性复制是旧 Room 路径的历史教训；当前 RulesDbInstaller 正常升级不要求清除应用数据。
+不得用清库代替升级或中断恢复验收。
 
 1. **预置库是粘性的，且 `pm clear` 不加 `--user` 是个假成功。**
    Room 发现目标文件已是同一版本就直接返回，重新安装或升级 APK 都不会替换它

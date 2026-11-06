@@ -39,11 +39,13 @@ cd android && ./gradlew :app:assembleDebug
 
 # 设备侧（应用跑在 user 10！）
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell pm clear --user 10 com.vscanner.rules   # 换过资产必须执行，且必须带 --user 10
+# 当前安装器按摘要升级，不需要清数据；勿用 pm clear 代替升级验收。
 adb shell am start -n com.vscanner.rules/.MainActivity
 ```
 
 ## 本目录的坑（全部实测，细节见 README「在真实设备上构建与验证」）
+
+当前升级中断恢复入口与证据见 [RECOVERY.md](RECOVERY.md)（D016）。以下粘性复制是旧路径的历史机制。
 
 - **预置库是粘性的，`pm clear` 不加 `--user 10` 是假成功**：`adb shell` 默认 user 0 上下文，
   会打印 `Success` 却只清掉不存在的那份；应用跑在 user 10，旧库原封不动。

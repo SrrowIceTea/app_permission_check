@@ -1,8 +1,9 @@
-"""Build human-review templates and publish measured strata separately."""
+"""Build review templates and publish human/subagent strata separately."""
 from datetime import datetime, timezone
 
 from vehicle.bench.labels import LABEL_SCHEMA
 from vehicle.bench.metrics import aggregate_strata, stratified_metrics
+from vehicle.bench.review_policy import DEFAULT_REVIEW_MODE, SUBAGENT_LIMITS, signoff_fields
 from vehicle.pipeline.contracts import ROOT, SCHEMA_VERSION, digest, read_json, write_json
 
 PAIR_CASE = 'ha_battery'
@@ -17,7 +18,8 @@ def review_entry(case, row):
         'id': case['id'], 'schema_version': LABEL_SCHEMA, 'pair_schema': 2,
         'apk_sha256': case['apk']['sha256'], 'package': case['package'],
         'session_id': row.get('capture_session_id'), 'sample_origin': 'independent',
-        'origin': 'independent_review', 'human_signoff': row['human_signoff'],
+        'origin': 'subagent_review' if row['review_mode'] == 'subagent' else 'independent_review',
+        **signoff_fields(row['review_mode'], row['signoff_status']),
         'reference_evidence': refs, 'capture_manifest': artifacts.get('capture_manifest'),
         'metrics_eligible': case['kind'] == PAIR_CASE,
         'identity_attribution': row['identity_attribution'], 'body_match': row['body_match'],
@@ -45,9 +47,11 @@ def fixture_entry(capture, labels, output, *, signed=None, root=ROOT):
     metrics = stratified_metrics(findings, signed, initial['apk_sha256'], replay['session_id'], 'owned_fixture',
         refs=refs, root=root, capture=capture, gap='agent_reference_pending_independent_review',
         paths=(('vhal', 'proxy'),))
+    mode = signed.get('review_mode', 'human') if signed else DEFAULT_REVIEW_MODE
     return {'id': FIXTURE_ID, 'sample_origin': 'owned_fixture', 'schema_version': LABEL_SCHEMA,
-            'pair_schema': 2, 'origin': 'independent_review', 'apk_sha256': initial['apk_sha256'],
-            'session_id': replay['session_id'], 'human_signoff': 'signed' if signed else 'pending',
+            'pair_schema': 2, 'origin': 'subagent_review' if mode == 'subagent' else 'independent_review',
+            'apk_sha256': initial['apk_sha256'], 'session_id': replay['session_id'],
+            **signoff_fields(mode, 'signed' if signed else 'pending'),
             'metric_unit': 'rule_read_flow_pair', 'metrics_eligible': True,
             'reference_evidence': refs,
             'initial_reference': label_ref,
@@ -66,24 +70,43 @@ def write_benchmark(output, rows):
     measured_ids = {key for row in measured for key in row['measured_samples']}
     apps = len({row['package'] for row in rows if row['id'] in measured_ids})
     reference_pairs = sum(row['tp'] + row['fn'] for row in measured)
-    reasons = []
-    if apps < 10:
-        reasons.append('fewer_than_10_independently_reviewed_apps')
-    if reference_pairs < 100:
-        reasons.append('fewer_than_100_independent_reference_pairs')
-    if measured and any(row['cohens_kappa'] is None or row['cohens_kappa'] < .80 for row in measured):
-        reasons.append('inter_reviewer_kappa_below_gate_or_undefined')
-    if measured and any(row['negative_control_fp_rate'] is None
-                        or row['negative_control_fp_rate'] > .10 for row in measured):
-        reasons.append('negative_control_rate_above_gate_or_undefined')
+    human = [row for row in measured if row['label_origin'] == 'independent_review']
+    agents = [row for row in measured if row['label_origin'] == 'subagent_review']
+    def app_count(strata):
+        ids = {key for row in strata for key in row['measured_samples']}
+        return len({row['package'] for row in rows if row['id'] in ids})
+    def acceptance(strata):
+        gaps = []
+        if app_count(strata) < 10:
+            gaps.append('fewer_than_10_independently_reviewed_apps')
+        if sum(row['tp'] + row['fn'] for row in strata) < 100:
+            gaps.append('fewer_than_100_independent_reference_pairs')
+        if strata and any(row['cohens_kappa'] is None or row['cohens_kappa'] < .80 for row in strata):
+            gaps.append('inter_reviewer_kappa_below_gate_or_undefined')
+        if strata and any(row['negative_control_fp_rate'] is None
+                          or row['negative_control_fp_rate'] > .10 for row in strata):
+            gaps.append('negative_control_rate_above_gate_or_undefined')
+        return {'status': 'pending' if gaps else 'passed', 'gaps': gaps}
+    gates = {'human': acceptance(human), 'subagent': acceptance(agents)}
+    gate_mode = 'subagent' if agents or not human else 'human'
     document = {'schema_version': SCHEMA_VERSION, 'generated_at': datetime.now(timezone.utc).isoformat(),
         'bindings_by_sample': bindings, 'strata': strata,
         'samples': {row['id']: row['metrics'] for row in rows},
         'independent_apps_measured': apps, 'independent_reference_pairs_measured': reference_pairs,
+        'human_reviewed_apps_measured': app_count(human),
+        'subagent_reviewed_apps_measured': app_count(agents),
+        'human_reference_pairs_measured': sum(row['tp'] + row['fn'] for row in human),
+        'subagent_reference_pairs_measured': sum(row['tp'] + row['fn'] for row in agents),
+        'human_reference_metrics': 'measured_by_stratum' if human else 'not_measured',
+        'subagent_reference_metrics': 'measured_by_stratum' if agents else 'not_measured',
+        'review_sources': sorted({row['label_origin'] for row in measured}),
+        'review_limits': SUBAGENT_LIMITS if agents else [],
         'accuracy': 'measured_by_stratum' if measured else 'not_measured',
-        'benchmark_acceptance': 'passed' if not reasons else 'pending',
-        'benchmark_acceptance_gaps': reasons,
-        'caveat': 'Wilson intervals are descriptive for the reviewed pairs in each stratum.'}
+        'benchmark_acceptance': gates[gate_mode]['status'],
+        'benchmark_acceptance_review_mode': gate_mode,
+        'benchmark_acceptance_by_review_mode': gates,
+        'benchmark_acceptance_gaps': gates[gate_mode]['gaps'],
+        'caveat': 'Wilson intervals describe reviewed pairs. Subagent agreement does not establish human ground truth.'}
     for key in ('rules_sha', 'coverage_sha'):
         available = {ref[key] for ref in bindings.values() if ref[key]}
         document[key] = next(iter(available)) if len(available) == 1 else None

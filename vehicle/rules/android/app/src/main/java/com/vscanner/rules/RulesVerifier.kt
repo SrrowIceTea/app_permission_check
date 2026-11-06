@@ -138,24 +138,27 @@ class RulesVerifier(private val context: Context) {
         // Room only copies the asset while the target file is absent, so an APK
         // update that changed rules.db but not the schema version would keep the
         // old copy. The installer decides on the digest, not on the schema version.
-        val install = RulesDbInstaller(context).ensureInstalled(source, databaseName)
-
-        val db = RulesDatabase.open(context, source, databaseName)
-        return try {
-            // RulesDatabase.open() is lazy. Every copy error and every schema
-            // validation error surfaces on the first DAO call below, so the first
-            // query - not the open - is the thing that must be guarded.
-            val dao = db.rules()
-            val present = dao.versions()
-            val counts = LinkedHashMap<String, VersionCounts>()
-            for (version in (BaselineExpectation.VERSIONS.keys + present).sorted()) {
-                counts[version] = dao.counts(version)
+        return RulesDbInstaller(context).withInstalled(source, databaseName) { install ->
+            if (!install.readable) {
+                return@withInstalled failure(install.cause ?: java.io.IOException(install.reason), digest, started, install)
             }
-            success(counts, digest, started, install)
-        } catch (t: Throwable) {
-            failure(t, digest, started, install)
-        } finally {
-            runCatching { db.close() }
+            val db = RulesDatabase.open(context, source, databaseName)
+            try {
+                // RulesDatabase.open() is lazy. Every copy error and every schema
+                // validation error surfaces on the first DAO call below, so the first
+                // query - not the open - is the thing that must be guarded.
+                val dao = db.rules()
+                val present = dao.versions()
+                val counts = LinkedHashMap<String, VersionCounts>()
+                for (version in (BaselineExpectation.VERSIONS.keys + present).sorted()) {
+                    counts[version] = dao.counts(version)
+                }
+                success(counts, digest, started, install)
+            } catch (t: Throwable) {
+                failure(t, digest, started, install)
+            } finally {
+                runCatching { db.close() }
+            }
         }
     }
 
@@ -167,6 +170,7 @@ class RulesVerifier(private val context: Context) {
     ): VerificationReport {
         val expected = BaselineExpectation.VERSIONS
         val shaMatch = digest == BaselineExpectation.SHA256
+        val effectiveMatch = install.effectiveSha256 == BaselineExpectation.SHA256
         val countsMatch = expected.all { (version, exp) -> counts[version] == exp }
 
         // The empty-schema trap: Room created its own tables from a 0-byte asset,
@@ -176,7 +180,7 @@ class RulesVerifier(private val context: Context) {
         val state: DbState
         val reason: String
         when {
-            shaMatch && countsMatch -> {
+            shaMatch && effectiveMatch && countsMatch -> {
                 state = DbState.OK
                 reason = "预置规则库与基线一致（SHA-256 匹配，四表条数符合预期）"
             }
@@ -188,7 +192,7 @@ class RulesVerifier(private val context: Context) {
             else -> {
                 state = DbState.SCHEMA_MISMATCH
                 reason = "预置规则库与基线不符：SHA-256 ${if (shaMatch) "匹配" else "不匹配"}，" +
-                    "条数${if (countsMatch) "符合" else "不符合"}预期"
+                    "生效库${if (effectiveMatch) "匹配" else "不匹配"}，条数${if (countsMatch) "符合" else "不符合"}预期"
             }
         }
 

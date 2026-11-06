@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -28,7 +29,7 @@ class RulesVerifierStateTest {
 
     @After
     fun tearDown() {
-        opened.forEach { context.deleteDatabase(it) }
+        opened.forEach { RulesRecoveryFixtures.clean(context, it) }
         opened.clear()
     }
 
@@ -72,8 +73,9 @@ class RulesVerifierStateTest {
             "state-notadb.db",
         )
         assertEquals(DbState.MISSING_OR_CORRUPT, report.state)
-        assertEquals(null, report.errorClass)
-        assertTrue(report.counts.getValue("14").isEmpty)
+        assertNotNull(report.errorClass)
+        assertTrue(report.counts.isEmpty())
+        assertFalse(report.install.readable)
     }
 
     /**
@@ -85,8 +87,9 @@ class RulesVerifierStateTest {
     fun zeroLengthAssetIsCaughtByCountsNotByAnException() = runBlocking {
         val report = verify(RulesDbSource.Bytes(ByteArray(0)), "state-empty.db")
         assertEquals(DbState.MISSING_OR_CORRUPT, report.state)
-        assertEquals(null, report.errorClass) // nothing was thrown
-        assertTrue(report.counts.getValue("14").isEmpty)
+        assertNotNull(report.errorClass)
+        assertTrue(report.counts.isEmpty())
+        assertFalse(report.install.readable)
     }
 
     /**
@@ -103,7 +106,8 @@ class RulesVerifierStateTest {
     fun truncatedAssetIsAlsoCaughtByCounts() = runBlocking {
         val report = verify(RulesDbSource.Bytes(assetBytes().copyOf(2048)), "state-truncated.db")
         assertEquals(DbState.MISSING_OR_CORRUPT, report.state)
-        assertTrue(report.counts.getValue("14").isEmpty)
+        assertTrue(report.counts.isEmpty())
+        assertFalse(report.install.readable)
     }
 
     @Test

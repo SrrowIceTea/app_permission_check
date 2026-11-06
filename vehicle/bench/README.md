@@ -98,6 +98,12 @@ HA 控制、MG4 与 YAABSA 的业务回执按各自证据口径登记。使用�
 
 ## 独立标注
 
+2026-11-05 用户指定默认使用两个全新上下文 subagent 独立复核，再由第三个 subagent 签核。
+`blind_round prepare` 默认 `--review-mode subagent`；真人轮次显式使用 `--review-mode human`。
+操作与来源字段见 [subagent 签核说明](../../docs/VEHICLE_SUBAGENT_SIGNOFF_20261105.md)。
+subagent 标签使用独立来源 `subagent_review`，不冒充人工真值；指标、样本数和验收门槛按来源分别统计。
+下面的真人交接作为可选流程保留，旧 AI 初评不能自动转成 subagent 签核。
+
 当前双人任务的盲审包、OwnTracks 评分资格和脱敏重放入口见 [双人交接与首轮盲评](../../docs/VEHICLE_TEAM_HANDOFF.md)。
 
 首轮试标从封存记录生成两个审阅包和一份组织者材料。组织者只分发 `reviewer-A.zip`
@@ -107,7 +113,7 @@ HA 电量配对与其他业务问题分开。候选由同会话电量读取与�
 
 ```powershell
 . ./environment.ps1
-& $VScanPython -m vehicle.bench.blind_round prepare --out output/o3-blind-pilot
+& $VScanPython -m vehicle.bench.blind_round prepare --review-mode human --out output/o3-blind-pilot
 & $VScanPython -m vehicle.bench.blind_round compare --organizer output/o3-blind-pilot/organizer-only --review-a review-A.json --review-b review-B.json --out output/o3-adjudication
 ```
 

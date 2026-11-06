@@ -1,4 +1,4 @@
-"""Replay sealed authorized AAOS sample evidence and prepare human review."""
+"""Replay sealed authorized AAOS evidence with explicit review provenance."""
 import math
 import re
 from datetime import datetime, timezone
@@ -7,6 +7,7 @@ from pathlib import Path
 from core.io_utils import load_jsonl
 from vehicle.bench.metrics import observation_stats, stratified_metrics
 from vehicle.bench.review_packet import FIXTURE_ID, PAIR_CASE, fixture_entry, review_entry, write_benchmark
+from vehicle.bench.review_policy import DEFAULT_REVIEW_MODE, signoff_fields
 from vehicle.pipeline.audit import run_audit
 from vehicle.pipeline.contracts import ROOT, SCHEMA_VERSION, AuditError, digest, read_json, write_json
 from vehicle.pipeline.evidence_manifest import artifact_ref
@@ -155,8 +156,10 @@ def replay_suite(suite_path, output, labels_path=None, root=ROOT, *, fixture=Non
     results, review = [], []
     for case in cases:
         key = case['id']
+        mode = signed.get(key, {}).get('review_mode',
+            'human' if key in signed and signed[key].get('origin') == 'independent_review' else DEFAULT_REVIEW_MODE)
         row = {'id': key, 'family': case['family'], 'package': case['package'],
-               'kind': case['kind'], 'status': 'failed', 'human_signoff': 'pending',
+               'kind': case['kind'], 'status': 'failed', **signoff_fields(mode, 'pending'),
                'metrics': stratified_metrics([], None, None, None, 'independent', gap='case_replay_failed')}
         results.append(row)
         try:
@@ -182,7 +185,7 @@ def replay_suite(suite_path, output, labels_path=None, root=ROOT, *, fixture=Non
                 gap='independent_review_pending' if eligible else 'workflow_evidence_without_pair_ground_truth',
                 paths=(('lab_power', 'ha_transport'),) if eligible else ())
             if key in signed:
-                row['human_signoff'] = 'signed'
+                row.update(signoff_fields(mode, 'signed'))
             entry = review_entry(case, row)
             if eligible:
                 entry['controls'] = business['negative_controls']
@@ -198,6 +201,8 @@ def replay_suite(suite_path, output, labels_path=None, root=ROOT, *, fixture=Non
               'families': len({case['family'] for case in cases}),
               'evaluated_cases': sum(r['status'] == 'evaluated' for r in results),
               'independently_signed_cases': sum(r['human_signoff'] == 'signed' for r in results),
+              'subagent_signed_cases': sum(r['subagent_signoff'] == 'signed' for r in results),
+              'signed_cases': sum(r['signoff_status'] == 'signed' for r in results),
               'completion': 'complete' if all(r['status'] == 'evaluated' for r in results) else 'partial',
               'cases': results}
     write_json(output / 'evaluation.json', result)

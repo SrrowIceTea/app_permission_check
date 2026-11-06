@@ -6,6 +6,7 @@ from pathlib import Path
 
 from core.io_utils import load_jsonl
 from vehicle.pipeline.contracts import ROOT, AuditError, digest
+from vehicle.bench.review_policy import label_mode, validate_agents
 
 LABEL_SCHEMA = 1
 SAMPLE_ORIGINS = {'owned_fixture', 'independent'}
@@ -47,13 +48,13 @@ def reference_identity(refs, root=ROOT):
 def _person(record):
     reviewer = record.get('reviewer')
     if not isinstance(reviewer, str) or not reviewer.strip():
-        reject('缺少人工复核人。')
+        reject('缺少复核者身份。')
     try:
         timestamp = datetime.fromisoformat(record['reviewed_at'])
     except (KeyError, ValueError, TypeError):
-        reject('人工复核时间无效。')
+        reject('复核时间无效。')
     if timestamp.tzinfo is None:
-        reject('人工复核时间须包含时区。')
+        reject('复核时间须包含时区。')
     return reviewer.strip().casefold()
 
 
@@ -78,11 +79,15 @@ def captured_event_refs(capture):
 
 def adjudicated_labels(label, apk_sha, session, sample_origin, *, refs=None, root=ROOT, events=None):
     if (type(label.get('schema_version')) is not int or label['schema_version'] != LABEL_SCHEMA
-            or label.get('pair_schema') != 2 or label.get('origin') != 'independent_review'
-            or label.get('human_signoff') != 'signed' or not session
+            or label.get('pair_schema') != 2 or label.get('origin') not in ('independent_review', 'subagent_review')
+            or not session
             or label.get('session_id') != session or label.get('apk_sha256') != apk_sha
             or label.get('sample_origin') != sample_origin or sample_origin not in SAMPLE_ORIGINS):
         reject('标签版本、签核状态、APK、会话或样本来源不匹配。')
+    try:
+        mode = label_mode(label)
+    except ValueError as exc:
+        reject('标签版本、签核状态无效：' + str(exc))
     evidence = reference_identity(label.get('reference_evidence'), root)
     if refs is not None and evidence != reference_identity(refs, root):
         reject('标签参考证据与本案例绑定的独立参考不一致。')
@@ -99,14 +104,25 @@ def adjudicated_labels(label, apk_sha, session, sample_origin, *, refs=None, roo
         if entry['negative_control']:
             controls.add(pair)
     if not universe:
-        reject('没有经人工复核的配对范围。')
+        reject('没有经复核的配对范围。')
     reviews, adjudication = label.get('reviews'), label.get('adjudication')
     if (not isinstance(reviews, list) or len(reviews) != 2
             or not all(isinstance(review, dict) for review in reviews) or not isinstance(adjudication, dict)):
         reject('必须提供两份独立标注及一份仲裁记录。')
     people = [*reviews, adjudication]
     typed = any('reviewer_kind' in record for record in people)
-    if label.get('reviewer_kind') == 'ai' or (typed and any(record.get('reviewer_kind') != 'human' for record in people)):
+    if mode == 'subagent':
+        try:
+            validate_agents(people)
+        except ValueError as exc:
+            reject(str(exc))
+        if label.get('reviewer_kind') != 'subagent':
+            reject('subagent 标签必须明确标注签核来源。')
+        if any(label.get(key) != adjudication.get(key) for key in (
+                'reviewer', 'reviewer_kind', 'reviewed_at', 'agent_id', 'context_mode', 'review_session_id')):
+            reject('subagent 签核身份与仲裁记录不一致。')
+    elif label.get('reviewer_kind') not in (None, 'human') or (
+            typed and any(record.get('reviewer_kind') != 'human' for record in people)):
         reject('AI 或身份未确认的复核记录不能用于人工签核计分。')
     if len({_person(record) for record in people}) != 3:
         reject('两位标注人与仲裁人必须分别具名。')
@@ -122,4 +138,5 @@ def adjudicated_labels(label, apk_sha, session, sample_origin, *, refs=None, roo
                 or {pair_key(pair) for pair in expected} != positives):
             reject('expected_pairs 必须与双人标注和仲裁确定的正例一致。')
     return {'universe': universe, 'positive': positives, 'negative_controls': controls,
+            'label_origin': label['origin'], 'review_mode': mode,
             'reviewer_a': first, 'reviewer_b': second, 'label_set_sha256': canonical_sha(label)}

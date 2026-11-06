@@ -40,6 +40,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent.parent))
 from core.event_store import EventStore
 from core.frida_host.bundle_config import configure
+from core.frida_host.shutdown import OwnedResources
 from core.frida_host.device_target import adb, resolve_pid
 from core.frida_host.message_stream import MessageStream, TRANSPORT
 # frida-server on this device is started with `-l 127.0.0.1:27043`, not the default
@@ -156,100 +157,97 @@ def main() -> int:
     ensure_forward()
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
-    device = frida.get_device_manager().add_remote_device(f"127.0.0.1:{FRIDA_PORT}")
-    if args.gadget:
-        pid = device.spawn(["re.frida.Gadget"])
-    elif args.spawn:
-        if args.user is not None:
-            raise ValueError('--user requires attach mode; start the app for that user first')
-        # spawn 注入（2026-10-18 新增）：attach 模式下应用**启动那一刻**的握手/外发
-        # 全在钩子装上之前，实测 F-Droid 首轮 SSL 明文一条没捕到、keylog 也装不上
-        # （App 的 SSL_CTX 在我们 attach 前就建好了）。spawn 时钩子在应用跑第一条
-        # 指令前就已就位，这两处缺口同时消失。
-        if not args.package:
-            print("--spawn 需要 --package", file=sys.stderr)
-            return 2
-        pid = device.spawn([args.package])
-    else:
-        pid = args.pid or resolve_pid(args.package, args.user)
-    session = device.attach(pid)
-    store = EventStore(args.event_db or args.out.with_suffix(".sqlite"))
-    stream = MessageStream(args.out, session_id, store, label=args.label, serial=os.environ.get('VSCAN_SERIAL'))
-    shutting_down = False
+    with OwnedResources(frida) as owned:
+        device = frida.get_device_manager().add_remote_device(f"127.0.0.1:{FRIDA_PORT}")
+        if args.gadget:
+            pid = device.spawn(["re.frida.Gadget"])
+        elif args.spawn:
+            if args.user is not None:
+                raise ValueError('--user requires attach mode; start the app for that user first')
+            # spawn 注入（2026-10-18 新增）：attach 模式下应用**启动那一刻**的握手/外发
+            # 全在钩子装上之前，实测 F-Droid 首轮 SSL 明文一条没捕到、keylog 也装不上
+            # （App 的 SSL_CTX 在我们 attach 前就建好了）。spawn 时钩子在应用跑第一条
+            # 指令前就已就位，这两处缺口同时消失。
+            if not args.package:
+                print("--spawn 需要 --package", file=sys.stderr)
+                return 2
+            pid = device.spawn([args.package])
+        else:
+            pid = args.pid or resolve_pid(args.package, args.user)
+        session = owned.session = device.attach(pid)
+        store = owned.store = EventStore(args.event_db or args.out.with_suffix(".sqlite"))
+        stream = owned.stream = MessageStream(args.out, session_id, store, label=args.label, serial=os.environ.get('VSCAN_SERIAL'))
+        shutting_down = False
 
-    def detached(*_info):
-        if not shutting_down:
-            stream.failed.append('unexpected_detach')
+        def detached(*_info):
+            if not shutting_down:
+                stream.failed.append('unexpected_detach')
 
-    session.on('detached', detached)
-    script = session.create_script(
-        configure(body, allowed, watch_limit=args.watch_limit, no_stack=no_stack,
-                  args_only=args_only, deoptimize=args.deoptimize))
-    if (args.watch_limit is not None or no_stack or args_only
-            or args.deoptimize is not None):
-        print(f"分档模式：watch_limit={args.watch_limit} no_stack={no_stack} "
-              f"args_only={args_only} deoptimize={args.deoptimize}", flush=True)
+        owned.detached = detached
+        session.on('detached', detached)
+        script = owned.script = session.create_script(
+            configure(body, allowed, watch_limit=args.watch_limit, no_stack=no_stack,
+                      args_only=args_only, deoptimize=args.deoptimize))
+        if (args.watch_limit is not None or no_stack or args_only
+                or args.deoptimize is not None):
+            print(f"分档模式：watch_limit={args.watch_limit} no_stack={no_stack} "
+                  f"args_only={args_only} deoptimize={args.deoptimize}", flush=True)
 
-    script.on("message", stream.on_message)
-    script.load()
-    if args.gadget or args.spawn:
-        device.resume(pid)
-    print(f"attached pid {pid}; collecting for {args.seconds:.0f}s -> {args.out}", flush=True)
+        message_callback = owned.callback = stream.on_message
+        script.on("message", message_callback)
+        script.load()
+        if args.gadget or args.spawn:
+            device.resume(pid)
+        print(f"attached pid {pid}; collecting for {args.seconds:.0f}s -> {args.out}", flush=True)
 
-    # 轮询而不是一觉睡到底：**进程中途死掉的话，钩子跟着消失**，此后一个事件也收不到。
-    # 而"钩子掉了"与"应用什么都没做"的结果**完全一样**——一个空 JSONL，
-    # 没有任何异常。实测踩过：挂了两个钩子，点完两个按钮回来是零条记录，
-    # 日志干干净净，只能靠事后比对 pid 才发现进程早就换了一个。
-    started = time.monotonic()
-    deadline = started + args.seconds
-    died_at = None
-    try:
-        while time.monotonic() < deadline:
-            time.sleep(1.0)
-            if stream.failed:
-                break
-            if args.stop_file is not None and args.stop_file.exists():
-                # 优雅停止（2026-10-16）：调用方以文件哨兵收尾而非 taskkill——
-                # 强杀会让 agent 在未清理状态下收尾，CheckJNI 上必发
-                # "DeleteGlobalRef ... without being attached" abort（实测每轮一次）。
-                # 这里 break 后走 finally 的 session.detach()，正常卸载。
-                print("stop-file 出现：优雅收尾（正常 detach）", flush=True)
-                break
-            if not args.gadget and died_at is None and not pid_alive(pid):
-                died_at = time.monotonic()
-                print(f"\n!! pid {pid} 在第 {died_at - started:.0f}s 消失——钩子已随之失效，"
-                      f"此后的事件一条也收不到。\n"
-                      f"!! 这**不是**「应用没有动作」：两者都表现为记录为空。"
-                      f"请确认 pid 是否变了（adb shell pidof {args.package or ''}）。", flush=True)
-    except KeyboardInterrupt:
-        print("interrupted", flush=True)
-    finally:
-        if TRANSPORT in body and 'vscanFlush' in body and not stream.failed and died_at is None:
-            try:
-                with frida.Cancellable() as cancellation:
-                    timer = threading.Timer(5, cancellation.cancel)
-                    timer.start()
-                    try:
-                        stats = script.exports_sync.vscan_flush()
-                    finally:
-                        timer.cancel()
-                if stream.acknowledge(stats):
-                    print("VSCAN_TRANSPORT " + json.dumps(stats), flush=True)
-            except Exception as error:
-                stream.flush_failed(error)
-        shutting_down = True
+        # 轮询而不是一觉睡到底：**进程中途死掉的话，钩子跟着消失**，此后一个事件也收不到。
+        # 而"钩子掉了"与"应用什么都没做"的结果**完全一样**——一个空 JSONL，
+        # 没有任何异常。实测踩过：挂了两个钩子，点完两个按钮回来是零条记录，
+        # 日志干干净净，只能靠事后比对 pid 才发现进程早就换了一个。
+        started = time.monotonic()
+        deadline = started + args.seconds
+        died_at = None
         try:
-            session.detach()
-        except Exception as error:
-            stream.failed.append('detach_failed')
-            print(f"detach: {error}", flush=True)
-        with stream.ready:
-            store.close()
+            while time.monotonic() < deadline:
+                time.sleep(1.0)
+                if stream.failed:
+                    break
+                if args.stop_file is not None and args.stop_file.exists():
+                    # 优雅停止（2026-10-16）：调用方以文件哨兵收尾而非 taskkill——
+                    # 强杀会让 agent 在未清理状态下收尾，CheckJNI 上必发
+                    # "DeleteGlobalRef ... without being attached" abort（实测每轮一次）。
+                    # 这里 break 后走 finally 的 session.detach()，正常卸载。
+                    print("stop-file 出现：优雅收尾（正常 detach）", flush=True)
+                    break
+                if not args.gadget and died_at is None and not pid_alive(pid):
+                    died_at = time.monotonic()
+                    print(f"\n!! pid {pid} 在第 {died_at - started:.0f}s 消失——钩子已随之失效，"
+                          f"此后的事件一条也收不到。\n"
+                          f"!! 这**不是**「应用没有动作」：两者都表现为记录为空。"
+                          f"请确认 pid 是否变了（adb shell pidof {args.package or ''}）。", flush=True)
+        except KeyboardInterrupt:
+            print("interrupted", flush=True)
+        finally:
+            if TRANSPORT in body and 'vscanFlush' in body and not stream.failed and died_at is None:
+                try:
+                    with frida.Cancellable() as cancellation:
+                        timer = threading.Timer(5, cancellation.cancel)
+                        timer.start()
+                        try:
+                            stats = script.exports_sync.vscan_flush()
+                        finally:
+                            timer.cancel()
+                    if stream.acknowledge(stats):
+                        print("VSCAN_TRANSPORT " + json.dumps(stats), flush=True)
+                except Exception as error:
+                    stream.flush_failed(error)
+            shutting_down = True
+            owned.close()
 
-    print(f"\ncollected {sum(stream.counts.values())} JSONL records")
-    for event, count in sorted(stream.counts.items()):
-        print(f"  {count:5}  {event}")
-    return 1 if stream.failed or died_at is not None else 0
+        print(f"\ncollected {sum(stream.counts.values())} JSONL records")
+        for event, count in sorted(stream.counts.items()):
+            print(f"  {count:5}  {event}")
+        return 1 if stream.failed or died_at is not None else 0
 
 
 if __name__ == "__main__":

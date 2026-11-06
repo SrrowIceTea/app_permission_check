@@ -7,6 +7,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from vehicle.bench.blind_evidence import PILOT_IDS, REVIEW_TITLES, WORKFLOWS, Sources, battery
 from vehicle.bench.labels import LABEL_SCHEMA, canonical_sha, reference_identity
+from vehicle.bench.review_policy import DEFAULT_REVIEW_MODE, REVIEW_MODES, comparison_mode, identity, signoff_fields
 from vehicle.pipeline.contracts import ROOT, digest, read_json, write_json
 
 SUITE = ROOT / 'vehicle/bench/aaos35-suite.json'
@@ -21,7 +22,9 @@ GUIDE = """# O3 首轮独立标注
 - insufficient 表示证据不足或有歧义。说明缺什么，保留为待补证。
 
 每题填写 decision 和 reason。reason 可引用证据中的来源与事件编号。
-reviewer 填实际复核者，reviewer_kind 填 human 或 ai。reviewed_at 填带时区的 ISO 8601 时间。
+reviewer 填实际复核者，reviewer_kind 按本轮填写 human 或 subagent；ai 仅供旧初评。
+subagent 另填实际 agent_id、context_mode=fresh 和独立 UUID review_session_id；不得冒充真人。
+reviewed_at 填带时区的 ISO 8601 时间。同模型可能有共同错误，独立上下文不保证结论正确。
 两位审阅者分别把填写完的 review.json 交回组织者。
 
 电量题逐对判断同一次读取与请求是否能对齐。可核对 level、scale、实际请求字段、
@@ -42,7 +45,9 @@ def render(evidence):
     return '\n'.join(lines) + '\n'
 
 
-def prepare(suite, out, root=ROOT):
+def prepare(suite, out, root=ROOT, review_mode=DEFAULT_REVIEW_MODE):
+    if review_mode not in REVIEW_MODES:
+        raise ValueError('unknown review mode')
     root = Path(root).resolve()
     source_cases = read_json(suite)['cases']
     cases = {case['id']: case for case in source_cases}
@@ -79,7 +84,8 @@ def prepare(suite, out, root=ROOT):
     evidence_path = private / 'evidence.json'
     write_json(evidence_path, evidence)
     evidence_sha = digest(evidence_path)
-    plan = {'schema_version': 1, 'suite_sha256': digest(suite), 'evidence_sha256': evidence_sha,
+    plan = {'schema_version': 1, 'review_mode': review_mode,
+            'suite_sha256': digest(suite), 'evidence_sha256': evidence_sha,
             'cases': bindings, 'items': items, 'status': 'awaiting_independent_reviews'}
     plan_path = private / 'plan.json'
     write_json(plan_path, plan)
@@ -87,7 +93,9 @@ def prepare(suite, out, root=ROOT):
     for slot in ('A', 'B'):
         review = {'schema_version': 1, 'slot': slot, 'evidence_sha256': evidence_sha,
                   'plan_sha256': plan_sha,
-                  'reviewer': None, 'reviewer_kind': None, 'reviewed_at': None,
+                  'reviewer': None, 'reviewer_kind': review_mode, 'reviewed_at': None,
+                  **({'agent_id': None, 'context_mode': 'fresh', 'review_session_id': None}
+                     if review_mode == 'subagent' else {}),
                   'decisions': [{'id': item['id'], 'decision': None, 'reason': None} for item in items]}
         with ZipFile(out / f'reviewer-{slot}.zip', 'x', compression=ZIP_DEFLATED) as archive:
             archive.writestr('README.md', GUIDE)
@@ -110,8 +118,8 @@ def reviewer(path, slot, evidence_sha, plan_sha, expected):
     name = submission.get('reviewer')
     if not isinstance(name, str) or not name.strip():
         raise ValueError('missing reviewer name: ' + slot)
-    if 'reviewer_kind' in submission and submission['reviewer_kind'] not in ('human', 'ai'):
-        raise ValueError('reviewer kind must be human or ai: ' + slot)
+    if 'reviewer_kind' in submission and submission['reviewer_kind'] not in ('human', 'ai', 'subagent'):
+        raise ValueError('reviewer kind must be human, subagent or legacy ai: ' + slot)
     try:
         timestamp = datetime.fromisoformat(submission['reviewed_at'])
     except (KeyError, TypeError, ValueError) as exc:
@@ -148,6 +156,7 @@ def build_comparison(private, first, second, root=ROOT):
         raise ValueError('submitted answer changed during validation')
     if a['reviewer'].strip().casefold() == b['reviewer'].strip().casefold():
         raise ValueError('independent reviews require two different reviewers')
+    mode = comparison_mode(plan, (a, b))
     disagreements, insufficient = [], []
     pair_items = [item for item in plan['items'] if 'pair' in item]
     for item in plan['items']:
@@ -158,13 +167,14 @@ def build_comparison(private, first, second, root=ROOT):
         if 'insufficient' in (a_row['decision'], b_row['decision']):
             insufficient.append(key)
     pair_insufficient = [x['id'] for x in pair_items if x['id'] in insufficient]
-    if not all(row.get('reviewer_kind') == 'human' for row in (a, b)):
-        status = 'awaiting_human_reviews'
+    if not all(row.get('reviewer_kind') == mode for row in (a, b)):
+        status = f'awaiting_{mode}_reviews'
     elif pair_insufficient:
         status = 'awaiting_pair_evidence'
     else:
-        status = 'awaiting_human_adjudication'
-    result = {'status': status, 'evidence_sha256': evidence_sha, 'plan_sha256': plan_sha,
+        status = f'awaiting_{mode}_adjudication'
+    result = {'status': status, 'review_mode': mode,
+              'evidence_sha256': evidence_sha, 'plan_sha256': plan_sha,
               'review_sha256': review_hashes,
               'disagreements': disagreements, 'insufficient_items': insufficient,
               'pair_items_with_insufficient_evidence': pair_insufficient,
@@ -175,13 +185,13 @@ def build_comparison(private, first, second, root=ROOT):
     if not result['pair_items_with_insufficient_evidence']:
         binding = next(case for case in plan['cases'] if case['id'] == 'ha-battery')
         label = {key: binding[key] for key in ('id', 'apk_sha256', 'session_id')}
-        origin = 'agent_review' if any(row.get('reviewer_kind') == 'ai' for row in (a, b)) else 'independent_review'
+        origin = ('subagent_review' if mode == 'subagent' else 'agent_review'
+                  if any(row.get('reviewer_kind') == 'ai' for row in (a, b)) else 'independent_review')
         label.update(schema_version=LABEL_SCHEMA, pair_schema=2, sample_origin='independent',
-            origin=origin, human_signoff='pending',
+            origin=origin, **signoff_fields(mode, 'pending'),
             reference_evidence=[binding['sources']['business']],
             universe=[{'pair': item['pair'], 'negative_control': None} for item in pair_items],
-            reviews=[{'reviewer': submission['reviewer'], 'reviewer_kind': submission.get('reviewer_kind'),
-                      'reviewed_at': submission['reviewed_at'],
+            reviews=[{**identity(submission),
                       'decisions': [{'pair': item['pair'],
                                      'present': rows[item['id']]['decision'] == 'present'}
                                     for item in pair_items]}
@@ -214,13 +224,14 @@ def main():
     new = actions.add_parser('prepare')
     new.add_argument('--suite', type=Path, default=SUITE)
     new.add_argument('--out', type=Path, required=True)
+    new.add_argument('--review-mode', choices=REVIEW_MODES, default=DEFAULT_REVIEW_MODE)
     collect = actions.add_parser('compare')
     collect.add_argument('--organizer', type=Path, required=True)
     collect.add_argument('--review-a', type=Path, required=True)
     collect.add_argument('--review-b', type=Path, required=True)
     collect.add_argument('--out', type=Path, required=True)
     args = parser.parse_args()
-    result = (prepare(args.suite, args.out) if args.action == 'prepare'
+    result = (prepare(args.suite, args.out, review_mode=args.review_mode) if args.action == 'prepare'
               else compare(args.organizer, args.review_a, args.review_b, args.out))
     print(json.dumps({'status': result['status'], 'out': str(args.out)}, ensure_ascii=False))
 
