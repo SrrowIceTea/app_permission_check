@@ -1,17 +1,23 @@
 """Integrate general sources into the vehicle report contract. 授权测试专用。"""
+import hashlib
 import json
 from collections import Counter
 from core.evidence import codeloc
 from core.collector.parse_stats import body_parse_totals
 from core.io_utils import load_jsonl
 from vehicle.analyze.finding_class import classify
-from vehicle.privacy.evaluation import evaluate
-from vehicle.privacy.catalog import AAID_POLICY, AAID_SIGNATURES, catalog_hash, general_profile, contract, HERE
-from vehicle.pipeline.contracts import digest, read_json, write_json
+from vehicle.privacy.evaluation import evaluate, load_general_rules
+from vehicle.privacy.catalog import (
+    AAID_POLICY, AAID_SIGNATURES, HERE, catalog_hash, contract, contract_sha256, general_profile,
+    matches_catalog_snapshot, policy_path,
+)
+from vehicle.pipeline.contracts import AuditError, digest, read_json, write_json
+from vehicle.pipeline.evidence_manifest import artifact_ref
 from vehicle.privacy import ha_contract
 from vehicle.privacy import ha_socket_evidence as ha_socket
 from vehicle.privacy import mg4_contract as mg4
 from vehicle.privacy import abs_contract as abs_scope
+from vehicle.privacy import owntracks_contract as owntracks
 
 
 def scan_general_manifest(apk, output, package):
@@ -44,20 +50,46 @@ def initial_summary(capture, output, package, version, session):
     write_json(output / 'correlation-summary.json', summary)
 
 
-def append_general(summary, output, capture, package, session, version='15'):
-    manifest = read_json(capture / 'session-manifest.json')
-    revision = 1 if manifest.get('privacy_catalog_sha256') == catalog_hash(1) else 2
-    (output / 'privacy-catalog.json').write_text(json.dumps(contract(revision), ensure_ascii=False) + '\n',
-                                                  encoding='utf-8')
-    (output / 'privacy-policy.md').write_bytes((HERE / 'POLICY.md').read_bytes())
-    (output / 'privacy-sdk36-signatures.json').write_bytes((HERE / 'sdk36-signatures.json').read_bytes())
+def _export_catalog(output, expected, snapshot):
+    if snapshot:
+        catalog = read_json(snapshot)
+        if not matches_catalog_snapshot(catalog, expected):
+            raise AuditError('privacy_catalog_mismatch', '隐私目录快照与本轮采集不一致。', '核对封存目录。')
+    else:
+        catalog = contract(1 if expected == catalog_hash(1) else 2)
+    revision = catalog['revision']
+    files = [('privacy-policy.md', policy_path(revision), 'policy_sha256'),
+             ('privacy-sdk36-signatures.json', HERE / 'sdk36-signatures.json', 'signature_evidence_sha256')]
     if revision == 2:
-        for name in (AAID_POLICY, AAID_SIGNATURES):
-            (output / name).write_bytes((HERE / name).read_bytes())
+        files.extend([(AAID_POLICY, HERE / AAID_POLICY, 'aaid_policy_sha256'),
+                      (AAID_SIGNATURES, HERE / AAID_SIGNATURES, 'aaid_signature_evidence_sha256')])
+    refs = {}
+    for name, local_path, key in files:
+        source = snapshot.parent / name if snapshot else local_path
+        raw = source.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != catalog[key]:
+            raise AuditError('privacy_catalog_source_mismatch', f'隐私目录配套文件摘要不一致：{name}。',
+                             '提供与目录同批封存的文件。')
+        target = output / name
+        target.write_bytes(raw)
+        refs[f'privacy/{name}'] = artifact_ref(target, sha256=catalog[key])
+    target = output / 'privacy-catalog.json'
+    raw = (json.dumps(catalog, ensure_ascii=False) + '\n').encode('utf-8')
+    target.write_bytes(raw)
+    refs['privacy/privacy-catalog.json'] = artifact_ref(target, sha256=hashlib.sha256(raw).hexdigest())
+    return revision, contract_sha256(catalog), refs
+
+
+def append_general(summary, output, capture, package, session, version='15', *, rules_path=None, catalog_snapshot=None):
+    manifest = read_json(capture / 'session-manifest.json')
+    revision, catalog_sha, refs = _export_catalog(output, manifest.get('privacy_catalog_sha256'), catalog_snapshot)
     reads, flows = load_jsonl(capture / 'reads.jsonl'), load_jsonl(capture / 'flows.jsonl')
-    records, stats = evaluate(reads, flows, package, session, version, catalog_revision=revision)
+    rules = load_general_rules(version, rules_path) if rules_path is not None else None
+    records, stats = evaluate(reads, flows, package, session, version, rules, catalog_revision=revision)
     records = codeloc.attach(records, reads, flows, load_jsonl(capture / 'egress.jsonl'), package)
-    summary['privacy_catalog_sha256'] = catalog_hash(revision)
+    summary['privacy_catalog_sha256'] = stats['catalog_sha256'] = catalog_sha
+    for record in records:
+        record['privacy_catalog_sha256'] = catalog_sha
     if manifest.get('data_scope') == 'general':
         summary['inputs']['reads'] = stats['events']
         summary['version_profile'] = general_profile(version, revision)
@@ -72,6 +104,8 @@ def append_general(summary, output, capture, package, session, version='15'):
         summary['ha_websocket'] = add_capture_gaps(ha_socket.summarize(reads, session, user),
                                                   reads, session, user)
     if manifest.get(mg4.MANIFEST_KEY) == mg4.contract_hash():
+        from vehicle.privacy.mg4_write_evidence import audit as audit_mg4_writes
+        summary['mg4_native_http'] = audit_mg4_writes(capture, session)
         summary['mg4_webview'] = {'request_refs': [{'src': r['src'], 'evt_id': r['evt_id']} for r in reads
             if r.get('src') == 'mg4_webview' and r.get('ev') == 'WEBVIEW_POST_REQUEST'
             and r.get('pkg') == package and r.get('session_id') == session],
@@ -79,6 +113,13 @@ def append_general(summary, output, capture, package, session, version='15'):
     if manifest.get(abs_scope.MANIFEST_KEY) == abs_scope.contract_hash():
         from vehicle.privacy.abs_runtime import audit_requests
         summary['abs_native_send'] = audit_requests(capture, reads, session, manifest['user_id'])
+    if manifest.get(owntracks.MANIFEST_KEY) == owntracks.contract_hash():
+        from vehicle.privacy import owntracks_evidence
+        location_records, summary['owntracks_location'] = owntracks_evidence.evaluate(
+            reads, flows, session, manifest['user_id'], manifest.get('owntracks_endpoint_host', '198.18.0.1'))
+        records.extend(codeloc.attach(location_records, reads, flows, [], package))
+        summary['owntracks_location']['evaluator_sha256'] = digest(owntracks_evidence.__file__)
+        summary['inputs']['reads'] += summary['owntracks_location']['callback_events']
     findings = output / 'findings.jsonl'
     previous = [classify(f) for f in load_jsonl(findings)]
     records = [classify(f) for f in records]
@@ -91,4 +132,4 @@ def append_general(summary, output, capture, package, session, version='15'):
     summary['code_locs'] = codeloc.summarize(previous + records)
     if records and summary['status'] in ('no_target_general_reads', 'no_target_vehicle_reads'):
         summary['status'] = 'observed_general_privacy'
-    return summary
+    return summary, refs

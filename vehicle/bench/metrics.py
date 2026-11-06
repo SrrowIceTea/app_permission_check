@@ -22,6 +22,8 @@ def pair_metrics(findings, label, apk_sha256, session_id):
     if label is None:
         return {'status': 'unlabelled', 'precision': None, 'recall': None,
                 'reason': '没有独立标注，不能由未命中推算准确率。'}
+    if any(key in label for key in ('universe', 'reviews', 'adjudication')):
+        adjudicated_labels(label, apk_sha256, session_id, label.get('sample_origin'))
     if (label.get('apk_sha256') != apk_sha256 or label.get('session_id') != session_id
             or label.get('origin') not in ('owned_fixture', 'independent_review', 'agent_review')
             or not label.get('reviewer') or not label.get('reviewed_at')

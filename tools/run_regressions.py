@@ -1,12 +1,14 @@
 """离线回归入口；记录退出码与完整日志，任何失败均返回非零。"""
 import argparse
 import json
+import os
 import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from core.regression_output import create_output, publish_latest
 CHECKS = [
     ('completion', '.', [sys.executable, '-m', 'unittest', 'test_completion']),
     ('rules-contract', 'core', [sys.executable, '-m', 'unittest', 'test_rules_contract']),
@@ -21,9 +23,11 @@ CHECKS = [
                               'core.collector.test_vehicle_lifecycle']),
     ('vehicle-pipeline', '.', [sys.executable, '-m', 'unittest',
         'vehicle.pipeline.test_preflight', 'vehicle.pipeline.test_audit',
+        'core.test_regression_output',
+        'vehicle.pipeline.test_bundle',
         'vehicle.pipeline.test_scenarios', 'vehicle.coverage.test_coverage',
         'vehicle.policy.test_assessment', 'vehicle.bench.test_metrics', 'vehicle.bench.test_suite',
-        'vehicle.bench.test_blind_round',
+        'vehicle.bench.test_blind_round', 'vehicle.bench.test_handoff',
         'vehicle.bench.test_overhead',
         'core.frida_host.test_message_stream',
         'vehicle.bench.test_window_calibration',
@@ -35,7 +39,7 @@ CHECKS = [
         'vehicle.pipeline.test_capture_proxy',
         'vehicle.privacy.test_observation', 'vehicle.privacy.test_ha_evaluation',
         'vehicle.lab.test_evidence_repairs', 'vehicle.lab.test_owntracks_run',
-        'vehicle.lab.test_companion', 'vehicle.lab.test_gpslogger_probe', 'vehicle.lab.test_owntracks_multiple',
+        'vehicle.lab.test_companion', 'vehicle.lab.test_gpslogger_probe', 'vehicle.lab.test_owntracks_multiple', 'vehicle.lab.test_mg4_write',
         'vehicle.privacy.test_ha_socket_evidence']),
     # 归因/载荷/失败流落盘/报文扫描是平台无关的，已抽到 core/collector/；
     # 车载 VHAL 指纹表留在 vehicle/traffic。
@@ -44,7 +48,7 @@ CHECKS = [
                                      'test_redaction',
                                      'test_system_probe',
                                      'test_experiment', 'test_montecarlo',
-                                     'test_uid_sampler', 'test_targets']),
+                                     'test_uid_sampler', 'test_targets', 'test_native_write']),
     ('tagging-vehicle', 'vehicle/traffic', [sys.executable, '-m', 'unittest', 'test_tagging']),
     ('dashboard', 'vehicle/dashboard', [sys.executable, '-m', 'unittest', 'test_dashboard']),
     ('runtime', 'vehicle/hooks', ['node', 'test_runtime.mjs']),
@@ -73,6 +77,18 @@ CHECKS = [
 # 冒出假红——见 AGENTS.md「先确认解释器再判红」，故给它单独的宽松超时。
 MOBILE_GROUP = ('mobile-checks', 'mobile/tools', [sys.executable, 'run_mobile_checks.py'])
 MOBILE_TIMEOUT = 600
+PREPARE_TIMEOUT = 1000
+
+
+def run_check(out, name, cwd, command, timeout):
+    with (out / (name + '.log')).open('w', encoding='utf-8') as log:
+        try:
+            process = subprocess.run(command, cwd=ROOT / cwd, stdout=log, stderr=subprocess.STDOUT,
+                                     timeout=timeout, env={**os.environ, 'PYTHONIOENCODING': 'utf-8'})
+            return dict(name=name, exit_code=process.returncode)
+        except subprocess.TimeoutExpired:
+            log.write(f'\n{name} 超时（{timeout} 秒）。\n')
+            return dict(name=name, exit_code=124, status='timeout')
 
 
 def main():
@@ -80,18 +96,25 @@ def main():
     ap.add_argument('--mobile', action='store_true',
                     help='追加跑移动侧 29 项检查（mobile/tools/run_mobile_checks.py），'
                          '失败计入根回归失败（语义见 MOBILE_GROUP 注释）')
+    ap.add_argument('--prepare', action='store_true', help='先按锁文件准备 Hook 产物，用于干净检出')
+    ap.add_argument('--out', type=Path, help='本次回归日志目录，必须是新目录')
     args = ap.parse_args()
-    out = ROOT / 'output' / ('regression-' + datetime.now().strftime('%Y%m%d-%H%M%S'))
-    out.mkdir(parents=True)
-    (ROOT / 'output/latest-regression.txt').write_text(str(out), encoding='utf-8')
+    out = create_output(ROOT, 'regression', args.out)
+    publish_latest(ROOT / 'output/latest-regression.txt', out)
+    name, cwd, command = MOBILE_GROUP
+    mobile_group = (name, cwd, [*command, '--out', str(out / 'mobile')])
+    checks = [*CHECKS, mobile_group] if args.mobile else list(CHECKS)
+    if args.prepare:
+        checks.insert(0, ('prepare', '.', [sys.executable, '-m', 'vehicle', 'prepare',
+                                           '--install-deps', '--out', str(out / 'prepare')]))
+    timeouts = {'prepare': PREPARE_TIMEOUT, 'mobile-checks': MOBILE_TIMEOUT}
     results = []
-    for name, cwd, command in ([*CHECKS, MOBILE_GROUP] if args.mobile else CHECKS):
-        process = subprocess.run(command, cwd=ROOT / cwd, capture_output=True,
-                                 encoding='utf-8', errors='replace',
-                                 timeout=MOBILE_TIMEOUT if name == 'mobile-checks' else 120)
-        (out / (name + '.log')).write_text(process.stdout + process.stderr, encoding='utf-8')
-        results.append(dict(name=name, exit_code=process.returncode))
-        print(name, process.returncode, flush=True)
+    for name, cwd, command in checks:
+        result = run_check(out, name, cwd, command, timeouts.get(name, 120))
+        results.append(result)
+        print(name, result['exit_code'], flush=True)
+        if name == 'prepare' and result['exit_code']:
+            break
     (out / 'verification.json').write_text(json.dumps(results, indent=2), encoding='utf-8')
     return int(any(r['exit_code'] != 0 for r in results))
 

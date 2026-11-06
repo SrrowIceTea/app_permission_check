@@ -8,7 +8,7 @@ from xml.sax.saxutils import escape
 from PIL import Image as Raster, ImageDraw, ImageFont
 from reportlab.platypus import Image, PageBreak, Paragraph, Spacer
 from core.io_utils import load_jsonl
-from vehicle.pipeline.evidence_manifest import verify_document
+from vehicle.pipeline.evidence_manifest import ref_path, verify_document
 
 # 中文字体候选表（**全项目车载侧唯一一份**，report.py 从这里 import）。
 # 早先 report.py 只有 SimHei/DengXian、这里只有 雅黑/SimHei，两处各写一份且不一致——
@@ -26,12 +26,13 @@ _RASTER_FONTS: dict = {}
 
 
 def load_report_evidence(args):
-    summary = json.loads(args.summary.read_text(encoding='utf-8'))
-    verify_document(summary, rules=args.rules, findings=args.findings, flows=args.flows)
+    summary = json.loads(Path(args.summary).read_text(encoding='utf-8'))
+    base = Path(args.summary).resolve().parent
+    verify_document(summary, rules=args.rules, findings=args.findings, flows=args.flows, base=base)
     flow_path = args.flows
     sealed = summary.get('evidence_artifacts')
     if flow_path is None and sealed:
-        flow_path = summary['input_completeness']['inputs']['flows']['path']
+        flow_path = ref_path(summary['input_completeness']['inputs']['flows'], base)
     flows = load_jsonl(flow_path)
     if sealed:
         flows = [flow for flow in flows if flow.get('package') == summary['package']
@@ -156,6 +157,9 @@ def extra_story(summary, flows, ownership, folder, body, heading, findings):
         if item.get('error'):
             story.append(Paragraph(escape(item['error']), body))
     story.extend([PageBreak(), Paragraph('六、敏感载荷明文证据截图', heading)])
+    if summary.get('owntracks_location'):
+        story.append(Paragraph('OwnTracks 定位证据仅展示事件引用与关联结果，报告不附坐标正文截图。', body))
+        return story
     referenced = {(p.get('flow_src', 'proxy'), p['flow_event_id'])
                   for f in findings for p in f.get('pairs', [])}
     selected = [f for f in flows if (f.get('src', 'proxy'), f.get('evt_id')) in referenced
@@ -187,4 +191,7 @@ def evidence_summary(summary):
     if abs_send := summary.get('abs_native_send'):
         lines.append(f"YAABSA 隔离回环请求 {abs_send['verified_requests']} 条已验证发送身份，"
                      f"{abs_send['unresolved_requests_discarded']} 条归因未解决")
+    if owntracks := summary.get('owntracks_location'):
+        lines.append(f"OwnTracks 侧载对照 {owntracks['callback_events']} 条定位回调，"
+                     f"{owntracks['matched_requests']} 条 HTTP 请求满足同值候选条件。")
     return '<br/>'.join([f"发现记录共 {summary['findings_total']} 条。", *lines]) + '<br/>'

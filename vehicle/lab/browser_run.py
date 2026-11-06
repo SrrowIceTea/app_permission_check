@@ -15,6 +15,7 @@ from urllib.parse import parse_qs
 from core.collector.identity import uid_of
 from core.io_utils import load_jsonl
 from vehicle.lab.ui import UI
+from vehicle.lab.browser_control import send_control
 from vehicle.pipeline.contracts import ROOT, digest, write_json, read_json
 from vehicle.privacy import mg4_contract as mg4
 
@@ -68,10 +69,12 @@ def proxy_post_line(line, host, post_path):
             and expected.startswith(observed[:-1]) and len(observed.rsplit('=', 1)[-1]) >= 13))
 
 
-def run(out, webview_probe=False, control=False, serial='emulator-5554'):
+def run(out, webview_probe=False, native_control=False):
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=False)
     host, marker = host_ip(), secrets.token_hex(8)
+    if native_control and not webview_probe:
+        raise ValueError('native control requires --webview-probe')
     post_path = f'/submit?vscan_id={marker}' if webview_probe else '/submit'
     receipts, actions = [], []
     class Handler(BaseHTTPRequestHandler):
@@ -106,10 +109,10 @@ def run(out, webview_probe=False, control=False, serial='emulator-5554'):
             pass
     server = ThreadingHTTPServer((host, 18124), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    ui, capture = UI(out / 'ui', serial), out / 'capture'
+    ui, capture = UI(out / 'ui'), out / 'capture'
     log = (out / 'capture.log').open('w', encoding='utf-8')
     cmd = [sys.executable, '-m', 'vehicle.pipeline.capture', '--package', PKG,
-        '--serial', serial, '--user', '10', '--seconds', '100', '--activity', PKG + '/.BrowserActivity', '--scope', 'general',
+        '--user', '10', '--seconds', '100', '--activity', PKG + '/.BrowserActivity', '--scope', 'general',
         '--out', str(capture)]
     if webview_probe:
         cmd.append('--mg4-webview')
@@ -119,18 +122,17 @@ def run(out, webview_probe=False, control=False, serial='emulator-5554'):
         while time.monotonic() < deadline:
             if proc.poll() is not None:
                 raise RuntimeError('capture exited before readiness')
-            if '"status": "capturing"' in (out / 'capture.log').read_text(encoding='utf-8'):
+            if (capture / 'reads.jsonl').exists() and any(r.get('src') ==
+                    ('mg4_webview' if webview_probe else 'privacy') and r.get('ev') == 'ARMED'
+                    for r in load_jsonl(capture / 'reads.jsonl')):
                 break
             time.sleep(.3)
         else:
             raise TimeoutError('capture not armed')
-        from vehicle.lab.owntracks_scenarios import Scenarios
-        scenario = Scenarios(ui, PKG, out)
         def snap(name, expected=None):
             xml = ui.snapshot(name)
             if expected and not any(expected in n.get('text', '') for n in xml.iter('node')):
                 raise AssertionError('expected UI text missing: ' + expected)
-            scenario.observe(name, 'background' if name == '09-background' else 'foreground')
             actions.append({'id': name, 'ts_ms': int(time.time() * 1000),
                 'ui_file': 'ui/' + name + '.xml', 'ui_sha256': digest(out / 'ui' / (name + '.xml'))})
             return xml
@@ -148,17 +150,9 @@ def run(out, webview_probe=False, control=False, serial='emulator-5554'):
         xml = snap('04-back', 'VScanner owned AAOS page')
         ui.tap(xml, resource=PKG + ':id/button_reload'); time.sleep(1)
         xml = snap('05-reload', 'VScanner owned AAOS page')
-        control_result = None
-        if control:
-            control_marker = secrets.token_hex(8)
-            process = subprocess.run([sys.executable, '-m', 'vehicle.lab.mg4_control',
-                '--url', f'http://{host}:18124{post_path}', '--marker', control_marker,
-                '--serial', serial], cwd=ROOT, capture_output=True,
-                text=True, encoding='utf-8', timeout=30)
-            if process.returncode:
-                raise RuntimeError('separate control process failed: ' + process.stderr[-1000:])
-            control_result = json.loads(process.stdout)
-            write_json(out / 'control-process.json', control_result)
+        control = None
+        if native_control:
+            control = send_control(ui.device, host, post_path, secrets.token_hex(8))
         submitted_ms = int(time.time() * 1000)
         ui.tap(xml, text='Submit synthetic form')
         deadline = time.monotonic() + 8
@@ -190,6 +184,17 @@ def run(out, webview_probe=False, control=False, serial='emulator-5554'):
                       and str(f.get('path', '')).split('?')[0] == '/submit']
         session = read_json(capture / 'session-manifest.json')['session']
         attributed = [f for f in post_flows if post and matching_post(f, host, marker, post, session, submitted_ms)]
+        control_ok = None
+        if control:
+            control_receipts = [r for r in receipts if r.get('body_sha256') == control['body_sha256']
+                                and r['path'] == post_path and r['ts_ms'] >= control['ts_ms']]
+            control_ok = (len(control_receipts) == 1 and bool(re.match(r'HTTP/1\.[01] 200\b', control['response_status']))
+                and all(control['uid'] != uid_of(f) and control['pid'] !=
+                    (f.get('native_write_ref') or {}).get('pid') for f in attributed)
+                and control['exit_code'] == 0 and all((f.get('request_payload') or {}).get('raw_sha256')
+                    != control['body_sha256'] for f in flows))
+            control.update(receipt_count=len(control_receipts), attributed_to_mg4=False if control_ok else None,
+                           passed=control_ok)
         linked = []
         webview_uid = None
         if webview_probe and post:
@@ -199,8 +204,7 @@ def run(out, webview_probe=False, control=False, serial='emulator-5554'):
                 webview_uid = int(uid[1])
                 linked = [r for r in load_jsonl(capture / 'reads.jsonl') if
                           matching_webview_request(r, host, marker, post, session, submitted_ms, webview_uid)]
-            if len(linked) != 1 or sum(r['method'] == 'POST' and r['path'] == post_path
-                                       and r.get('marker') == marker for r in receipts) != 1:
+            if len(linked) != 1 or sum(r['method'] == 'POST' and r['path'] == post_path for r in receipts) != 1:
                 linked = []
         mitm = (capture / 'mitm.log').read_text(encoding='utf-8', errors='replace')
         proxy_post = [line for line in mitm.splitlines() if proxy_post_line(line, host, post_path)]
@@ -219,27 +223,16 @@ def run(out, webview_probe=False, control=False, serial='emulator-5554'):
         elif marker_ok and not attributed:
             gaps.insert(0, '代理观察到 /submit POST，但缺少可验证的 App 身份与完整同值正文；'
                            'WebView 网络进程映射待实测，按正文归因缺口登记。')
-        if control_result:
-            checksum = control_result['requests'][1]['body_sha256']
-            control_result['independent_receipt_matched'] = sum(
-                r.get('body_sha256') == checksum and r['path'] == post_path for r in receipts) == 1
-            control_result['misattributed_to_target'] = any(
-                f.get('package') == PKG and (f.get('request_payload') or {}).get('raw_sha256') == checksum
-                for f in flows)
-            control_result['proxy_identity'] = 'unknown_or_discarded'
-            if control_result['misattributed_to_target'] or not control_result['independent_receipt_matched']:
-                status = 'control_identity_or_receipt_failed'
         basis = ('proxy_per_flow_body_attribution' if attributed
                  else 'webview_callback_and_server_body_substitution' if linked else 'unattributed')
         substitution = bool(linked and not attributed)
         write_json(out / 'business.json', {'family': 'mg4-webbrowser', 'status': status,
-            'package': PKG, 'control_process': control_result, 'actions': actions, 'server_receipts': receipts, 'marker': marker,
-            'get_receipts': sorted(get_paths),
-            'get_flow_attributed': sum(f.get('method') == 'GET' and f.get('package') == PKG for f in flows),
-            'scenario_observations': scenario.observations, 'post_marker_matched': marker_ok,
+            'package': PKG, 'actions': actions, 'server_receipts': receipts, 'marker': marker,
+            'get_receipts': sorted(get_paths), 'post_marker_matched': marker_ok,
             'proxy_observed_post': bool(proxy_post), 'proxy_post_lines': proxy_post,
             'post_flow_count': len(post_flows), 'post_flow_attributed': len(attributed),
             'attribution_basis': basis,
+            'native_write_refs': [f.get('native_write_ref') for f in attributed if f.get('native_write_ref')],
             'attribution_substitution': {**mg4.SUBSTITUTION, 'used': substitution},
             'webview_request_refs': [{'src': r['src'], 'evt_id': r['evt_id']} for r in linked],
             'server_host': host, 'submitted_ms': submitted_ms, 'webview_package_uid': webview_uid,
@@ -248,9 +241,11 @@ def run(out, webview_probe=False, control=False, serial='emulator-5554'):
                                          'attribution': f.get('attribution')} for f in post_flows
                                         if f.get('package') != PKG],
             'capture_healthy': read_json(capture / 'verification.json')['passed'],
+            'negative_control': control,
             'scope': 'Owned HTTP page: GET navigate/link/back/reload; random-marker POST; '
                      'favourite UI/background/resume', 'gaps': gaps})
-        return status in ('workflow_complete', 'webview_receipt_linked')
+        return (status == 'workflow_complete' and bool(control_ok)) if native_control else status in (
+            'workflow_complete', 'webview_receipt_linked')
     except Exception as error:
         write_json(out / 'business.json', {'status': 'failed', 'error': str(error),
                                           'actions': actions, 'server_receipts': receipts})
@@ -269,7 +264,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--webview-probe', action='store_true')
-    parser.add_argument('--control', action='store_true', help='separate AAOS shell process, same endpoint')
-    parser.add_argument('--serial', default='emulator-5554')
+    parser.add_argument('--native-control', '--control', dest='native_control', action='store_true')
     args = parser.parse_args()
-    raise SystemExit(0 if run(args.out, args.webview_probe, args.control, args.serial) else 1)
+    raise SystemExit(0 if run(args.out, args.webview_probe, args.native_control) else 1)

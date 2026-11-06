@@ -10,7 +10,7 @@ import frida
 from core.frida_host.build import build_one
 from core.io_utils import load_jsonl
 from vehicle.lab.owntracks_run import coordinate_digest
-from vehicle.lab.owntracks_scenarios import Scenarios
+from vehicle.lab.scenario_state import Scenarios
 from vehicle.lab.ui import UI
 from vehicle.pipeline.capture_device import wait_until
 from vehicle.pipeline.contracts import ROOT, digest, write_json

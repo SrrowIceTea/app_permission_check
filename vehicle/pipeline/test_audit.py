@@ -1,11 +1,14 @@
 """Verify committed/failed pipeline outcomes rather than caught exceptions."""
+import shutil
+import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 from vehicle.pipeline.audit import run_audit
-from vehicle.pipeline.contracts import AuditError, SCHEMA_VERSION, digest, read_json, write_json
-from vehicle.pipeline.evidence_manifest import verify_document
+from vehicle.pipeline.contracts import ROOT, AuditError, SCHEMA_VERSION, digest, read_json, write_json
+from vehicle.pipeline.evidence_manifest import ref_path, verify_document
 from vehicle.pipeline.test_support import make_capture, seal_capture, PACKAGE
 from core.io_utils import load_jsonl
 
@@ -39,6 +42,23 @@ class AuditPipelineTests(unittest.TestCase):
         self.assertEqual('not_supplied', result['policy_assessment']['status'])
         self.assertTrue(result['capture_validation']['gaps'])
 
+    def test_explicit_rule_snapshot_is_bound_to_capture_and_coverage(self):
+        capture, hooks = make_capture(self.root, with_read=False)
+        rules = self.root / 'sealed-rules.db'
+        shutil.copyfile(ROOT / 'vehicle/rules/rules_library/rules.db', rules)
+        with closing(sqlite3.connect(rules)) as connection:
+            connection.execute('PRAGMA user_version = 801')
+        manifest = read_json(capture / 'session-manifest.json')
+        manifest['rules_sha256'] = digest(rules)
+        seal_capture(capture, manifest)
+        with patch('vehicle.pipeline.preflight.HOOK_DIRS', (hooks,)):
+            with self.assertRaisesRegex(AuditError, '当前规则库'):
+                run_audit(capture, self.root / 'wrong-rules', PACKAGE, pdf=False)
+            output = self.root / 'matching-rules'
+            result = run_audit(capture, output, PACKAGE, pdf=False, rules_path=rules)
+        self.assertEqual(digest(rules), result['rules_sha'])
+        self.assertEqual(digest(rules), read_json(output / 'coverage/coverage.json')['rules_sha256'])
+
     def test_runtime_read_produces_observed_evidence(self):
         capture, hooks = make_capture(self.root)
         with patch('vehicle.pipeline.preflight.HOOK_DIRS', (hooks,)):
@@ -59,6 +79,37 @@ class AuditPipelineTests(unittest.TestCase):
         (output / 'findings.jsonl').write_text('', encoding='utf-8')
         with self.assertRaisesRegex(AuditError, '证据文件缺失或摘要'):
             verify_document(result)
+
+    def test_completed_audit_rejects_changed_capture_and_privacy_evidence(self):
+        capture, hooks = make_capture(self.root, with_read=False)
+        name = 'hook_vehicle_all.bundle.js'
+        archive = capture / 'hook-bundles'
+        archive.mkdir()
+        shutil.copyfile(hooks / name, archive / name)
+        aux = capture / 'collector-health.json'
+        write_json(aux, {'status': 'completed', 'session_id': 's1'})
+        manifest = read_json(capture / 'session-manifest.json')
+        manifest['hook_archive'] = 'hook-bundles'
+        manifest['input_sha256'][aux.name] = digest(aux)
+        write_json(capture / 'session-manifest.json', manifest)
+        output = self.root / 'audit'
+        result = run_audit(capture, output, PACKAGE, pdf=False)
+        verify_document(result)
+        for key in (f'hook/{name}', 'capture/verification.json', 'capture/collector-health.json',
+                    'privacy/privacy-catalog.json', 'privacy/privacy-policy.md',
+                    'privacy/privacy-sdk36-signatures.json', 'privacy/AAID_POLICY.md',
+                    'privacy/aaid-signatures.json'):
+            with self.subTest(artifact=key):
+                path = ref_path(result['evidence_artifacts'][key])
+                raw = path.read_bytes()
+                try:
+                    path.unlink()
+                    with self.assertRaises(AuditError) as caught:
+                        verify_document(result)
+                    self.assertEqual('artifact_digest_mismatch', caught.exception.code)
+                    self.assertEqual(key, caught.exception.details['artifact'])
+                finally:
+                    path.write_bytes(raw)
 
     def test_missing_flows_and_resealed_cross_session_fail_closed(self):
         capture, hooks = make_capture(self.root)

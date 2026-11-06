@@ -7,11 +7,12 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PY = sys.executable
+sys.path.insert(0, str(ROOT))
+from core.regression_output import create_output, publish_latest
 CHECKS = [
     ("upstream_mobile", ".", [PY, "mobile/tools/run_mobile_checks.py"]),
     ("mobile_workbench", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/workbench", "-p", "test_*.py"]),
@@ -39,12 +40,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--include-upstream-core", action="store_true",
                         help="Also run all vehicle/shared checks, including required generated bundles")
+    parser.add_argument("--out", type=Path, help="本轮独占的新输出目录")
     args = parser.parse_args()
+    out = create_output(ROOT, "mobile-branch", args.out)
     groups = list(CHECKS)
+    name, cwd, command = groups[0]
+    groups[0] = (name, cwd, [*command, "--out", str(out / "mobile")])
     if args.include_upstream_core:
-        groups.insert(0, ("upstream_core", ".", [PY, "tools/run_regressions.py"]))
-    out = ROOT / "output" / ("mobile-branch-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
-    out.mkdir(parents=True)
+        groups.insert(0, ("upstream_core", ".", [PY, "tools/run_regressions.py", "--out", str(out / "core")]))
     env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
     # Windows TEMP may be an 8.3 alias; mixed canonical/short fixture paths can
     # falsely fail evidence-root and equality checks. Use a canonical run-local tmp.
@@ -67,7 +70,7 @@ def main() -> int:
     verification = {"scope": "mobile_branch_and_upstream_core" if args.include_upstream_core else "mobile_branch", "passed": not failed, "checks": checks, "failed": failed,
                     "note": "Upstream nested logs retain their own test counts; no device or online AI verification."}
     (out / "verification.json").write_text(json.dumps(verification, ensure_ascii=False, indent=2), encoding="utf-8")
-    (ROOT / "output/latest-mobile-branch.txt").write_text(str(out), encoding="utf-8")
+    publish_latest(ROOT / "output/latest-mobile-branch.txt", out)
     print(json.dumps({"passed": not failed, "out": str(out), "failed": failed}, ensure_ascii=False))
     return int(bool(failed))
 

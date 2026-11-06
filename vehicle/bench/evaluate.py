@@ -100,9 +100,12 @@ def main(argv=None):
     parser.add_argument('--out', type=Path)
     parser.add_argument('--captures', type=Path)
     parser.add_argument('--labels', type=Path)
+    parser.add_argument('--rules', type=Path, help='与封存会话摘要匹配的历史规则库，仅供 --suite 重放')
     parser.add_argument('--fixture-capture', type=Path)
     parser.add_argument('--fixture-labels', type=Path)
     args = parser.parse_args(argv)
+    if args.rules and not args.suite:
+        parser.error('--rules requires --suite')
     if bool(args.fixture_capture) != bool(args.fixture_labels) or (args.fixture_capture and not args.suite):
         parser.error('--fixture-capture and --fixture-labels require --suite and must be supplied together')
     if args.suite:
@@ -111,7 +114,7 @@ def main(argv=None):
         from vehicle.bench.suite import replay_suite
         out = args.out or new_output('vehicle-suite')
         fixture = (args.fixture_capture, args.fixture_labels) if args.fixture_capture else None
-        result = replay_suite(args.suite, out, args.labels, fixture=fixture)
+        result = replay_suite(args.suite, out, args.labels, fixture=fixture, rules_path=args.rules)
         print(json.dumps({k: result[k] for k in ('completion', 'families', 'evaluated_cases')}
                          | {'out': str(out)}, ensure_ascii=False))
         return int(result['completion'] != 'complete')

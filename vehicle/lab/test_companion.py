@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from vehicle.lab.owntracks_run import pairs, receiver
-from vehicle.lab.owntracks_scenarios import Scenarios, check_rejection
+from vehicle.lab.scenario_state import Scenarios, check_rejection
 from vehicle.lab import test_owntracks_run
 
 

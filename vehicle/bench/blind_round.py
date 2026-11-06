@@ -21,13 +21,15 @@ GUIDE = """# O3 首轮独立标注
 - insufficient 表示证据不足或有歧义。说明缺什么，保留为待补证。
 
 每题填写 decision 和 reason。reason 可引用证据中的来源与事件编号。
-reviewer 填本人姓名，reviewed_at 填带时区的 ISO 8601 时间，例如 2026-11-04T15:00:00+08:00。
+reviewer 填实际复核者，reviewer_kind 填 human 或 ai。reviewed_at 填带时区的 ISO 8601 时间。
 两位审阅者分别把填写完的 review.json 交回组织者。
 
 电量题逐对判断同一次读取与请求是否能对齐。可核对 level、scale、实际请求字段、
 请求时序、进程身份和独立服务端状态。同一个 evt_id 在不同来源下可能重复。
 ts 和 request_started_ts 属设备时钟，host_received_ts 和外部动作记录属宿主时钟。
 跨时钟请分别核对，外部动作的记录点本身不能证明设备读取的先后。业务复核题按题意作答。
+浏览器题分开核对代理是否看见 POST、服务端标记是否匹配、以及是否有能归属到目标应用的流。
+代理观察和归属后的落盘计数是不同的证据。
 """
 
 
@@ -85,7 +87,7 @@ def prepare(suite, out, root=ROOT):
     for slot in ('A', 'B'):
         review = {'schema_version': 1, 'slot': slot, 'evidence_sha256': evidence_sha,
                   'plan_sha256': plan_sha,
-                  'reviewer': None, 'reviewed_at': None,
+                  'reviewer': None, 'reviewer_kind': None, 'reviewed_at': None,
                   'decisions': [{'id': item['id'], 'decision': None, 'reason': None} for item in items]}
         with ZipFile(out / f'reviewer-{slot}.zip', 'x', compression=ZIP_DEFLATED) as archive:
             archive.writestr('README.md', GUIDE)
@@ -108,6 +110,8 @@ def reviewer(path, slot, evidence_sha, plan_sha, expected):
     name = submission.get('reviewer')
     if not isinstance(name, str) or not name.strip():
         raise ValueError('missing reviewer name: ' + slot)
+    if 'reviewer_kind' in submission and submission['reviewer_kind'] not in ('human', 'ai'):
+        raise ValueError('reviewer kind must be human or ai: ' + slot)
     try:
         timestamp = datetime.fromisoformat(submission['reviewed_at'])
     except (KeyError, TypeError, ValueError) as exc:
@@ -127,7 +131,7 @@ def reviewer(path, slot, evidence_sha, plan_sha, expected):
     return submission, decisions
 
 
-def compare(private, first, second, out, root=ROOT):
+def build_comparison(private, first, second, root=ROOT):
     plan_path = private / 'plan.json'
     plan = read_json(plan_path)
     plan_sha = digest(plan_path)
@@ -137,8 +141,11 @@ def compare(private, first, second, out, root=ROOT):
     for binding in plan['cases']:
         reference_identity(list(binding['sources'].values()), root)
     expected = {item['id'] for item in plan['items']}
+    review_hashes = {'A': digest(first), 'B': digest(second)}
     a, a_rows = reviewer(first, 'A', evidence_sha, plan_sha, expected)
     b, b_rows = reviewer(second, 'B', evidence_sha, plan_sha, expected)
+    if review_hashes != {'A': digest(first), 'B': digest(second)}:
+        raise ValueError('submitted answer changed during validation')
     if a['reviewer'].strip().casefold() == b['reviewer'].strip().casefold():
         raise ValueError('independent reviews require two different reviewers')
     disagreements, insufficient = [], []
@@ -150,31 +157,54 @@ def compare(private, first, second, out, root=ROOT):
             disagreements.append({**item, 'A': a_row, 'B': b_row, 'decision': None, 'reason': None})
         if 'insufficient' in (a_row['decision'], b_row['decision']):
             insufficient.append(key)
-    result = {'status': 'awaiting_human_adjudication', 'evidence_sha256': evidence_sha, 'plan_sha256': plan_sha,
-              'review_sha256': {'A': digest(first), 'B': digest(second)},
+    pair_insufficient = [x['id'] for x in pair_items if x['id'] in insufficient]
+    if not all(row.get('reviewer_kind') == 'human' for row in (a, b)):
+        status = 'awaiting_human_reviews'
+    elif pair_insufficient:
+        status = 'awaiting_pair_evidence'
+    else:
+        status = 'awaiting_human_adjudication'
+    result = {'status': status, 'evidence_sha256': evidence_sha, 'plan_sha256': plan_sha,
+              'review_sha256': review_hashes,
               'disagreements': disagreements, 'insufficient_items': insufficient,
-              'pair_items_with_insufficient_evidence': [x['id'] for x in pair_items if x['id'] in insufficient],
+              'pair_items_with_insufficient_evidence': pair_insufficient,
               'reviewer': None, 'reviewed_at': None}
-    out.mkdir(parents=True, exist_ok=False)
-    write_json(out / 'adjudication.json', result)
-    write_json(out / 'workflow-reviews.json', [{'id': item['id'], 'case': item['case'],
-        'A': a_rows[item['id']], 'B': b_rows[item['id']]} for item in plan['items'] if 'pair' not in item])
+    workflows = [{'id': item['id'], 'case': item['case'], 'A': a_rows[item['id']], 'B': b_rows[item['id']]}
+                 for item in plan['items'] if 'pair' not in item]
+    label = None
     if not result['pair_items_with_insufficient_evidence']:
         binding = next(case for case in plan['cases'] if case['id'] == 'ha-battery')
         label = {key: binding[key] for key in ('id', 'apk_sha256', 'session_id')}
+        origin = 'agent_review' if any(row.get('reviewer_kind') == 'ai' for row in (a, b)) else 'independent_review'
         label.update(schema_version=LABEL_SCHEMA, pair_schema=2, sample_origin='independent',
-            origin='independent_review', human_signoff='pending',
+            origin=origin, human_signoff='pending',
             reference_evidence=[binding['sources']['business']],
             universe=[{'pair': item['pair'], 'negative_control': None} for item in pair_items],
-            reviews=[{'reviewer': submission['reviewer'], 'reviewed_at': submission['reviewed_at'],
+            reviews=[{'reviewer': submission['reviewer'], 'reviewer_kind': submission.get('reviewer_kind'),
+                      'reviewed_at': submission['reviewed_at'],
                       'decisions': [{'pair': item['pair'],
                                      'present': rows[item['id']]['decision'] == 'present'}
                                     for item in pair_items]}
                      for submission, rows in ((a, a_rows), (b, b_rows))],
-            adjudication={'reviewer': None, 'reviewed_at': None,
+            adjudication={'reviewer': None, 'reviewer_kind': None, 'reviewed_at': None,
                           'decisions': [{'pair': item['pair'], 'present': None}
                                         for item in disagreements if 'pair' in item]})
+        if not label['adjudication']['decisions']:
+            label['expected_pairs'] = [item['pair'] for item in pair_items if a_rows[item['id']]['decision'] == 'present']
+    return result, workflows, label, pair_items
+
+
+def compare(private, first, second, out, root=ROOT):
+    result, workflows, label, pair_items = build_comparison(private, first, second, root)
+    out.mkdir(parents=True, exist_ok=False)
+    write_json(out / 'adjudication.json', result)
+    write_json(out / 'workflow-reviews.json', workflows)
+    if label is not None:
         write_json(out / 'labels-draft.json', {'samples': [label]})
+        from vehicle.bench.blind_signoff import signoff_request
+        request = signoff_request(result, label, pair_items)
+        if request is not None:
+            write_json(out / 'signoff-request.json', request)
     return result
 
 

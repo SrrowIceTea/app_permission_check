@@ -196,3 +196,11 @@ health 模块包装采集回调和延迟 flush；异常保留结构化 failed �
 regular 保留 request.host 与实际 peer IP；reverse 才用 pretty_host，并排除上游 peer IP。
 每条记录保存 attribution_target，_flush 直接复用，避免第一次和延迟重试使用不同目标。
 真实 mitmproxy Request 的自定义 Host 正反例、两模式回调及延迟落盘已加入离线回归。
+
+## D419 完整 native HTTP 写入的逐流正文匹配（2026-11-05）
+
+显式 opt-in 的 NativeWrites 只接受同会话白名单进程的成功完整写入。按实际目标主机、端口、
+路径、正文 SHA-256 和字节数匹配，并核对 ARMED 的 PID/UID/用户及 2 秒主机收件时间窗口。
+候选 POST 在内存保留到采集结束，整轮重复请求或重复写入均弃权；不允许时间候选救回不匹配正文。
+严格范围仍只持久化已归属正文，独立进程负控只增加丢弃计数。SLIRP 改写端口，源端口仅作诊断。
+MG4 实测见 [本轮交付](../../docs/VEHICLE_MAIN_CLOSEOUT_20261105.md)。该匹配不是通用 socket 确定性归因。

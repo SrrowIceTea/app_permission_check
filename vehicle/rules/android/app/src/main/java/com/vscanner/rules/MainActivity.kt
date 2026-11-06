@@ -69,6 +69,17 @@ class MainActivity : AppCompatActivity() {
             appendLine("  期望 ${report.sha256Expected}")
             appendLine("  实际 ${report.sha256Actual ?: "(读取失败)"}")
             appendLine()
+            appendLine("安装状态: ${report.install.state.label()}")
+            appendLine("  ${report.install.reason}")
+            appendLine("  生效规则库 SHA-256: ${report.install.effectiveSha256 ?: "(未知)"}")
+            appendLine("  APK 内 rules.db: ${report.install.assetSha256 ?: "(读取失败)"}")
+            appendLine("  运行时文件 SHA-256: ${report.install.activeFileSha256 ?: "(缺失)"}")
+            appendLine("    注: Room 首次打开会追加 room_master_table/android_metadata，" +
+                "原始文件摘要变化不代表规则变化")
+            appendLine("  生效内容摘要: ${report.install.contentSha256 ?: "(无法读取)"}" +
+                (if (report.install.contentMatch) " ✓ 与安装记录一致" else " ✗ 与安装记录不一致"))
+            report.install.previousSha256?.let { appendLine("  升级前库文件 SHA-256: $it") }
+            appendLine()
 
             for ((version, exp) in report.expected) {
                 val got = report.counts[version]

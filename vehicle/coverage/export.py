@@ -5,6 +5,7 @@
 import json
 import re
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from vehicle.pipeline.contracts import ROOT, digest, write_json
 from vehicle.compatibility import profile, os_version
@@ -22,12 +23,13 @@ def build_coverage(version='15', rules_path=None):
     source = (ROOT / 'vehicle/hooks/hook_vhal.js').read_text(encoding='utf-8')
     watch_block = source.split('watch: {', 1)[1].split('}', 1)[0]
     watched = {int(value) for value in re.findall(r'(\d+)\s*:', watch_block)}
-    with sqlite3.connect(rules_path.resolve().as_uri() + '?mode=ro', uri=True) as db:
+    with closing(sqlite3.connect(rules_path.resolve().as_uri() + '?mode=ro', uri=True)) as db:
         db.row_factory = sqlite3.Row
         properties = db.execute('SELECT * FROM vhal_properties WHERE android_version=?', (version,)).fetchall()
         permissions = {r['permission_name']: dict(r) for r in db.execute(
             'SELECT * FROM permissions WHERE android_version=?', (version,))}
         rules = [dict(r) for r in db.execute('SELECT * FROM risk_rules WHERE android_version=?', (version,))]
+        has_aaid = db.execute("SELECT 1 FROM risk_rules WHERE rule_id='VSC-GR-advertising_id' LIMIT 1").fetchone()
     rows = []
     for prop in properties:
         matched = [r for r in rules if r['property_key'] == prop['property_key'] and r['enabled']]
@@ -55,7 +57,7 @@ def build_coverage(version='15', rules_path=None):
             'acceptance_examples': ['tools/vehicle_scenario_acceptance.py',
                 'vehicle/analyze/test_vehicle_evidence.py'],
             'acceptance_scope': 'historical_fixture_suite_not_per_property_proof',
-            'uncovered_reasons': (['Android 15 属性到权限的定义字段为空；规则策略候选不能冒充设备映射。']
+            'uncovered_reasons': (['该规则版本缺少属性权限定义。策略候选与设备实际授予分开记录。']
                 if mapping_status != 'definition_recorded' else []) +
                 (['普通第三方签名/特权权限预期被拒绝；拒绝不算采集。'] if restricted else []) +
                 ['厂商 ROM/独立样本未完成逐属性验收。', '异步读取/旧 registerCallback 路径未覆盖。',
@@ -73,9 +75,10 @@ def build_coverage(version='15', rules_path=None):
             'read_apis': [], 'rule_ids': [], 'hook_coverage': {'status': 'not_validated_for_version'},
             'acceptance_examples': [], 'uncovered_reasons': ['没有该版本定义与设备校准；禁止套用 API35。']})
     from vehicle.privacy.coverage import coverage_rows
-    rows.extend(coverage_rows(selected['api_level']))
+    rows.extend(coverage_rows(selected['api_level'], 2 if has_aaid else 1))
     if selected['api_level'] == 35:
-        from vehicle.privacy import ha_contract as ha
+        from vehicle.privacy import ha_contract as ha, owntracks_contract as owntracks
+        from vehicle.privacy import owntracks_evidence as ot_rules
         rows.append({'data_type': 'Android 设备电量（HA Automotive 样本）',
             'required_permissions': 'HA 该读取路径无需运行时权限',
             'read_apis': ['ACTION_BATTERY_CHANGED → Intent.getIntExtra(level/scale)'],
@@ -84,6 +87,19 @@ def build_coverage(version='15', rules_path=None):
             'acceptance_examples': ['vehicle/lab/HA_WEBHOOK_VALIDATION.md'],
             'source_refs': ha.SOURCES,
             'uncovered_reasons': ['仅校准 AAOS 35 指定 APK 与隔离 webhook；充电状态、动力电池及其他网络栈单列。']})
+        rows.append({'data_type': '位置/轨迹（OwnTracks 样本）',
+            'required_permissions': {'op': 'any_of', 'names': ['android.permission.ACCESS_COARSE_LOCATION',
+                                                             'android.permission.ACCESS_FINE_LOCATION']},
+            'permission_mapping_status': 'android_location_permissions_not_same_round_grant_proof',
+            'read_apis': ['org.owntracks.android.services.LocationProcessor.onLocationChanged'],
+            'hook_coverage': {'status': 'sample_opt_in', 'artifact': 'vehicle/hooks/hook_vehicle_owntracks.js'},
+            'rule_ids': [ot_rules.READ_RULE, ot_rules.BODY_RULE],
+            'acceptance_examples': ['vehicle/lab/SAMPLE_RUNTIME_REVIEW.md'],
+            'acceptance_scope': 'pinned_apk_isolated_http_workflow_only',
+            'source_refs': [{'path': 'vehicle/privacy/owntracks_contract.py', 'apk_sha256': owntracks.APK_SHA256}],
+            'uncovered_reasons': ['审计展示直接回调与同值正文候选；独立回执由业务验收核验。',
+                '专用规则限定侧载对照，单列业务验收。',
+                'TLS、其他 APK 版本和独立评分待覆盖。']})
     return {'schema_version': 1, 'target': 'ordinary_third_party_app', 'profile': selected,
             'rules_sha256': digest(rules_path), 'rows': rows,
             'caveat': '仅列能力与缺口；规则/静态引用/读取/外发/政策违规不能互相替代。'}
@@ -96,13 +112,13 @@ def coverage_bytes(data):
     return (head + ', "rows": [\n' + rows + '\n]}\n').encode('utf-8')
 
 
-def export_coverage(output, version='15', vhal_capture=None):
+def export_coverage(output, version='15', vhal_capture=None, catalog_snapshot=None, *, rules_path=None):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
-    data = build_coverage(version)
+    data = build_coverage(version, rules_path)
     if vhal_capture:
         from vehicle.coverage.device_observation import attach_observations
-        data = attach_observations(data, vhal_capture)
+        data = attach_observations(data, vhal_capture, catalog_snapshot)
     # Keep each evidence row on one physical line; provenance can be large, and
     # generated source artifacts must also remain below the repository line cap.
     (output / 'coverage.json').write_bytes(coverage_bytes(data))
@@ -116,9 +132,12 @@ def export_coverage(output, version='15', vhal_capture=None):
                   ', '.join(row['acceptance_examples']) or '待补', '；'.join(row['uncovered_reasons'])]
         lines.append('| ' + ' | '.join(v.replace('|', '\\|') for v in values) + ' |')
     if data.get('device_observation'):
+        snapshot = data['device_observation'].get('grant_snapshot') or {}
         lines.extend(['', '## 自有 API 35 夹具设备结果', '',
-            '设备和事件摘要见 coverage.json。权限授予来自同一会话的 dumpsys 快照；'
-            '订阅回调只认实际收到的 onChangeEvent，注册成功本身不算读取。', '',
+            '设备和事件摘要见 coverage.json。订阅回调只认实际收到的 onChangeEvent。',
+            '权限授予依据为 ' + {'capture_manifest': '采集清单绑定的 dumpsys 快照。',
+                'local_snapshot_not_in_capture_manifest': '与采集同目录的 dumpsys 快照，旧采集清单未绑定其摘要。'
+                }.get(snapshot.get('binding'), '未取得设备快照。'), '',
             '| 属性 | 同步结果 | 同步 API | 订阅回调 | 权限授予 |',
             '|---|---|---|---|---|'])
         for row in data['rows']:

@@ -117,7 +117,8 @@ def browser(source):
                     if row.get('src') == 'mg4_webview' and row.get('ev') == 'WEBVIEW_POST_REQUEST']
     flows = source.events('flows.jsonl')
     return {'server_post_receipts': post, 'app_request_events': app_requests,
-            'captured_proxy_flow_count': len(flows)}
+            'captured_proxy_flow_count': len(flows),
+            **pick(source.business, 'proxy_observed_post', 'post_marker_matched', 'post_flow_attributed')}
 
 
 def sync_requests(requests, sessions, bodies):

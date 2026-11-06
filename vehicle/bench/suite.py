@@ -53,13 +53,13 @@ def _playback(case, files, business, row):
                    {'input': 'manifest', 'reason': '回环实验独立回执，没有常规采集会话清单'}]})
 
 
-def _replay(case, files, business, output, row):
+def _replay(case, files, business, output, row, rules_path):
     manifest = read_json(files['capture_manifest'])
     capture = files['capture_manifest'].parent
     if manifest['session'] != case.get('capture_session_id'):
         raise ValueError('capture manifest belongs to another session')
     result = run_audit(capture, output / 'audit', case['package'],
-                       version=str(manifest['android_version']), apk=files['apk'], pdf=False)
+                       version=str(manifest['android_version']), apk=files['apk'], pdf=False, rules_path=rules_path)
     findings = load_jsonl(output / 'audit/findings.jsonl')
     reads = load_jsonl(capture / 'reads.jsonl')
     flows = load_jsonl(capture / 'flows.jsonl')
@@ -137,7 +137,7 @@ def _replay(case, files, business, output, row):
     return findings
 
 
-def replay_suite(suite_path, output, labels_path=None, root=ROOT, *, fixture=None):
+def replay_suite(suite_path, output, labels_path=None, root=ROOT, *, fixture=None, rules_path=None):
     root, output = Path(root).resolve(), Path(output)
     suite = read_json(suite_path)
     if suite.get('schema') != 1:
@@ -172,7 +172,7 @@ def replay_suite(suite_path, output, labels_path=None, root=ROOT, *, fixture=Non
                 _playback(case, files, business, row)
                 findings = []
             else:
-                findings = _replay(case, files, business, output / key, row)
+                findings = _replay(case, files, business, output / key, row, rules_path)
             eligible = case['kind'] == PAIR_CASE
             if key in signed and not eligible:
                 raise ValueError('workflow review is separate from rule/read/flow pair scoring')

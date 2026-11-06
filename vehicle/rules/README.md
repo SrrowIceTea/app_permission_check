@@ -144,7 +144,15 @@ python python/calibrate_permissions.py --db draft/rules.db --pm-output /path/to/
 正式发布的数据库放 `app/src/main/assets/rules.db`，不要使用 demo-rules.db。
 `createFromAsset("rules.db")` 创建运行副本；只读 DAO 是应用层约束，并非文件系统强制只读。
 扫描结果必须用另一个数据库。本骨架没有原始 SQL 写入口或破坏性迁移回退。
-同 schema 版本更新资产不会自动刷新已有副本，规则发布更新策略待后续实现。
+同 schema 版本更新资产不会自动刷新已有副本（`createFromAsset` 只在目标文件缺失时复制）。
+`RulesDbInstaller` 以 `rules.db` 的 SHA-256 + schema 版本为判据重建：新库先暂存并做摘要、
+四表内容与 Room schema 校验，通过后才替换；新资产校验失败保留旧库并报告
+`UPGRADE_FAILED_KEEPING_OLD`。运行时报告生效库摘要（`effectiveSha256`）与内容摘要，
+供审计侧核对。原始文件摘要会因 Room 追加 `room_master_table`/`android_metadata` 而变化，
+所以"是否仍是同一份规则"由四表内容摘要判定，而不是原始文件摘要。
+
+已验收正常升级、损坏资产和升级后的整机重启。替换过程中磁盘写入异常、断电及并发安装尚未验收；
+当前替换实现不能保证这些情况下自动恢复旧库，不能将正常重启通过解释为升级中断安全。
 
 依赖变更单列：
 

@@ -1,6 +1,5 @@
 "Mitmproxy capture and delayed attribution; authorized tests only. See vehicle/traffic/DECISIONS.md."
 from __future__ import annotations
-import importlib.util
 import json
 import os
 import sys
@@ -15,29 +14,12 @@ sys.path.insert(0, str(ROOT))
 from core.collector.attribution import ATTRIB_SOURCES, Attribution, TimeAttribution  # noqa: E402
 from core.collector.inspection import inspect_body  # noqa: E402
 from core.collector import flow_entry, scope, health  # noqa: E402
+from core.collector.native_write import NativeWrites
+from core.collector.tagging_loader import load_tagging
 from core.event_store import EventStore  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-def _load_tagging():
-    "加载**平台专有**的打标表；文件路径由 `VSCAN_TAGGING` 给出。"
-    path = os.environ.get("VSCAN_TAGGING")
-    if not path:
-        raise SystemExit(
-            "[fatal] 未设 VSCAN_TAGGING。它必须指向本次审计所属产品的打标表："
-            "车载 vehicle/traffic/tagging.py，移动端 mobile/traffic/tagging_mobile.py。")
-    src = Path(path)
-    if not src.is_absolute():
-        src = ROOT / src
-    if not src.exists():
-        raise SystemExit(f"[fatal] VSCAN_TAGGING 指向的文件不存在：{src}")
-    spec = importlib.util.spec_from_file_location("vscan_tagging", src)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    if not hasattr(module, "tag_sensitive"):
-        raise SystemExit(f"[fatal] {src} 缺少 tag_sensitive(text)->(labels,tokens)")
-    return module
-
-TAGGING = _load_tagging()
+TAGGING = load_tagging(ROOT)
 tag_sensitive = TAGGING.tag_sensitive
 # 平台打标表可以按解析后的字段补扫（form/multipart/WS 文本）；没有就退回原文扫描。
 tag_fields = getattr(TAGGING, "tag_fields", None)
@@ -73,6 +55,7 @@ PENDING: list[dict] = []
 FLOW_SEQ = 0
 STORE = None
 SESSION = os.environ.get("VSCAN_SESSION", FLOW_LOG.stem)
+WRITES = NativeWrites(ATTRIB_SOURCES, SESSION, os.environ.get('VSCAN_NATIVE_HTTP_PACKAGE'))
 
 _LOCK = threading.Lock()
 _STOP = threading.Event()
@@ -126,8 +109,16 @@ def _flush(force: bool = False) -> None:
         if not PENDING:
             return
         now = int(time.time() * 1000)
+        if force:
+            WRITES.bind(PENDING)
         keep: list[dict] = []
         for entry in PENDING:
+            if WRITES.eligible(entry):
+                if force:
+                    _emit(entry)
+                else:
+                    keep.append(entry)
+                continue
             # 即使已有候选也等待其他采集器落盘，避免抢先把 B 的流判给 A。
             if not force and now - entry['ts'] < GRACE_MS:
                 keep.append(entry)
@@ -218,7 +209,7 @@ def response(flow: http.HTTPFlow) -> None:
 
     flow.metadata["vscan_terminal"] = "response"
 
-    if found.package in WHITELIST or (not found.resolved and all_tags):
+    if WRITES.eligible(entry) or found.package in WHITELIST or (not found.resolved and all_tags):
         with _LOCK:
             PENDING.append(entry)
     elif not found.resolved:

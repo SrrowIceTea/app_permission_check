@@ -62,10 +62,30 @@ OwnTracks 下载线程发生原生崩溃，采集健康检查失败。冷启动�
 & $VScanPython -m vehicle.lab.owntracks_run --out <新输出目录> --config <本轮配置文件> --apk <原版APK路径>
 ```
 
-## 新镜像续验（2026-11-04）
+## 常规审计重放（2026-11-05）
 
-用户提供的 AAOS 35 revision 4 镜像已启动，实际指纹为 A6。
-[同伴续验](COMPANION_FOLLOWUP_20261104.md)封存 OwnTracks 前台与后台不同新测试点、真实 HTTP 503 和完整健康校验，均通过。
-GPSLogger 138 的实际 GeneralLocationListener 异步回调在前后台各捕获一个新值，驱动正常退出且原 PID 存活。
-两者单列侧载对照层；GPSLogger 是读取诊断，不是其外发或负控验收。
-MG4 逐流映射和新增原生 AAOS 外发路径仍保留缺口。
+已通过前置校验的 OwnTracks 专用采集可由 `vehicle.ps1 audit` 处理。
+`VSC-LAB-OWNTRACKS-LOCATION-001` 记录定位回调，`VSC-LAB-OWNTRACKS-HTTP-001` 记录完整 HTTP 正文的同值候选。
+候选要求同 UID、用户和会话，定位时间及坐标摘要一致，并满足 30 秒窗口。
+PDF 和结论文件仅展示事件引用和关联结果。三侧核对（回调、代理、独立回执）仍由本页的业务验收入口执行。
+此路径属于侧载对照，计分资格为 `workflow_only`。
+
+历史采集使用 `--capture-catalog` 提供当时的目录快照，配套政策和签名文件保留在快照同目录。
+
+```powershell
+./vehicle.ps1 audit `
+  --capture output/owntracks-vehicle-retest-20261104/run-003/capture `
+  --capture-catalog output/o6-device-acceptance-20261104/aaid-audit/privacy-catalog.json `
+  --package org.owntracks.android `
+  --apk output/sample-acquisition-20261103/org.owntracks.android/sample.apk `
+  --out <新输出目录>
+```
+
+## 第三方业务补测（2026-11-05）
+
+新一轮 AAOS 35 采集已补 MG4 实际写入与代理逐流正文身份，并用独立设备进程做同端点负控。
+OwnTracks 的前台、后台、真实断网重连和 HTTP 503 四项通过；503 后正常恢复的上传单列。
+详见 [主线集成与第三方车机补测](../../docs/VEHICLE_MAIN_CLOSEOUT_20261105.md)。
+历史 MG4 替代关系与 OwnTracks 原接收地址证据保持原范围，不因新轮次通过而升级。
+
+本地 GPSLogger 与 OwnTracks 侧载补测另见 [同伴续验](COMPANION_FOLLOWUP_20261104.md)。旧轮次的范围与失败状态保持原样。

@@ -8,7 +8,7 @@ from vehicle.pipeline.test_support import make_capture, seal_capture, PACKAGE
 from vehicle.pipeline.contracts import digest, write_json, read_json, AuditError
 from vehicle.pipeline.audit import run_audit
 from vehicle.pipeline.preflight import validate_capture
-from vehicle.privacy.catalog import catalog_hash
+from vehicle.privacy.catalog import catalog_hash, contract, contract_sha256
 
 
 class GeneralVersionTests(unittest.TestCase):
@@ -52,6 +52,68 @@ class GeneralVersionTests(unittest.TestCase):
         with self.assertRaises(AuditError) as caught:
             run_audit(self.capture, self.root / 'mixed', PACKAGE, version='16', pdf=False)
         self.assertEqual('vhal_outside_scope', caught.exception.code)
+
+    def test_legacy_catalog_exports_the_frozen_policy_bytes(self):
+        expected = catalog_hash(1)
+        self.manifest['privacy_catalog_sha256'] = expected
+        self.events[-1]['privacy_catalog_sha256'] = expected
+        self.save()
+        output = self.root / 'legacy'
+        result = run_audit(self.capture, output, PACKAGE, version='16', pdf=False)
+        self.assertEqual(expected, result['privacy_catalog_sha256'])
+        self.assertEqual(contract(1)['policy_sha256'], digest(output / 'privacy-policy.md'))
+
+    def test_historical_snapshot_needs_matching_digest_and_unchanged_hook_contract(self):
+        snapshot = contract()
+        snapshot['policy_sha256'] = 'a' * 64
+        rules = Path(__file__).resolve().parents[1] / 'rules/rules_library/rules.db'
+        path = self.root / 'archived-catalog.json'
+        for changed_target in (False, True):
+            with self.subTest(changed_target=changed_target):
+                if changed_target:
+                    snapshot['targets'] = snapshot['targets'][:-1]
+                write_json(path, snapshot)
+                hashed = contract_sha256(snapshot)
+                self.manifest['privacy_catalog_sha256'] = hashed
+                self.events[-1]['privacy_catalog_sha256'] = hashed
+                self.save()
+                with self.assertRaisesRegex(AuditError, '通用隐私规则'):
+                    validate_capture(self.capture, PACKAGE, '16', rules)
+                if changed_target:
+                    with self.assertRaisesRegex(AuditError, '通用隐私规则'):
+                        validate_capture(self.capture, PACKAGE, '16', rules, catalog_snapshot=path)
+                else:
+                    validated = validate_capture(self.capture, PACKAGE, '16', rules, catalog_snapshot=path)
+                    self.assertEqual('passed', validated['status'])
+                    write_json(path, snapshot | {'policy_sha256': 'b' * 64})
+                    with self.assertRaisesRegex(AuditError, '通用隐私规则'):
+                        validate_capture(self.capture, PACKAGE, '16', rules, catalog_snapshot=path)
+
+    def test_audit_exports_matching_historical_sources_and_rejects_tampering(self):
+        self.save()
+        seed = self.root / 'source'
+        run_audit(self.capture, seed, PACKAGE, version='16', pdf=False)
+        snapshot_path = seed / 'privacy-catalog.json'
+        policy_path = seed / 'privacy-policy.md'
+        snapshot = read_json(snapshot_path)
+        archived_policy = policy_path.read_bytes() + b'\nHistorical source snapshot.\n'
+        policy_path.write_bytes(archived_policy)
+        snapshot['policy_sha256'] = digest(policy_path)
+        write_json(snapshot_path, snapshot)
+        expected = contract_sha256(snapshot)
+        self.manifest['privacy_catalog_sha256'] = self.events[-1]['privacy_catalog_sha256'] = expected
+        self.save()
+        output = self.root / 'historical'
+        result = run_audit(self.capture, output, PACKAGE, version='16', pdf=False, catalog_snapshot=snapshot_path)
+        self.assertEqual(expected, result['general_privacy']['catalog_sha256'])
+        self.assertEqual(snapshot, read_json(output / 'privacy-catalog.json'))
+        self.assertEqual(archived_policy, (output / 'privacy-policy.md').read_bytes())
+        policy_path.write_bytes(b'tampered')
+        failed = self.root / 'tampered'
+        with self.assertRaises(AuditError) as caught:
+            run_audit(self.capture, failed, PACKAGE, version='16', pdf=False, catalog_snapshot=snapshot_path)
+        self.assertEqual('privacy_catalog_source_mismatch', caught.exception.code)
+        self.assertFalse((failed / 'summary.json').exists())
 
 
 if __name__ == '__main__':
