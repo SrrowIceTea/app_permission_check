@@ -2,3 +2,4 @@
 import './java_bootstrap.js';
 import './hook_privacy.js';
 import './hook_yaabsa_send.js';
+import './hook_abs_progress.js';
