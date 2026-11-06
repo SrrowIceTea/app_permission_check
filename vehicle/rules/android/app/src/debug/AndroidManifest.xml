@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 仅用于授权测试。 Debug-only peers share the fixture UID, never the third-party app UID. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <service android:name=".RulesLeasePeerA" android:process=":rulesLeaseA"
+            android:exported="true" android:permission="android.permission.DUMP" />
+        <service android:name=".RulesLeasePeerB" android:process=":rulesLeaseB"
+            android:exported="true" android:permission="android.permission.DUMP" />
+    </application>
+</manifest>

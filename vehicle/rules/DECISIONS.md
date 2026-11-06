@@ -263,3 +263,13 @@ AAOS 35 的 device-002 已完成 22 项设备用例、6 个阶段真实终止进
 corruption handler。有效头损坏反例在本机修复前也未触发删除，此项按防御性改进登记，不声称已复现删除。
 验收逐方法核对 raw instrumentation，不再接受任意 OK(N)；各项清理独立尝试。device-final 严格确认
 26 项用例和 8 个真实中断点，原用户库逐字节不变、测试用户已移除。见 docs 本轮交付与总 verification.json。
+
+## D017 同 UID 独立进程竞争复验（2026-11-06）
+
+debug 专用双 Service 使用不同进程，共享同一测试用户的专用库。以 /proc/locks 的精确持锁/等待 PID
+和实际 .lock inode 确认竞争，不把进程存活或短暂无结果当成阻塞证明。
+读取阻塞升级、两升级器竞争、杀持锁者后继续、杀等待者再启动四项在 AAOS 35 通过；
+一轮 26 方法及每次 seed/inspect 逐方法核对，原用户库不变、APK 恢复、测试用户移除。
+调试入口要求 DUMP，release 合并清单无该入口。详见 [CROSS_PROCESS.md](CROSS_PROCESS.md)。
+exec-out 缺失文件假成功与 ADB 连接中断各保留失败轮次，最终证据为本轮 device-003。
+只补充本轮同 APK/UID 协作进程的已测范围，D016 的旧证据和未测硬件断电结论不追溯改写。

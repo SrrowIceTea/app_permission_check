@@ -41,6 +41,7 @@ CHECKS = [
         'vehicle.lab.test_evidence_repairs', 'vehicle.lab.test_owntracks_run',
         'vehicle.lab.test_owntracks_permissions', 'vehicle.lab.test_mg4_write',
         'vehicle.rules.android.tools.test_recovery_acceptance',
+        'vehicle.rules.android.tools.test_crossprocess_checks',
         'vehicle.privacy.test_ha_socket_evidence']),
     # 归因/载荷/失败流落盘/报文扫描是平台无关的，已抽到 core/collector/；
     # 车载 VHAL 指纹表留在 vehicle/traffic。
