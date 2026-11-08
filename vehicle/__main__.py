@@ -18,7 +18,7 @@ def main():
     coverage.add_argument('--vhal-capture', type=Path, help='附加已封存的自有 API 35 夹具设备观测')
     coverage.add_argument('--capture-catalog', type=Path, help='封存采集当时的隐私目录 JSON 快照')
     commands.add_parser('profiles', help='查看版本能力与验证状态')
-    for name in ('audit', 'capture', 'samples', 'benchmark', 'overhead', 'scenarios', 'handoff'):
+    for name in ('audit', 'capture', 'samples', 'benchmark', 'overhead', 'scenarios', 'handoff', 'web'):
         commands.add_parser(name, add_help=False, help=f'{name} --help 查看参数')
     args, remaining = parser.parse_known_args()
     if args.command in ('prepare', 'coverage', 'profiles') and remaining:
@@ -41,7 +41,8 @@ def main():
             module = {'audit': 'vehicle.pipeline.audit', 'capture': 'vehicle.pipeline.capture',
                       'samples': 'vehicle.bench.samples', 'benchmark': 'vehicle.bench.evaluate',
                       'overhead': 'vehicle.bench.overhead',
-                      'scenarios': 'vehicle.pipeline.acceptance', 'handoff': 'vehicle.bench.handoff'}[args.command]
+                      'scenarios': 'vehicle.pipeline.acceptance', 'handoff': 'vehicle.bench.handoff',
+                      'web': 'vehicle.webapp.server'}[args.command]
             return importlib.import_module(module).main(remaining)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
