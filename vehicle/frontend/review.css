@@ -1,0 +1,19 @@
+/* Existing local fonts and workbench palette, with case-by-case review in normal flow. */
+#review-round { width:min(100%,1100px);margin:0 auto;padding:0 0 40px; }
+#review-round h3 { font-size:18px;font-weight:500;margin:0 0 14px; }
+.review-intro { padding:0 0 24px;border-bottom:1px solid var(--line); }
+.review-intro h3 { overflow-wrap:anywhere; }
+.review-intro .hint { max-width:70em;line-height:1.8; }
+.review-threshold { padding:24px 0;border-bottom:1px solid var(--line); }
+.review-field { margin:8px 0;color:var(--paper-2);line-height:1.8;overflow-wrap:anywhere; }
+.review-cases { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px;margin:28px 0; }
+.review-case { padding:24px;border:1px solid var(--line);background:rgba(9,16,23,.72);border-radius:8px;min-width:0; }
+.review-case h3 { color:var(--paper);overflow-wrap:anywhere; }
+.review-list { margin-top:24px; }
+#review-round .review-list h3 { font-size:14px;margin-bottom:8px; }
+.review-list ul { padding-left:20px;color:var(--paper-2);line-height:1.9;overflow-wrap:anywhere; }
+#review-round .evidence-json { white-space:pre-wrap;overflow-wrap:anywhere; }
+@media(max-width:760px) {
+  .review-cases { grid-template-columns:1fr;gap:20px; }
+  .review-case { padding:18px; }
+}

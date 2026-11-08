@@ -14,7 +14,7 @@ vscanner/
 ├── core/           # 平台无关内核（唯一一份）：事件库/流量采集/代码行号/规则契约/Frida驱动/静态内核
 ├── vehicle/        # 普通第三方车载审计：独立入口/覆盖链/场景/政策/样本评估 + 原车载工具
 ├── mobile/         # 移动端产品线：规则库/钩子/政策/AI/报告/工具 + 一键审计流水线
-├── frontend/       # 零构建前端：落地页 index.html + 「一键审计」工作台 app.html（对接 pipeline:8771）
+├── frontend/       # 移动端零构建前端：落地页 + 一键审计（8771）；车载独立入口 vehicle/frontend（8773）
 ├── tools/          # 验收 / 回归脚本（run_regressions.py / check_mobile_branch.py）
 ├── docs/           # 操作手册（AGENT_TEST_SUITE_RUNBOOK 等）
 └── archive/        # 已归档的过期/一次性文档（含 MANIFEST.md 找回说明）
@@ -70,6 +70,7 @@ vscanner/
 | --- | --- | --- |
 | 一键审计流水线 | **8771** | `python -B mobile/pipeline/server.py --port 8771 --workdir output/pipe ...` |
 | 静态工作台（旧） | **8772** | `python -B mobile/workbench/server.py` |
+| 车载审计工作台 | **8773** | `./vehicle.ps1 web`，详见 [车载前端](vehicle/frontend/README.md) |
 | 前端静态服务器 | **8090** | `python -m http.server 8090 --bind 127.0.0.1 --directory frontend` |
 
 > 旧文档「都为 8771」已过时。Root / 非 root 由启动配置的正控决定，不能混用证明。

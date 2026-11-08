@@ -1,0 +1,47 @@
+{
+  "provider": "Google Fonts",
+  "families": [
+    {
+      "family": "Manrope:wght@400..700",
+      "provider_css": "https://fonts.googleapis.com/css2?family=Manrope%3Awght%40400..700&display=swap&text=+%21%22%23%24%25%26%27%28%29%2A%2B%2C-.%2F0123456789%3A%3B%3C%3D%3E%3F%40ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B%5C%5D%5E_%60abcdefghijklmnopqrstuvwxyz%7B%7C%7D~%C2%B7%E2%80%93%E2%80%94%E2%80%98%E2%80%99%E2%80%9C%E2%80%9D%E2%80%A6%E3%80%81%E3%80%82%E3%80%8A%E3%80%8B%E3%80%8C%E3%80%8D%EF%BC%81%EF%BC%88%EF%BC%89%EF%BC%8C%EF%BC%8F%EF%BC%9A%EF%BC%9B%EF%BC%9F",
+      "license_source": "https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/OFL.txt",
+      "subset_text": " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~·–—‘’“”…、。《》「」！（），／：；？",
+      "files": [
+        {
+          "file": "manrope-1.woff2",
+          "source": "https://fonts.gstatic.com/l/font?kit=xn7gYHE41ni1AdIRsgWj79z8XfytQmsTcOfs85fVVOjvOoaD8jygkUNc0DEhx7qdUhAzIvVP1ETcpR6Up30OG9saDCxa-Zq7F0sxiEleqR9-kkpC5FGmgbyFywfCRasVNvudy197KDswpRkayeomZMkPBgTnNkdR2Cfa4AWSapkDEqrfS2E3r9CibJkEDdahu8hyIQhLLRj2BT8W7y4DvqW1JIyAhpjEfnyiLgARv4Aa&skey=c397ded15edc0853&v=v23",
+          "sha256": "7ed220ddf29349427e3b8109abba6f845d67b5de54133ad2f90b683bafb98b66",
+          "bytes": 17180
+        }
+      ]
+    },
+    {
+      "family": "Noto Sans SC:wght@400..600",
+      "provider_css": "https://fonts.googleapis.com/css2?family=Noto+Sans+SC%3Awght%40400..600&display=swap&text=+%21%22%23%24%25%26%27%28%29%2A%2B%2C-.%2F0123456789%3A%3B%3C%3D%3E%3F%40ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B%5C%5D%5E_%60abcdefghijklmnopqrstuvwxyz%7B%7C%7D~%C2%B7%E2%80%93%E2%80%94%E2%80%98%E2%80%99%E2%80%9C%E2%80%9D%E2%80%A6%E3%80%81%E3%80%82%E3%80%8A%E3%80%8B%E3%80%8C%E3%80%8D%E4%B8%80%E4%B8%8A%E4%B8%8B%E4%B8%8D%E4%B8%8E%E4%B8%9A%E4%B8%AD%E4%BB%85%E4%BB%A3%E4%BB%B6%E4%BB%BB%E4%BC%A0%E4%BD%8D%E4%BD%9C%E4%BD%BF%E4%BE%9B%E4%BE%9D%E4%BF%9D%E4%BF%A1%E4%BF%AE%E5%80%99%E5%81%9C%E5%81%A5%E5%85%A5%E5%85%A8%E5%85%B3%E5%86%85%E5%87%BA%E5%87%BB%E5%88%86%E5%88%97%E5%88%99%E5%88%9B%E5%88%B7%E5%89%8D%E5%8A%9F%E5%8A%A1%E5%8A%A8%E5%8A%A9%E5%8C%85%E5%8C%B9%E5%8E%86%E5%8E%9F%E5%8F%82%E5%8F%96%E5%8F%A3%E5%8F%AA%E5%8F%B2%E5%8F%B7%E5%90%8C%E5%90%8D%E5%90%8E%E5%90%AF%E5%91%8A%E5%9B%9E%E5%9B%A0%E5%9B%B4%E5%9C%A8%E5%9E%8B%E5%A3%B0%E5%A4%84%E5%A4%87%E5%A4%8D%E5%A4%B1%E5%A7%8B%E5%AD%97%E5%AD%98%E5%AE%89%E5%AE%8C%E5%AE%9A%E5%AE%9E%E5%AE%A1%E5%AE%B9%E5%AF%9F%E5%B0%9A%E5%B0%B1%E5%B1%95%E5%B7%A5%E5%B7%B2%E5%B8%B8%E5%B9%B6%E5%BA%8F%E5%BA%94%E5%BA%A6%E5%BA%B7%E5%BB%BA%E5%BC%80%E5%BC%82%E5%BC%BA%E5%BD%93%E5%BD%95%E5%BE%84%E5%BE%85%E6%80%81%E6%81%A2%E6%81%AF%E6%84%8F%E6%84%9F%E6%88%90%E6%88%91%E6%88%96%E6%88%B7%E6%89%80%E6%89%93%E6%89%A7%E6%8A%A5%E6%8B%96%E6%8B%A9%E6%8C%81%E6%8D%AE%E6%8E%88%E6%8E%A5%E6%8F%90%E6%90%9C%E6%91%98%E6%93%8D%E6%94%AF%E6%94%B6%E6%94%BE%E6%94%BF%E6%95%88%E6%95%8F%E6%95%B0%E6%95%B4%E6%96%87%E6%96%B0%E6%96%B9%E6%97%A0%E6%97%B6%E6%98%8E%E6%9C%80%E6%9C%89%E6%9C%8D%E6%9C%9F%E6%9C%AA%E6%9C%AC%E6%9D%83%E6%9D%9F%E6%9D%A1%E6%9D%A5%E6%9D%BF%E6%9E%90%E6%9E%9C%E6%9F%A5%E6%A0%87%E6%A0%A1%E6%A0%B7%E6%A0%B8%E6%AC%A1%E6%AD%A2%E6%AD%A3%E6%AD%A4%E6%AE%B5%E6%AF%8F%E6%B2%A1%E6%B3%95%E6%B5%8B%E6%B6%88%E6%B8%85%E6%BA%90%E6%BA%AF%E7%82%B9%E7%89%88%E7%8A%B6%E7%8E%87%E7%8E%B0%E7%90%86%E7%94%A8%E7%95%8C%E7%95%A5%E7%9B%AE%E7%9C%8B%E7%9C%9F%E7%A0%81%E7%A1%AE%E7%A7%81%E7%A7%92%E7%A7%B0%E7%A8%8B%E7%A9%BA%E7%AD%89%E7%AD%96%E7%AD%9B%E7%AD%BE%E7%B1%BB%E7%B3%BB%E7%B4%A2%E7%BA%A7%E7%BB%84%E7%BB%93%E7%BB%9F%E7%BB%AA%E7%BC%96%E7%BC%BA%E7%BD%AE%E8%81%94%E8%83%BD%E8%87%AA%E8%87%B4%E8%8C%83%E8%8E%B7%E8%A1%8C%E8%A1%A8%E8%A3%85%E8%A6%81%E8%A7%82%E8%A7%84%E8%AD%A6%E8%AE%A1%E8%AE%A4%E8%AE%B0%E8%AE%BE%E8%AF%81%E8%AF%95%E8%AF%AF%E8%AF%B4%E8%AF%B7%E8%AF%BB%E8%B4%A5%E8%B5%B7%E8%B7%AF%E8%B7%B3%E8%BD%A6%E8%BD%AE%E8%BD%BD%E8%BE%85%E8%BE%B9%E8%BF%87%E8%BF%90%E8%BF%91%E8%BF%94%E8%BF%9B%E8%BF%9E%E8%BF%BD%E9%80%89%E9%80%94%E9%83%A8%E9%85%8D%E9%87%87%E9%87%8D%E9%94%99%E9%97%B4%E9%98%B6%E9%99%90%E9%99%A9%E9%9A%90%E9%9B%86%E9%9D%99%E9%9D%A2%E9%A1%B5%E9%A1%B9%E9%A1%BB%E9%A2%91%E9%A2%98%E9%A3%8E%E9%AA%8C%EF%BC%81%EF%BC%88%EF%BC%89%EF%BC%8C%EF%BC%8F%EF%BC%9A%EF%BC%9B%EF%BC%9F",
+      "license_source": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/OFL.txt",
+      "subset_text": " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~·–—‘’“”…、。《》「」一上下不与业中仅代件任传位作使供依保信修候停健入全关内出击分列则创刷前功务动助包匹历原参取口只史号同名后启告回因围在型声处备复失始字存安完定实审容察尚就展工已常并序应度康建开异强当录径待态恢息意感成我或户所打执报拖择持据授接提搜摘操支收放政效敏数整文新方无时明最有服期未本权束条来板析果查标校样核次止正此段每没法测消清源溯点版状率现理用界略目看真码确私秒称程空等策筛签类系索级组结统绪编缺置联能自致范获行表装要观规警计认记设证试误说请读败起路跳车轮载辅边过运近返进连追选途部配采重错间阶限险隐集静面页项须频题风验！（），／：；？",
+      "files": [
+        {
+          "file": "noto-sans-sc-1.woff2",
+          "source": "https://fonts.gstatic.com/l/font?kit=k3kXo84MPvpLmixcA63oeALhLJAt9i_f0I--PjGhlaVNQ9j-0l95wQVfG3_cY_xoGlQph2IPly5QTOPMH98Ikj4azl9Rlc145Q-Iu3PRcXdYvKoiw6n5v9d1O7QnA3Ss1uEhVmTrlaEpSSu4cn2OtCNCZIgO5htgtY5oY8MpfCqjT2XS4D98J43bgQ8AuiLZOh14uhzIXm_MD8Hq6iGgPjWTh_ZSyq4ripAMwHCNkt_pq5QoMlGeYh1e-oYumOyudb7qkmtnUZi2WfGf3B718k7qty-Dr7rXyZAMJNKo7DlYnaWrF6rckFcEFBPMdhFYW8pJn4-lUCgAurl81Z4P8UfIwkuJcad16nFW4RHZJNbK3gZ6CL-158YsYtas2tX8RX61hCCeDiKaaQ1J83YcGoB64NyJUTK3tzfpSndh6RqQNPBL1H-nNsKLXPHigjhZEQOJ0PIJbyI_W2T35b81LJykvOiREbTWmpPDtOMfzdPUW9U9RTznYGFWEVQPn8whVEg1iZgyynOn3oEv1rS-HOK0g6xSy1TAdrZsL2bCA3dypYYwMWuvPiHAuws9nU8op76M5D7pS7L8zjNf2z0P3bD6oc1mEVQQV9MD7lUSpdBmpqL3qracEShJJLOfW5zBkAVWOOiyD2Hh0OaMAckGnO2EoUGC6lJwNaiN-N5OH42Z2N5qWwdcBpSx7Dz5TwlDURLBw-eEXN6V0bEvKelTRsZT0bCYtKtAprl--_mHCT51dJrlo5RD6T0KeplUwFA0xBRbMac5rhTQ9eEyTJ8k2HgAmUfsoDmEdEppBHHU7AWv5tW1k_BUehVatbTRA6asTJhGOOfhk1s2z5feBwapDQI2wtrF7OPCuLpdoOmNoJugGTWKr1pgNYcoFXgDN5djCZ5Bp_x1XqY2ZAbiucaULnDdaAeOiGlUy1C4FkrH8m0bEvKoIRsLwqs5a5plu3_gEvGo7dWwhtod7riFe4T_92uwN0MvETPIXA_3YMPaNGr5XH2nuBTDxe79Yvk7bgP537wACqSnEAfeRk9Ft2oTqdszCvOdeWlvXcqHPCEJMGska2hxjRRhAhWp4dtidJW-N24ERT6_e5f20fBgcr_XcQU0b9fQInDSj-oA-yWEE7mtqqVxsXocjSMjdzHONbK7krUE74xdiY2TjfTsfJD6QYgZMpj2AbMaj21xOrclREJbHnVlDOMvNFhLJL-8kNf8fIhDihI_G6Wp5CbLk0-vV-GigOz1m7S_Q6A1rap24Yb4o139ycY&skey=cf0bb10b5602fdc3&v=v41",
+          "sha256": "9cd6817b381b4e5a9a0249ce2b181efd1ed1f108e069c9981e43ff91a7a08eb1",
+          "bytes": 94896
+        }
+      ]
+    },
+    {
+      "family": "Noto Serif SC:wght@400..600",
+      "provider_css": "https://fonts.googleapis.com/css2?family=Noto+Serif+SC%3Awght%40400..600&display=swap&text=%E4%BB%85%E4%BD%9C%E5%8A%A8%E5%8A%A9%E5%8F%B0%E5%91%8A%E5%A4%8D%E5%A4%B1%E5%AE%8C%E5%AE%A1%E5%B7%A5%E5%BA%93%E5%BA%94%E6%80%81%E6%88%90%E6%8A%A5%E6%9F%A5%E6%A0%B8%E6%BA%90%E7%94%A8%E7%9C%8B%E7%A0%81%E8%AE%A1%E8%B4%A5%E8%BD%A6%E8%BD%BD%E8%BE%85%E9%9D%99",
+      "license_source": "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifsc/OFL.txt",
+      "subset_text": "仅作动助台告复失完审工库应态成报查核源用看码计败车载辅静",
+      "files": [
+        {
+          "file": "noto-serif-sc-1.woff2",
+          "source": "https://fonts.gstatic.com/l/font?kit=H4chBXePl9DZ0Xe7gG9cyOj7oqOEP9TQkz2t_1HAQOAlcG9mxcgSy6NuDb5vZAIq71DHA7f-6Iuoejqw7-fz_ye3IPVap04XfgTCUhXfzLfEJ955PpkKkl41_M_Ro0dPX8asir8Jv1XZhA&skey=37fe335b8fd815cc&v=v36",
+          "sha256": "5c7a5535f8bd29010e23f8b9ae4f15c887b2878f454dde41bc2e900dd69b0eb4",
+          "bytes": 12576
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#05070A">
+<title>V-Scanner · 车载审计工作台</title>
+<link rel="stylesheet" href="../../frontend/app.css">
+<link rel="stylesheet" href="../../frontend/workspace.css">
+<link rel="preload" href="assets/fonts/noto-serif-sc-1.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/manrope-1.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="vehicle.css">
+<link rel="stylesheet" href="typography.css">
+<link rel="stylesheet" href="review.css">
+</head>
+<body>
+<div class="app-bg" aria-hidden="true"></div>
+<div class="app-rays" aria-hidden="true"></div>
+<div class="app-veil" aria-hidden="true"></div>
+<!-- —— 左侧 rail：默认几乎透明，hover 展开并覆盖主区 —— -->
+<aside class="rail" aria-label="主导航">
+  <a class="rail-brand" href="app.html" aria-label="车载工作台">
+    <svg width="22" height="23" viewBox="0 0 36 38" fill="none" aria-hidden="true">
+      <path d="M18 1.5 34.5 9.2v12.4L18 36.5 1.5 21.6V9.2Z" stroke="currentColor" stroke-width="1.3"/>
+      <circle cx="18" cy="17" r="2.2" fill="currentColor"/>
+    </svg>
+  </a>
+  <nav class="rail-nav">
+    <a href="#" class="nav-item active" data-page="pipeline" title="车载审计">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>
+      </svg>
+      <span class="nav-label">车载审计</span>
+    </a>
+    <a href="#" class="nav-item" data-page="source" title="源码查看">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/>
+      </svg>
+      <span class="nav-label">源码查看</span>
+    </a>
+    <a href="#" class="nav-item" data-page="static" title="静态审计">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+        <path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+        <circle cx="12" cy="12" r="3"/><path d="m16 16-1.9-1.9"/>
+      </svg>
+      <span class="nav-label">静态审计</span>
+    </a>
+    <a href="#" class="nav-item" data-page="dynamic" title="动态审计">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>
+      </svg>
+      <span class="nav-label">动态审计</span>
+    </a>
+    <a href="#" class="nav-item" data-page="ai-report" title="辅助复核">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0l1.58 6.14A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/>
+        <path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/>
+      </svg>
+      <span class="nav-label">辅助复核</span>
+    </a>
+    <a href="#" class="nav-item" data-page="pdf-report" title="PDF 报告">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+        <path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>
+      </svg>
+      <span class="nav-label">PDF 报告</span>
+    </a>
+    <a href="#review" class="nav-item" data-page="review" title="证据复核">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 3H5v18h14V3h-4M9 2h6v4H9zM8 12l2 2 5-5M8 18h8"/></svg>
+      <span class="nav-label">证据复核</span>
+    </a>
+  </nav>
+  <div class="rail-foot"><span>仅用于授权测试</span></div>
+</aside>
+<main class="workbench">
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="topbar-label">当前应用</span>
+      <span class="current-apk-name" id="current-apk-name">尚未选择</span>
+      <div class="history-picker" id="history-picker" hidden>
+        <span aria-hidden="true">历史记录</span>
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+        <select class="apk-switch" id="apk-switch" style="display:none" aria-label="切换历史样本"></select>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <button type="button" class="pl-btn" id="new-audit">新建审计</button>
+      <span class="service-addr" id="service-state" role="status">车载服务连接中</span>
+      <span class="status-dot" aria-hidden="true"></span>
+    </div>
+  </header>
+  <div class="page-container">
+    <!-- ============ 车载审计 ============ -->
+    <section class="page active" id="page-pipeline">
+      <div class="stage" id="audit-stage" data-state="idle">
+        <header class="stage-brand">
+          <p class="vehicle-brand">V-Scanner <span>/ AAOS</span></p>
+          <h1>车载应用审计</h1>
+          <p class="vehicle-lead">选择授权应用，查看代码、运行证据与审计报告。</p>
+        </header>
+<form id="audit-options" class="vehicle-options" aria-label="审计设置">
+<label>审计方式<select id="audit-mode"><option value="static">仅静态分析</option><option value="replay">重放已有采集</option><option value="live">新建 AAOS 采集</option></select></label>
+<label id="capture-option" hidden>采集会话<select id="capture-choice"><option value="">选择已有会话</option></select></label>
+<div id="device-options" hidden>
+<label>设备序列号<input id="device-serial" value="emulator-5554" autocomplete="off"></label>
+<label>用户编号<input id="device-user" type="number" min="0" value="10"></label>
+<label>采集秒数<input id="capture-seconds" type="number" min="5" max="300" value="30"></label>
+<p class="hint">使用 API 35 的自有 AAOS 与已启动的 Frida；目标 App 须已安装并打开，且与上传 APK 一致。采集期间请操作目标 App。</p>
+</div>
+<label class="authorization"><input type="checkbox" id="authorized">我有权测试当前 APK 及所选设备。仅用于授权测试。</label>
+</form>
+        <div class="stage-slot">
+          <div class="pipeline-dropzone" id="pipeline-dropzone" role="button" tabindex="0"
+               aria-label="拖入或选择 APK 文件"
+               onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('pipeline-apk-input').click();}">
+            <span class="dz-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>
+              </svg>
+            </span>
+            <span class="dz-copy">
+              <span class="pipeline-dz-title">拖入车载 APK</span>
+              <span class="pipeline-dz-sub">或点击选择 · 仅 .apk · 车载规则</span>
+            </span>
+            <span class="dz-action" aria-hidden="true">选择</span>
+            <input type="file" id="pipeline-apk-input" accept=".apk" hidden
+                   onclick="event.stopPropagation()">
+          </div>
+          <div class="stage-meta" aria-hidden="true">
+            <span>AAOS 35</span><i></i><span>OBSERVE ONLY</span>
+          </div>
+          <div class="upload-error" id="upload-error" role="alert"></div>
+          <div class="pipeline-progress" id="pipeline-progress" style="display:none">
+            <div class="progress-head">
+              <span class="progress-eyebrow mono">车载审计进度</span>
+              <span class="progress-note mono">OBSERVE ONLY</span>
+            </div>
+            <div class="pipeline-job" id="pipeline-job"></div>
+            <ol class="pipeline-timeline" id="pipeline-timeline"></ol>
+            <div class="progress-empty">
+              <span>正在连接审计服务</span>
+              <a href="app.html#pipeline">刷新页面</a>
+            </div>
+          </div>
+        </div>
+        <div class="pipeline-result" id="pipeline-result" style="display:none"></div>
+      </div>
+    </section>
+    <!-- ============ 源码查看 ============ -->
+    <section class="page" id="page-source">
+      <header class="page-head">
+        <h2>源码查看</h2>
+        <div class="page-tools">
+          <input type="search" id="source-filter" class="filter-input"
+                 placeholder="按路径过滤，例如 VhalReader" aria-label="按路径过滤源码文件">
+        </div>
+      </header>
+      <div class="page-body">
+        <div class="source-viewer">
+          <div class="file-tree" id="file-tree">
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 4h6l2 2h8v14H4z"/><path d="M4 8h16"/>
+              </svg>
+              <p>在车载审计页拖入车载 APK 后查看反编译源码</p>
+            </div>
+          </div>
+          <div class="code-view" id="code-view">
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="m8 8-4 4 4 4"/><path d="m16 8 4 4-4 4"/><path d="m13 5-2 14"/>
+              </svg>
+              <p>选择文件查看代码</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- ============ 静态审计 ============ -->
+    <section class="page" id="page-static">
+      <header class="page-head">
+        <h2>静态审计</h2>
+      </header>
+      <div class="page-body">
+        <div class="results-container" id="static-results">
+          <div class="empty-state large">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M9 9v11"/>
+            </svg>
+            <p>在车载审计页拖入车载 APK 后查看静态审计结果</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- ============ 动态审计 ============ -->
+    <section class="page" id="page-dynamic">
+      <header class="page-head">
+        <h2>动态审计</h2>
+      </header>
+      <div class="page-body">
+        <div class="results-container" id="dynamic-results">
+          <div class="empty-state large">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M22 12h-4l-3 8L9 4l-3 8H2"/>
+            </svg>
+            <p>在车载审计页拖入车载 APK 后查看动态审计结果</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- ============ 辅助复核 ============ -->
+    <section class="page" id="page-ai-report">
+      <header class="page-head">
+        <h2>辅助复核</h2>
+      </header>
+      <div class="page-body">
+        <div class="report-viewer" id="ai-report">
+          <div class="empty-state large">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+              <path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h8M8 17h5"/>
+            </svg>
+            <p>在车载审计页拖入车载 APK 后查看综合审计报告</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="page" id="page-pdf-report">
+<header class="page-head"><h2>车载报告库</h2><p class="hint">仅列出本服务已完整生成的车载报告。</p></header>
+<div class="page-body"><div id="report-library" class="vehicle-reports"></div>
+<div id="pdf-viewer-container"></div></div>
+</section>
+    <section class="page" id="page-review">
+      <header class="page-head"><h2>证据复核</h2><p class="hint">独立复核轮次 · 不随当前 APK 或历史任务切换</p></header>
+      <div class="page-body"><div id="review-round" aria-live="polite"><p class="notice">选择此页读取已发布的复核摘要。</p></div></div>
+    </section>
+  </div>
+</main>
+<script src="../../frontend/highlight.js"></script>
+<script src="results.js"></script>
+<script src="source.js"></script>
+<script src="review.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

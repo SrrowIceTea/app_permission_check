@@ -1,0 +1,86 @@
+/* Locally hosted type: editorial Chinese headings, clean UI and deliberate code faces. */
+:root {
+  --font-ui:"Manrope","Noto Sans SC","Microsoft YaHei UI","Microsoft YaHei","Segoe UI",sans-serif;
+  --font-display:"Noto Serif SC","Noto Sans SC","Microsoft YaHei",serif;
+  --font-mono:"Cascadia Code",Consolas,"Noto Sans SC",monospace;
+  --topbar:76px;
+}
+body { font-family:var(--font-ui);font-synthesis:none;text-rendering:optimizeLegibility;letter-spacing:0; }
+button,input,select { font-family:var(--font-ui); }
+.topbar {
+  height:var(--topbar);flex-basis:var(--topbar);padding:0 36px;gap:24px;
+  background:rgba(8,14,20,.9);backdrop-filter:blur(16px);
+}
+.topbar-left { min-width:0;gap:16px; }
+.topbar-label { font:400 12px/1.5 var(--font-ui);letter-spacing:0;color:#9da8b5;white-space:nowrap; }
+.current-apk-name {
+  max-width:min(29vw,360px);font:600 14px/1.6 var(--font-ui);letter-spacing:-.01em;color:#e9edf0;
+}
+.history-picker {
+  position:relative;display:flex;align-items:center;gap:12px;padding:8px 11px;
+  border:1px solid rgba(215,228,238,.13);border-radius:5px;flex-shrink:0;
+  font:400 12px/1.5 var(--font-ui);color:#b5c0ca;background:rgba(255,255,255,.025);
+}
+.history-picker svg { width:14px;height:14px; }
+.history-picker:hover { color:#f1f3f5;border-color:rgba(215,228,238,.3); }
+.history-picker:focus-within { outline:2px solid var(--live);outline-offset:3px; }
+.history-picker .apk-switch {
+  position:absolute;inset:0;width:100%;height:100%;max-width:none;padding:0;margin:0;opacity:0;
+  cursor:pointer;font:400 13px/1.6 var(--font-ui);letter-spacing:0;
+}
+.apk-switch option { color:#eef1f4;background:#111b25;font-family:var(--font-ui); }
+.topbar-right { gap:18px; }
+.topbar-right .pl-btn { padding:9px 15px;font-size:12px;font-weight:500;border-radius:5px;background:rgba(255,255,255,.035); }
+.service-addr { font:400 11px/1.5 var(--font-ui);letter-spacing:0;color:#91a0ad; }
+.nav-label { font-family:var(--font-ui);font-size:13px;letter-spacing:.025em; }
+.nav-item.active .nav-label { font-weight:600; }
+.rail-foot span { font-family:var(--font-ui);letter-spacing:.015em;font-size:10px; }
+.vehicle-brand { font-family:"Manrope",var(--font-ui);font-size:19px;font-weight:600;letter-spacing:-.04em;margin-bottom:24px; }
+.vehicle-brand span { font-size:10px;letter-spacing:.08em;font-weight:500;vertical-align:middle;margin-left:12px;color:#b9c9d5; }
+.stage-brand h1 {
+  font-family:var(--font-display);font-size:clamp(42px,4.6vw,64px);font-weight:400;
+  line-height:1.3;letter-spacing:.02em;color:#f0f0eb;
+}
+.vehicle-lead { font:400 14px/1.9 var(--font-ui);letter-spacing:.015em;color:#b6c0ca;margin-top:18px; }
+.vehicle-options { gap:20px;padding:26px;border-color:rgba(207,223,235,.14);background:rgba(8,15,22,.82); }
+.vehicle-options label { font-family:var(--font-ui);font-weight:400;font-size:12px;color:#bec9d2; }
+.vehicle-options select,.vehicle-options input:not([type=checkbox]) {
+  font-family:var(--font-ui);font-size:13px;line-height:1.6;background:#12202b;border-color:rgba(207,223,235,.19);
+}
+.vehicle-options .authorization { font-size:12px;line-height:1.85;color:#aab7c2; }
+.pipeline-dz-title { font:500 18px/1.5 var(--font-ui);letter-spacing:.015em; }
+.pipeline-dz-sub { font:400 12px/1.8 var(--font-ui);color:#a8b6c1; }
+.dz-action { font:500 12px/1.5 var(--font-ui); }
+.stage-meta,.progress-head .mono,.pipeline-job,.progress-note,.progress-eyebrow {
+  font-family:var(--font-ui);letter-spacing:.015em;font-size:11px;
+}
+.pipeline-card { border-color:rgba(217,229,236,.2);background:rgba(11,21,30,.94); }
+.pipeline-card h2 { font-family:var(--font-display);font-weight:500;font-size:28px;letter-spacing:.035em;line-height:1.5; }
+.pipeline-card p { font-family:var(--font-ui);font-size:13px;line-height:1.9; }
+.pipeline-card p:last-child { font:400 11px/1.8 var(--font-ui);letter-spacing:0; }
+.pipeline-card .pl-btn { font-family:var(--font-ui);font-weight:500;font-size:13px; }
+.pl-label { font-family:var(--font-ui);font-weight:400;font-size:13px; }
+.pl-msg { font-family:var(--font-ui);font-size:12px; }
+.page-head h2 { font-family:var(--font-display);font-size:30px;font-weight:500;letter-spacing:.04em; }
+.results-table { font-family:var(--font-ui);font-size:13px; }
+.results-table th { font-weight:500;letter-spacing:0; }
+.hint,.notice,.file-tree-item,.report-content { font-family:var(--font-ui); }
+.evidence-json,.code-content { font-family:var(--font-mono); }
+@media(max-width:1100px) {
+  .topbar { padding:0 24px;gap:14px; }.service-addr { display:none; }
+  .topbar-left { gap:12px; }.current-apk-name { max-width:32vw; }
+}
+@media(max-width:700px) {
+  :root { --topbar:64px; }
+  .topbar { padding:0 14px;gap:10px;flex-wrap:nowrap;min-height:64px; }
+  .topbar-label { display:none; }.topbar-left { flex:1;gap:8px; }
+  .current-apk-name { font-size:12px;max-width:none;min-width:0;flex:1; }
+  .history-picker { padding:7px 8px;gap:5px;font-size:11px; }
+  .history-picker svg { width:11px; }
+  .topbar-right .pl-btn { padding:8px 10px;font-size:11px;white-space:nowrap; }
+  .vehicle-brand { font-size:18px;margin-bottom:18px; }
+  .stage-brand h1 { font-size:40px;line-height:1.35;letter-spacing:.015em; }
+  .vehicle-lead { font-size:12px;line-height:1.9;margin-top:16px; }
+  .vehicle-options { padding:20px; }.pipeline-card h2 { font-size:26px; }
+  .pipeline-dz-title { font-size:16px; }.pipeline-card .pl-btn { font-size:12px; }
+}
