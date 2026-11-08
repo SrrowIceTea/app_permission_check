@@ -58,7 +58,10 @@ internal object RulesDbDigest {
      * reliable pre-check: Room would happily build its own empty tables instead.
      */
     fun content(file: File): DbContent? = runCatching {
-        SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+        RulesDbSqlite.open(file).use { db ->
+            db.rawQuery("PRAGMA quick_check", null).use { c ->
+                require(c.moveToFirst() && c.getString(0) == "ok") { "SQLite 完整性检查失败" }
+            }
             val version = db.rawQuery("PRAGMA user_version", null).use { c ->
                 if (c.moveToFirst()) c.getInt(0) else 0
             }
@@ -114,7 +117,11 @@ internal object DbMetaStore {
             contentSha256 = requireNotNull(props.getProperty(KEY_CONTENT)),
             schemaVersion = requireNotNull(props.getProperty(KEY_SCHEMA)).toInt(),
             algorithmVersion = requireNotNull(props.getProperty(KEY_ALGORITHM)).toInt(),
-        )
+        ).also { meta ->
+            require(listOf(meta.assetSha256, meta.effectiveSha256, meta.contentSha256).all {
+                it.matches(Regex("[a-f0-9]{64}"))
+            } && meta.schemaVersion > 0) { "规则库元数据格式无效" }
+        }
     }.getOrNull()
 
     fun write(file: File, data: DbMeta) {
@@ -125,6 +132,6 @@ internal object DbMetaStore {
             setProperty(KEY_SCHEMA, data.schemaVersion.toString())
             setProperty(KEY_ALGORITHM, data.algorithmVersion.toString())
         }
-        file.outputStream().use { props.store(it, "V-Scanner rules.db install state") }
+        RulesDbFiles.write(file) { props.store(it, "V-Scanner rules.db install state") }
     }
 }

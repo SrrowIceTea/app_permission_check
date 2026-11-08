@@ -86,7 +86,7 @@ abstract class RulesDatabase : RoomDatabase() {
          * error surfaces on the first DAO call. Callers must wrap the first query,
          * not this call.
          */
-        fun open(
+        internal fun open(
             context: Context,
             source: RulesDbSource = RulesDbSource.Asset(DEFAULT_ASSET),
             databaseName: String = DEFAULT_NAME,
@@ -96,6 +96,7 @@ abstract class RulesDatabase : RoomDatabase() {
                 RulesDatabase::class.java,
                 databaseName,
             )
+            builder.setJournalMode(JournalMode.TRUNCATE)
             source.applyTo(builder)
             return builder.build()
         }

@@ -10,6 +10,7 @@ import hashlib
 import math
 from collections import defaultdict
 from vehicle.bench.labels import adjudicated_labels, canonical_sha, captured_event_refs
+from vehicle.bench.review_policy import SUBAGENT_LIMITS
 
 
 def matched_pairs(findings):
@@ -18,14 +19,15 @@ def matched_pairs(findings):
             if f.get('evidence_kind') == 'read_then_egress' for p in f.get('pairs', [])}
 
 
-def pair_metrics(findings, label, apk_sha256, session_id):
+def pair_metrics(findings, label, apk_sha256, session_id, *, root=None):
     if label is None:
         return {'status': 'unlabelled', 'precision': None, 'recall': None,
                 'reason': '没有独立标注，不能由未命中推算准确率。'}
-    if any(key in label for key in ('universe', 'reviews', 'adjudication')):
-        adjudicated_labels(label, apk_sha256, session_id, label.get('sample_origin'))
+    if label.get('origin') == 'subagent_review' or any(key in label for key in ('universe', 'reviews', 'adjudication')):
+        adjudicated_labels(label, apk_sha256, session_id, label.get('sample_origin'),
+                           **({'root': root} if root is not None else {}))
     if (label.get('apk_sha256') != apk_sha256 or label.get('session_id') != session_id
-            or label.get('origin') not in ('owned_fixture', 'independent_review', 'agent_review')
+            or label.get('origin') not in ('owned_fixture', 'independent_review', 'agent_review', 'subagent_review')
             or not label.get('reviewer') or not label.get('reviewed_at')
             or not isinstance(label.get('expected_pairs'), list)):
         raise AuditError('invalid_benchmark_labels', '评估标注缺身份、来源或审阅信息。',
@@ -60,8 +62,10 @@ def pair_metrics(findings, label, apk_sha256, session_id):
         actual = legacy
     expected = {tuple(row) for row in label['expected_pairs']}
     tp, fp, fn = len(actual & expected), len(actual - expected), len(expected - actual)
-    return {'status': 'agent_reviewed' if label['origin'] == 'agent_review' else 'labelled',
+    return {'status': {'agent_review': 'agent_reviewed', 'subagent_review': 'subagent_reviewed'}.get(
+                label['origin'], 'labelled'),
             'label_origin': label['origin'], 'human_signoff': label.get('human_signoff'),
+            'subagent_signoff': label.get('subagent_signoff'), 'review_mode': label.get('review_mode'),
             'independent_human_review': label['origin'] == 'independent_review',
             'tp': tp, 'fp': fp, 'fn': fn,
             'precision': tp / (tp + fp) if tp + fp else None,
@@ -151,7 +155,8 @@ def stratified_metrics(findings, label, apk_sha, session, sample_origin, *,
     strata = []
     for (read_src, flow_src), scope in sorted(grouped.items()):
         row = {'read_source': read_src, 'flow_path': flow_src, 'sample_origin': sample_origin,
-               'label_origin': 'independent_review', 'label_set_sha256': truth['label_set_sha256']}
+               'label_origin': truth['label_origin'], 'review_mode': truth['review_mode'],
+               'label_set_sha256': truth['label_set_sha256']}
         actual = predicted & scope
         if actual - truth['universe']:
             strata.append({**row, 'status': 'not_measured', 'reason': 'unreviewed_predictions',
@@ -169,7 +174,10 @@ def stratified_metrics(findings, label, apk_sha, session, sample_origin, *,
         strata.append({**row, **_rates(counts), 'status': 'measured',
                        'cohens_kappa': cohens_kappa(agreement), 'reviewer_agreement_counts': agreement})
     return {'status': 'measured' if any(row['status'] == 'measured' for row in strata) else 'not_measured',
-            'precision': None, 'recall': None, 'label_origin': 'independent_review',
+            'precision': None, 'recall': None, 'label_origin': truth['label_origin'],
+            'review_mode': truth['review_mode'],
+            'independent_human_review': truth['review_mode'] == 'human',
+            'review_limits': SUBAGENT_LIMITS if truth['review_mode'] == 'subagent' else [],
             'label_set_sha256': truth['label_set_sha256'],
             'not_measured_reasons': sorted({row['reason'] for row in strata if row['status'] == 'not_measured'}),
             'strata': strata}

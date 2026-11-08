@@ -30,7 +30,9 @@ def stop_workers(processes, handles, stop_file, log):
         forced = False
         try:
             try:
-                process.wait(timeout=15)
+                # Flush/ack plus bounded unload/detach/manager shutdown can take
+                # up to 22 s. Leave time for every release; failures stay unhealthy.
+                process.wait(timeout=30)
             except subprocess.TimeoutExpired:
                 forced = True
                 process.terminate()
