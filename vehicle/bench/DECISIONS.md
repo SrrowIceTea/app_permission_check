@@ -66,3 +66,11 @@ subagent 标签使用 origin=subagent_review、subagent_signoff=signed、human_s
 独立模型上下文并非文件权限隔离，程序只能校验声明的来源与摘要，不能凭 JSON 证明执行过工具。
 实际启动记录另留 run.json。相同模型可能共享错误，subagent 共识不等于人工参考真值，
 也不证明准确率提高。签核模式本身不改变基准的样本规模门槛或业务证据边界。
+
+## B010 后补业务证据与计分资格分开（2026-11-08）
+
+新 MG4/OwnTracks 材料另冻结为 expanded_round，不改旧 W03、旧 HA 配对标签或正式 pair kind。
+新包仅投影原始身份/事件/正文哈希/回执/权限，A/B/C 独立复核业务命题及资格，不从预测复制标签。
+MG4 没有敏感读取，OwnTracks 专用路径仍 workflow_only；denied 空流不能伪造双事件负配对。
+业务签核输出 not_measured 和零新增正式参考数；前端单独发布本轮摘要，不能与当前任务混用。
+普通精度/召回仍由原有规则与参考范围决定，不通过派生字段或评审一致性扩大求值口径。
