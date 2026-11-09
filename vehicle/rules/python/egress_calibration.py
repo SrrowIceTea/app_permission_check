@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 
-def calibrate(db, window_ms):
+def calibrate(db, window_ms, versions=('14', '15')):
     if window_ms != 30000:
         raise ValueError('本校准记录只批准 30000ms；其他值需新的校准依据')
     policy = Path(__file__).resolve().parents[1] / 'EGRESS_CALIBRATION.md'
@@ -12,9 +12,13 @@ def calibrate(db, window_ms):
     # E1 is the VHAL egress calibration. VSC-GE-* general-privacy rules get their 30s
     # window from vehicle/privacy/catalog.py and their own POLICY.md basis; stamping
     # them with E1 would claim a revision they never had.
+    # android-13/16 were never part of the E1 device calibration, so their rows must
+    # not inherit 30000ms or the E1 basis (no cross-version reuse was authorised).
+    marks = ','.join('?' * len(versions))
     for rule_id, version, revision, refs in db.execute(
             'SELECT rule_id,android_version,rule_revision,basis_refs_json FROM risk_rules '
-            "WHERE rule_type='data_egress' AND rule_id LIKE 'VSC-E%'").fetchall():
+            "WHERE rule_type='data_egress' AND rule_id LIKE 'VSC-E%' "
+            f'AND android_version IN ({marks})', tuple(versions)).fetchall():
         basis = json.loads(refs)
         marker = {'kind': 'project_policy', 'path': 'vehicle/rules/EGRESS_CALIBRATION.md',
                   'version': '2026-09-24', 'clause': 'E1', 'sha256': digest,

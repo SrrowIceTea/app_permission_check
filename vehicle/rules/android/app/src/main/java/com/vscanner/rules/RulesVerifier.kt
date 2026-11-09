@@ -17,24 +17,36 @@ enum class DbState { OK, SCHEMA_MISMATCH, MISSING_OR_CORRUPT }
  * ship. Taken from rules_library/rules.db.summary.json - never adjusted to make a
  * failing check pass.
  *
- * The two versions come from different places and that distinction is load-bearing:
- * "14" is extracted from AOSP android-14.0.0_r1 source; "15" is observed on the API 35
- * test device (146 car permissions read off `pm list permissions -f`, VHAL ids and CPM
- * signatures read off the device's own android.car.jar). Device observations are
- * definition_status=pending and must never be reported as source extractions.
+ * The versions come from different places and that distinction is load-bearing:
+ * "13" is extracted from AOSP android-13.0.0_r1 and "14" from android-14.0.0_r1;
+ * "15" is observed on the API 35 test device (146 car permissions read off
+ * `pm list permissions -f`, plus four generic Android permissions from the same
+ * frozen output; VHAL ids and CPM signatures read off the device's own
+ * android.car.jar). Device observations are definition_status=pending and must
+ * never be reported as source extractions.
  *
  * enabledRules counts the rules actually approved to produce audit conclusions. It is
  * asserted so that an accidental enable or disable is noticed.
  *
- * All 22 VHAL rules per version enabled after E1 calibration to 30000ms, plus seven
- * registered general-privacy rules (VSC-GR and VSC-GE prefixes): 29 enabled per version.
+ * 14/15 enable all 29 rules per version (22 VHAL rules calibrated to 30000ms plus seven
+ * general-privacy rules). 13 has no egress-window calibration, so its ten data_egress
+ * rules stay disabled: 19 enabled.
  * See EGRESS_CALIBRATION.md (2026-09-24 user authorization) and vehicle/privacy/POLICY.md.
  */
 object BaselineExpectation {
-    const val SHA256 = "4bf51ba0aadb0234aefb80dfc197429347d748c38fb36f567e90c2d928bff824"
-    const val SOURCE_TAG = "14=AOSP android-14.0.0_r1 / 15=设备实测 API 35"
+    const val SHA256 = "50b143f257024cb80e8b94ee45e748180e3ec1826f0b0cfda65a85ce21e0ff18"
+    const val SOURCE_TAG = "13/14=AOSP release source / 15=设备实测 API 35"
 
     val VERSIONS: Map<String, VersionCounts> = mapOf(
+        "13" to VersionCounts(
+            permissions = 6,
+            vhalProperties = 8,
+            dangerousApis = 3,
+            // 22 VHAL rules + 5 VSC-GR + 2 VSC-GE general-privacy rules.
+            riskRules = 29,
+            // The ten data_egress rules stay disabled: no window calibration for 13.
+            enabledRules = 19,
+        ),
         "14" to VersionCounts(
             permissions = 6,
             vhalProperties = 8,
@@ -44,7 +56,7 @@ object BaselineExpectation {
             enabledRules = 29,
         ),
         "15" to VersionCounts(
-            permissions = 146,
+            permissions = 150,
             vhalProperties = 8,
             dangerousApis = 3,
             // The nine policy drafts are mirrored here. Their basis_refs (POLICY.md) is

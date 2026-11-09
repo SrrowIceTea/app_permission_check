@@ -13,11 +13,12 @@ from vehicle.analyze.pair_ambiguity import annotate_candidates
 
 RULE_DB = Path(__file__).resolve().parents[1] / 'rules/rules_library/rules.db'
 
-# The library registers only the two releases it tracks ('14' source baseline, '15'
-# device-observed). The four general sources exist since API 33, so platform 13/16
-# resolve to the nearest registered row set. The finding carries both the platform
-# asked about and the row's own android_version - it never relabels the row.
-ROW_VERSION = {'13': '14', '14': '14', '15': '15', '16': '15'}
+# '13'/'14' are AOSP source rows and '15' is the device-observed row set; each
+# resolves to its own rows so a finding never borrows a neighbour's provenance.
+# android-16 rows are not built yet, so '16' still borrows '15' and the finding
+# reports rule_version_basis=nearest_registered_row_api_surface; switch it to
+# '16' together with the baseline_android16 rows.
+ROW_VERSION = {'13': '13', '14': '14', '15': '15', '16': '15'}
 
 
 def load_general_rules(version='15', db=RULE_DB):

@@ -1,0 +1,125 @@
+{
+  "tag": "android-13.0.0_r1",
+  "android_version": "13",
+  "repositories": {
+    "car": {
+      "repository": "packages/services/Car",
+      "commit": "d27feff5d51f1a765490d6b7a2eaaa6cd680e89d"
+    },
+    "interfaces": {
+      "repository": "hardware/interfaces",
+      "commit": "ad2871f7d266307f583f900b022ea45dbafba54f"
+    }
+  },
+  "files": [
+    {
+      "id": "car_manifest",
+      "repository_key": "car",
+      "path": "car-lib/AndroidManifest.xml",
+      "commit": "d27feff5d51f1a765490d6b7a2eaaa6cd680e89d",
+      "url": "https://android.googlesource.com/platform/packages/services/Car/+/d27feff5d51f1a765490d6b7a2eaaa6cd680e89d/car-lib/AndroidManifest.xml",
+      "transport_url": "https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/packages/services/Car",
+      "sha256": "d805616d121847c9a792a0a8115d7527810378c997696cc74aaf2937ba5f1108",
+      "git_blob_sha1": "f719f7ac5920476864bf67a00cd7f1a8148dffa0"
+    },
+    {
+      "id": "manifest",
+      "repository_key": "car",
+      "path": "service/AndroidManifest.xml",
+      "commit": "d27feff5d51f1a765490d6b7a2eaaa6cd680e89d",
+      "url": "https://android.googlesource.com/platform/packages/services/Car/+/d27feff5d51f1a765490d6b7a2eaaa6cd680e89d/service/AndroidManifest.xml",
+      "transport_url": "https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/packages/services/Car",
+      "sha256": "5955019b0d17fd78f131ef3d307dbd869a007ac26ca1eb662065a36217c00767",
+      "git_blob_sha1": "e6ba072ae250e4d0c82ad9e9804bc719c27d2e4a"
+    },
+    {
+      "id": "ids",
+      "repository_key": "car",
+      "path": "car-lib/src/android/car/VehiclePropertyIds.java",
+      "commit": "d27feff5d51f1a765490d6b7a2eaaa6cd680e89d",
+      "url": "https://android.googlesource.com/platform/packages/services/Car/+/d27feff5d51f1a765490d6b7a2eaaa6cd680e89d/car-lib/src/android/car/VehiclePropertyIds.java",
+      "transport_url": "https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/packages/services/Car",
+      "sha256": "c89471c255baf912b6a6d5a00e25eaefa12539d63ee82fc8eb8843146570a645",
+      "git_blob_sha1": "35c1746fdaed7a5a3d013cbf5049006ab958f3c5"
+    },
+    {
+      "id": "cpm",
+      "repository_key": "car",
+      "path": "car-lib/src/android/car/hardware/property/CarPropertyManager.java",
+      "commit": "d27feff5d51f1a765490d6b7a2eaaa6cd680e89d",
+      "url": "https://android.googlesource.com/platform/packages/services/Car/+/d27feff5d51f1a765490d6b7a2eaaa6cd680e89d/car-lib/src/android/car/hardware/property/CarPropertyManager.java",
+      "transport_url": "https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/packages/services/Car",
+      "sha256": "b5ca984aa8e1299470f16c2685d570053e963300700cd714a31bbb74b6aafc0d",
+      "git_blob_sha1": "c4c15a12e6346ea1163f62cb6a01d613967f16fa"
+    },
+    {
+      "id": "car",
+      "repository_key": "car",
+      "path": "car-lib/src/android/car/Car.java",
+      "commit": "d27feff5d51f1a765490d6b7a2eaaa6cd680e89d",
+      "url": "https://android.googlesource.com/platform/packages/services/Car/+/d27feff5d51f1a765490d6b7a2eaaa6cd680e89d/car-lib/src/android/car/Car.java",
+      "transport_url": "https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/packages/services/Car",
+      "sha256": "665a109d634ac158ea723a5b9111bd62e9e7fc949a753b17d038030f8f809e4a",
+      "git_blob_sha1": "d9e09e17545f11f628c05e9cf0d4947072b867f0"
+    },
+    {
+      "id": "aidl",
+      "repository_key": "interfaces",
+      "path": "automotive/vehicle/aidl/android/hardware/automotive/vehicle/VehicleProperty.aidl",
+      "commit": "ad2871f7d266307f583f900b022ea45dbafba54f",
+      "url": "https://android.googlesource.com/platform/hardware/interfaces/+/ad2871f7d266307f583f900b022ea45dbafba54f/automotive/vehicle/aidl/android/hardware/automotive/vehicle/VehicleProperty.aidl",
+      "transport_url": "https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/hardware/interfaces",
+      "sha256": "11c07898dcd9f60bac7b86d8789f8fa6cdc9288516722fbc5f779b2028bc7da2",
+      "git_blob_sha1": "95dc0e44ea0b33442e7f6ac69e6936ea08b90072"
+    },
+    {
+      "id": "hidl",
+      "repository_key": "interfaces",
+      "path": "automotive/vehicle/2.0/types.hal",
+      "commit": "ad2871f7d266307f583f900b022ea45dbafba54f",
+      "url": "https://android.googlesource.com/platform/hardware/interfaces/+/ad2871f7d266307f583f900b022ea45dbafba54f/automotive/vehicle/2.0/types.hal",
+      "transport_url": "https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/hardware/interfaces",
+      "sha256": "6471c2297d9d5a82ce9440f466d26d5f272ca86afe99e241a5205de9385b4c55",
+      "git_blob_sha1": "d8ec7f055f1c9bacf158e49a3323ad88c38ed491"
+    },
+    {
+      "id": "mapping",
+      "repository_key": "car",
+      "path": "service/src/com/android/car/hal/PropertyHalServiceIds.java",
+      "commit": "d27feff5d51f1a765490d6b7a2eaaa6cd680e89d",
+      "url": "https://android.googlesource.com/platform/packages/services/Car/+/d27feff5d51f1a765490d6b7a2eaaa6cd680e89d/service/src/com/android/car/hal/PropertyHalServiceIds.java",
+      "transport_url": "https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/packages/services/Car",
+      "sha256": "adeb63de6776f3d8c7c5d147f2f09a485ba71ae06acd447cbd1dbd46b7de38ce",
+      "git_blob_sha1": "49a6d54c4f2f0fbfe87b310b713bebcc5eeb6e35"
+    }
+  ],
+  "purpose": "AOSP release source baseline for the android-13 rule rows; not a device observation.",
+  "transport_note": "Sources were taken from the Tsinghua TUNA AOSP git mirror. The mirror has no raw-file endpoint (/plain/ answers 'Please use git to access this link'), so transport_url is the mirror repository and files are read from the release commit. sha256 and git_blob_sha1 are recomputed locally; git object ids are content-addressed, so identical bytes mean identical blobs on the official host.",
+  "mirror": {
+    "name": "Tsinghua TUNA AOSP mirror",
+    "repository_root": "https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform",
+    "access": "git",
+    "official_host_unreachable": "android.googlesource.com did not answer from this host",
+    "github_aosp_mirror_org": "no Car or hardware/interfaces repositories; not used"
+  },
+  "tag_verification": {
+    "method": "git ls-remote <tuna repository> refs/tags/<tag> refs/tags/<tag>^{}",
+    "tag": "android-13.0.0_r1",
+    "refs": {
+      "car": {
+        "tag_object": "d4914adb2f27c769e67ceafac4d83cca77c4b162",
+        "peeled_commit": "d27feff5d51f1a765490d6b7a2eaaa6cd680e89d"
+      },
+      "interfaces": {
+        "tag_object": "f39df1a1ce1f722feec83fea1906503d7fb5da2d",
+        "peeled_commit": "ad2871f7d266307f583f900b022ea45dbafba54f"
+      }
+    },
+    "basis": "The mirror advertises the same release tag name as the official host. The annotated tag peels to the commit recorded in repositories[], every file is then verified by sha256 and git_blob_sha1, and the local clone HEAD must equal that commit."
+  },
+  "artifacts": {
+    "seed_facts.jsonl": "6e17fe15e9dac3b635bfad42b869babdce0841197109eccdcf00166b1150c5ac",
+    "seed_evidence.jsonl": "7baa92bec0f7998ff6f452e8cebb3c2e3151c8061ff2b99224a759e1c0c7094b",
+    "POLICY.md": "70bdbe25f67f81a0cb45c232fd10d11a9ddca13348a77db64764b076166b307c"
+  }
+}

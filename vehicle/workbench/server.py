@@ -52,7 +52,7 @@ _DIGEST = re.compile(r"[0-9a-f]{64}")
 def _manifest_versions(rules: Path) -> list[str]:
     """从规则库旁的 rules.manifest.json 读 android_versions，作为 --android-version 的合法取值。
 
-    单一来源是契约文件，不在这里写死 ["14","15"]：车载库是 14/15，移动库只有 36，
+    单一来源是契约文件，不在这里写死版本列表：车载库是 13/14/15，移动库只有 36，
     一旦 workbench 复用到其他平台，这里不该再改代码。
     """
     manifest = rules.parent / "rules.manifest.json"
@@ -63,7 +63,7 @@ def _manifest_versions(rules: Path) -> list[str]:
             return [str(v) for v in versions]
     except (OSError, json.JSONDecodeError):
         pass
-    return ["14", "15"]
+    return ["13", "14", "15"]
 
 
 def _work(apk: Path, digest: str, session: Path | None, out: Path, decompile: bool):

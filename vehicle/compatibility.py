@@ -3,8 +3,8 @@
 仅用于授权测试。 API/OS numbers below describe platform releases, not OEM test results.
 """
 PROFILES = {
-    '13': {'api_level': 33, 'status': 'planned', 'dynamic_verified': False,
-           'reason': '量产车型有使用依据；本库尚无 Android 13 车载定义和设备校准。'},
+    '13': {'api_level': 33, 'status': 'source_reference', 'dynamic_verified': False,
+           'reason': 'AOSP android-13.0.0_r1 源码基线已入库；未做设备校准与夹具验收。'},
     '14': {'api_level': 34, 'status': 'source_reference', 'dynamic_verified': False,
            'reason': '通用隐私四类来源已通过专用 AAOS 34 夹具正反例；VHAL 仍为源码基线。'},
     '15': {'api_level': 35, 'status': 'fixture_baseline', 'dynamic_verified': True,

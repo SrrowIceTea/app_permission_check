@@ -26,12 +26,19 @@ class CoverageTests(unittest.TestCase):
         self.assertTrue(location['uncovered_reasons'])
 
     def test_other_versions_expand_general_sources_without_copying_vhal(self):
-        for version in ('13', '16'):
-            rows = build_coverage(version)['rows']
-            self.assertFalse(any('property_id' in row for row in rows))
-            self.assertEqual({'location', 'microphone', 'contacts', 'android_id', 'advertising_id'},
-                             {row['data_type_key'] for row in rows if 'data_type_key' in row})
-            self.assertTrue(any(r['hook_coverage']['status'] == 'not_validated_for_version' for r in rows))
+        # 13 is a full AOSP source baseline, so it owns its eight VHAL rows; the
+        # invariant is that those rows are source-verified and carry no device
+        # observations copied from 15.
+        props = [r for r in build_coverage('13')['rows'] if 'property_id' in r]
+        self.assertEqual(8, len(props))
+        self.assertTrue(all(r['definition_status'] == 'source_verified' for r in props))
+        self.assertTrue(all(not r['device_refs'] for r in props))
+        # 16 is not registered yet: general sources only, and it must say so.
+        rows = build_coverage('16')['rows']
+        self.assertFalse(any('property_id' in row for row in rows))
+        self.assertEqual({'location', 'microphone', 'contacts', 'android_id', 'advertising_id'},
+                         {row['data_type_key'] for row in rows if 'data_type_key' in row})
+        self.assertTrue(any(r['hook_coverage']['status'] == 'not_validated_for_version' for r in rows))
 
     def test_owntracks_experiment_is_not_reported_as_a_general_rule(self):
         rows = build_coverage()['rows']

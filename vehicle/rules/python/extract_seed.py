@@ -48,6 +48,40 @@ def one(pattern, text):
     return matches[0]
 
 
+def closed_brace(text, start):
+    """Index just past the object literal that opens at `start`."""
+    depth = 0
+    for index in range(start, len(text)):
+        depth += text[index] == '{'
+        depth -= text[index] == '}'
+        if depth == 0:
+            return index + 1
+    raise ValueError('Unbalanced object literal')
+
+
+def permission_mapping(sources, name):
+    """Locate one property's read mapping and return (span, car_symbol, permission_name).
+
+    android-13/14 keep a static Java pair table inside the Car service;
+    android-16 no longer ships that file and instead generates a JSON property
+    config in car-lib. Both are in-repo AOSP sources, so the shape difference is
+    branched here rather than forking the extractor.
+    """
+    path, text = sources.paths['mapping'], sources.text['mapping']
+    if path.suffix == '.json':
+        entry = json.loads(text)['properties'][name]
+        read, write = entry.get('readPermission'), entry.get('writePermission')
+        if write is not None or (read or {}).get('type') != 'single':
+            raise ValueError('Selected seed requires explicit read-only mapping: ' + name)
+        m = one(r'"' + name + r'"\s*:\s*\{', text)
+        return (m.start(), closed_brace(text, m.end() - 1)), None, read['value']
+    m = one(r'(?:mHalPropIdToPermissions|mProps)\.put\(VehicleProperty\.' + name +
+            r',\s*new Pair<>\(\s*Car\.(\w+),\s*(null|Car\.\w+)\s*\)\);', text)
+    if m[2] != 'null':
+        raise ValueError('Selected seed requires explicit read-only mapping: ' + name)
+    return (m.start(), m.end()), m[1], None
+
+
 def extract(sources):
     version = sources.lock['android_version']
     facts = []
@@ -60,7 +94,10 @@ def extract(sources):
         row['source_refs_json'] = packed([sources.ref('manifest', name, m.start(), m.end(),
             ['permission_name', 'protection_level_raw', 'permission_group', 'description'])])
         row['notes'] = 'AOSP source definition. Protection flag numbers not inferred. Device values require calibration.'
-        if suffix in ('CAR_SPEED', 'CAR_ENERGY'):
+        # 实测例外（CAR_SPEED / CAR_ENERGY 在 Phase 0 设备名录里对得上）只保留在
+        # android-14 冻结基线中。13/16 的行必须是纯源码出处，不得掺入设备观测，
+        # 否则"一个版本一种出处"就被破坏。
+        if version == '14' and suffix in ('CAR_SPEED', 'CAR_ENERGY'):
             row['device_calibration_json'] = packed([{
                 'kind': 'user_report', 'scope': 'permission_name_exists', 'observed': True,
                 'device': 'emulator_car64_x86_64', 'device_android_version': None,
@@ -81,8 +118,8 @@ def extract(sources):
         m = one(r'\b' + name + r'\s*=\s*[^;]*?,[^\n]*', text)
         start = text.rfind('/**', 0, m.start())
         block = text[start:m.end()]
-        row['access_mode'] = one(r'@access VehiclePropertyAccess\.(\w+)', block)[1]
-        row['change_mode'] = one(r'@change_mode VehiclePropertyChangeMode\.(\w+)', block)[1]
+        row['access_mode'] = one(r'@access VehiclePropertyAccess[.:](\w+)', block)[1]
+        row['change_mode'] = one(r'@change_mode VehiclePropertyChangeMode[.:](\w+)', block)[1]
         row['value_type'] = one(r'VehiclePropertyType:(\w+)', block)[1]
         row['area_type'] = one(r'VehicleArea:(\w+)', block)[1]
         unit = re.search(r'@unit VehicleUnit[:.](\w+)', block)
@@ -95,19 +132,25 @@ def extract(sources):
         refs.append(sources.ref('ids', name, j.start(), j.end(), ['property_id']))
         h = one(r'\b' + name + r'\s*=\s*\([^;]*?\),', sources.text['hidl'])
         refs.append(sources.ref('hidl', name, h.start(), h.end(), ['property_id']))
-        mapping = one(r'mHalPropIdToPermissions\.put\(VehicleProperty\.' + name +
-                      r',\s*new Pair<>\(\s*Car\.(\w+),\s*(null|Car\.\w+)\s*\)\);', sources.text['mapping'])
-        if row['access_mode'] != 'READ' or mapping[2] != 'null':
+        span, symbol, direct = permission_mapping(sources, name)
+        if row['access_mode'] != 'READ':
             raise ValueError('Selected seed requires explicit read-only mapping: ' + name)
-        permission = one(r'public static final String ' + mapping[1] + r'\s*=\s*"([^"]+)";', sources.text['car'])
-        if permission[1] not in permissions or permission[1].split('.')[-1] not in PERMISSIONS:
-            raise ValueError('Missing selected permission: ' + permission[1])
-        row['read_permission_expr_json'] = packed({'op': 'permission', 'name': permission[1]})
+        car_ref = None
+        if direct is None:
+            permission = one(r'public static final String ' + symbol + r'\s*=\s*"([^"]+)";', sources.text['car'])
+            permission_name = permission[1]
+            car_ref = sources.ref('car', symbol, permission.start(), permission.end(),
+                                  ['read_permission_expr_json'])
+        else:
+            permission_name = direct
+        if permission_name not in permissions or permission_name.split('.')[-1] not in PERMISSIONS:
+            raise ValueError('Missing selected permission: ' + permission_name)
+        row['read_permission_expr_json'] = packed({'op': 'permission', 'name': permission_name})
         row['write_permission_expr_json'] = packed({'op': 'unsupported'})
-        refs.append(sources.ref('mapping', name, mapping.start(), mapping.end(),
+        refs.append(sources.ref('mapping', name, span[0], span[1],
                                ['read_permission_expr_json', 'write_permission_expr_json']))
-        refs.append(sources.ref('car', mapping[1], permission.start(), permission.end(),
-                               ['read_permission_expr_json']))
+        if car_ref:
+            refs.append(car_ref)
         row['source_refs_json'], row['definition_status'] = packed(refs), 'source_verified'
         row['notes'] = 'AIDL/HIDL/Java ID cross-checked. Source definition only; device applicability requires calibration.'
         if name == 'FUEL_LEVEL':
@@ -133,7 +176,7 @@ def extract(sources):
         class_name = package + '.CarPropertyManager'
         row = {'api_key': m[2] + descriptor, 'android_version': version, 'class_name': class_name,
                'method_name': m[2], 'jvm_descriptor': descriptor, 'api_role': 'read',
-               'property_arg_index': [p[1] for p in parts].index('propertyId'),
+               'property_arg_index': types.index('int'),
                'definition_status': 'source_verified',
                'notes': 'Source signature, not device verification. Hook process coverage/UID attribution remain TODO.'}
         refs = [sources.ref('cpm', m[2], m.start(), m.end(),

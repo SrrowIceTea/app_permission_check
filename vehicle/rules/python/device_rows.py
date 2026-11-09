@@ -25,6 +25,16 @@ from pathlib import Path
 DEVICE_VERSION = "15"
 SOURCE_VERSION = "14"
 
+# Only these generic Android permissions are allowed into the device-observed
+# version. The list is a guard against accidentally importing the full 1094-row
+# pm output; extraction is also restricted by --names.
+GENERAL_PERMISSION_NAMES = frozenset({
+    "android.permission.ACCESS_FINE_LOCATION",
+    "android.permission.ACCESS_COARSE_LOCATION",
+    "android.permission.RECORD_AUDIO",
+    "android.permission.READ_CONTACTS",
+})
+
 
 def insert_device_permissions(dst: sqlite3.Connection, calibration: Path) -> int:
     rows = [json.loads(line) for line in calibration.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -58,6 +68,14 @@ def insert_device_permissions(dst: sqlite3.Connection, calibration: Path) -> int
         payload,
     )
     return len(payload)
+
+
+def insert_general_permissions(dst: sqlite3.Connection, calibration: Path) -> int:
+    rows = [json.loads(line) for line in calibration.read_text(encoding="utf-8").splitlines() if line.strip()]
+    unexpected = sorted({row["permission_name"] for row in rows} - GENERAL_PERMISSION_NAMES)
+    if unexpected:
+        raise ValueError("Unapproved generic permissions in calibration: " + ", ".join(unexpected))
+    return insert_device_permissions(dst, calibration)
 
 
 def insert_device_properties(dst: sqlite3.Connection, device_ids: Path, provenance: dict) -> int:
@@ -219,14 +237,15 @@ def insert_device_rules(dst: sqlite3.Connection, provenance: dict) -> int:
     return len(payload)
 
 
-def build_device_rows(dst: sqlite3.Connection, calibration: Path, property_ids: Path,
-                      cpm_signatures: Path, device_facts: dict) -> dict:
+def build_device_rows(dst: sqlite3.Connection, calibration: Path, general_permissions: Path,
+                      property_ids: Path, cpm_signatures: Path, device_facts: dict) -> dict:
     """构造全部 android-15 设备观测行，返回各表行数。
 
     risk_rules 必须最后构造——它的行带指向上面三张表的外键。
     """
     return {
-        "permissions": insert_device_permissions(dst, calibration),
+        "permissions": (insert_device_permissions(dst, calibration)
+                        + insert_general_permissions(dst, general_permissions)),
         "vhal_properties": insert_device_properties(dst, property_ids, device_facts),
         "dangerous_apis": insert_device_apis(dst, cpm_signatures, device_facts),
         # Last on purpose: the rule rows carry foreign keys into the three tables above.

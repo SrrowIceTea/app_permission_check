@@ -14,6 +14,9 @@ Never invokes adb. Feed it output captured separately.
 Usage:
   python python/extract_device_calibration.py --pm-output saved.txt \
       --device-facts device.json --out calibration/permissions.jsonl
+  python python/extract_device_calibration.py --pm-output saved.txt \
+      --device-facts device.json --prefix android.permission. \
+      --names android.permission.RECORD_AUDIO --out calibration/general.jsonl
 """
 from __future__ import annotations
 
@@ -61,7 +64,8 @@ def sha256_of(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def collect(pm_output: Path, device_facts: Path | None, prefix: str) -> tuple[list[dict], dict]:
+def collect(pm_output: Path, device_facts: Path | None, prefix: str,
+            names: tuple[str, ...] = ()) -> tuple[list[dict], dict]:
     text = pm_output.read_text(encoding="utf-8-sig")
     parsed = parse(text)
     if not parsed:
@@ -75,7 +79,12 @@ def collect(pm_output: Path, device_facts: Path | None, prefix: str) -> tuple[li
         "device": device,
     }
 
-    selected = [r for r in parsed if r["permission_name"].startswith(prefix)]
+    selected = [r for r in parsed if r["permission_name"].startswith(prefix)
+                and (not names or r["permission_name"] in names)]
+    if names:
+        missing = sorted(set(names) - {r["permission_name"] for r in selected})
+        if missing:
+            raise ValueError("Requested permissions not found: " + ", ".join(missing))
     seen: dict[str, dict] = {}
     conflicts: list[dict] = []
     for record in selected:
@@ -110,6 +119,7 @@ def collect(pm_output: Path, device_facts: Path | None, prefix: str) -> tuple[li
         "parsed_blocks": len(parsed),
         "selected": len(facts),
         "prefix": prefix,
+        "names": sorted(names),
         "without_protection_level": sorted(
             f["permission_name"] for f in facts if not f["protection_level_raw"]
         ),
@@ -124,6 +134,8 @@ def main() -> int:
     parser.add_argument("--pm-output", type=Path, required=True)
     parser.add_argument("--device-facts", type=Path)
     parser.add_argument("--prefix", default="android.car.")
+    parser.add_argument("--names", default="",
+                        help="逗号分隔的精确权限名；留空则按 --prefix 前缀选择")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--summary", type=Path, required=True)
     args = parser.parse_args()
@@ -133,8 +145,9 @@ def main() -> int:
             print(json.dumps({"status": "failed", "message": f"Refusing to overwrite {target}"}),
                   file=sys.stderr)
             return 1
+    names = tuple(n.strip() for n in args.names.split(",") if n.strip())
     try:
-        facts, summary = collect(args.pm_output, args.device_facts, args.prefix)
+        facts, summary = collect(args.pm_output, args.device_facts, args.prefix, names)
     except (ValueError, OSError, json.JSONDecodeError) as exc:
         print(json.dumps({"status": "failed", "error_type": type(exc).__name__,
                           "message": str(exc)}, ensure_ascii=False), file=sys.stderr)

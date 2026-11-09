@@ -1,6 +1,12 @@
 {
-  "status": "dual_version_library",
+  "status": "multi_version_library",
   "counts": {
+    "13": {
+      "permissions": 6,
+      "vhal_properties": 8,
+      "dangerous_apis": 3,
+      "risk_rules": 29
+    },
     "14": {
       "permissions": 6,
       "vhal_properties": 8,
@@ -8,40 +14,67 @@
       "risk_rules": 29
     },
     "15": {
-      "permissions": 146,
+      "permissions": 150,
       "vhal_properties": 8,
       "dangerous_apis": 3,
       "risk_rules": 29
     }
   },
-  "enabled_rules": 58,
+  "enabled_rules": 77,
+  "enabled_by_version": {
+    "13": 19,
+    "14": 29,
+    "15": 29
+  },
   "privacy_rules": {
+    "13": 7,
     "14": 7,
     "15": 7
   },
+  "source_versions": [
+    "13",
+    "14"
+  ],
   "android15_source": "device_observation",
   "android15_rule_policy": "policy_mirrored_from_android14_with_device_provenance",
+  "egress_versions": [
+    "14",
+    "15"
+  ],
   "enablement": {
     "before": {
-      "over_permission": 0,
-      "sensitive_read": 10,
-      "data_egress": 4
+      "over_permission": {
+        "total": 18,
+        "enabled": 0
+      },
+      "sensitive_read": {
+        "total": 39,
+        "enabled": 15
+      },
+      "data_egress": {
+        "total": 30,
+        "enabled": 4
+      }
     },
     "after": {
       "over_permission": {
-        "total": 12,
-        "enabled": 12
+        "total": 18,
+        "enabled": 18
       },
       "sensitive_read": {
-        "total": 26,
-        "enabled": 26
+        "total": 39,
+        "enabled": 39
       },
       "data_egress": {
-        "total": 20,
+        "total": 30,
         "enabled": 20
       }
-    }
+    },
+    "egress_versions": [
+      "14",
+      "15"
+    ]
   },
-  "database_sha256": "4bf51ba0aadb0234aefb80dfc197429347d748c38fb36f567e90c2d928bff824",
-  "note": "android-15 rows are device observations (definition_status=pending). They are not source extractions and must not be reported as such."
+  "database_sha256": "50b143f257024cb80e8b94ee45e748180e3ec1826f0b0cfda65a85ce21e0ff18",
+  "note": "android-15 rows are device observations (definition_status=pending). android-13/14 are source extractions. Egress rules stay disabled outside egress_versions because no window calibration exists for those releases."
 }

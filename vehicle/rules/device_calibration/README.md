@@ -24,6 +24,7 @@
 | `permissions-full.txt` | `adb shell pm list permissions -f -g` 的原始输出（1495 个权限块） |
 | `permissions-car-android15.jsonl` | 抽出的 146 条 `android.car.*`，含 protectionLevel |
 | `permissions-car-android15.summary.json` | 抽取摘要：条数、缺 protectionLevel 的、重名冲突 |
+| `permissions-general-android15.jsonl` | 同一份 pm 输出白名单抽出的 4 条通用权限（定位×2 / 录音 / 通讯录） |
 | `vhal-property-ids-device35.json` | 设备 `VehiclePropertyIds` 全部 254 个常量 |
 | `cpm-signatures-device35.json` | 设备 `CarPropertyManager` 全部 96 个方法签名 |
 | `android.car.jar` | 设备 `/system/framework/android.car.jar`（1.4 MB，内含 `classes.dex`） |
@@ -79,13 +80,16 @@ cd vehicle/rules
 python python/build_multiversion_rules.py \
   --base baseline_android14/rules.db \
   --calibration device_calibration/permissions-car-android15.jsonl \
+  --general-permissions device_calibration/permissions-general-android15.jsonl \
   --property-ids device_calibration/vhal-property-ids-device35.json \
   --cpm-signatures device_calibration/cpm-signatures-device35.json \
   --device-facts device_calibration/device-facts.json \
+  --enable-types over_permission,sensitive_read,data_egress \
+  --egress-window-ms 30000 \
   --out rules_library/rules.db --summary rules_library/rules.db.summary.json
 ```
 
-产物 `rules_library/rules.db`：'14' 46 条、'15' 186 条，每版本启用规则 29/29
+产物 `rules_library/rules.db`：'14' 46 条、'15' 190 条，每版本启用规则 29/29
 （6 over_permission + 13 sensitive_read + 10 data_egress）。通用隐私 `VSC-G*` 共 7 条，
 包含 O6 新增的 AAID 读取规则。
 
