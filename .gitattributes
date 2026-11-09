@@ -6,3 +6,4 @@ vehicle/privacy/POLICY_20261102.md text eol=lf
 vehicle/privacy/*-signatures.json text eol=lf
 vehicle/privacy/sdk36-signatures.json text eol=crlf
 vehicle/bench/aaos35-suite.json text eol=crlf
+docs/VALIDATION_SAMPLE_POOL_20261109.json text eol=lf
