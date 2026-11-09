@@ -9,8 +9,8 @@ PROFILES = {
            'reason': '通用隐私四类来源已通过专用 AAOS 34 夹具正反例；VHAL 仍为源码基线。'},
     '15': {'api_level': 35, 'status': 'fixture_baseline', 'dynamic_verified': True,
            'reason': '既有 AAOS 35 自有夹具基线；不代表 OEM 或独立样本已验证。'},
-    '16': {'api_level': 36, 'status': 'planned', 'dynamic_verified': False,
-           'reason': '第三方可访问车辆属性发生扩展，须独立建库与验收，禁止套用 15。'},
+    '16': {'api_level': 36, 'status': 'source_reference', 'dynamic_verified': False,
+           'reason': 'AOSP android-16.0.0_r1 源码基线已入库；未做设备校准与夹具验收。'},
 }
 
 

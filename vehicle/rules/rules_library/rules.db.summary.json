@@ -18,22 +18,31 @@
       "vhal_properties": 8,
       "dangerous_apis": 3,
       "risk_rules": 29
+    },
+    "16": {
+      "permissions": 6,
+      "vhal_properties": 8,
+      "dangerous_apis": 3,
+      "risk_rules": 29
     }
   },
-  "enabled_rules": 77,
+  "enabled_rules": 96,
   "enabled_by_version": {
     "13": 19,
     "14": 29,
-    "15": 29
+    "15": 29,
+    "16": 19
   },
   "privacy_rules": {
     "13": 7,
     "14": 7,
-    "15": 7
+    "15": 7,
+    "16": 7
   },
   "source_versions": [
     "13",
-    "14"
+    "14",
+    "16"
   ],
   "android15_source": "device_observation",
   "android15_rule_policy": "policy_mirrored_from_android14_with_device_provenance",
@@ -44,29 +53,29 @@
   "enablement": {
     "before": {
       "over_permission": {
-        "total": 18,
+        "total": 24,
         "enabled": 0
       },
       "sensitive_read": {
-        "total": 39,
-        "enabled": 15
+        "total": 52,
+        "enabled": 20
       },
       "data_egress": {
-        "total": 30,
+        "total": 40,
         "enabled": 4
       }
     },
     "after": {
       "over_permission": {
-        "total": 18,
-        "enabled": 18
+        "total": 24,
+        "enabled": 24
       },
       "sensitive_read": {
-        "total": 39,
-        "enabled": 39
+        "total": 52,
+        "enabled": 52
       },
       "data_egress": {
-        "total": 30,
+        "total": 40,
         "enabled": 20
       }
     },
@@ -75,6 +84,6 @@
       "15"
     ]
   },
-  "database_sha256": "50b143f257024cb80e8b94ee45e748180e3ec1826f0b0cfda65a85ce21e0ff18",
-  "note": "android-15 rows are device observations (definition_status=pending). android-13/14 are source extractions. Egress rules stay disabled outside egress_versions because no window calibration exists for those releases."
+  "database_sha256": "56a88e5e91333745dde445830f29510dfdeb2fe229872eea7c2a6ebaa9139962",
+  "note": "android-15 rows are device observations (definition_status=pending). android-13/14/16 are source extractions. Egress rules stay disabled outside egress_versions because no window calibration exists for those releases."
 }

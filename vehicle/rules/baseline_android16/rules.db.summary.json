@@ -1,0 +1,13 @@
+{
+  "status": "reference_baseline_only",
+  "counts": {
+    "permissions": 6,
+    "vhal_properties": 8,
+    "dangerous_apis": 3,
+    "risk_rules": 22
+  },
+  "total_records": 39,
+  "enabled_rules": 0,
+  "device_verified": false,
+  "database_sha256": "6376718b14c94ed393e04bbe5ea785db848f89c06764b3a32ae4f05b295c14c7"
+}

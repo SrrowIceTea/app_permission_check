@@ -5,10 +5,11 @@
 当前内容：四表 SQL、Room Entity、只查询 DAO、源码解析、离线校准和合成演示。
 android-13 部分是从 AOSP `android-13.0.0_r1`（清华 TUNA 镜像）抽取的 39 条（22 规则 / 6 权限 / 8 属性 / 3 API），出处见 [sources.lock.json](baseline_android13/sources.lock.json)。
 android-14 部分是从 AOSP `android-14.0.0_r1` 抽取的 39 条（22 规则覆盖全部 8 个 VHAL 属性，P 按权限去重），见 [种子库说明](baseline_android14/README.md)。
+android-16 部分是从 AOSP `android-16.0.0_r1`（清华 TUNA 镜像，`aidl_property/` 路径）抽取的 39 条，出处见 [sources.lock.json](baseline_android16/sources.lock.json)。
 android-15 部分是**设备实测**的 190 条，见 [设备校准说明](device_calibration/README.md)。
-`android/` 已是可编译的 Gradle 工程，三版本规则库已在真实 AAOS 设备上验证加载成功（见下）。
+`android/` 已是可编译的 Gradle 工程，四版本规则库已在真实 AAOS 设备上验证加载成功（见下）。
 14/15 每版本启用 29 条规则：over_permission 6 条 + sensitive_read 13 条（8 VHAL + 5 `VSC-GR-*`）
-+ data_egress 10 条（8 VHAL + 2 `VSC-GE-*`）。13 未做外发窗口标定，`data_egress` 不启用（启用 19 条）。
++ data_egress 10 条（8 VHAL + 2 `VSC-GE-*`）。13/16 未做外发窗口标定，`data_egress` 不启用（各启用 19 条）。
 2026-11-02 通用隐私规则正式登记，见
 [privacy/POLICY.md](../privacy/POLICY.md)；VHAL 外发窗口依据见 D010 / EGRESS_CALIBRATION.md。
 测试样例全部使用 TEST_ONLY 标识，不代表 AOSP 常量，也不能部署用于正式审计。
@@ -18,8 +19,9 @@ vehicle/rules/
   schema.sql                    四表契约
   baseline_android13/           android-13 源码抽取基线（39 条，TUNA 镜像，已锁定）
   baseline_android14/           android-14 源码抽取基线（39 条，已锁定）
+  baseline_android16/           android-16 源码抽取基线（39 条，TUNA 镜像，已锁定）
   device_calibration/           android-15 设备实测证据（146 车载权限 + 4 通用权限 / 254 属性 / 96 签名）
-  rules_library/rules.db        三版本规则库产物（'13' 46 条 + '14' 46 条 + '15' 190 条）
+  rules_library/rules.db        四版本规则库产物（'13' 46 条 + '14' 46 条 + '15' 190 条 + '16' 46 条）
   android/                      可编译的 Gradle 工程
     settings.gradle.kts         仓库源：阿里云优先
     gradle/libs.versions.toml   版本目录
@@ -244,7 +246,7 @@ adb root && adb pull /data/user/10/com.vscanner.rules/files/verification.json
 `classify()` 里仍保留 `SQLiteDatabaseCorruptException` / `SQLiteException` 分支，
 作为尚未观测到的形态的防线，但它不是这几种情况的判据。
 
-实测结果：`state=OK`，SHA-256 匹配，三版本条数均符合预期，14/15 每版本启用规则 29 条、13 启用 19 条
+实测结果：`state=OK`，SHA-256 匹配，四版本条数均符合预期，14/15 每版本启用规则 29 条、13/16 各启用 19 条
 （over_permission 6 条 + sensitive_read 13 条 + data_egress 10 条；通用隐私 `VSC-G*` 6 条
 2026-11-02 登记，其余 VHAL 规则依据见 D010 / EGRESS_CALIBRATION.md）：
 
@@ -253,10 +255,11 @@ adb root && adb pull /data/user/10/com.vscanner.rules/files/verification.json
 | 13 | 6 | 8 | 3 | 29 | 19 | 46 | AOSP `android-13.0.0_r1`（TUNA 镜像）源码抽取 |
 | 14 | 6 | 8 | 3 | 29 | 29 | 46 | AOSP `android-14.0.0_r1` 源码抽取 |
 | 15 | 150 | 8 | 3 | 29 | 29 | 190 | 设备实测（API 35；146 车载 + 4 通用权限） |
+| 16 | 6 | 8 | 3 | 29 | 19 | 46 | AOSP `android-16.0.0_r1`（TUNA 镜像、`aidl_property/`）源码抽取 |
 
-三版本来源不同，这是**刻意的**：`definition_status` 只有源码抽取才配 `source_verified`，
-设备观测一律 `pending`，出处记在 `device_calibration_json`。13 与 14 的 29 条规则都带各自
-AOSP commit 的 `source_refs_json`；13 未做外发窗口标定，`data_egress` 规则登记但不启用。
+四版本来源不同，这是**刻意的**：`definition_status` 只有源码抽取才配 `source_verified`，
+设备观测一律 `pending`，出处记在 `device_calibration_json`。13/14/16 的 29 条规则都带各自
+AOSP commit 的 `source_refs_json`；13/16 未做外发窗口标定，`data_egress` 规则登记但不启用。
 
 android-15 的 9 条规则是镜像的，但**溯源被拆开**（D009）：
 `basis_refs_json`（POLICY.md，项目策略，与版本无关）原样保留；

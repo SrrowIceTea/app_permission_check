@@ -93,7 +93,7 @@ class GeneralPrivacyTests(unittest.TestCase):
 
     def test_rule_ids_are_registered_and_findings_cite_registered_metadata(self):
         # 2026-11-02: VSC-GR-/GE-* used to be emitted without any rules.db row.
-        for version in ('13', '14', '15'):
+        for version in ('13', '14', '15', '16'):
             with self.subTest(version=version):
                 rules = load_general_rules(version)
                 self.assertEqual({'VSC-GR-' + d for d in TYPES} |
@@ -101,8 +101,8 @@ class GeneralPrivacyTests(unittest.TestCase):
                 for rule_id, rule in rules.items():
                     self.assertEqual(1, rule['rule_revision'])
                     self.assertEqual('medium', rule['severity'])
-                    # 13 未做外发窗口标定，VSC-GE-* 登记但不启用；其余规则按 14 口径启用。
-                    expected_enabled = int(not (rule_id.startswith('VSC-GE-') and version == '13'))
+                    # 13/16 未做外发窗口标定，VSC-GE-* 登记但不启用；其余规则按 14 口径启用。
+                    expected_enabled = int(not (rule_id.startswith('VSC-GE-') and version in ('13', '16')))
                     self.assertEqual(expected_enabled, rule['enabled'])
                     self.assertTrue(json.loads(rule['condition_json'])['predicate'])
                     self.assertTrue(json.loads(rule['evidence_requirements_json'])['required'])
@@ -123,10 +123,10 @@ class GeneralPrivacyTests(unittest.TestCase):
             self.assertTrue(record['basis_refs'][0]['path'].endswith('POLICY.md'))
 
     def test_all_four_platforms_resolve_to_registered_rows_without_relabelling(self):
-        # 13/14/16 are AOSP source rows and 15 is the device-observed row set. 16 is
-        # not in the library yet (stage 3), so it still borrows 15's rows and must
-        # say so in the finding; once 16 lands this mapping becomes ('16', '16').
-        for platform, row_version in (('13', '13'), ('14', '14'), ('15', '15'), ('16', '15')):
+        # 13/14/16 are AOSP source rows and 15 is the device-observed row set; every
+        # platform resolves to its own rows, so rule_version_basis stays
+        # registered_for_platform for all four.
+        for platform, row_version in (('13', '13'), ('14', '14'), ('15', '15'), ('16', '16')):
             with self.subTest(platform=platform):
                 record = evaluate([read()], [flow()], PACKAGE, SESSION, platform)[0][0]
                 self.assertEqual(row_version, record['rule_android_version'])

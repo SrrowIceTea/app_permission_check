@@ -54,13 +54,13 @@ class RulesSchemaValidationTest {
 
     @Test
     fun reportsOnlyTheBaselineVersions() = runBlocking {
-        assertEquals(listOf("13", "14", "15"), db.rules().versions())
+        assertEquals(listOf("13", "14", "15", "16"), db.rules().versions())
     }
 
     /**
-     * The android-13 rows are AOSP source extractions, not device observations. Their
-     * egress rules stay disabled because no 30s window calibration exists for this
-     * release, while the other 19 rules follow the android-14 enablement scope.
+     * The android-13/16 rows are AOSP source extractions, not device observations. Their
+     * egress rules stay disabled because no 30s window calibration exists for these
+     * releases, while the other 19 rules follow the android-14 enablement scope.
      */
     @Test
     fun carriesSourceVerifiedAndroid13Rows() = runBlocking {
@@ -73,18 +73,31 @@ class RulesSchemaValidationTest {
     }
 
     @Test
-    fun android13RulesCarryAospSourceRefsNotDeviceObservations() {
-        db.openHelper.readableDatabase.query(
-            "SELECT rule_id, source_refs_json FROM risk_rules WHERE android_version = '13'"
-        ).use { cursor ->
-            assertEquals(29, cursor.count)
-            while (cursor.moveToNext()) {
-                val ruleId = cursor.getString(0)
-                val sourceRefs = cursor.getString(1)
-                assertFalse(
-                    "$ruleId claims device provenance under android-13: $sourceRefs",
-                    sourceRefs.contains("device_observation"),
-                )
+    fun carriesSourceVerifiedAndroid16Rows() = runBlocking {
+        val counts = db.rules().counts("16")
+        assertEquals(6, counts.permissions)
+        assertEquals(8, counts.vhalProperties)
+        assertEquals(3, counts.dangerousApis)
+        assertEquals(29, counts.riskRules)
+        assertEquals(19, counts.enabledRules)
+    }
+
+    @Test
+    fun sourceRulesCarryAospSourceRefsNotDeviceObservations() {
+        for (version in listOf("13", "16")) {
+            db.openHelper.readableDatabase.query(
+                "SELECT rule_id, source_refs_json FROM risk_rules WHERE android_version = ?",
+                arrayOf(version),
+            ).use { cursor ->
+                assertEquals(29, cursor.count)
+                while (cursor.moveToNext()) {
+                    val ruleId = cursor.getString(0)
+                    val sourceRefs = cursor.getString(1)
+                    assertFalse(
+                        "$ruleId claims device provenance under android-$version: $sourceRefs",
+                        sourceRefs.contains("device_observation"),
+                    )
+                }
             }
         }
     }

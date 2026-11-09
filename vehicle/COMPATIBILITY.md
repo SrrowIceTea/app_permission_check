@@ -16,24 +16,25 @@ SDK Extension、OEM 软件版本与 GAS/Google built-in 是不同字段，不能
 
 | Android | API | 本项目状态 | 扩展顺序 |
 |---|---|---|---|
-| 13 | 33 | 已登记待适配；没有专用规则库或本轮设备验收 | 优先补较老量产平台 |
+| 13 | 33 | AOSP `android-13.0.0_r1` 源码基线已入库；无本轮设备验收 | 优先补较老量产平台 |
 | 14 | 34 | 四类通用来源已通过专用 AVD 正反例；VHAL 为源码基线 | 通用来源第二条设备基线 |
 | 15 | 35 | 既有夹具基线；本轮验收产物必须另行读取 | 当前开发/回归主线 |
-| 16 | 36 | 已登记待适配；禁止把 Android 15 规则伪装成 16 | 核实新增第三方车辆数据能力后接入 |
+| 16 | 36 | AOSP `android-16.0.0_r1` 源码基线已入库；无本轮设备验收 | 核实新增第三方车辆数据能力后接入 |
 
 旧系统 10/11/12/12L 可进入后续兼容研究，不把历史 API 名称直接当作已验证 Hook 签名。
 全量车载审计入口拒绝未校准版本。API 34 使用 `--scope general`；`vehicle.ps1 profiles` 返回机器可读状态。扩展时必须同时具备：
 对应版本定义与来源、权限/属性实际可用性、同步/订阅/异步 API 覆盖、正反例、设备运行证据。
 已有 8 个属性不等于当前普通第三方可以读取 8 个；以实际授予、返回状态和覆盖链为准。
 
-**离线流水线 vs 设备验收**：规则库只登记 `'14'`（OS 13/14）与 `'15'`（OS 15/16）两组行，
-OS 13 与 OS 16 的通用隐私阶段映射到最近登记行并在 finding 中标注
-`rule_version_basis = nearest_registered_row_api_surface`。API 34 和 35 有通用来源夹具设备验收。API 33 和 36 目前覆盖离线解析、映射和规则加载。API 34 的 `general_dynamic_verified=true`，全量车载 `dynamic_verified=false`。
+**离线流水线 vs 设备验收**：规则库登记四组行——`'13'`/`'14'`/`'16'` 为 AOSP 源码基线、
+`'15'` 为设备观测行；每个平台解析到自己登记的行，不再借用相邻版本
+（`ROW_VERSION`）。API 34 和 35 有通用来源夹具设备验收。API 33 和 36 目前覆盖离线解析、映射和规则加载。API 34 的 `general_dynamic_verified=true`，全量车载 `dynamic_verified=false`。
 
 API 34 使用官方 Android 14 ext9 x86_64 r05 车载镜像。四类通用来源、查询未消费负控、错误键、拒绝和不同值对照全部通过。结果在 `output/vehicle-api34-20261103/general-001/verification.json`。API 36 本轮查询的 Google 官方车载镜像索引无对应 x86_64 条目。宿主机已有的 API 36.1 镜像属于手机变体。来源见 [Android 官方车载模拟器说明](https://developer.android.com/training/cars/testing/emulator)。
 
 Android 16 的 AAOS 25Q2 官方说明新增了面向第三方的车辆属性访问能力，说明版本扩展确有价值；
-这些能力不能从现有 15 版规则推导出常量或权限。当前不新增未经证实的 ID。
+16 版的常量与权限取自 `android-16.0.0_r1` 源码（`aidl_property/` 与 `CarSvcProps-Released.json`），
+不新增未经证实的 ID。
 
 ## 代表性量产车型/车系
 
