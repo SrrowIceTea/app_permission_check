@@ -12,6 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from vehicle.bench import claim_scope as scope
 from vehicle.bench.samples import requirements
 from vehicle.pipeline.contracts import ROOT
 
@@ -39,10 +40,14 @@ def catalog_rows(sources):
 
 
 def verdict_rows(verdicts):
+    # 周四口径修复（只此一处映射）：旧列「运行求值器数」把数量当成本命题的观测证据，
+    # 与计分里的 observation_state / unobserved_ratio 不是同一口径（见 C4 反例）。
+    # 改由 claim_scope.report_cell 投影三态；旧产物没有该字段时显式显示「无观测状态」，
+    # 不推算、不默认 0。函数签名与 8 列结构不变。
     rows = []
     for row in verdicts.get('items', []):
         rows.append((row.get('item'), row.get('case'), row.get('adjudicated', DASH),
-                     row.get('system_stance', DASH), len(row.get('evaluators_that_ran') or []),
+                     row.get('system_stance', DASH), scope.report_cell(row),
                      row.get('business_evidence_total', DASH), row.get('rule_hits', DASH),
                      row.get('status')))
     return rows
@@ -59,10 +64,13 @@ def build(verdicts, measure, sources):
     lines += ['', f'{len(sources)} 个真实样本中 {blocked} 个依赖外部条件；'
                   '只有自足的样本能在此环境产生可观测行为。', '',
               '## 2. 逐案可观测性与断言', '',
-              '| 项 | case | 裁决 | 系统断言 | 运行求值器数 | 业务证据 | 规则命中 | 判定 |',
+              '| 项 | case | 裁决 | 系统断言 | 本命题观测 | 业务证据 | 规则命中 | 判定 |',
               '|---|---|---|---|---|---|---|---|']
     lines += ['| {} | {} | {} | {} | {} | {} | {} | {} |'.format(*row)
               for row in verdict_rows(verdicts)]
+    lines += ['', '「本命题观测」取自 `observation_state`：已观测（本命题）/ 已观测·本轮无命中 / '
+              '不可判（未运行/缺统计）。不可判不是阴性结论，不等于未发生或无风险；'
+              '旧产物无该字段时显示「无观测状态」，不按数量推算。']
     counts = '；'.join(f'{key}={value}' for key, value in (verdicts.get('counts') or {}).items() if value)
     lines += ['', f'计分 {verdicts.get("scored", 0)} 项：{counts or DASH}', '',
               f'- wrong_assertion_ratio = {verdicts.get("wrong_assertion_ratio")}',
@@ -94,14 +102,23 @@ def limitations(verdicts):
     """Derive the caveats from what the data actually shows, not from prose."""
     items = verdicts.get('items') or []
     unscored = [row['item'] for row in items if row.get('status') == 'unscored']
-    unobserved = [row['item'] for row in items
-                  if row.get('status') == 'correct_by_absence_of_observation']
+    unobserved = [row['item'] for row in items if row.get('status') in
+                  ('correct_by_absence_of_observation', 'missed_without_observation')]
+    # 评审 F2：旧文案按 status 断言「没有运行任何求值器」，对 not_applicable
+    # 的行会编造原因（正是 C3 反例点名的旧缺陷）。改由 observation_state 同源生成。
+    not_applicable = [row['item'] for row in items
+                      if row.get('observation_state') == 'not_applicable']
     out = []
     if unscored:
         out.append('缺口：' + '、'.join(unscored) + ' 无采集产物，无法计分。')
+    if not_applicable:
+        out.append('本轮不可判定：' + '、'.join(not_applicable)
+                   + ' 缺少本命题所需求值器的观测或统计结构，逐条原因见「本命题观测」列；'
+                     '不可判不是阴性结论，不等于未发生、无风险或合规。')
     if unobserved:
-        out.append('依据不足但结论正确：' + '、'.join(unobserved)
-                   + ' 的「absent」来自没有运行任何求值器，不是观测结论。')
+        out.append('依据不足但结论碰巧正确：' + '、'.join(unobserved)
+                   + ' 没有本命题的观测证据，不得计入有效性；'
+                     '不据此推断「求值器没运行」或「应用没有行为」。')
     out += ['方法增益：没有对照组实验，配对指标只是单样本数字。',
             '跨模型标签不等于专家验证：模型身份为组织者指定的路由别名，未验证上游权重是否共享。',
             'mg4 类样本的代理逐流归因在模拟器上不可得（SLIRP 不保留源端口），只能依赖替代关系。',

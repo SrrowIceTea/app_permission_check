@@ -74,3 +74,84 @@ subagent 标签使用 origin=subagent_review、subagent_signoff=signed、human_s
 MG4 没有敏感读取，OwnTracks 专用路径仍 workflow_only；denied 空流不能伪造双事件负配对。
 业务签核输出 not_measured 和零新增正式参考数；前端单独发布本轮摘要，不能与当前任务混用。
 普通精度/召回仍由原有规则与参考范围决定，不通过派生字段或评审一致性扩大求值口径。
+
+## B011 命题↔求值器契约与三态观测门控（2026-11-17，一周任务周二～周四）
+
+复现了四种判定口径缺陷并各留一个合成反例（`vehicle/bench/claim_scope.py::counterexamples`，
+产物 `output/week-mao-20261110/counterexamples.json`）：
+
+| 口径 | 旧缺陷 | 位置 |
+| --- | --- | --- |
+| C1 观测充分 | `observed = bool(evaluators_ran)`，任意求值器跑过就算本题观测充分 | `claim_verdicts.py:42`（旧） |
+| C2 命题与证据对应 | `business_evidence_total` 是整轮合计，未按命题裁剪 | `claim_verdicts.py::report`（旧） |
+| C3 未运行/不可判 | `read_detection` 用 `or 0` / `or []` 补齐，统计结构缺失 ≡ 跑了且 0 命中 | `claim_verdicts.py::read_detection`（旧） |
+| C4 计分/投影一致 | 报告「运行求值器数」被当作本命题观测证据 | `tools/real_sample_result.py`（旧） |
+
+修复：`claim_scope.py` 是「case → 所需求值器」与三态判定的唯一权威来源，映射出处为
+`aaos35-suite.json` 的 kind、`suite.py::_replay` 分支与 `detection_summary.EXTRACTORS`，
+单测强制校验出处；三态语义直接复用 `core/evidence/decidability.py`，不复制不改。
+`claim_verdicts` 只补投影字段（`observation_state` / `required_evaluators` /
+`matched_evaluators` / `business_evidence_scoped` / `observation_reason` 及顶层状态计数），
+**七个 STANCES、counts、三个比率一律不动**；未登记契约的 case 沿用旧口径并显式标
+`legacy_unscoped`，不得据以声称观测充分。结构存在但 `business_evidence={}` 记 `0`，
+结构缺失记 `None`，不混（FIELD_CONTRACT.md §6 约定）。
+
+冻结重放（`output/week-mao-20261110/compat-matrix.json`，输入
+`output/claim-verdicts-20261110/verdicts.json` + `output/real-detection-20261110/`）：
+6 项状态、counts、三个比率**全部不变**，新增 `not_applicable=1`（W03 mg4-post，
+所需 `mg4_native_http` 未运行）；采集副本交叉核对 5/6 一致，W05 无 audit 产物如实记为
+结构性不可计分。**修复是口径加固，不是改冻结批次的结果**。
+
+报告投影只改一处：表格第 5 列「运行求值器数」→「本命题观测」（`report_cell` 三态），
+表头与一段口径提示同步，8 列结构与所有函数签名不变；旧产物无该字段时显示
+「无观测状态」，不按数量推算。其余三项（业务证据列仍是整轮值、`limitations()` 未覆盖
+`missed_without_observation` / `not_applicable`、unscored 行无状态标签）登记为
+`output/week-mao-20261110/projection-candidates.json` 的候选，按「只修一处」约束未改。
+
+不迁移证据库、不重编号 `finding_uid`、不改 `vehicle/webapp/presentation.py`；
+新测试 `test_claim_scope.py`（14 项）已并入 `tools/run_regressions.py` 的 `vehicle-method` 组，
+方法层 177→191 项全绿，`test_inventory_guard.py` PASS（unregistered=0）。
+
+## B012 独立 subagent 复核与评审修复轮（2026-11-10 晚）
+
+按既有独立双标惯例冻结 A/B/C 三个**内容一致**的评审包
+（`output/week-mao-review-20261110/`，33 个材料文件、`evidence_sha256=6c54e5b1…`），
+三个隔离上下文的 subagent 各出一份带 `文件:行号` 依据的 `review.json`。
+Q01–Q10：6 题三票一致 `present`，Q03/Q09 为多数 `present`（A 因证据层级与措辞口径判
+`insufficient`），Q04/Q06 三票一致 `insufficient`——包内缺独立 diff 与证据库/前端快照，
+**如实保留、不追溯改判**；组织者另补 mtime 证据，但不回灌评审包。
+
+确认并修复的 findings：
+
+- **F1（3/3，medium）**：`report()` 对未登记契约 case 过去落 `stance()` 兼容路径，仍以
+  `bool(evaluators_ran)` 决定七态，等于把「任意求值器运行」当成本题观测充分。现生产路径
+  一律传三态，`UNSCOPED` ⇒ `observed=False`，新增 `status_basis` 标注，并补 F1 反例单测。
+  `stance()` 兼容路径仅为历史纯函数测试保留，docstring 明示禁止生产使用。
+- **F2（2/3）**：`limitations()` 对 `not_applicable` 的 W03 仍输出「absent 来自没有运行任何
+  求值器」（C3 反例点名的编造原因）。改由 `observation_state` 同源生成，并把
+  `missed_without_observation` 纳入；`projection-candidates.json` P3 描述同步订正。
+  周四「只修一处」的约束在评审轮被显式放宽为「修确认问题」，不再主张全程只修一处。
+- **F3（2/3）**：`scope_selfcheck.crosscheck()` 用 `None == None` 把「双方都无采集副本」
+  写成「一致」。note 改以 `agrees` 为准，区分一致 / 无采集副本 / 不一致三种文案。
+- **F4（3/3）**：`observation_reason` 重复「不可判定（不是阴性结论）」前缀。去掉自有前缀，
+  保留内核 `statement` 与逐条 `missing_reasons`。
+- **F5（1/3，部分成立）**：branch/solo 两份 `verification.json` 逐字节相同，单凭产物不能
+  佐证独立复跑。已补两次运行的目录/日志 mtime（22:37:07 / 22:39:22，日志均含守卫堆栈），
+  并收紧 `acceptance.json` 与交付文档措辞：verification 不含时间戳，逐字节相同是预期，
+  独立性由时间戳佐证而非文件差异。
+
+**组织者层级判定 F6**：三个 slot 自报 `model_id` 同为 `hy4free`，`model_family` 只是同一
+家族的不同写法。本轮是**同模型 subagent 复核（`subagent_signed`），不是
+`cross_model_signed`，不能作金标准**；引用必须带 `no_human_in_the_loop` /
+`model_identity_is_self_declared` / `families_can_share_upstream_weights` 三条限定。
+
+冻结重放结论不变：`status_changes=[]`、`counts_changed=false`、`ratios_changed=false`
+（修复只作用于未登记 case 与文案，冻结 6 个 case 全部已登记）。评审修复后回归：
+`test_claim_scope` 14→16 项、结论级 28 项、方法层 191→193 项全绿；
+`test_inventory_guard.py` PASS；根回归 19/19、移动侧 63/63、分支 24/24（隔离环境守卫后），
+固定目录 `output/week-mao-20261110/verify-{root,mobile,branch}/`。
+
+独立复验（`output/week-mao-review-20261110/FIX-VERIFICATION.md`）结论：F1/F2/F3/F4/F6
+`fixed`、F5 `partially_fixed`、无 `not_fixed`、无 `regression`；并补强 F5 证据——两次
+`mobile_lab.log` 的 sha256 不同（随机临时名、耗时 4.054s vs 3.697s、各含 4 处守卫堆栈），
+直接佐证两次独立进程。复验者同为 `hy4free` 同模型 subagent、无人工介入，不作金标准。
