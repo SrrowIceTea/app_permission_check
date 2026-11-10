@@ -5,7 +5,7 @@ import re
 import zipfile
 from pathlib import Path
 from core.static import static_rules
-from mobile.tools.static_scan_thirdparty import supplement
+from mobile.tools.static_supplement import INTERNET_PERMISSION, supplement
 from mobile.workbench import health, local_policy
 from mobile.workbench.store import ROOT, Store, read_json, write_json
 from mobile.workbench.static_adapter import _findings
@@ -36,7 +36,9 @@ def create(apk: Path, source: Path, storage: Path):
     facts = {key: set(value) if isinstance(value, list) else value for key, value in original_facts.items()
              if key not in ('counts', 'per_dex_lines')}
     rules = ROOT / 'mobile/rules/rules_mobile.db'
-    extra = supplement(facts, rules, '36', static_rules)
+    extra = supplement(facts, rules, '36', static_rules,
+                       has_internet=INTERNET_PERMISSION in (
+                           (raw.get('apk') or {}).get('permissions') or []))
     loaded = static_rules.load_rules(rules, '36')
     enabled = {r['rule_id']: r for r in loaded['rules'] if r['enabled']}
     evaluated = {rid for rid, rule in enabled.items() if rule['rule_type'] == 'over_permission'}
@@ -53,6 +55,8 @@ def create(apk: Path, source: Path, storage: Path):
         'supplement_findings': extra_findings, 'core_rules_visited': raw.get('rules_evaluated'),
         'rules_loaded': metadata['count'], 'rules_evaluated': len(evaluated),
         'supplement_rules_considered': len(extra['rules_considered']),
+        'supplement_downgraded': len(extra['downgraded_findings']),
+        'supplement_internet_declared': extra['permissions']['internet_declared'],
         'coverage': {'supplement': extra['rules_considered'],
                      'unhandled_rule_types': raw.get('unhandled_rule_types', [])},
         'gaps': raw.get('dex_gaps', []) + raw.get('apk_gaps', []),

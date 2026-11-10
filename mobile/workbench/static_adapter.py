@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from core.static import analysis, static_rules, toolchain
-from mobile.tools.static_scan_thirdparty import supplement
+from mobile.tools.static_supplement import INTERNET_PERMISSION, supplement
 from mobile.workbench.health import rules_info, tool_selection
 from mobile.workbench import local_policy
 from mobile.workbench.store import now, read_json, write_json
@@ -73,7 +73,9 @@ def work(runtime, task_id: str, job, out: Path) -> dict:
         facts_raw = read_json(out / "dexfacts.json", {})
         facts = {key: set(value) if isinstance(value, list) else value
                  for key, value in facts_raw.items() if key not in ("counts", "per_dex_lines")}
-        supp = supplement(facts, runtime.rules, runtime.version, static_rules)
+        supp = supplement(facts, runtime.rules, runtime.version, static_rules,
+                          has_internet=INTERNET_PERMISSION in (
+                              (raw.get("apk") or {}).get("permissions") or []))
         write_json(out / "static_mobile_supplement.json", supp)
         loaded = static_rules.load_rules(runtime.rules, runtime.version)
         if loaded["platform"] != "mobile":
@@ -91,6 +93,8 @@ def work(runtime, task_id: str, job, out: Path) -> dict:
                    "apk": apk, "rules": task["rules"], "rules_evaluated": len(evaluated),
                    "rules_loaded": len(rules), "core_rules_visited": raw.get("rules_evaluated"),
                    "supplement_rules_considered": len(supp.get("rules_considered", [])),
+                   "supplement_downgraded": len(supp.get("downgraded_findings", [])),
+                   "supplement_internet_declared": supp.get("permissions", {}).get("internet_declared"),
                    "coverage": {"supplement": supp.get("rules_considered", []),
                                 "unhandled_rule_types": raw.get("unhandled_rule_types", [])},
                    "gaps": gaps, "decompile": None,

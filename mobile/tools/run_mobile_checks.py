@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 MOBILE = ROOT / "mobile"
 PY = sys.executable
 sys.path.insert(0, str(ROOT))
+from core.env_guard import MOBILE_DEPS, enforce_dependencies
 from core.regression_output import create_output, publish_latest
 
 
@@ -40,11 +41,21 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, help="本轮独占的新输出目录")
     args = parser.parse_args()
+    # 缺库时以退出码 3 结束；报告/AI/流量各组的 ModuleNotFoundError 不应被当成代码失败。
+    enforce_dependencies("mobile/tools/run_mobile_checks.py", MOBILE_DEPS)
     out = create_output(ROOT, "mobile-regression", args.out)
     checks: list[dict] = []
 
     unit = [
         ("rules", MOBILE / "rules", [PY, "-m", "unittest", "test_rules"]),
+        # 补充扫描的两个静默失真点（2026-11-09）：无 INTERNET 仍出 data_egress 候选；
+        # 定位/通讯录/媒体的多对多映射只按 data_type_key 分组导致 apis_in_library=0。
+        ("static_supplement", MOBILE / "tools",
+         [PY, "-m", "unittest", "test_static_supplement"]),
+        # 可达性过滤的四种情形（2026-11-09）：App 直接调用 / 仅库内部 / 路径经库 /
+        # 断链未知。判错的方向是「把断链当不可达」——会静默地把真读取藏起来。
+        ("reachability", MOBILE / "tools",
+         [PY, "-m", "unittest", "test_reachability", "test_reachability_wrapper"]),
         ("hooks_dispatch", MOBILE / "hooks", ["node", "test_dispatch.mjs"]),
         # 两侧同源钩子 JS 的漂移守卫（跨 mobile ↔ vehicle，纯离线；RESEARCH_OUTLOOK §5.4）。
         ("hooks_parity", MOBILE, [PY, str(MOBILE / "tools" / "test_hooks_parity.py")]),
