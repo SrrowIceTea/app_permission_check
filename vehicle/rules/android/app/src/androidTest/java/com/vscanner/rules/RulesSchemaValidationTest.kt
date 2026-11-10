@@ -41,11 +41,11 @@ class RulesSchemaValidationTest {
     @Test
     fun opensFromAssetAndReturnsBaselineCounts() = runBlocking {
         val counts = db.rules().counts("14")
-        assertEquals(6, counts.permissions)
+        assertEquals(10, counts.permissions)
         assertEquals(8, counts.vhalProperties)
         assertEquals(3, counts.dangerousApis)
         assertEquals(29, counts.riskRules)
-        assertEquals(46, counts.total)
+        assertEquals(50, counts.total)
         // All 29 enabled per version: 6 over_permission + 13 sensitive_read (8 VHAL +
         // 5 VSC-GR) + 10 data_egress (8 VHAL + 2 VSC-GE). Asserted so an accidental
         // enable or disable is caught.
@@ -65,7 +65,7 @@ class RulesSchemaValidationTest {
     @Test
     fun carriesSourceVerifiedAndroid13Rows() = runBlocking {
         val counts = db.rules().counts("13")
-        assertEquals(6, counts.permissions)
+        assertEquals(10, counts.permissions)
         assertEquals(8, counts.vhalProperties)
         assertEquals(3, counts.dangerousApis)
         assertEquals(29, counts.riskRules)
@@ -75,7 +75,7 @@ class RulesSchemaValidationTest {
     @Test
     fun carriesSourceVerifiedAndroid16Rows() = runBlocking {
         val counts = db.rules().counts("16")
-        assertEquals(6, counts.permissions)
+        assertEquals(10, counts.permissions)
         assertEquals(8, counts.vhalProperties)
         assertEquals(3, counts.dangerousApis)
         assertEquals(29, counts.riskRules)

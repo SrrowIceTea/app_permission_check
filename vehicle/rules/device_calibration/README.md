@@ -35,7 +35,8 @@
 电脑执行，设备需在线。`-f` 是关键，`-d` 只会列出 dangerous 组。
 
 ```bash
-export PATH="D:/Anroid/SDK/platform-tools:$PATH"; export MSYS_NO_PATHCONV=1
+# 本机 SDK 在 %LOCALAPPDATA%\Android\Sdk（原开发机是 D:/Anroid/SDK）
+export PATH="$(cygpath -u "$LOCALAPPDATA")/Android/Sdk/platform-tools:$PATH"; export MSYS_NO_PATHCONV=1
 cd vehicle/rules/device_calibration
 adb shell pm list permissions -f -g > permissions-full.txt
 adb pull /system/framework/android.car.jar ./android.car.jar
@@ -45,7 +46,7 @@ adb pull /system/framework/android.car.jar ./android.car.jar
 
 ```bash
 python -c "import zipfile;open('classes.dex','wb').write(zipfile.ZipFile('android.car.jar').read('classes.dex'))"
-"D:/Anroid/SDK/build-tools/36.0.0/dexdump.exe" -d classes.dex > dexdump.txt
+"$(cygpath -m "$LOCALAPPDATA")/Android/Sdk/build-tools/36.0.0/dexdump.exe" -d classes.dex > dexdump.txt
 # 再从 dexdump.txt 里解析：
 #   类 'Landroid/car/VehiclePropertyIds;' 的静态字段 value : <int>
 #   类 'Landroid/car/hardware/property/CarPropertyManager;' 的方法 name/type 对
@@ -89,7 +90,7 @@ python python/build_multiversion_rules.py \
   --out rules_library/rules.db --summary rules_library/rules.db.summary.json
 ```
 
-产物 `rules_library/rules.db`：'14' 46 条、'15' 190 条，每版本启用规则 29/29
+产物 `rules_library/rules.db`：'14' 50 条、'15' 190 条，每版本启用规则 29/29
 （6 over_permission + 13 sensitive_read + 10 data_egress）。通用隐私 `VSC-G*` 共 7 条，
 包含 O6 新增的 AAID 读取规则。
 

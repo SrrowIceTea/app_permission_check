@@ -43,7 +43,7 @@ class RulesVerifierStateTest {
         val report = verify(RulesDbSource.Bytes(assetBytes()), "state-real.db")
         assertEquals(DbState.OK, report.state)
         assertTrue(report.sha256Match)
-        assertEquals(46, report.counts.getValue("14").total)
+        assertEquals(50, report.counts.getValue("14").total)
     }
 
     @Test

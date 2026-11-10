@@ -9,6 +9,10 @@
     "interfaces": {
       "repository": "hardware/interfaces",
       "commit": "ad2871f7d266307f583f900b022ea45dbafba54f"
+    },
+    "framework": {
+      "repository": "platform/frameworks/base",
+      "commit": "0d3ff311e6e80dee7fe88a2a2cfa272ce231c3c6"
     }
   },
   "files": [
@@ -91,6 +95,16 @@
       "transport_url": "https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/packages/services/Car",
       "sha256": "adeb63de6776f3d8c7c5d147f2f09a485ba71ae06acd447cbd1dbd46b7de38ce",
       "git_blob_sha1": "49a6d54c4f2f0fbfe87b310b713bebcc5eeb6e35"
+    },
+    {
+      "id": "framework_manifest",
+      "repository_key": "framework",
+      "path": "core/res/AndroidManifest.xml",
+      "commit": "0d3ff311e6e80dee7fe88a2a2cfa272ce231c3c6",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/0d3ff311e6e80dee7fe88a2a2cfa272ce231c3c6/core/res/AndroidManifest.xml",
+      "transport_url": "https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/frameworks/base",
+      "sha256": "27638066d65594d30e88ba6495fa875a909888e27a386a9c5a3b80d88479f1cf",
+      "git_blob_sha1": "7439b2f0921ff1d40e15125dd765f842831adf13"
     }
   ],
   "purpose": "AOSP release source baseline for the android-13 rule rows; not a device observation.",
@@ -113,13 +127,17 @@
       "interfaces": {
         "tag_object": "f39df1a1ce1f722feec83fea1906503d7fb5da2d",
         "peeled_commit": "ad2871f7d266307f583f900b022ea45dbafba54f"
+      },
+      "framework": {
+        "tag_object": "a4cd7977df1c42b7c215acc47a34227fff06a7a2",
+        "peeled_commit": "0d3ff311e6e80dee7fe88a2a2cfa272ce231c3c6"
       }
     },
     "basis": "The mirror advertises the same release tag name as the official host. The annotated tag peels to the commit recorded in repositories[], every file is then verified by sha256 and git_blob_sha1, and the local clone HEAD must equal that commit."
   },
   "artifacts": {
-    "seed_facts.jsonl": "6e17fe15e9dac3b635bfad42b869babdce0841197109eccdcf00166b1150c5ac",
-    "seed_evidence.jsonl": "7baa92bec0f7998ff6f452e8cebb3c2e3151c8061ff2b99224a759e1c0c7094b",
+    "seed_facts.jsonl": "688698e59a727700dfe6f8e3c37d749b9d60b67748b3a511f3b916846f49858f",
+    "seed_evidence.jsonl": "527b09b3ee918aac590ba7b7c3ba53a6d9ee9bc6301ce847fd36aa6dc897648d",
     "POLICY.md": "70bdbe25f67f81a0cb45c232fd10d11a9ddca13348a77db64764b076166b307c"
   }
 }

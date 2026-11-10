@@ -3,9 +3,9 @@
 # V-Scanner 车载规则库（vehicle/rules，原 Phase 1）
 
 当前内容：四表 SQL、Room Entity、只查询 DAO、源码解析、离线校准和合成演示。
-android-13 部分是从 AOSP `android-13.0.0_r1`（清华 TUNA 镜像）抽取的 39 条（22 规则 / 6 权限 / 8 属性 / 3 API），出处见 [sources.lock.json](baseline_android13/sources.lock.json)。
-android-14 部分是从 AOSP `android-14.0.0_r1` 抽取的 39 条（22 规则覆盖全部 8 个 VHAL 属性，P 按权限去重），见 [种子库说明](baseline_android14/README.md)。
-android-16 部分是从 AOSP `android-16.0.0_r1`（清华 TUNA 镜像，`aidl_property/` 路径）抽取的 39 条，出处见 [sources.lock.json](baseline_android16/sources.lock.json)。
+android-13 部分是从 AOSP `android-13.0.0_r1`（清华 TUNA 镜像）抽取的 43 条（22 规则 / 10 权限 / 8 属性 / 3 API），出处见 [sources.lock.json](baseline_android13/sources.lock.json)。
+android-14 部分是从 AOSP `android-14.0.0_r1` 抽取的 43 条（22 规则覆盖全部 8 个 VHAL 属性，P 按权限去重），见 [种子库说明](baseline_android14/README.md)。
+android-16 部分是从 AOSP `android-16.0.0_r1`（清华 TUNA 镜像，`aidl_property/` 路径）抽取的 43 条，出处见 [sources.lock.json](baseline_android16/sources.lock.json)。
 android-15 部分是**设备实测**的 190 条，见 [设备校准说明](device_calibration/README.md)。
 `android/` 已是可编译的 Gradle 工程，四版本规则库已在真实 AAOS 设备上验证加载成功（见下）。
 14/15 每版本启用 29 条规则：over_permission 6 条 + sensitive_read 13 条（8 VHAL + 5 `VSC-GR-*`）
@@ -17,11 +17,11 @@ android-15 部分是**设备实测**的 190 条，见 [设备校准说明](devic
 ```text
 vehicle/rules/
   schema.sql                    四表契约
-  baseline_android13/           android-13 源码抽取基线（39 条，TUNA 镜像，已锁定）
-  baseline_android14/           android-14 源码抽取基线（39 条，已锁定）
-  baseline_android16/           android-16 源码抽取基线（39 条，TUNA 镜像，已锁定）
+  baseline_android13/           android-13 源码抽取基线（43 条，TUNA 镜像，已锁定）
+  baseline_android14/           android-14 源码抽取基线（43 条，已锁定）
+  baseline_android16/           android-16 源码抽取基线（43 条，TUNA 镜像，已锁定）
   device_calibration/           android-15 设备实测证据（146 车载权限 + 4 通用权限 / 254 属性 / 96 签名）
-  rules_library/rules.db        四版本规则库产物（'13' 46 条 + '14' 46 条 + '15' 190 条 + '16' 46 条）
+  rules_library/rules.db        四版本规则库产物（'13' 50 条 + '14' 50 条 + '15' 190 条 + '16' 50 条）
   android/                      可编译的 Gradle 工程
     settings.gradle.kts         仓库源：阿里云优先
     gradle/libs.versions.toml   版本目录
@@ -174,9 +174,12 @@ Room schema 校验已在真实工程中构建并装机通过，见下节。
 
 ## 在真实设备上构建与验证
 
-已实测环境：SDK `D:\Anroid\SDK`（拼写如此），JDK 21（`JAVA_HOME=D:\Anroid\JDK`），
+**原开发机**已实测环境：SDK `D:\Anroid\SDK`（拼写如此），JDK 21（`JAVA_HOME=D:\Anroid\JDK`）。
+**本机实测（2026-11-10）**：SDK `%LOCALAPPDATA%\Android\Sdk`（`platforms/` 有 `android-36`、`android-37.0`），
+`JAVA_HOME=D:\Android\JDK`。
 Gradle 8.13 / AGP 8.11.1 / Kotlin 2.2.0 / KSP 2.2.0-2.0.2 / Room 2.8.5，
-`compileSdk 36`（唯一带 `android.car.jar` 的已装平台）、`minSdk 23`、`targetSdk 35`。
+`compileSdk 36`（本机已装平台中 `android-36` 与 `android-37.0` 都带 `android.car.jar`；工程固定取 36）、
+`minSdk 23`、`targetSdk 35`。
 
 **本网络下 `dl.google.com` 不可达**，而 AGP、AndroidX、Room 全在 Google Maven 上，
 因此 `settings.gradle.kts` 以阿里云镜像优先，上游仅作兜底；不要改回裸 `google()`。
@@ -192,7 +195,8 @@ python tools/verify_schema_parity.py  # 比对 schema.sql / rules.db / Room 导�
 parity 脚本**覆盖 Room 运行时看不到的东西**：CHECK 约束、索引名、主键顺序。
 Room 只比较列、索引列与外键；这三项恰好是本项目完整性主张的依托，因此不能只依赖它的结论。
 
-设备侧（AAOS 模拟器 `emulator_car64_x86_64`，Android 15 / API 35 / userdebug）：
+设备侧（AAOS 模拟器 `emulator_car64_x86_64`，Android 15 / API 35 / userdebug；该镜像来自官网单独下载，
+本机放在仓库 `output/vehicle-device-setup/image/x86_64/`，**不在** SDK `system-images/`）：
 
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk

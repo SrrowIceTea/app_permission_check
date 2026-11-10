@@ -9,6 +9,10 @@
     "interfaces": {
       "repository": "platform/hardware/interfaces",
       "commit": "40e9f1537e308ed49e3b561ce333e3f2bb64f31e"
+    },
+    "framework": {
+      "repository": "platform/frameworks/base",
+      "commit": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368"
     }
   },
   "files": [
@@ -91,13 +95,23 @@
       "transport_url": "https://api.github.com/repos/LineageOS/android_packages_services_Car/contents/service/src/com/android/car/hal/PropertyHalServiceIds.java?ref=f9a252f4a3b621daabd330531fce555300a1d4c0",
       "sha256": "bebd719c6c975f2695dc2afa3c54811fe9e9bce60fb2b01b113358fa49f480ac",
       "git_blob_sha1": "fd0b90271649e6d2abc59c7b9305a9575f83d5ee"
+    },
+    {
+      "id": "framework_manifest",
+      "repository_key": "framework",
+      "path": "core/res/AndroidManifest.xml",
+      "commit": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/res/AndroidManifest.xml",
+      "transport_url": "https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/frameworks/base",
+      "sha256": "b1ea5717df349624d78d28809ed73545b06d7a604ada54a6b1300fb9ab4c358e",
+      "git_blob_sha1": "2f9f6ae3f3c41fe48c1953850d637760fa917d32"
     }
   ],
   "purpose": "Reference baseline only. Device Android version is not established.",
   "transport_note": "Mirrors carry fixed AOSP commits; mirror branch names are never used as a baseline.",
   "artifacts": {
-    "seed_facts.jsonl": "79e70d641ba8f40afa6604e2b02d09ac2b927530e0ba934e50ee2ae628251d17",
-    "seed_evidence.jsonl": "525207c7d2c634d7a9eb18612693c4e359a1ee60bebb1e8eb7ed353a1da06977",
+    "seed_facts.jsonl": "2da4ac9ecae958545ddcf8e3aad6c578e749edadaee4e9b6598c78e4db0b66a9",
+    "seed_evidence.jsonl": "145cb7700acbfac3bd8f9b7f70b4a05bb383b9b4b71a9b419aa6f1f91e8c29a1",
     "POLICY.md": "a22525819b9134d20a0e22cf40bd6f699f8d20c554f7c4fe5fd8e9a85bc5b51d"
   }
 }

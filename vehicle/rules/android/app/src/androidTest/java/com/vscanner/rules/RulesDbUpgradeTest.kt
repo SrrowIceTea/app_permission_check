@@ -86,7 +86,7 @@ class RulesDbUpgradeTest {
         // The old library is not merely present, it still loads and returns its rows.
         val report = RulesVerifier(context).verify(RulesDbSource.Asset(), dbName)
         assertEquals(DbState.OK, report.state)
-        assertEquals(46, report.counts.getValue("14").total)
+        assertEquals(50, report.counts.getValue("14").total)
         assertEquals(first.effectiveSha256, report.install.effectiveSha256)
     }
 

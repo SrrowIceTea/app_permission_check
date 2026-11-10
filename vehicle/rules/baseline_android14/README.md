@@ -1,6 +1,6 @@
 # Android 14 参考种子库
 
-本包从 AOSP android-14.0.0_r1 抽取 17 条平台事实，配合 24 条禁用的项目策略草案（8 属性 × 3 谓词，P 按权限去重后 22 条——见 DECISIONS D011），共 41 条种子记录。
+本包从 AOSP android-14.0.0_r1 抽取 21 条平台事实，配合 24 条禁用的项目策略草案（8 属性 × 3 谓词，P 按权限去重后 22 条——见 DECISIONS D011），共 45 条种子记录。
 源码基线与设备版本是两个概念：用户设备版本尚未建立对应关系，所有新增平台事实均【需实测校准】。
 rules.db 可用于离线查看和后续 Room 预置验证，不能据此直接输出设备违规结论。
 
@@ -8,10 +8,16 @@ rules.db 可用于离线查看和后续 Room 预置验证，不能据此直接�
 
 | 表 | 条数 | 范围 |
 | --- | ---: | --- |
-| permissions | 6 | VIN、车速、能源、里程、发动机详情、动力系统 |
+| permissions | 10 | VIN、车速、能源、里程、发动机详情、动力系统，外加 4 条通用隐私权限（定位粗/细、录音、联系人） |
 | vhal_properties | 8 | VIN、车速、选定挡位、当前挡位、里程、RPM、燃油、电池电量 |
 | dangerous_apis | 3 | CPM 两个 getProperty 重载与 getFloatProperty |
 | risk_rules | 22 | 全部 8 个属性：over_permission 6 条（按权限去重）+ sensitive_read 8 条 + data_egress 8 条 |
+
+那 4 条通用隐私权限（`ACCESS_FINE_LOCATION`、`ACCESS_COARSE_LOCATION`、`RECORD_AUDIO`、
+`READ_CONTACTS`）来自 `frameworks/base/core/res/AndroidManifest.xml`（commit
+`299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368`），**不是** android-15 的设备观测；
+它们的 `definition_status` 是 `source_verified`，`device_calibration_json` 为空。
+设备侧的 protectionLevel 数值未在 14 上标定，回填脚本见 `python/general_permissions.py`。
 
 CAR_SPEED/CAR_ENERGY 的设备存在性记录来自用户已提供的 Phase 0 输出，未重复采集。
 它们的源码 protectionLevel 与设备观测分开存储：设备观测不证明源码版本或保护级别相同。
@@ -22,12 +28,15 @@ CAR_SPEED/CAR_ENERGY 的设备存在性记录来自用户已提供的 Phase 0 �
 - Car commit：`f9a252f4a3b621daabd330531fce555300a1d4c0`。
 - hardware/interfaces commit：`40e9f1537e308ed49e3b561ce333e3f2bb64f31e`。
 - `sources.lock.json` 保存固定 commit、AOSP URL、传输 URL、文件 SHA-256 和 git blob ID。
-- `seed_facts.jsonl` 是抽取结果；`seed_evidence.jsonl` 保存 50 处原始源码摘录及原始行号。
+- `seed_facts.jsonl` 是抽取结果；`seed_evidence.jsonl` 保存 54 处原始源码摘录及原始行号。
 - 抽取器先校验文件哈希，再核对 AIDL/HIDL/Java 属性 ID；不使用运行时反射结果冒充源码事实。
 - 两个镜像仅用作传输：Car 来自 LineageOS 仓库中对应的原始 AOSP commit，interfaces 来自 aosp-mirror-neo。
   没有使用 LineageOS 分支上的修改，也没有把镜像 main 当成 Android 版本。
 - 固定 tag 和来源可以从 [AOSP Car](https://android.googlesource.com/platform/packages/services/Car/+/refs/tags/android-14.0.0_r1)
   与 [AOSP interfaces](https://android.googlesource.com/platform/hardware/interfaces/+/refs/tags/android-14.0.0_r1) 追溯。
+- 4 条通用隐私权限来自 frameworks/base commit `299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368`
+  （`core/res/AndroidManifest.xml`，经 TUNA 镜像传输），可对照
+  [AOSP frameworks/base](https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/res/AndroidManifest.xml) 追溯。
 
 ## 两个源码发现
 
@@ -51,7 +60,7 @@ python -B python/build_seed.py --verify baseline_android14/rules.db
 "C:/Users/毛宇淇/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe" -B python/build_seed.py --verify baseline_android14/rules.db
 ```
 
-预期：counts 为 6/8/3/22，total_records=41，enabled_rules=0，device_verified=false。
+预期：counts 为 10/8/3/22，total_records=45，enabled_rules=0，device_verified=false。
 重复验证不会修改数据库。不要求连接设备。
 
 在电脑离线重建到新路径：

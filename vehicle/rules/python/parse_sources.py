@@ -21,8 +21,14 @@ def source_ref(path, revision, symbol, fields, line=None):
     }])
 
 
-def parse_permissions(path, android_version, revision):
-    """Return permission rows; textual protection flags are not guessed."""
+def parse_permissions(path, android_version, revision, names=None):
+    """Return permission rows; textual protection flags are not guessed.
+
+    `names=None` keeps the original behaviour (every `android.car.*` declaration).
+    Passing an explicit name list is how the generic Android privacy permissions in
+    `frameworks/base/core/res/AndroidManifest.xml` are read without widening the
+    Car baseline to every platform permission.
+    """
     ns = "{http://schemas.android.com/apk/res/android}"
     root = ET.parse(path).getroot()
     if root.tag != "manifest":
@@ -30,7 +36,10 @@ def parse_permissions(path, android_version, revision):
     rows = []
     for node in root.findall("permission"):
         name = node.get(ns + "name", "")
-        if not name.startswith("android.car."):
+        if names is None:
+            if not name.startswith("android.car."):
+                continue
+        elif name not in names:
             continue
         raw = node.get(ns + "protectionLevel")
         numeric = None

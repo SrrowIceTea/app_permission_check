@@ -9,11 +9,11 @@
 | 路径 | 作用 |
 | --- | --- |
 | `schema.sql` | 四表契约（permissions / vhal_properties / dangerous_apis / risk_rules），**不要动** |
-| `baseline_android13/` | android-13 源码抽取基线（TUNA 镜像 `android-13.0.0_r1`，39 条，`source_verified`） |
-| `baseline_android14/` | android-14 源码抽取基线（已锁定，39 条，`source_verified`） |
-| `baseline_android16/` | android-16 源码抽取基线（TUNA 镜像 `android-16.0.0_r1`，39 条，`source_verified`） |
+| `baseline_android13/` | android-13 源码抽取基线（TUNA 镜像 `android-13.0.0_r1`，43 条，`source_verified`） |
+| `baseline_android14/` | android-14 源码抽取基线（已锁定，43 条，`source_verified`） |
+| `baseline_android16/` | android-16 源码抽取基线（TUNA 镜像 `android-16.0.0_r1`，43 条，`source_verified`） |
 | `device_calibration/` | android-15 设备实测证据（146 车载权限 + 4 通用权限 / 254 属性 / 96 签名） |
-| `rules_library/rules.db` | 四版本产物（'13' 46 + '14' 46 + '15' 190 + '16' 46 条；13/16 启用 19，14/15 各 29） |
+| `rules_library/rules.db` | 四版本产物（'13' 50 + '14' 50 + '15' 190 + '16' 50 条；13/16 启用 19，14/15 各 29） |
 | `android/` | Gradle 工程：Room 实体/DAO、RulesVerifier、验证页、设备侧测试 |
 | `python/` | 抽取/校准/构建流水线（全部零第三方依赖） |
 | `archive/research/RELATED_WORK.md` | 研究文档（已归档到 archive/，改算法前先读） |
@@ -21,7 +21,7 @@
 ## 怎么跑
 
 ```bash
-PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
+PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
 # 离线演示（最小路径，零依赖）
 "$PY" python/demo.py --out demo/demo-rules.db
 
@@ -39,7 +39,7 @@ PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
   --egress-window-ms 30000 --egress-versions 14,15 \
   --out rules_library/rules.db --summary rules_library/rules.db.summary.json
 
-# Android 工程（JAVA_HOME 必须是 D:\Anroid\JDK；首次构建联网走阿里云）
+# Android 工程（本机 JAVA_HOME=D:\Android\JDK；原开发机是 D:\Anroid\JDK；首次构建联网走阿里云）
 cd android && ./gradlew :app:assembleDebug
 "$PY" tools/verify_schema_parity.py          # schema.sql ↔ rules.db ↔ Room 1.json
 
@@ -76,7 +76,8 @@ GitHub `aosp-mirror` 组织没有 Car 与 hardware/interfaces 仓库，未使用
 ## 状态（2026-11-09）
 
 已完成四版本规则库（13/14/16 源码、15 设备）、Room 验证与 schema parity。当前资产 SHA256 与 RulesVerifier 同步。
-2026-09-24 启用每版 8 条 data_egress 规则，window_ms=30000、revision=2；见 EGRESS_CALIBRATION.md。
+2026-09-24 启用 data_egress 规则（window_ms=30000、revision=2，当时每版 8 条）；现每版 10 条
+（revision 2 的 8 条 + revision 1 的 2 条），仅 14/15 全启用；见 EGRESS_CALIBRATION.md。
 **android-13/16 未做外发窗口标定，`data_egress` 不启用（13/16 启用 19 条，14/15 各 29 条）**，
 `--egress-versions 14,15` 显式限定标定与启用范围；E1 不跨版本复用。
 2026-11-02 通用隐私规则 `VSC-GR-*`/`VSC-GE-*` 正式登记（每版 6 条），规则 ID 可在 rules.db 查回；

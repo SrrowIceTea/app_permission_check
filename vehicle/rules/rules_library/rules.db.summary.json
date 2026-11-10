@@ -2,13 +2,13 @@
   "status": "multi_version_library",
   "counts": {
     "13": {
-      "permissions": 6,
+      "permissions": 10,
       "vhal_properties": 8,
       "dangerous_apis": 3,
       "risk_rules": 29
     },
     "14": {
-      "permissions": 6,
+      "permissions": 10,
       "vhal_properties": 8,
       "dangerous_apis": 3,
       "risk_rules": 29
@@ -20,7 +20,7 @@
       "risk_rules": 29
     },
     "16": {
-      "permissions": 6,
+      "permissions": 10,
       "vhal_properties": 8,
       "dangerous_apis": 3,
       "risk_rules": 29
@@ -84,6 +84,6 @@
       "15"
     ]
   },
-  "database_sha256": "56a88e5e91333745dde445830f29510dfdeb2fe229872eea7c2a6ebaa9139962",
+  "database_sha256": "ddf57f6f4f05e8b6cbc773bb4a5afd7c0657e402748c9724b2f1bade23026f29",
   "note": "android-15 rows are device observations (definition_status=pending). android-13/14/16 are source extractions. Egress rules stay disabled outside egress_versions because no window calibration exists for those releases."
 }
