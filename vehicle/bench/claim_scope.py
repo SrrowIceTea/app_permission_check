@@ -51,6 +51,16 @@ STATE_LABELS = {
     UNSCOPED: '未登记契约·旧口径',
 }
 
+# B 周 D2：unscored 是「结构性不可计分」，不是一种观测状态；两种原因补救动作不同。
+UNSCORED_REASONS = {
+    'no_audit_output': '未计分·无采集产物',
+    'reviewers_disagreed': '未计分·评审未一致',
+}
+UNSCORED_LIMITATIONS = {
+    'no_audit_output': '无采集产物，无法计分',
+    'reviewers_disagreed': '评审意见未一致，不计分（不是没有行为、不是阴性结论）',
+}
+
 
 def required_evaluators(case):
     """返回本命题所需求值器；未登记返回 ``None``（显式标注，不猜）。"""
@@ -151,9 +161,27 @@ def classify(adjudicated, *, observed, evidence_present):
 
 
 def report_cell(row):
-    """报告表格「本命题观测」一列的唯一映射（周四口径修复，只此一处）。"""
-    state = (row or {}).get('observation_state')
-    return STATE_LABELS.get(state, '—（无观测状态）')
+    """报告「本命题观测」列的唯一映射：观测三态 + unscored 的具体原因。
+
+    旧产物无 observation_state 且非 unscored 时显示「无观测状态」，不按数量推算。
+    """
+    row = row or {}
+    if row.get('status') == 'unscored':
+        return UNSCORED_REASONS.get(row.get('unscored_reason'), '未计分·原因未记录')
+    return STATE_LABELS.get(row.get('observation_state'), '—（无观测状态）')
+
+
+def evidence_cell(row, dash='—'):
+    """报告「业务证据」列的唯一映射：只投影按命题裁剪后的证据数。
+
+    整轮 ``business_evidence_total`` 不得进入本列（C2 反例）；旧产物没有
+    ``business_evidence_scoped`` 时返回 dash，绝不退化成整轮值或默认 0。
+    """
+    row = row or {}
+    if row.get('status') == 'unscored':
+        return dash
+    value = row.get('business_evidence_scoped')
+    return value if type(value) is int and value >= 0 else dash
 
 
 def legacy_stance(adjudicated, business_total, evaluators_ran):
