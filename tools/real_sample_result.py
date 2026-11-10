@@ -46,9 +46,7 @@ def verdict_rows(verdicts):
     for row in verdicts.get('items', []):
         rows.append((row.get('item'), row.get('case'), row.get('adjudicated', DASH),
                      row.get('system_stance', DASH), scope.report_cell(row),
-                     (row['business_evidence_scoped']
-                      if type(row.get('business_evidence_scoped')) is int
-                      and row['business_evidence_scoped'] >= 0 else DASH), row.get('rule_hits', DASH),
+                     scope.evidence_cell(row, DASH), row.get('rule_hits', DASH),
                      row.get('status')))
     return rows
 
@@ -76,14 +74,15 @@ def build(verdicts, measure, sources, location=None):
     lines += ['', f'{len(sources)} 个真实样本中 {blocked} 个依赖外部条件；'
                   '只有自足的样本能在此环境产生可观测行为。', '',
               '## 2. 逐案可观测性与断言', '',
-              '| 项 | case | 裁决 | 系统断言 | 本命题观测 | 本命题业务证据 | 整轮规则命中 | 判定 |',
+              '| 项 | case | 裁决 | 系统断言 | 本命题观测 | 业务证据（本命题） | 整轮规则命中 | 判定 |',
               '|---|---|---|---|---|---|---|---|']
     lines += ['| {} | {} | {} | {} | {} | {} | {} | {} |'.format(*row)
               for row in verdict_rows(verdicts)]
     lines += ['', '「本命题观测」取自 `observation_state`：已观测（本命题）/ 已观测·本轮无命中 / '
               '不可判（未运行/缺统计）。不可判不是阴性结论，不等于未发生或无风险；'
               '旧产物无该字段时显示「无观测状态」，不按数量推算。'
-              '业务证据仅取 business_evidence_scoped；旧产物缺少命题明细时留空，不借整轮合计。']
+              '业务证据仅取 business_evidence_scoped；旧产物缺少命题明细时留空，不借整轮合计。'
+              '不可判行的0仅表示没有本命题证据记录，**不是**健康零命中，须同看观测列。']
     counts = '；'.join(f'{key}={value}' for key, value in (verdicts.get('counts') or {}).items() if value)
     lines += ['', f'计分 {verdicts.get("scored", 0)} 项：{counts or DASH}', '',
               f'- wrong_assertion_ratio = {verdicts.get("wrong_assertion_ratio")}',
@@ -124,8 +123,11 @@ def limitations(verdicts):
                       if row.get('observation_state') == 'not_applicable']
     out = []
     if unscored:
-        out.extend('不可计分：' + str(row.get('item', DASH)) + '，'
-                   + scope.unscored_text(row) + '。' for row in unscored)
+        groups = {}
+        for row in unscored:
+            groups.setdefault(row.get('unscored_reason'), []).append(str(row.get('item', DASH)))
+        out.append('缺口：' + '；'.join('、'.join(names) + ' ' + scope.unscored_text(
+            {'unscored_reason': reason}) for reason, names in groups.items()) + '。')
     if not_applicable:
         out.append('本轮不可判定：' + '、'.join(not_applicable)
                    + ' 缺少本命题所需求值器的观测或统计结构，逐条原因见「本命题观测」列；'
