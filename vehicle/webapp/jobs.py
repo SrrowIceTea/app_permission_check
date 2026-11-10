@@ -127,10 +127,15 @@ class Registry:
         with self.lock:
             return self.jobs.get(identity)
 
+    def snapshot(self, job):
+        """对外快照：在原 job.json 字段上补身份、分档计数与阶段耗时。"""
+        from vehicle.webapp.presentation import decorate
+        return decorate(job.snapshot(), job.out, STAGES)
+
     def rows(self):
         with self.lock:
-            return sorted((j.snapshot() for j in self.jobs.values()),
-                          key=lambda r: r['created'], reverse=True)
+            jobs = list(self.jobs.values())
+        return sorted((self.snapshot(j) for j in jobs), key=lambda r: r['created'], reverse=True)
 
     def close(self):
         with self.lock:

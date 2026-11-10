@@ -6,20 +6,23 @@ import argparse
 import json
 import logging
 import mimetypes
+import re
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from vehicle.pipeline.contracts import AuditError, ROOT
-from vehicle.webapp import artifacts
+from vehicle.webapp import artifacts, finding_reviews
 from vehicle.webapp.catalog import Catalog
 from vehicle.webapp.http_io import Responses
 from vehicle.webapp.jobs import Registry, STAGES, TERMINAL, options
+from vehicle.webapp.presentation import finding_uids
 from vehicle.webapp.review_round import load_public_review
 
 WEB = ROOT / 'vehicle/frontend'
 SHARED = {'app.css', 'workspace.css', 'highlight.js'}
+JOB_ID = re.compile(r'v-[0-9a-f]{32}')
 
 
 class Handler(Responses, BaseHTTPRequestHandler):
@@ -44,26 +47,33 @@ class Handler(Responses, BaseHTTPRequestHandler):
         self.dispatch(False)
 
     def do_POST(self):
+        self.body_pending = True
         self.dispatch(True)
 
     def dispatch(self, post):
         if not self.allowed():
             self.close_connection = True
+            if post:
+                self.discard_body()
             return self.json({'error': {'code': 'local_only', 'message': '仅允许本机页面访问。',
                                        'next_action': '使用本机工作台地址。'}}, 403)
         try:
             parts = urlsplit(self.path)
             path, query = parts.path, parse_qs(parts.query)
             if post:
-                if path != '/api/pipeline':
-                    return self.json({'error': {'message': '接口不存在。'}}, 404)
-                settings = options(query, self.registry.catalog)
-                name = Path(query.get('name', ['uploaded.apk'])[0]).name[:200]
-                if not name.lower().endswith('.apk'):
-                    raise AuditError('invalid_apk_name', '只接受 APK 文件。', '重新选择 .apk 文件。')
-                with self.upload() as uploaded:
-                    job = self.registry.submit(uploaded, name, settings)
-                return self.json(job.snapshot(), 202)
+                if path == '/api/pipeline':
+                    settings = options(query, self.registry.catalog)
+                    name = Path(query.get('name', ['uploaded.apk'])[0]).name[:200]
+                    if not name.lower().endswith('.apk'):
+                        raise AuditError('invalid_apk_name', '只接受 APK 文件。', '重新选择 .apk 文件。')
+                    with self.upload() as uploaded:
+                        job = self.registry.submit(uploaded, name, settings)
+                    return self.json(self.registry.snapshot(job), 202)
+                segments = path.strip('/').split('/')
+                if len(segments) == 4 and segments[:2] == ['api', 'pipeline'] \
+                        and segments[3] == 'finding-reviews':
+                    return self.save_review(segments[2])
+                return self.json({'error': {'code': 'not_found', 'message': '接口不存在。'}}, 404)
             if path in ('/', '/app.html', '/index.html'):
                 return self.file(WEB / 'app.html', 'text/html; charset=utf-8')
             if path.startswith('/frontend/'):
@@ -71,7 +81,8 @@ class Handler(Responses, BaseHTTPRequestHandler):
                 target = ROOT / 'frontend' / relative
                 if relative in SHARED or relative == 'assets/hero-bg.jpg':
                     return self.file(target, mimetypes.guess_type(target)[0] or 'application/octet-stream')
-            if path in ('/app.js', '/results.js', '/source.js', '/review.js', '/review.css', '/vehicle.css', '/fonts.css', '/typography.css'):
+            if path in ('/app.js', '/results.js', '/components.js', '/upload.js', '/source.js', '/review.js',
+                        '/review.css', '/vehicle.css', '/components.css', '/fonts.css', '/typography.css'):
                 target = WEB / path[1:]
                 return self.file(target, mimetypes.guess_type(target)[0] or 'text/plain')
             if path == '/assets/vehicle-studio.png':
@@ -98,26 +109,54 @@ class Handler(Responses, BaseHTTPRequestHandler):
                 if not job:
                     return self.json({'error': {'message': '任务不存在。'}}, 404)
                 if len(segments) == 3:
-                    return self.json(job.snapshot())
+                    return self.json(self.registry.snapshot(job))
                 if segments[3] == 'events':
                     return self.sse(job)
                 return artifacts.serve(self, job, segments[3], query)
             return self.json({'error': {'message': '接口不存在。'}}, 404)
         except AuditError as error:
             self.close_connection = post
+            if post and self.body_pending:
+                # 先读掉未读的小请求体：带未读数据直接关连接会发 RST（WinError 10053）。
+                self.discard_body()
             status = 409 if error.code == 'service_busy' else 400
             if error.code in ('artifact_missing', 'audit_not_completed'):
                 status = 404
             if error.code == 'review_round_unavailable':
                 status = 404
+            if error.code == 'body_too_large':
+                status = 413
+            if error.code in ('origin_required', 'cross_site', 'reviewer_kind_rejected'):
+                status = 403
             return self.json({'error': error.record()}, status)
         except (BrokenPipeError, ConnectionResetError):
             return
         except Exception:
             logging.exception('Vehicle HTTP request failed')
             self.close_connection = True
+            if post and self.body_pending:
+                self.discard_body()
             return self.json({'error': {'code': 'request_failed', 'message': '请求未完成。',
                 'next_action': '查看服务日志；已存在任务与证据会保留。'}}, 500)
+
+    def save_review(self, identity):
+        """第一个业务写入口：只写复核文件，不碰 audit 产物与 conclusion_level。"""
+        if not self.same_origin():
+            raise AuditError('origin_required', '复核写入只接受本机工作台页面提交（Origin 缺失或跨站一律拒绝）。',
+                             '从本机工作台地址提交；不要用跨站页面或无 Origin 的脚本。')
+        if not JOB_ID.fullmatch(identity):
+            raise AuditError('invalid_job_id', '任务编号格式不合法。', '使用任务列表里的任务编号。')
+        job = self.registry.get(identity)
+        if not job:
+            return self.json({'error': {'code': 'not_found', 'message': '任务不存在。'}}, 404)
+        snapshot = self.registry.snapshot(job)
+        if snapshot['state'] != 'done':
+            raise AuditError('audit_not_completed', '动态审计尚未完整完成，不能写复核。',
+                             '等任务完成后再复核；静态候选不是复核对象。')
+        allowed = set(finding_uids(artifacts.rows_of(job.out)))
+        with self.payload() as record:
+            entry = finding_reviews.save(finding_reviews.path_for(job.out), record, allowed)
+        return self.json({'finding_uid': record['finding_uid'], 'review': entry}, 201)
 
     def sse(self, job):
         self.headers_out(200, 'text/event-stream')
@@ -125,7 +164,7 @@ class Handler(Responses, BaseHTTPRequestHandler):
         try:
             while True:
                 # Read the terminal state before events: finish() follows the final event.
-                snapshot = job.snapshot()
+                snapshot = self.registry.snapshot(job)
                 path = job.out / 'events.jsonl'
                 with job.lock:
                     rows = path.read_text(encoding='utf-8').splitlines() if path.exists() else []

@@ -27,3 +27,38 @@
     不提供目录、任意文件、路径查询、原始日志或写入端点。缺文件返回 404，格式无效返回 400，
     不回退组织者材料或历史轮次。bindings 仅平面 ID/摘要字符串。subagent 标签与人工签核区分；
     workflow_only 不并入配对计分，静态成功不代表动态通过。测试合成摘要明确标记，不作为签核证据。
+11. 补齐前端所需字段放在**响应投影层**（`presentation.py`、`rule_titles.py`），不写回
+    `output/vehicle-web/<任务>/` 的任何产物，也不改 `correlate.py` 的判定与计数。
+    四档计数里 `correlated`/`observed`/`candidate` 取自摘要原值（缺键记 0），`unjudged` 由
+    `findings_total` 反推；三档之外的键原样附加，不并入 `unjudged`，避免改口径。
+    阶段耗时只认 `events.jsonl` 的起止事件，被跳过、仍在跑、事件不足两条的一律 `duration_ms: null`
+    加 `unavailable_reason`，不做均摊或估算。APK 身份优先取 preflight 已核对的摘要值，
+    没有时才现场对 `uploaded.apk` 计算；未跑完审计的任务 `findings_total` 是 `null` 而不是 `0`。
+    规则标题只读 join `risk_rules`，按本轮 `android_version` 取值；库内没有中文标题，
+    `VSC-LAB-*` 这类实验室结论行在库内无对应 id，统一 `null` + 原因，不翻译不兜底。
+    详见 `FIELD_CONTRACT.md`。
+12. 稳定的结论标识走**投影层内容指纹**（方案 A），不入 pipeline：`finding_uid` =
+    `sha256(rule_id|conclusion_level|排序后 event_ids|排序后 code_locs)[:16]`，同内容按出现顺序加
+    `-1/-2` 后缀。`review_order[].finding_id`（`finding-<下标>`）原样保留，AI 复核校验与 PDF
+    排序继续用它；投影层绝不覆盖。副作用要记住：**证据一变 uid 就变**，旧复核记录会变成孤儿
+    （保留在文件里、不再挂行），不会错配到新行。
+13. 复核结果是本服务第一个业务写入口：每任务一文件 `review/finding-review.json`，键为 `finding_uid`。
+    写端点强制本机 `Origin`（缺省也拒）、任务编号正则 `v-[0-9a-f]{32}`、`Content-Length` 必填且
+    ≤8 KiB、不接分块传输、字段白名单；`reviewer_kind` 非 `human` 一律 403（与 `labels.py`
+    拒绝 AI 标注计分同一立场）；未复核的行读取时是 `null` + 原因，不默认 `pending`。
+    写只落到复核文件，绝不回写 `audit/*` 与 `conclusion_level`。读-改-写在进程内锁内完成，
+    临时文件 + `os.replace` 原子替换；锁不跨进程，靠 `.service.lock` 保证单实例。
+    中文标题另用展示层映射 `rule_titles.zh.json`（不改规则库），未映射回退英文原值并标 `locale=en`。
+14. 契约以**真实响应**为准回头修订（2026-11-10）：`FIELD_CONTRACT.md` 原先漏记 `rule_title_locale`、
+    还把"规则库没有中文标题"当成现状（那是加映射之前的结论）。本次按 `v-4505…`/`v-c723…`/`v-ca66…`
+    的实际返回逐字段重写：`/findings` 新增 9 键（`rule_title`/`rule_title_locale`/`rule_title_source`/
+    `finding_uid`/`review_status`/`reviewer`/`reviewed_at`/`review_note`/`review_status_reason`）；
+    `field_gaps` 里不存在 `findings_total` 键（原因由 `findings_by_conclusion_level` 覆盖说明）；
+    `/summary` 的 `findings_by_conclusion_level_gaps` 无缺口时**键不存在**而不是 `null`；
+    `stage_timings_elapsed_ms` 是全部事件 `ts` 的 max−min，不是首尾两条之差。
+15. `WinError 10053` 的根因在服务端不在测试：写接口在 `same_origin()`/任务编号/状态校验处提前拒绝时
+    **没读请求体**，Windows 下关闭仍带未读接收数据的 socket 会发 RST，把刚写出的 4xx 冲掉。
+    修法：POST 记 `body_pending`，`payload()`/`upload()` 读完即清；错误出口（`local_only`、
+    `AuditError`、`500`）先把 ≤8 KiB 的未读体读掉再回响应，并给错误响应补 `Connection: close`。
+    超 8 KiB 的请求体仍然不读（防 DoS），此时客户端可能看到 RST 而不是 `413`，这是有意取舍。
+    负控测试 `test_rejection_still_delivers_status_with_unread_body` 连发 40 次拒绝请求做守卫。
