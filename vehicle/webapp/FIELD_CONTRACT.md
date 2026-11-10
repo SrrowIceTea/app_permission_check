@@ -237,3 +237,75 @@ finding_uid = sha256(rule_id | conclusion_level | 排序后的 event_ids | 排�
 5. 无速率限制。
 6. 超过 8 KiB 的请求体被拒时**不读体**，此时客户端可能仍会看到 `10053` 而不是 `413`
    ——为了不吞下任意大的请求体，这是有意接受的取舍。
+
+## 6. 隐私观测投影（`privacy_observation` 与结论行的 `observation_*`）
+
+目的：把「已观测 / 仅注册未取值 / 未观测」分开呈现，投影**不改任何结论**：`registration_only` 不升级成
+`observed`，`not_observed` 也不变成「通过」或「无风险」。缺省总约定：**键不存在 = 产物没有该字段**；
+有字段但内容不成立时用显式字符串状态 + 原因码，**不用 `null` 同时兼指「没有」和「不知道」**。
+
+### 6.1 `privacy_observation`（`/summary`、`/api/pipeline`、`/api/pipeline/<id>` 都有）
+
+来源 `audit/summary.json:general_privacy`，值哈希与事件号由 `audit/findings.jsonl` 补齐；
+无 `general_privacy`（旧产物 / 纯静态任务 / 未跑一般隐私采集）时返回 `not_available`，不猜。
+
+| 字段 | 类型 | 取值 / 缺失时 | 说明 |
+| --- | --- | --- | --- |
+| `status` | `string` | 恒有：`"available"` \| `"not_available"` | `not_available` 时 `data_types` 为空数组 |
+| `source` | `string` | 恒有 | 恒为 `audit/summary.json:general_privacy` |
+| `reason_code` / `reason_text` | `string` | **仅 `not_available` 时存在** | `no_general_privacy_artifact`；明说不等于未采集、不能当作安全 |
+| `data_types[]` | `array` | 恒有（`available` 时固定 5 项） | 见 6.2；顺序固定 location→microphone→contacts→android_id→advertising_id |
+| `not_observed` / `registration_only` | `string[]` | 恒有，可能为空 | 对应状态的 `data_type` 列表 |
+| `call_only_events` | `int` | 恒有（没有为 `0`） | 注册事件数，等于 `general_privacy.registrations.events`；注册事件的 `collection_state` 恒为 `call_only` |
+| `observation_gaps[]` | `array` | 恒有，可能为空 | 本轮 Hook 缺口（`where`/`message`/`evt_id`），来自 `general_privacy.hook_gaps` |
+| `note` | `string` | 恒有 | 口径说明；含「未观测不等于未采集，也不代表安全」 |
+
+### 6.2 `data_types[]` 单项
+
+| 字段 | 类型 / 取值 | 说明 |
+| --- | --- | --- |
+| `data_type` / `data_type_name` | `location` / `microphone` / `contacts` / `android_id` / `advertising_id` / 中文名 | 车载侧只有这 5 类 |
+| `state` | `observed` \| `registration_only` \| `read_not_obtained` \| `not_observed` | 四态；`read_not_obtained` 专指「有读取但没取到值（denied/error/empty/unknown）」，不允许并进 `not_observed` |
+| `state_label` | `已观测` / `仅注册 / 未取值` / `有读取但未取到值` / `未观测` | 恒有 |
+| `reason_code` | `obtained_read` / `call_only_no_value` / `empty` / `denied` / `unavailable` / `error` / `unknown` / `call_only` / `no_events_in_session` / `no_events_with_hook_gaps` | 恒有；`read_not_obtained` 取**最强**的读取状态作码（`denied>unavailable>error>empty>unknown>call_only`，不是取出现次数最多的），完整分布仍看 `read_states` |
+| `reason_text` | `string` | 恒有；`registration_only` 固定为 `该 App 注册了<定位>订阅，但未取到值，按判据不升级。` |
+| `read_events` / `call_only_events` | `int` | 恒有（没有为 `0`）；前者含所有读取状态 |
+| `read_states` / `registrations_by_kind` | `object` | 恒有，可能为 `{}`；如 `{"obtained":3}`、`{"listener_registration":3}`（`unknown` = 产物未给 `registration_kind`） |
+| `value_hash_present` | `int` | 结论行 `observed_basis.value_hash_present` 汇总；为 0 时不可能同时 `state=observed`（见 6.4） |
+| `finding_rule_ids` / `evidence_event_ids` | `string[]` / `int[]` | 相关 `rule_id`（如 `VSC-GR-location`）与可展开复核的 `evt_id` |
+| `observation_gap_event_ids` | `int[]` | **仅当该类型有 Hook 缺口时存在**（6.4 第 4 条）；键不存在 ≠ 没有缺口 |
+
+**`reason_code` 只是判据上的选择，不是风险分级。** 取"最强证据"（`denied>unavailable>error>empty>unknown>call_only`）
+是为了让复核者先看到"最接近拿到值的那一步卡在哪"，不代表该类型更危险或更安全；出现次数仍在 `read_states`。
+三条读法必须一起成立，缺一条就会被误读成"没问题"：
+
+- `empty` 只表示**这一次读到的值是空的**（如通讯录 0 行后对空列取 `getString`），
+  **不等于"没有敏感数据"**，也不等于 App 没接触过该数据；
+- `call_only` 只表示**看到调用、没看到取值**，`query` 本身在 contacts 上就是 `call_only`，它既不是成功读取也不是失败；
+- `not_observed` 只表示**本轮没有该数据类型的读取或注册事件**，`not_observed` 不等于未采集，更不代表安全。
+
+真实样本参照：`org.fossify.contacts` 空通讯录一轮是 `read_states={"call_only":72,"empty":6}` → `read_not_obtained` + `reason_code=empty`。
+
+### 6.3 `GET /api/pipeline/<id>/findings` 每行新增 4 键
+
+| 字段 | 类型 / 取值 | 缺失时 |
+| --- | --- | --- |
+| `observation_state` | `observed` \| `correlated` \| `unverified` | 恒有；`observed` 要求 `conclusion_level=="observed"` **且**行内有 `read_evidence[]` |
+| `observation_reason_code` | `read_evidence_obtained` / `egress_correlated` / `observed_without_read_evidence` / `no_read_evidence` | 恒有 |
+| `observation_reason_text` | `string` | 恒有；`observed_without_read_evidence` 表示旧产物升不上界面复核 |
+| `read_evidence_count` | `int` | **仅当行内有 `read_evidence` 时存在**，等于 `len(read_evidence)`；键不存在 ≠「0 条证据」 |
+
+`observed_basis`（`criterion` 判据原文 / `collection_state` 恒 `obtained` / `states_seen` /
+`value_hash_present` / `value_len_present`）、`read_evidence`（每条 `evt_id`、`src`、`api`、
+`collection_state`、`outcome`、`value_hash`、`value_len`、`count`、`host_received_ts`，上限 20 条）、
+`read_evidence_total`（读取事件总数，大于 20 说明只展示前 20 条）由 `vehicle/privacy/evaluation.py`
+写入产物，投影层**原样透传**，不裁剪、不改写。
+
+### 6.4 投影层拒绝做的事
+
+1. 不把 `call_only`（注册/异步回调）当 `obtained`，也不把 `getLastLocation` 的 `null` 当取到值。
+2. 不把 `not_observed` 渲染或解释成「通过」「无风险」「已合规」。
+3. 不在 `general_privacy` 缺失时推算任何状态：返回 `not_available` 并明说不能当作安全。
+4. Hook 缺口只按**精确签名**归类型：缺口 `message` 必须以 `vehicle/privacy/catalog.py` 登记的
+   `<cls>.<method>` 开头，才写入 `observation_gap_event_ids` 并把 `reason_code` 升为
+   `no_events_with_hook_gaps`；对不上的只留在 `observation_gaps`，不外推到任何数据类型。

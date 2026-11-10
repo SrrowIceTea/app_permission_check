@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "slot": "A",
+  "evidence_sha256": "10f7193ccd550d1b7a09a75a3c84434e08d606a03b5394cfbb4132a4292daa39",
+  "plan_sha256": "7db356515c579a46d1ecd09260cd33bc5da13f5652199b0d236233e4a7a36efc",
+  "reviewer": "subagent-slot-A-fresh-context",
+  "agent_id": "c6a0d747-cf7c-4656-bc9c-5fe0e36f038c",
+  "reviewer_kind": "subagent",
+  "context_mode": "fresh",
+  "review_session_id": "612a9c7f-d542-42b1-a20e-c9eeb8ff2345",
+  "reviewed_at": "2026-11-10T15:39:49+08:00",
+  "decisions": [
+    {
+      "id": "P01",
+      "decision": "absent",
+      "reason": "值与先后都不成立：lab_power evt_id=14 记 field=level、value=100（设备 ts 1793691793048），ha_transport evt_id=2 的 state=73（request_started_ts 1793691791448、ts 1793691791458），state 与 level 不一致；同一 uid=1010251/pid=3254 的设备时钟上读取比该请求开始晚 1600ms，请求不可能携带尚未发生的读取值。独立佐证把 evt_id=2 归给别的一轮：independent_device_server_steps 中 emulator_level=73 的 server.last_changed=2026-11-03T07:43:11.453048+00:00（即 1793691791453）正落在该请求 [1793691791448, 1793691791458] 窗口内。request_events 里没有 state=100 的请求，步骤表也没有 100 的记录，level=100 这次读取整体无配对请求。"
+    },
+    {
+      "id": "P02",
+      "decision": "absent",
+      "reason": "值不一致且因果反向：lab_power evt_id=14 level=100（设备 ts 1793691793048）对 ha_transport evt_id=3 state=61（request_started_ts 1793691792625、ts 1793691792635），100≠61，且读取比请求开始晚 423ms（同一设备钟、同 uid/pid）。evt_id=3 的 61 已被独立服务端状态确认属于 lab_power evt_id=8 那一轮：emulator_level=61 的 server.last_changed=2026-11-03T07:43:12.631021+00:00（1793691792631）落在 [1793691792625, 1793691792635] 窗口内。"
+    },
+    {
+      "id": "P03",
+      "decision": "present",
+      "reason": "四线对齐：lab_power evt_id=8 field=level value=61（设备 ts 1793691791925，配套 evt_id=9 scale=100 于 1793691791931）对 ha_transport evt_id=3 state=61（request_started_ts 1793691792625、ts 1793691792635），值一致，同 uid=1010251/pid=3254。设备钟上读取早于请求 700ms；宿主钟同样顺序（host_received_ts 1793691792976 → 1793691793683，差 707ms），两条流 ts→host_received_ts 偏移稳定在 1048–1051ms，可作跨钟折算。外部动作记录点 emulator_level=61 的 recorded_step_ms=1793691792744 属宿主钟，按 README 不单独用于排序——折算回设备钟约 1793691791693，仍早于读取 232ms，设值→读取→请求顺序一致。独立服务端 state=\"61\" 的 last_changed=1793691792631 落在该请求 [1793691792625, 1793691792635] 窗口内，status=200、body_complete=true。"
+    },
+    {
+      "id": "P04",
+      "decision": "absent",
+      "reason": "值不一致且因果反向：lab_power evt_id=8 level=61（设备 ts 1793691791925）对 ha_transport evt_id=2 state=73（request_started_ts 1793691791448），61≠73，且读取比该请求开始晚 477ms（同一设备钟）。evt_id=2 已配给 lab_power evt_id=2：服务端 state=\"73\" 的 last_changed=2026-11-03T07:43:11.453048+00:00（1793691791453）落在其 [1793691791448, 1793691791458] 窗口内。"
+    },
+    {
+      "id": "P05",
+      "decision": "present",
+      "reason": "值一致 + 双向时钟顺序 + 独立服务端确认：lab_power evt_id=2 level=73（设备 ts 1793691790747，配套 evt_id=3 scale=100）对 ha_transport evt_id=2 state=73（request_started_ts 1793691791448、ts 1793691791458），读取早于请求 701ms；宿主钟同序（host_received_ts 1793691791798 → 1793691792508）。外部步骤 emulator_level=73 的 recorded_step_ms=1793691791330（宿主钟）折算约设备钟 1793691790279，早于读取 468ms，顺序为设值→读取→请求。服务端 state=\"73\" 的 last_changed=2026-11-03T07:43:11.453048+00:00（1793691791453）恰在该请求窗口内。注意两条流的 evt_id=2 只是各自流内编号巧合相同，配对依据是 level/state 值、设备钟与宿主钟各自的顺序以及服务端 last_changed，而非编号相等。"
+    },
+    {
+      "id": "P06",
+      "decision": "absent",
+      "reason": "值不一致且两侧已各有归属：lab_power evt_id=2 level=73 对 ha_transport evt_id=3 state=61，73≠61。73 这次读取已对齐 evt_id=2 请求（服务端 last_changed 1793691791453 落在 [1793691791448, 1793691791458]），61 由 lab_power evt_id=8 提供且服务端 last_changed 1793691792631 落在 evt_id=3 的 [1793691792625, 1793691792635]；两条请求与两次读取一一对应，无把 evt_id=2 的读取配给 evt_id=3 的余地（且两次读取在设备钟上相隔 1178ms）。"
+    },
+    {
+      "id": "W01",
+      "decision": "present",
+      "reason": "三条证据线在两轮上都对齐。HTTP：ha_transport evt_id=3 operation=input_boolean.turn_on、status=200、body_complete=true、request_started_ts=1793711318872、ts=1793711319107；evt_id=4 turn_off、status=200、request_started_ts=1793711321845、ts=1793711321863，同 uid=1010251/pid=3254。同连接订阅：ha_socket evt_id=4 SEND conn=2/message_id=1981 accepted=true，evt_id=5 RESULT success=true（更早的 conn 1/mid 1976 只有 SEND+RESULT，未产生状态推送），两次状态推送都回到 conn 2/mid 1981：evt_id=6 \"on\" ts=1793711319071 落在 turn_on 窗口 [1793711318872, 1793711319107] 内；evt_id=7 \"off\" ts=1793711321856 落在 turn_off 窗口 [1793711321845, 1793711321863] 内。独立服务端：server_states \"on\" last_changed=2026-11-03T13:08:39.048123+00:00（1793711319048）、\"off\" last_changed=2026-11-03T13:08:41.854930+00:00（1793711321854）同样落在各自 POST 窗口内；两条的 start_ms（1793711319816、1793711322804）是宿主侧记录时刻，比 last_changed 晚 768/950ms，按 README 只作记录点、不参与先后判断。entity_id 三处一致（input_boolean.audit_test_light）。"
+    },
+    {
+      "id": "W02",
+      "decision": "absent",
+      "reason": "证据足以否定成功回执：本轮 http 只有 ha_transport evt_id=2 一条 POST（entity_id=input_boolean.audit_test_light、operation=input_boolean.turn_on、request_started_ts=1793691699525、ts=1793691699548），status=503，不是成功回执；body_complete=true 只说明请求体被抓全，不代表服务端受理。websocket=[] 且 server_states=[]，没有任何同连接响应或独立状态变化可以佐证控制生效。"
+    },
+    {
+      "id": "W03",
+      "decision": "insufficient",
+      "reason": "可归属到目标应用的记录缺失，绑定无法成立也无法否证。已有：server_post_receipts 一条 POST /submit status=200、ts_ms=1793691826284（2026-11-03T07:43:46.284Z）、marker_ref=marker-1、body_ref=body-1；proxy_observed_post=true、post_marker_matched=true。但 app_request_events=[]（无任何应用侧请求事件、无 uid/pid），captured_proxy_flow_count=0、post_flow_attributed=0。按 README 的三分法，代理是否看见 POST、服务端标记是否匹配、是否有能归属到目标应用的流是三种不同证据，本题只有前两项为真，第三项既无归属流也无落盘流，而 post_marker_matched=true 在本记录内没有第二个来源可比对，其匹配对象不明（歧义）。待补证其一即可：带同一 marker_ref 的应用侧请求事件（含 uid/pid，形如 W04 的 mg4_webview evt_id=2），或落盘且归属到该 uid/pid 的代理流（post_flow_attributed≥1）；并需说明 post_marker_matched 是与哪个来源比对得出的。"
+    },
+    {
+      "id": "W04",
+      "decision": "present",
+      "reason": "可用应用内标记绑定：mg4_webview evt_id=2（uid=1010252、pid=28856）path=/submit、marker_ref=marker-1，设备 ts=1793711782395、host_received_ts=1793711783435（偏移 1040ms）；server_post_receipts 唯一一条 POST /submit、marker-1、body-1、status=200、ts_ms=1793711783451。服务端记录与事件的应用侧宿主时刻只差 16ms（1793711783451−1793711783435），与设备钟相差 1056ms 自洽；marker 与 path 在本轮一一对应且无竞争候选，进程身份由钩子侧 uid/pid 提供。限定：captured_proxy_flow_count=0、post_flow_attributed=0 只表示代理流未落盘/未归属，是另一条（较弱）证据线，不影响标记绑定；另外 marker-1 这一字符串在 W03（07:43:46 那一轮）也出现过，跨轮复用同名标记时须靠时间窗区分，本轮 16ms 的贴合足以区分。"
+    },
+    {
+      "id": "W05",
+      "decision": "present",
+      "reason": "同一会话内两侧逐位对齐，暂停后有独立服务端查询佐证。会话：五条 wire_requests 的 session_ref 全为 media-session-1，server_receipts.session_ref 同名。对齐：progress_before=5 等于 body-1 的 currentTime=5.0（device_ts_ms=1793712269169）；progress_after=19.499 与 body-5 的 currentTime=19.499 逐位相同；listening_delta=12.070885000000018 与五条 timeListened 之和 0.161028+5.871496+0.0+6.038361+0.0=12.070885 完全吻合（仅浮点尾差）。暂停：body-3（device_ts_ms=1793712274981、timeListened=0.0、body_bytes=57）报 currentTime=10.852，pause_progress=10.852，且 progress_six_seconds_later=10.852 六秒后未变——服务端进度停止增长。限定两点：connection_port 从 48504 换到 51438（同一 session_ref 跨连接），以及 body-4→body-5 的 currentTime 回落 0.376s、timeListened 在暂停报文归零，说明 CT/TL 是区间上报值而非累计量，其字段语义在包内没有规格佐证；device_ts_ms 属设备钟，server_receipts 属宿主/服务端记录点，跨钟只用了数值相等这一与偏移无关的比较。命题两部分仍成立。"
+    },
+    {
+      "id": "W06",
+      "decision": "present",
+      "reason": "逐条对应成立，端口/时间/正文标记三项同时吻合。端口：abs_native_send evt_id=2、evt_id=3 的 local_port=37608，两条 wire_requests 的 connection_port 同为 37608。时间：evt_id=2 的 device_start_ms=1793694856040 与 body-1 的 device_ts_ms 逐位相等（device_end_ms=1793694856043 即其 ts）；evt_id=3 的 device_start_ms=device_end_ms=1793694856086 与 body-2 的 device_ts_ms=1793694856086 相等。标记与字节数：evt_id=2→body_ref=body-1、evt_id=3→body-2，且 body_bytes/write_size/returned_bytes 三处一致（65/65/65、57/57/57），与 wire 侧 body_bytes=65、57 相符，returned_bytes==write_size 说明整包写出无截断；两条写相隔 46ms 落在同一端口，靠时间戳＋字节数＋body_ref 三重区分无歧义。限定：wire 侧 session_ref=media-session-1 而钩子侧 session_ref=null，本对应靠端口/时间/标记而非 session 字段；进程归属来自钩子侧 uid=1010253、pid=2066，wire 侧不带 uid/pid；host_received_ts（1793694857090、1793694857134）为宿主钟落盘时刻，未参与配对。"
+    }
+  ]
+}

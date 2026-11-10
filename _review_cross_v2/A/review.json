@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "slot": "A",
+  "evidence_sha256": "83b7e13a1ddd6a54d481d7c68099cae7cc2ed1fd532e7b9d188808e87ee18856",
+  "plan_sha256": "0ff3141a805bcb9d1d04082a83ea4262c97854b86c49d3897f3a8611848a7edf",
+  "reviewer": "subagent-cross-v2-A-r1",
+  "reviewer_kind": "subagent",
+  "reviewed_at": "2026-11-10T19:14:35+08:00",
+  "agent_id": "7f3a2c58-91d4-4b6e-8a02-5c1e9d4f3b71",
+  "context_mode": "fresh",
+  "review_session_id": "c4d17e92-3b58-4f0a-9d61-8e2a7b5c0f43",
+  "model_family": "route:reasoning",
+  "model_id": "reasoning",
+  "decisions": [
+    {
+      "id": "P01",
+      "decision": "absent",
+      "reason": "lab_power#14 的 ts=1793691793048、field=level、value=100；ha_transport#2 的 request_started_ts=1793691791448、ts=1793691791458、sensor_id=battery_level、state=73。取值 100≠73；同一设备钟内读取时刻比请求启动晚 1600 ms，因果顺序反了；独立服务端记录也只有 state=\"73\"(last_changed 07:43:11.453048) 与 state=\"61\"(07:43:12.631021) 两步，不存在 100。故否定。"
+    },
+    {
+      "id": "P02",
+      "decision": "absent",
+      "reason": "lab_power#14 的 value=100、ts=1793691793048；ha_transport#3 的 request_started_ts=1793691792625、state=61、status=200。值 100≠61；设备钟上读取比请求启动晚 423 ms（1793691793048-1793691792625），读发生在请求之后；#3 的 61 已由 lab_power#8 的 61 对应（见 P03），独立服务端无 100 这一步。故否定。"
+    },
+    {
+      "id": "P03",
+      "decision": "present",
+      "reason": "lab_power#8 的 ts=1793691791925、field=level、value=61；ha_transport#3 的 request_started_ts=1793691792625、state=61、status=200、body_complete=true。值一致（61=61）；设备钟上读取比请求启动早 700 ms，符合先读后发的顺序；两侧 uid=1010251、pid=3254 相同；independent_device_server_steps 第二步 emulator_level=61、recorded_step_ms=1793691792744、server.state=\"61\"、last_changed=2026-11-03T07:43:12.631021+00:00 与 #3 的提交窗口吻合。三源互证，故支持。"
+    },
+    {
+      "id": "P04",
+      "decision": "absent",
+      "reason": "lab_power#8 的 value=61、ts=1793691791925；ha_transport#2 的 state=73、ts=1793691791458。值 61≠73；且 #8 的读取时刻已晚于 #2 的事件时刻 467 ms，即便忽略时钟差也不可能是该轮请求的来源；#2 的 73 由 lab_power#2 的 73 对应（见 P05）。故否定。"
+    },
+    {
+      "id": "P05",
+      "decision": "present",
+      "reason": "lab_power#2 的 ts=1793691790747、field=level、value=73；ha_transport#2 的 request_started_ts=1793691791448、state=73、status=200、body_complete=true。值一致（73=73）；读取比请求启动早 701 ms；uid=1010251/pid=3254 相同；独立服务端第一步 emulator_level=73、recorded_step_ms=1793691791330、server.state=\"73\"、last_changed=07:43:11.453048 与请求对齐。故支持。"
+    },
+    {
+      "id": "P06",
+      "decision": "absent",
+      "reason": "lab_power#2 的 value=73、ts=1793691790747；ha_transport#3 的 state=61、request_started_ts=1793691792625。值 73≠61；且 #3 的 61 已被 lab_power#8（value=61、ts=1793691791925、紧邻 700 ms）配对，独立服务端 07:43:12.631 的 state=\"61\" 也只对应一次读取。故否定。"
+    },
+    {
+      "id": "W01",
+      "decision": "present",
+      "reason": "HTTP 侧 ha_transport#3（operation=input_boolean.turn_on、status=200、body_complete=true、ts=1793711319107）与 #4（turn_off、status=200、body_complete=true、ts=1793711321863），entity_id 均为 input_boolean.audit_test_light；WS 侧同一连接 connection_id=2 在 ts=1793711315440 订阅成功（message_id=1981、HA_WS_RESULT success=true），随后 #6 state=\"on\"(ts=1793711319071)、#7 state=\"off\"(ts=1793711321856) 均带 message_id=1981；server_states 独立给出 on(last_changed=2026-11-03T13:08:39.048123+00:00) 与 off(13:08:41.854930)，顺序与两次控制一致。三个来源互不矛盾且指向同一对动作，故支持。"
+    },
+    {
+      "id": "W02",
+      "decision": "absent",
+      "reason": "本轮 http 仅 1 条 ha_transport#2：method=POST、operation=input_boolean.turn_on、body_complete=true、status=503；websocket=[]、server_states=[]。503 表示服务端未成功处理，且没有任何订阅回显或独立服务端状态可佐证生效。故“有成功 HTTP 控制回执”被否定。"
+    },
+    {
+      "id": "W03",
+      "decision": "absent",
+      "reason": "server_post_receipts 只有一条 /submit（status=200、marker_ref=marker-1、body_ref=body-1、ts_ms=1793691826284），但 app_request_events=[]、captured_proxy_flow_count=0、post_flow_attributed=0。post_marker_matched_scope 明确 post_marker_matched=true 只说明 marker 出现在服务端收到的正文里，不等于绑定到目标应用进程；绑定需一条 App 侧事件或一条归因成功的代理流，此处两者皆无（recorded_gaps 亦登记“缺少可验证的 App 身份与完整同值正文”）。故否定。"
+    },
+    {
+      "id": "W04",
+      "decision": "present",
+      "reason": "app_request_events 存在 mg4_webview#2：uid=1010252、pid=28856、path=/submit、marker_ref=marker-1、ts=1793711782395、host_received_ts=1793711783435；server_post_receipts 的 path=/submit、status=200、marker_ref=marker-1、body_ref=body-1、ts_ms=1793711783451，服务端记录点仅比宿主收到 App 事件晚 16 ms。标记与路径同值且时序紧邻，按题意的“用应用内请求的标记绑定本次测试动作”成立（attribution_basis=webview_callback_and_server_body_substitution 表明这是替代关系而非代理逐流归因，post_flow_attributed=0 只削弱更强结论，不影响本题）。故支持。"
+    },
+    {
+      "id": "W05",
+      "decision": "present",
+      "reason": "5 条 wire_requests 的 session_ref 均为 media-session-1：body-1 currentTime=5.0 对应 progress_before=5；body-5 currentTime=19.499 对应 progress_after=19.499；body-3 currentTime=10.852 与 pause_progress=10.852 相等，progress_six_seconds_later 仍为 10.852（暂停 6 s 后未增长）；timeListened 求和 0.161028+5.871496+6.038361=12.070885 与 listening_delta=12.070885 完全吻合。端口 48504→51438 有变化，但 session_ref 相同且 currentTime 单调连续（10.852→19.874652），不构成矛盾。故支持。"
+    },
+    {
+      "id": "W06",
+      "decision": "present",
+      "reason": "wire_requests 两条：device_ts_ms=1793694856040 / connection_port=37608 / body_bytes=65 / body_ref=body-1，与 device_ts_ms=1793694856086 / 37608 / 57 / body-2；app_socket_writes 侧 abs_native_send#2（uid=1010253、pid=2066、local_port=37608、device_start_ms=1793694856040、device_end_ms=1793694856043、body_bytes=65、returned_bytes=65、body_ref=body-1）与 #3（local_port=37608、device_start_ms=1793694856086、body_bytes=57、returned_bytes=57、body_ref=body-2）。端口、设备时间、字节数、正文标记四项逐条全等，且 2 对 2 无多余项。写入侧 session_ref=null 只是缺失字段，不影响本题的四项对应。故支持。"
+    }
+  ]
+}

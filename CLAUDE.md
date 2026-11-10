@@ -110,7 +110,7 @@ PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/U
                                           #   collector/tagging-vehicle/dashboard/vehicle-webapp/
                                           #   vehicle-expanded-review/runtime/privacy-runtime/parity/
                                           #   workbench/hook-bundles/frida-bundle-config
-"$PY" mobile/tools/run_mobile_checks.py   # 移动端 31 项
+"$PY" mobile/tools/run_mobile_checks.py   # 移动端 63 项
 "$PY" tools/check_mobile_branch.py        # 移动分支 24 组（含 workbench/policy/AI/前端契约）
 ```
 

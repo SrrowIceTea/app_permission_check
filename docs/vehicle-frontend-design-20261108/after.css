@@ -1,0 +1,136 @@
+/* 改后：动态审计结果页。全部类名可在现有零构建结构里直接映射。 */
+.a-screen {
+  --bg: var(--d0); --panel: var(--d2); --panel2: var(--d3);
+  --hair: var(--dline); --hair2: var(--dline-strong);
+  --tx: var(--dtext); --tx2: var(--dtext2); --tx3: var(--dtext3); --ac: var(--daccent);
+  --pass: var(--dpass); --review: var(--dreview); --fail: var(--dfail); --gap: var(--dgap);
+  --pass-bg: rgba(107, 214, 160, .10); --review-bg: rgba(231, 192, 111, .12);
+  --fail-bg: rgba(255, 133, 133, .10); --gap-bg: rgba(147, 166, 179, .10);
+  --node-bg: rgba(255, 255, 255, .016); --well: rgba(255, 255, 255, .02);
+  background: var(--bg); color: var(--tx); font: 400 13px/1.6 var(--font-ui);
+}
+.a-screen::before {
+  content: ""; position: absolute; inset: 0 0 auto; height: 220px; pointer-events: none;
+  background: radial-gradient(90% 70% at 84% -30%, rgba(143, 227, 242, .10), transparent 64%);
+}
+
+/* 顶栏 */
+.a-top {
+  position: relative; display: flex; align-items: center; gap: 10px;
+  height: 56px; padding: 0 20px; border-bottom: 1px solid var(--hair);
+  background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(8px);
+}
+.a-brand { font: 600 11px/1 var(--font-ui); letter-spacing: .14em; color: var(--tx); }
+.a-brand span { color: var(--tx3); font-weight: 400; letter-spacing: .06em; }
+.conn { display: none; align-items: center; gap: 5px; margin-left: auto; font-size: 10.5px; color: var(--tx2); }
+.conn i { width: 5px; height: 5px; border-radius: 50%; background: var(--pass); box-shadow: 0 0 0 3px var(--pass-bg); }
+.conn--fail { color: var(--fail); }
+.conn--fail i { background: var(--fail); box-shadow: 0 0 0 3px var(--fail-bg); }
+.a-new { border: 1px solid var(--hair2); background: none; color: var(--tx); padding: 6px 10px; border-radius: 3px; font: 500 11px/1.4 var(--font-ui); cursor: pointer; }
+
+/* 页首 */
+.a-head {
+  position: relative; display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 14px; padding: 20px 20px 14px; border-bottom: 1px solid var(--hair);
+}
+.a-eyebrow { margin: 0 0 5px; font: 600 9px/1 var(--font-ui); letter-spacing: .16em; color: var(--ac); }
+.a-head h2 { margin: 0; font: 500 27px/1.2 "Noto Serif SC", "Songti SC", serif; color: var(--tx); letter-spacing: -.01em; }
+.a-runmeta { text-align: right; font: 400 9.5px/1.6 var(--font-mono); color: var(--tx3); }
+.a-runmeta .line { display: flex; align-items: center; gap: 5px; justify-content: flex-end; }
+.a-runmeta code { color: var(--tx2); }
+.a-body { position: relative; padding: 16px 20px 24px; }
+
+/* 五段流程：完成 / 当前 / 等待全部可见 */
+.a-steps { display: grid; grid-template-columns: repeat(5, 1fr); margin: 0 0 13px; padding: 0; list-style: none; border: 1px solid var(--hair); border-radius: 5px; background: var(--panel); overflow: hidden; }
+.a-step { position: relative; min-width: 0; padding: 9px 9px 8px; border-right: 1px solid var(--hair); }
+.a-step:last-child { border-right: 0; }
+.a-step::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--pass); }
+.a-step--now::before { background: var(--ac); }
+.a-step--pending::before { background: var(--gap); opacity: .55; }
+.a-step b { display: block; font: 600 10px/1.4 var(--font-ui); color: var(--tx2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.a-step span { display: block; margin-top: 2px; font: 400 9.5px/1.3 var(--font-mono); color: var(--tx3); }
+.a-step--now b { color: var(--tx); }
+.a-step--now span { color: var(--ac); }
+.a-step--pending b, .a-step--pending span { color: var(--tx3); }
+
+/* 范围说明：中性虚线，不与黄色告警冲突 */
+.a-scope { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 14px; padding: 8px 11px; border: 1px dashed var(--hair2); border-radius: 4px; font-size: 11px; line-height: 1.65; color: var(--tx2); }
+.a-scope b { flex: 0 0 14px; height: 14px; display: grid; place-items: center; border: 1px solid var(--tx3); border-radius: 50%; font: 600 8px/1 var(--font-mono); color: var(--tx3); margin-top: 1px; }
+
+/* 四态汇总 */
+.a-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0 0 14px; }
+.stat { position: relative; padding: 11px 11px 9px 13px; border: 1px solid var(--hair); border-radius: 5px; background: var(--panel); overflow: hidden; }
+.stat::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--pass); }
+.stat--review::before { background: var(--review); }
+.stat--fail::before { background: var(--fail); }
+.stat--gap::before { background: repeating-linear-gradient(135deg, var(--gap) 0 2px, transparent 2px 5px); }
+.stat b { display: block; font: 600 24px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--tx); }
+.stat b em { font-style: normal; font-size: 10px; color: var(--tx3); margin-left: 3px; }
+.stat span { display: block; margin-top: 4px; font: 600 11px/1.4 var(--font-ui); color: var(--tx2); }
+.stat small { display: block; margin-top: 1px; font-size: 9px; line-height: 1.4; color: var(--tx3); }
+.stat--fail b { color: var(--tx3); }
+
+/* 筛选 */
+.a-filter { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin: 0 0 10px; }
+.chip { border: 1px solid var(--hair); background: none; color: var(--tx2); padding: 3px 8px; border-radius: 999px; font: 500 10px/1.5 var(--font-ui); cursor: pointer; }
+.chip i { font-style: normal; font-family: var(--font-mono); margin-left: 4px; color: var(--tx3); }
+.chip--on { background: var(--tx); border-color: var(--tx); color: var(--bg); }
+.chip--on i { color: var(--bg); opacity: .7; }
+.a-search { margin-left: auto; width: 190px; max-width: 42%; padding: 4px 9px; border: 1px solid var(--hair); border-radius: 3px; background: none; color: var(--tx); font: 400 10.5px/1.5 var(--font-ui); }
+.a-search::placeholder { color: var(--tx3); }
+
+/* 结论卡 */
+.a-list { display: grid; gap: 8px; }
+.finding { display: grid; grid-template-columns: 3px 1fr; border: 1px solid var(--hair); border-radius: 5px; background: var(--panel); overflow: hidden; }
+.f-bar { background: var(--ac); }
+.finding--review .f-bar { background: var(--review); }
+.f-body { min-width: 0; padding: 12px 13px 11px; }
+.f-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.f-id { font: 400 10px/1.5 var(--font-mono); color: var(--tx); overflow-wrap: anywhere; }
+.copy { display: inline-grid; place-items: center; width: 17px; height: 17px; padding: 0; border: 1px solid var(--hair2); border-radius: 2px; background: none; color: var(--tx3); font: 400 9px/1 var(--font-mono); cursor: pointer; }
+.copy:hover { color: var(--ac); border-color: var(--ac); }
+.f-chip { padding: 1px 6px; border: 1px solid var(--hair); border-radius: 2px; font-size: 9.5px; color: var(--tx3); white-space: nowrap; }
+.f-right { margin-left: auto; font: 400 9px/1.4 var(--font-mono); color: var(--tx3); white-space: nowrap; }
+.f-title { margin: 7px 0 9px; font: 600 15px/1.4 var(--font-ui); color: var(--tx); }
+.f-title small { margin-left: 4px; font-weight: 400; font-size: 10.5px; color: var(--tx3); }
+
+/* 状态徽标 */
+.state { display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px 2px 5px; border: 1px solid currentColor; border-radius: 3px; font: 600 10px/1.5 var(--font-ui); white-space: nowrap; }
+.state b { font: 700 9px/1 var(--font-mono); }
+.state--pass { color: var(--pass); background: var(--pass-bg); }
+.state--review { color: var(--review); background: var(--review-bg); }
+.state--fail { color: var(--fail); background: var(--fail-bg); }
+.state--gap { color: var(--gap); background: repeating-linear-gradient(135deg, var(--gap-bg) 0 4px, transparent 4px 9px); }
+.state--observed { color: var(--ac); background: rgba(143, 227, 242, .07); }
+
+/* 证据链 */
+.f-chain { display: flex; align-items: stretch; flex-wrap: wrap; }
+.f-node { flex: 0 1 auto; min-width: 0; padding: 7px 9px; border: 1px solid var(--hair); border-radius: 4px; background: var(--node-bg); }
+.f-node b { display: block; font: 600 10.5px/1.4 var(--font-ui); color: var(--tx); }
+.f-node code { display: block; margin-top: 1px; font: 400 9px/1.4 var(--font-mono); color: var(--tx3); }
+.f-node small { display: block; margin-top: 1px; font-size: 9px; color: var(--tx3); }
+.f-node--gap { border-style: dashed; background: repeating-linear-gradient(135deg, var(--gap-bg) 0 4px, transparent 4px 9px); }
+.f-edge { display: flex; flex-direction: column; justify-content: center; min-width: 82px; padding: 0 8px; }
+.f-edge span { font: 400 9px/1.3 var(--font-mono); color: var(--tx3); }
+.f-edge i { position: relative; display: block; height: 1px; margin: 3px 0; background: var(--hair2); }
+.f-edge i::after { content: ""; position: absolute; right: -1px; top: -2px; border: 2.5px solid transparent; border-left-color: var(--hair2); }
+
+/* 底部元信息与抽屉 */
+.f-foot { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-top: 9px; padding-top: 7px; border-top: 1px dashed var(--hair); font-size: 9px; color: var(--tx3); }
+.f-foot code { font-family: var(--font-mono); }
+.f-gapflag { padding: 1px 5px; border: 1px solid var(--gap); border-radius: 2px; color: var(--gap); }
+.f-spacer { margin-left: auto; }
+.f-drawer { margin-top: 8px; }
+.f-drawer summary { cursor: pointer; list-style: none; font: 500 10px/1.5 var(--font-ui); color: var(--ac); }
+.f-drawer summary::-webkit-details-marker { display: none; }
+.f-drawer summary::before { content: "＋ "; font-family: var(--font-mono); }
+.f-drawer[open] summary::before { content: "− "; }
+.f-kv { display: grid; grid-template-columns: 84px 1fr; gap: 4px 10px; margin-top: 7px; padding: 9px; border: 1px solid var(--hair); border-radius: 4px; background: var(--well); font-size: 9.5px; }
+.f-kv span { color: var(--tx3); }
+.f-kv code { color: var(--tx2); font-family: var(--font-mono); overflow-wrap: anywhere; }
+.f-raw { margin-top: 7px; }
+.f-raw summary { list-style: none; font: 400 9px/1.5 var(--font-mono); color: var(--tx3); }
+.f-raw pre { margin: 5px 0 0; padding: 8px; max-height: 130px; overflow: auto; border: 1px solid var(--hair); border-radius: 3px; background: var(--well); font: 9px/1.7 var(--font-mono); color: var(--tx3); white-space: pre-wrap; }
+
+/* 复制反馈 */
+.copy[data-copied="1"] { color: var(--pass); border-color: var(--pass); }

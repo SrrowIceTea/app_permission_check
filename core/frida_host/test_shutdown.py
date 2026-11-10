@@ -25,8 +25,13 @@ class ShutdownTests(unittest.TestCase):
             source.write_text('// frida-java-bridge', encoding='utf-8')
             argv = ['run.py', '--package', 'test.app', '--allow-package', 'test.app', '--script', str(source),
                     '--out', str(Path(folder) / 'reads.jsonl')]
+            # 本用例验证"脚本加载失败也要 detach/关闭"，不是产物新鲜度；
+            # 临时 hook.js 没有构建清单，显式放行新鲜度门禁。
             with patch.dict('sys.modules', {'frida': frida}), patch('sys.argv', argv), \
                     patch.object(run, 'ensure_forward'), patch.object(run, 'resolve_pid', return_value=10), \
+                    patch.object(run.freshness, 'verify',
+                                 return_value={'tier': 'pass', 'code': 'clean'}), \
+                    patch.object(run.freshness, 'summary_line', return_value='{}'), \
                     patch.object(run, 'EventStore', return_value=store):
                 with self.assertRaisesRegex(RuntimeError, 'synthetic load failure'):
                     run.main()

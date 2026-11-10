@@ -14,6 +14,10 @@
 映射键用 `类.方法名`（不带描述符）：同一包装方法名的重载都指向同一根 API，
 用描述符做键会在 dex 版本差异下静默失配。未列入本表、但形似包装（Compat/Helper/
 ApiNN/Impl 且与根 API 同名）的命中点落「未判定」，不猜成 App。
+
+**调用方上溯**（2026-11-10 修正）按完整签名做节点身份：`wrapper_callers` 的键是
+被调方法的完整签名，所以 `getCurrentLocation(4 参)` 调 `getCurrentLocation(5 参)`
+这种重载转发会被当成一层包装，而不是被误判成自环丢掉。
 """
 from __future__ import annotations
 
@@ -96,35 +100,36 @@ def keys() -> set:
 def trace(method: str, graph: dict, attribution, reached) -> dict:
     """从命中的包装方法沿 `wrapper_callers` 上溯，收集最外层非包装调用方。
 
-    `attribution(方法)` 返回 app / library / unattributed；`reached` 是入口可达的方法集合。
+    `attribution(方法)` 返回 app / app_derived / library / unattributed；
+    `reached` 是入口可达的方法集合。节点身份用**完整签名**（含描述符）：
+    同名重载互相转发时各自算一层，只有真正的 `caller == cur` 才当自环丢弃。
     返回的方法都是 `类.方法签名` 原串，格式化由调用方负责。
     """
     index = graph.get("wrapper_callers") or {}
-    start = key(method)
-    layers = {start: (0, method)}
-    frontier, seen, terminals = [start], {start}, []
+    layers = {method: (0, method)}
+    frontier, seen, terminals = [method], {method}, []
     truncated, depth = False, 0
     while frontier:
         if depth >= MAX_DEPTH:
             truncated = True
             break
         nxt = []
-        for k in frontier:
-            for caller in index.get(k) or []:
-                ck = key(caller)
-                if ck == k or ck in seen:
+        for cur in frontier:
+            for caller in index.get(cur) or []:
+                if caller == cur or caller in seen:
                     continue
-                seen.add(ck)
-                if ck in WRAPPER_TO_ROOT:
-                    layers[ck] = (layers[k][0] + 1, caller)
-                    nxt.append(ck)
+                seen.add(caller)
+                if key(caller) in WRAPPER_TO_ROOT:
+                    layers[caller] = (layers[cur][0] + 1, caller)
+                    nxt.append(caller)
                 else:
                     terminals.append(caller)
         frontier, depth = nxt, depth + 1
     ordered = [m for _, m in sorted(layers.values())]
     callers = sorted(set(terminals))
     attrs = {m: attribution(m) for m in callers}
-    app = sorted(m for m in callers if attrs[m] == "app" and m in reached)
+    app = sorted(m for m in callers
+                 if attrs[m] in ("app", "app_derived") and m in reached)
     return {"root_api": root_api(method), "wrapper_layers": ordered,
             "callers": callers, "caller_attributes": attrs,
             "app_caller": app[0] if app else None, "truncated": truncated}

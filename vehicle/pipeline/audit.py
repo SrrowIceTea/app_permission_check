@@ -19,7 +19,8 @@ from vehicle.compatibility import os_version
 from vehicle.pipeline.contracts import AuditError, digest, read_json, write_json
 from vehicle.pipeline.bundle import package_evidence
 from vehicle.pipeline.execution import Execution
-from vehicle.pipeline.evidence_manifest import capture_paths, fingerprints, input_manifest, verify_document, verify_refs
+from vehicle.pipeline.evidence_manifest import (
+    artifact_ref, capture_paths, fingerprints, input_manifest, verify_document, verify_refs)
 from vehicle.pipeline.preflight import validate_capture
 from vehicle.pipeline.scenarios import load_scenarios
 from vehicle.policy.assessment import assess_policy
@@ -70,6 +71,9 @@ def _audit(execution, capture, output, package, version, scenarios, ai_config, p
             '--package', package, '--session', session, '--android-version', version,
             '--out', findings, '--summary', correlation, '--coverage', coverage_file,
             '--manifest', capture / 'session-manifest.json']
+        hook_bundle = validated['manifest'].get('hook_bundle')
+        if hook_bundle:
+            args.extend(['--hook-bundle-json', json.dumps(hook_bundle, ensure_ascii=False)])
         for flag, name in (('--egress', 'egress.jsonl'), ('--permissions', 'requested-permissions.txt')):
             if (capture / name).exists():
                 args.extend([flag, capture / name])
@@ -83,6 +87,9 @@ def _audit(execution, capture, output, package, version, scenarios, ai_config, p
                      rules_path=rules, catalog_snapshot=catalog_snapshot))
     document['capture_validation'] = {k: v for k, v in validated.items() if k not in ('manifest', 'evidence_artifacts')}
     document['rules_sha256'] = validated['manifest']['rules_sha256']
+    # 产物身份（2026-11-10）：summary.json / report-input.json / PDF 头部都能看到
+    # "这批结论是哪份钩子产物产生的"，不再只能凭文件名与时间猜。
+    document['hook_bundle'] = validated['manifest'].get('hook_bundle')
     document['target_scope'] = 'ordinary_third_party_app'
     document['coverage_chain'] = {'artifact': 'coverage/coverage.json',
         'sha256': digest(coverage_file),
@@ -90,6 +97,7 @@ def _audit(execution, capture, output, package, version, scenarios, ai_config, p
         'unconnected_types': [r['data_type'] for r in chain['rows']
                               if r['hook_coverage']['status'] != 'implemented']}
     document['static_analysis'] = {'status': 'skipped', 'reason': '未提供装机版本对应 APK。'}
+    static_payload = None  # 实际静态扫描产物；未跑时保持 None（分层差集须报 not_supplied）
     if apk and validated['data_scope'] == 'general':
         from vehicle.privacy.pipeline import scan_general_manifest
         document['static_analysis'] = stage('static', lambda: scan_general_manifest(apk, output / 'static', package))
@@ -102,6 +110,7 @@ def _audit(execution, capture, output, package, version, scenarios, ai_config, p
             raise AuditError('static_package_mismatch', '静态 APK 包名与目标不一致。', '提供本轮 APK。')
         static['findings'] = [classify({**finding, 'evidence_kind': 'static'}) for finding in static['findings']]
         write_json(static_dir / 'static.json', static)
+        static_payload = static  # 供本轮分层差集使用，不用规则库能力定义冒充静态扫描
         document['static_analysis'] = {'status': 'completed', 'findings': len(static['findings']),
             'artifact': 'static/static.json', 'scope': 'candidate_only',
             'apk_sha256': validated['manifest']['installed_apk_sha256']}
@@ -118,6 +127,11 @@ def _audit(execution, capture, output, package, version, scenarios, ai_config, p
             and any(pair.get('value_match') is True for pair in r.get('pairs', [])) for r in records),
         'static_candidates': document['static_analysis'].get('findings'),
     }
+    # 检出统计分列（2026-11-10）：findings_total 只数 findings.jsonl，而专用求值器
+    # （HA websocket / MG4 / YAABSA）把结果写在 summary 字段里、从不产生 finding。
+    # 单看 findings_total 会把 5 个有检出的真实案例报成 0，合并成一个"检测率"则同时高估和低估。
+    from vehicle.analyze.detection_summary import summarize as summarize_detection
+    document['detection_summary'] = summarize_detection(records, document)
     document['policy_assessment'] = stage('policy', lambda: assess_policy(policy, package,
         validated['manifest']['installed_apk_sha256'], records, output / 'policy'))
     completeness = input_manifest(capture_paths(capture))
@@ -131,6 +145,25 @@ def _audit(execution, capture, output, package, version, scenarios, ai_config, p
                                   else 'no_text_observed',
     })
     document.update(fingerprints(rules, version, completeness, coverage=coverage_file, findings=findings))
+    # 方法层证据：观测条件判定、来源候选集合、分层差集。必须在 bundle 之前写入，
+    # 这样 PDF 报告与封存产物都能看到「本轮能判什么、缺什么」。
+    from vehicle.analyze.method_evidence import attach as attach_method_evidence
+    document = attach_method_evidence(
+        document, reads=reads, flows=flows, findings=records, capture=capture,
+        coverage_chain=chain, static=static_payload,
+        policy=document['policy_assessment'], scenarios=profile['scenarios'])
+    # 统一证据能力（review P0-2）：候选集合的结论必须回写到 findings 本身。
+    # 否则 review_order / AI 校验 / 报告仍在读 evaluate_data_egress 的旧标记，
+    # 出现「摘要说唯一来源为 0，AI 能力字段说来源已定位」的自相矛盾。
+    # annotate_findings 只增加字段，不改写任何既有值。
+    from vehicle.analyze.source_candidates import annotate_findings
+    annotated = annotate_findings(records, document['source_candidates'])
+    if annotated != records:
+        records = annotated
+        findings.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n'
+                                    for row in records), encoding='utf-8')
+        document['evidence_artifacts']['findings'] = artifact_ref(findings)
+        document['evidence_state_source'] = 'source_candidates'
     document['evidence_artifacts'].update(validated['evidence_artifacts'])
     document['evidence_artifacts'].update(privacy_refs)
     if document['rules_sha'] != document['rules_sha256']:

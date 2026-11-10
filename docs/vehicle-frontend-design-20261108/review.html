@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>车载审计工作台 · 前端改版建议（2026-11-08）</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="review.css">
+</head>
+<body class="doc">
+
+<header class="doc-top">
+  <span class="mark">V-SCANNER<span> / </span>DESIGN REVIEW</span>
+  <nav>
+    <a href="#issues">现状</a><a href="#refs">参照</a><a href="#visual">视觉</a>
+    <a href="#type">排版</a><a href="#flow">交互</a><a href="#plan">落地</a><a href="#accept">验收</a>
+  </nav>
+</header>
+
+<main class="shell">
+  <div class="hero">
+    <p class="eyebrow">Vehicle Frontend · Scene Audit · 2026-11-08</p>
+    <h1>把审计结果从「一张表」<br>变成<em>一台证据仪</em></h1>
+    <p class="lead">车载审计工作台（<span class="mono">vehicle/frontend</span>）的前端改版建议。不改现有零构建结构、不引入打包框架，也不推翻已经签核过的暗场入口；本轮只重做数据页的呈现与交互。</p>
+    <dl class="meta">
+      <div><dt>Scope</dt><dd>新建 / 进度 / 静态 / 动态 / 复核 / 报告 / 源码</dd></div>
+      <div><dt>Stack</dt><dd>纯 HTML / CSS / ES5 脚本，无构建</dd></div>
+      <div><dt>Constraint</dt><dd>单文件 ≤300 行；观察不改写；不输出 policy_violation</dd></div>
+      <div><dt>Deliverable</dt><dd>本建议书 + 同目录对照原型</dd></div>
+    </dl>
+  </div>
+
+  <section id="tldr" style="padding-top:40px">
+    <div class="tldr">
+      <div><b>01</b><p><strong>不换皮，补一层。</strong>入口页的汽车摄影、细衬线标题和 204px 导航保留；问题集中在结果、进度、空态这些<strong>数据页</strong>。</p></div>
+      <div><b>02</b><p><strong>先语义，再美化。</strong>四态（通过 / 待复核 / 失败 / 证据不足）必须同时有颜色、形状、文字；结论等级不能再输出裸英文。</p></div>
+      <div><b>03</b><p><strong>三层下钻。</strong>结论 → 结构化字段 → 原始 JSON。首屏看结论和证据链，复核时才展开原文。</p></div>
+    </div>
+  </section>
+  <section id="issues">
+    <div class="sec-head"><div class="sec-no">01 / DIAGNOSIS</div><div><h2>现状不是「不够现代」，是信息没有层级</h2><p class="sub">以下每条都落到具体文件与行为。行号以当前仓库为准；问题按对复核效率的影响排序。</p></div></div>
+    <div class="issues">
+      <article class="issue">
+        <div class="t"><span class="id">I-01</span><h3>结论等级只有裸英文</h3></div>
+        <p class="where">results.js:86-87 · app.css:1258-1273</p>
+        <p>动态表第 3 列直接输出 <span class="mono">observed</span> / <span class="mono">candidate</span>。共享 CSS 里已有四色 <span class="mono">.result-badge</span>，但结果页从未使用。</p>
+        <p class="hit">不同等级没有形状差异，色弱用户与投影环境都无法一眼区分。</p>
+      </article>
+      <article class="issue">
+        <div class="t"><span class="id">I-02</span><h3>页面顶部没有汇总</h3></div>
+        <p class="where">results.js:89 · summary.json</p>
+        <p><span class="mono">findings_by_conclusion_level</span>、代码定位缺口、采集校验状态都已经在后端摘要里，但要展开最后一个折叠块才能看到。</p>
+        <p class="hit">打开页面第一眼不知道「几条、几条待复核、几条证据不足」。</p>
+      </article>
+      <article class="issue">
+        <div class="t"><span class="id">I-03</span><h3>每行证据就是原始 JSON</h3></div>
+        <p class="where">results.js:30-35, 54-56 · vehicle.css:79-82</p>
+        <p>证据单元格 = <span class="mono">details</span> + <span class="mono">JSON.stringify</span> 全量。关键字段 <span class="mono">event_ids / pairs / delta_ms / code_loc_gaps</span> 没有结构；表格外层和 <span class="mono">pre</span> 各有一层滚动。</p>
+        <p class="hit">双层滚动、长包名撑行，复核只能逐行展开再肉眼找字段。</p>
+      </article>
+      <article class="issue">
+        <div class="t"><span class="id">I-04</span><h3>免责声明和告警同色</h3></div>
+        <p class="where">results.js:83 · app.css:1276-1294</p>
+        <p>「无观测不代表无风险」这类范围说明用黄色左线提示条；真正的「待复核」也用黄。两者在视觉上等价。</p>
+        <p class="hit">免责声明被当成告警，真正的风险提示被稀释。</p>
+      </article>
+      <article class="issue">
+        <div class="t"><span class="id">I-05</span><h3>进度只显示「已发生」</h3></div>
+        <p class="where">app.css:729 · app.js:11-20</p>
+        <p>5 个阶段全部有节点，但 <span class="mono">.pl-pending</span> 被隐藏；没有阶段耗时，也没有总耗时。运行中的长阶段看起来像卡死。</p>
+        <p class="hit">用户无法预期「还剩几步」，刷新后也只能从当前消息重新推断。</p>
+      </article>
+      <article class="issue">
+        <div class="t"><span class="id">I-06</span><h3>空态、未完成、失败三态同形</h3></div>
+        <p class="where">results.js:27-29, 77-79</p>
+        <p><span class="mono">U.empty()</span> 一律塞一个 <span class="mono">&lt;p class="notice"&gt;</span>。未选择任务、动态未完成、请求失败看起来一样，也没有下一步动作。</p>
+        <p class="hit">失败被当成空态，用户只剩「刷新」这一个动作。</p>
+      </article>
+      <article class="issue">
+        <div class="t"><span class="id">I-07</span><h3>连接状态没有视觉编码</h3></div>
+        <p class="where">vehicle.css:92 · app.js:147-161</p>
+        <p><span class="mono">.status-dot</span> 被 <span class="mono">display:none</span>，断连只把文字改成「车载服务未连接」，颜色与正常态相同。</p>
+        <p class="hit">SSE 断开与正常运行在顶栏上不可区分。</p>
+      </article>
+      <article class="issue">
+        <div class="t"><span class="id">I-08</span><h3>上传校验发生在选文件之后</h3></div>
+        <p class="where">app.js:106-124 · app.html:112</p>
+        <p>模式、授权、后缀三项在 <span class="mono">upload()</span> 里逐条 return，错误落进 11px 等宽单行；授权勾选本身是 12px 小字。</p>
+        <p class="hit">用户先选文件再被打回，看不到「还差哪几项」。</p>
+      </article>
+    </div>
+  </section>
+  <section id="refs">
+    <div class="sec-head"><div class="sec-no">02 / REFERENCES</div><div><h2>同类产品实际怎么排证据</h2><p class="sub">只列本轮真正看过的对象，以及准备借用 / 明确不照搬的部分。安全工具最容易犯的错是把「分数」当成「结论」，这里不做。</p></div></div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>对象</th><th>做法</th><th>借鉴</th><th>不照搬</th></tr></thead>
+        <tbody>
+          <tr><td>MobSF<span class="no">移动安全审计</span></td><td>按 high / warning / info 分级染色，每条 finding 带规则、描述、证据入口，报告按类别分组。</td><td>四级语义 + 分组计数；每条结论都能追到规则与证据。</td><td>0–100 安全分：容易被读成合规结论。</td></tr>
+          <tr><td>Android Studio Network Inspector<span class="no">官方文档</span></td><td>顶部事件时间轴可框选，下方详情面板；请求分阶段着色。</td><td>进度 = 时间线 + 每阶段耗时；运行态可定位到具体阶段。</td><td>请求瀑布图：本轮摘要没有逐流延迟数据。</td></tr>
+          <tr><td>jadx-gui<span class="no">APK 反编译</span></td><td>左树、中码、搜索命中；选中上下文跨面板保持。</td><td>源码页的选中态、搜索定位、返回原行。</td><td>完整 IDE 外观与多标签。</td></tr>
+          <tr><td>Exodus Privacy<span class="no">权限与追踪器</span></td><td>权限清单逐条标注 dangerous，tracker 按类别分组。</td><td>权限 chip + 危险标记 + 分组标题。</td><td>品牌 logo 墙，信息密度被图形吃掉。</td></tr>
+          <tr><td>Burp Suite HTTP history<span class="no">流量审查</span></td><td>高密度列表、列宽固定、过滤条件常驻。</td><td>结果列表的筛选 chips 与固定列宽。</td><td>默认展开原始请求/响应报文。</td></tr>
+          <tr><td>Wireshark<span class="no">逐层证据</span></td><td>包列表 → 协议树 → 原始字节，三层下钻。</td><td>结论 → 结构化字段 → 原始 JSON 的三层结构。</td><td>逐字节视图；本工具面向复核而非协议调试。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <section id="visual">
+    <div class="sec-head"><div class="sec-no">03 / VISUAL</div><div><h2>暗场入口 + 证据台，两套密度共用一套令牌</h2><p class="sub">入口页继续用汽车摄影和低照度氛围；数据页去掉大光晕，改用细线、密排、语义色。深浅色不是两套设计，只是把同一组语义映射到两组底色。</p></div></div>
+    <h3>底色与语义色</h3>
+    <div class="palette">
+      <div class="sw"><i style="background:#05080c"></i><b>页底 ink-0</b><span>#05080C · 暗</span></div>
+      <div class="sw"><i style="background:#0e1720"></i><b>面板 ink-2</b><span>#0E1720</span></div>
+      <div class="sw"><i style="background:#8fe3f2"></i><b>强调 cyan</b><span>#8FE3F2</span></div>
+      <div class="sw"><i style="background:#6bd6a0"></i><b>通过 pass</b><span>#6BD6A0</span></div>
+      <div class="sw"><i style="background:#e7c06f"></i><b>待复核 review</b><span>#E7C06F</span></div>
+      <div class="sw"><i style="background:#ff8585"></i><b>失败 fail</b><span>#FF8585</span></div>
+      <div class="sw"><i style="background:#f2efe7"></i><b>纸底 paper</b><span>#F2EFE7 · 浅</span></div>
+      <div class="sw"><i style="background:#ffffff"></i><b>面板 white</b><span>#FFFFFF</span></div>
+      <div class="sw"><i style="background:#0d6b77"></i><b>强调 teal</b><span>#0D6B77</span></div>
+      <div class="sw"><i style="background:#14724a"></i><b>通过 pass</b><span>#14724A</span></div>
+      <div class="sw"><i style="background:#8a5a12"></i><b>待复核 review</b><span>#8A5A12</span></div>
+      <div class="sw"><i style="background:#56656e"></i><b>证据不足 gap</b><span>#56656E</span></div>
+    </div>
+    <p class="plan-note">暗色不是「把白底变黑」：正文用 <b>#A8B7C2</b> 而不是纯白；线用 12% 透明冷白；只有强调与状态色允许饱和。浅色把状态色压深到 AA 对比度，底色偏暖纸，避免医疗白。</p>
+
+    <h3>四态必须同时有颜色、形状、文字</h3>
+    <div class="legend">
+      <div class="cell"><span class="state state--pass"><b>✓</b>通过</span><p>采集校验、流程完整性通过。只描述流程，不等于「无风险」。</p></div>
+      <div class="cell"><span class="state state--review"><b>◐</b>待复核</span><p>候选结论，需要人工或独立复核。黄色只留给它。</p></div>
+      <div class="cell"><span class="state state--fail"><b>✕</b>失败</span><p>任务失败、阶段未完成或校验未通过。必须带下一步动作。</p></div>
+      <div class="cell"><span class="state state--gap"><b>▨</b>证据不足</span><p>未观测、代码定位缺口、仅静态。斜纹 + 虚线，不能当安全。</p></div>
+    </div>
+    <p class="plan-note">另有结论级两态：<span class="state state--observed"><b>●</b>已观测</span> 与 <span class="state state--pass"><b>◆</b>已关联</span>。同一青色系，用「描边 / 实心」表达强度，避免再加第五种色相。</p>
+
+    <h3>层级与间距</h3>
+    <div class="scale">
+      <div class="k">elevation</div><div class="v"><b>三层停用阴影</b><small>页底 / 面板 / 抬升面板只用底色差 + 1px 细线；数据页不加投影与光晕，避免表格漂浮。</small></div>
+      <div class="k">rhythm</div><div class="v"><b>4 / 8 / 12 / 16 / 24 / 32 / 48</b><small>区块 32，卡片内 16，行间 12，标签 8；不使用 20、28 这类无节奏值。</small></div>
+      <div class="k">radius</div><div class="v"><b>3 / 6 / 10</b><small>徽标 3，卡片 6，状态面板 10。表头、行、徽标之间保持同一圆角族。</small></div>
+    </div>
+  </section>
+  <section id="type">
+    <div class="sec-head"><div class="sec-no">04 / TYPOGRAPHY</div><div><h2>中文正文用无衬线，衬线只留给固定标题</h2><p class="sub">现有字体子集只覆盖界面常用词，动态证据里的生僻汉字会回退到系统无衬线——这可以接受，但必须让回退前后字号与行高一致，不能在同一句里跳字形再跳字号。</p></div></div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>用途</th><th>字体栈</th><th>用法</th></tr></thead>
+        <tbody>
+          <tr><td>标题</td><td class="mono">"Noto Serif SC", "Songti SC", serif</td><td>只用于页面大标题与固定品牌词；不与正文混排。</td></tr>
+          <tr><td>界面 / 正文</td><td class="mono">"Manrope", "Noto Sans SC", "Microsoft YaHei UI", sans-serif</td><td>拉丁与数字走 Manrope，中文走 Noto Sans；缺失字回退雅黑时不改字重。</td></tr>
+          <tr><td>标识 / 证据</td><td class="mono">"Cascadia Code", Consolas, "Noto Sans SC", monospace</td><td>规则 ID、包名、哈希、路径、原始 JSON；统一 <span class="mono">tabular-nums</span>。</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>字号阶梯</h3>
+    <div class="scale">
+      <div class="k">display 36 / 1.2</div><div class="v"><b>页面主标题</b><small>只在「新建审计」「动态审计」等页首出现，一页一次。</small></div>
+      <div class="k">title 17 / 1.4</div><div class="v"><b>结论标题</b><small>比规则 ID 大，承担扫读入口；不再用 13px 全部压平。</small></div>
+      <div class="k">body 14 / 1.75</div><div class="v"><b>说明与段落</b><small>中文正文 14px，不超过 72 字符行宽。</small></div>
+      <div class="k">data 13 / 1.65</div><div class="v"><b>表格与证据字段</b><small>行高略紧，保证 8–12 行结论可一屏扫完。</small></div>
+      <div class="k">label 11 / 1.4</div><div class="v"><b>表头、eyebrow、chip</b><small>大写拉丁加 .12em 字距；中文不加字距。</small></div>
+      <div class="k">mono 12 / 1.7</div><div class="v"><b>ID / 哈希 / JSON</b><small>比正文小 1px，靠等宽对齐而不是加粗。</small></div>
+    </div>
+
+    <h3>长路径与哈希</h3>
+    <p>规则 ID 按连字符断行即可（<span class="mono">overflow-wrap:anywhere</span> 只在没有连字符时兜底）；SHA-256 与 base64 必须整段断行、禁止省略号；路径优先保留头尾，中段省略需要 JS，不放进「纯 CSS」清单。</p>
+<pre class="code"><span class="c">/* 可断行，不截断 */</span>
+.hash, .path, .rule-id { font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere; word-break: break-word; }
+<span class="c">/* 只给哈希：每 8 字符留一个可读断点（JS 插入 &lt;wbr&gt;，CSS 不猜） */</span>
+.copy { min-width: 28px; height: 28px; }</pre>
+
+    <h3>密度取舍</h3>
+    <p class="plan-note">只保留一档「舒适」密度：行高 44px、单元格 <span class="mono">12px 16px</span>、表头 sticky。结论用卡片列表而不是宽表，把横向空间还给证据链；需要对比多列（静态 8 列）时才退回表格。展开的证据抽屉限高 <span class="mono">360px</span> 内部滚动，页面本身不再出现第二根横向滚动条。</p>
+  </section>
+  <section id="flow">
+    <div class="sec-head"><div class="sec-no">05 / INTERACTION</div><div><h2>把「等待」和「失败」做成可读状态</h2><p class="sub">交互改动优先做五件事：上传前校验清单、进度时间线、任务恢复、三态组件、可复制字段。全部可在现有 SSE 与 REST 字段上先做降级版。</p></div></div>
+
+    <h3>1 · 上传：先校验，再上传</h3>
+    <p>选中文件立刻显示文件卡（名称、大小、SHA-256 占位），下方三项校验用同一套四态中的「通过 / 待补 / 失败」：<span class="mono">.apk 后缀</span>、<span class="mono">授权已勾选</span>、<span class="mono">当前无运行中任务</span>。未勾选授权时点上传，不弹错，直接把焦点移到复选框并展开说明。</p>
+
+    <h3>2 · 进度：五段全部可见，带耗时</h3>
+    <div class="fig">
+      <div class="timeline-demo">
+        <div class="rail">
+          <div class="st done"><b>静态规则</b>0:12</div>
+          <div class="st done"><b>反编译</b>1:04</div>
+          <div class="st now"><b>设备采集</b>运行中 · 0:34</div>
+          <div class="st pending"><b>校验关联</b>等待</div>
+          <div class="st pending"><b>看板报告</b>等待</div>
+        </div>
+      </div>
+      <p class="fig-cap"><b>图 1</b> 待执行阶段保持可见（虚线），当前阶段展开一行消息，已完成阶段折成耗时。失败时该段变红并展开 <span class="mono">next_action</span>。</p>
+    </div>
+    <p>耗时直接由 SSE 事件的 <span class="mono">ts</span> 差计算，不改后端；总耗时显示「已运行」，完成后再显示终值，不预估 ETA。刷新后先渲染快照里的终态，再补事件，避免闪回。</p>
+
+    <h3>3 · 证据：三层下钻</h3>
+    <div class="fig">
+      <div class="chain-demo">
+        <div class="node"><b>读取</b><span>event #2 · location</span></div>
+        <div class="edge"><span>1.346 s</span><i></i><span>同值 · uid</span></div>
+        <div class="node"><b>外发</b><span>flow #2 · proxy</span></div>
+      </div>
+      <p class="fig-cap"><b>图 2</b> 第一层是「结论 + 证据链」，第二层是结构化字段（窗口、配对、delta、身份），第三层才是原始 JSON。第一层不默认展开。</p>
+    </div>
+
+    <h3>4 · 任务切换与恢复</h3>
+    <p>保留现有原生 <span class="mono">select</span>，但把选项改成「名称 · 状态 · 编号尾 4 位」，历史按钮不再显示裸 ID。页面记住最后查看的任务（<span class="mono">localStorage</span> 只存 job id），刷新优先恢复它；任务仍在跑时自动重连同一 SSE，已结束则直接取摘要与结论。</p>
+
+    <h3>5 · 三态、键盘与复制</h3>
+    <p>空态、加载态、错误态各用一个组件：图标 + 一句话原因 + 一个主操作 + 一个次操作。错误态必须写清是「服务未连接 / 任务失败 / 数据缺失」哪一种，不用「加载失败」一锅端。</p>
+    <p>键盘：首屏加「跳到主内容」skip link；导航加 <span class="mono">aria-current</span>；进度容器 <span class="mono">aria-live="polite"</span> 只播报阶段变化；<span class="mono">:focus-visible</span> 统一 2px 青色环，不用浏览器默认虚线；<span class="mono">details summary</span> 保留原生可聚焦。复制按钮覆盖：规则 ID、会话 ID、包名、SHA-256、文件路径、证据 JSON。</p>
+  </section>
+  <section id="plan">
+    <div class="sec-head"><div class="sec-no">06 / DELIVERY</div><div><h2>改动分三档，后端字段单列</h2><p class="sub">「HTML + JS」仍是零构建，改的是 <span class="mono">app.html / results.js / app.js</span>；后端项全部可以先降级，不阻塞首版。</p></div></div>
+
+    <h3>A · 只改 CSS（<span class="mono">vehicle.css / typography.css / app.css</span>）</h3>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>改动</th><th>落点</th><th>量</th></tr></thead>
+      <tbody>
+        <tr><td>字号/行高/字体栈阶梯</td><td>typography.css 全局层</td><td><span class="badge-s low">S</span></td></tr>
+        <tr><td>表格行高、sticky 表头、细线、数字对齐</td><td>app.css .results-table / .vehicle-table</td><td><span class="badge-s low">S</span></td></tr>
+        <tr><td>四态徽标与徽标空间（类名已存在）</td><td>app.css .result-badge 扩展</td><td><span class="badge-s low">S</span></td></tr>
+        <tr><td>免责声明改为中性范围条，与黄色告警分离</td><td>新增 .scope-note，替换 .notice 用法</td><td><span class="badge-s low">S</span></td></tr>
+        <tr><td>进度：显示 pending、失败段展开、耗时排版</td><td>app.css #pipeline-timeline</td><td><span class="badge-s mid">M</span></td></tr>
+        <tr><td>断连状态改为红/黄 pill（dot 已有）</td><td>vehicle.css .status-dot / topbar</td><td><span class="badge-s low">S</span></td></tr>
+        <tr><td>上传区 drag / error / disabled 三态</td><td>vehicle.css #pipeline-dropzone</td><td><span class="badge-s low">S</span></td></tr>
+        <tr><td>焦点环、滚动条、reduced-motion</td><td>typography.css + app.css</td><td><span class="badge-s low">S</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>B · 需要动 HTML 结构或渲染脚本（仍是零构建）</h3>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>改动</th><th>文件</th><th>量</th></tr></thead>
+      <tbody>
+        <tr><td>结果页汇总条（通过/待复核/失败/证据不足）</td><td>results.js dynamicView，新增一段 DOM</td><td><span class="badge-s mid">M</span></td></tr>
+        <tr><td>结论等级 → 徽标 + 证据链卡片</td><td>results.js table()/evidence() 改造</td><td><span class="badge-s high">L</span></td></tr>
+        <tr><td>结构化证据抽屉 + 原始 JSON 二级折叠</td><td>results.js details() 拆两层</td><td><span class="badge-s mid">M</span></td></tr>
+        <tr><td>进度时间线：pending / 耗时 / 运行详情</td><td>app.js timeline()</td><td><span class="badge-s mid">M</span></td></tr>
+        <tr><td>上传前校验清单 + 文件卡</td><td>app.html / app.js upload()</td><td><span class="badge-s mid">M</span></td></tr>
+        <tr><td>空/加载/错误状态组件</td><td>results.js U.empty() 扩展</td><td><span class="badge-s low">S</span></td></tr>
+        <tr><td>复制按钮、最后任务恢复、aria-live</td><td>app.js / results.js</td><td><span class="badge-s low">S</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>C · 需要后端多返回字段（<span class="mono">vehicle/webapp</span>）</h3>
+    <p class="plan-note">下列字段缺省时前端按现状降级显示；它们只提升「可复核性」，不改变任何结论口径。</p>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>字段</th><th>接口 / 位置</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><span class="mono">rule_title</span></td><td><span class="mono">/findings</span></td><td>卡片主标题，不再让用户读规则 ID 猜含义。</td></tr>
+        <tr><td><span class="mono">finding_id / review_status / reviewer</span></td><td><span class="mono">/findings</span></td><td>「待复核」可被勾选、分派与签核，而不只是颜色。</td></tr>
+        <tr><td><span class="mono">evidence_state</span>（present / partial / gap）</td><td><span class="mono">/findings</span></td><td>每条结论自己的证据状态；现在只能靠 code_loc_gaps 推断。</td></tr>
+        <tr><td><span class="mono">stage_timings[]</span> / 总起止时间</td><td><span class="mono">SSE</span> 或 <span class="mono">/summary</span></td><td>刷新后不依赖重放事件即可显示每段耗时。</td></tr>
+        <tr><td><span class="mono">apk_sha256 / apk_size / package</span></td><td><span class="mono">POST /api/pipeline</span> 响应</td><td>上传完成即显示文件卡；现在要等静态阶段结束。</td></tr>
+        <tr><td><span class="mono">Last-Event-ID</span> 续传</td><td><span class="mono">/events</span></td><td>断线重连不重放全量事件。</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+  <section id="accept">
+    <div class="sec-head"><div class="sec-no">07 / ACCEPTANCE</div><div><h2>验收看这几条，不看「感觉变好看了」</h2><p class="sub">可在无设备环境完成；涉及真实任务的用本机历史产物，不重跑采集。</p></div></div>
+    <ul class="checklist">
+      <li>1280 / 1440 / 1920 三档无横向滚动，表头 sticky 不遮首行。</li>
+      <li>四态在灰度截图下仍可区分（形状/文字，不只颜色）。</li>
+      <li>深浅色正文对比度 ≥ 4.5:1，状态徽标 ≥ 3:1。</li>
+      <li>200% 缩放下结论卡片不重叠，长哈希不撑破容器。</li>
+      <li>Tab 顺序：导航 → 主内容 → 任务选择 → 结论列表 → 抽屉。</li>
+      <li>进度刷新后不闪回，失败段能展开 next_action。</li>
+      <li>复制按钮在 <span class="mono">http://127.0.0.1</span> 下全部可用（file:// 不作为验收环境）。</li>
+      <li>零构建：不新增 npm/打包步骤，<span class="mono">python -m http.server</span> 可直接打开。</li>
+    </ul>
+
+    <h3>打开对照原型</h3>
+    <div class="open">
+      <a href="compare.html"><b>改前 / 改后并排原型</b><span>动态审计结果页 · 深/浅色 · 完成/失败/证据不足</span><em>compare.html</em></a>
+      <a href="../../vehicle/frontend/app.html"><b>当前产品页</b><span>需要先启动 vehicle/webapp/server.py</span><em>vehicle/frontend/app.html</em></a>
+    </div>
+  </section>
+
+  <footer class="doc-foot">
+    <p><b>仅用于授权测试（自有设备与自有 APK）。</b>本建议书只讨论呈现与交互，不改变规则、采集、审计与 AI 行为；不把「未观测」写成「安全」，也不输出 policy_violation。</p>
+  </footer>
+</main>
+
+</body>
+</html>

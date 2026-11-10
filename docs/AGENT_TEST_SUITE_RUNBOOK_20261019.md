@@ -387,6 +387,24 @@ print([r[0] for r in c.execute('select category_key from app_categories order by
 
 ## 10. AAOS 车载模拟器：单样本动态采集（2026-11-10 实测补充）
 
+### 10.0 先重建钩子产物，再做任何设备动作（硬闸）
+
+`vehicle/hooks/dist/` 被 gitignore，设备执行的代码与工作区源码之间**不能靠人记着同步**。
+2026-11-10 实测过反面案例：设备跑 11-06 的 bundle、源码已是 11-10，当时没有任何检查会发现。
+现在任何走设备采集的车载入口都会在起设备前比对产物清单，落后即拒绝开跑。
+
+```powershell
+# 唯一支持的重建命令（写 dist/*.bundle.js + 同名 .sha256.json 清单）
+.\tools\python313.ps1 core\frida_host\build.py --platform vehicle
+```
+
+- 只改了一两个钩子也要跑**整条命令**（`--only` 只用于排查，不是发布口径）。
+- 清单记录：bundle sha256、构建时间、参与源码的逐文件 sha256 + 组合指纹、构建时 dirty 标记。
+- 三档：一致且源码干净 → 放行；一致但 dirty → 告警放行并写 dirty 标记；**产物落后 → 拒绝**。
+- 证据里能查到本轮的 bundle sha256：`verification.json` / `session-manifest.json` /
+  `summary.json` 的 `hook_bundle`，PDF 报告头部「钩子产物」行。
+- 已知缺口：`mobile/hooks/dist`（`build.mjs` 构建）不产清单，不在本闸范围。
+
 > 场景：在 AAOS（`VScanner_AAOS_35_P1`，API 35，user 10）上对单个第三方 APK 做动态采集，
 > 尤其是**流水线走不通、需要手动 attach** 的情况。本轮样本 Breezy Weather 6.2.2
 > （`org.breezyweather`）与 Organic Maps web（`app.organicmaps.web`），产物与两份
@@ -553,6 +571,126 @@ Organic Maps 被 TLS 绕过 NPE 打断），因此两份报告都标明手动会
   `pm uninstall` → `cmd car_service enable-uxr true` → 停 frida-server →
   `adb forward --remove-all` → `adb emu kill` → `adb devices` 应为空；
   再确认无残留 `qemu-system-x86_64` / `emulator` 进程。
+
+### 10.10 证书固定（pinning）判据：2026-11-10 修订
+
+> 适用：带证书固定的样本（NSC `<pin-set>` 或应用自绘 TrustManager）。
+> 本轮样本 Proton Mail 3.0.17（`ch.protonmail.android`）。
+> **依据文档**（都可回溯）：
+> `output/memhook-evidence-20261110/POS-CONTROL-SYSTEM-CA.md`（正控）、
+> `output/memhook-evidence-20261110/NEG-C-SYSTEM-CA.md`（负控-c，系统 CA 二分）、
+> `output/memhook-evidence-20261110/NEG-B-READONLY.md` 与 `NEG-RESULT.md`（负控 b/a）；
+> 原判据出处 `output/memhook-pinning-samples-20261110/DEVICE-VALIDATION-PLAN.md` §6.2 / §7.3 / §8。
+
+#### 10.10.1 旧判据（保留原文，不要删）
+
+`DEVICE-VALIDATION-PLAN.md` §6.2 原文——「必须看到的证据（三条同时成立才算负控通过）」：
+
+| # | 证据 | 采集位置 | 通过示例 |
+| --- | --- | --- | --- |
+| N1 | TLS 已到达拦截端点（收到 ClientHello / 证书已发出） | mitmproxy 事件日志 | `client connect` + `TLS handshake failed` / `server TLS handshake failed` |
+| N2 | 应用侧明确 pin 失败 | logcat | `SSLHandshakeException`，`Caused by: java.security.cert.CertificateException: Pin verification failed` |
+| N3 | 未产生任何 HTTP 请求 | mitmproxy flow 列表 | `mail-api.proton.me` 只有 TLS 事件，**0 条 flow** |
+
+正控侧 §7.3 里被修订的那一条原文（P1，其余三条本轮未改）：
+
+| # | 证据 | 采集位置 | 通过示例 |
+| --- | --- | --- | --- |
+| P1 | bypass 已挂载 | JSONL | `PINNING_ARMED` 事件，且含 `SSLContext.init` 类手法 |
+
+#### 10.10.2 2026-11-10 修订（为什么改）
+
+上面这套判据是围着**可调试夹具**设计的：N2 直接要求应用侧 `Pin verification failed` 原文，
+P1 直接要求出现 `SSLContext.init` 类手法。2026-11-10 在真实第三方样本上实测，两条都落空：
+
+- **N2 对 release 构建结构性不可满足**：本轮 logcat 6,084 行 / 752,924 B，
+  `grep -c 'Pin verification failed'` = **0**。release 包不输出应用侧网络异常，
+  加长窗口也拿不到；负控-c 与正控两轮都卡在同一点，第三层因此在真实样本上**永远无法判定**。
+- **P1 绑定手法会把已成立的绕过判成失败**：该域名的握手闸根本不在 `SSLContext.init`
+  注入的 `TrustManagerImpl` 上（本轮 `hookTrustManagerImpl` / `hookSslContextInit`
+  均 **0 命中**），而在 `android.security.net.config.NetworkSecurityTrustManager.checkPins`。
+  按 P1 原文，一次**已经绕过成功**的正控会被判成 `POS_HOOK_MISS`。
+
+以下六条自 2026-11-10 起执行；旧判据原文保留在此供回溯，不作废历史结论。
+
+#### 10.10.3 修订一：N2 等价物（三件证据必须同时具备）
+
+`Pin verification failed` 原文不可得时，用下面**三项合取**替代 N2，缺一项不能结案：
+
+1. **CA 可信基线**：把 mitmproxy CA 装成系统 CA 后，用**不 pin 的旁路**证明设备侧 TLS 栈
+   真的认了这张 CA——默认信任库与 **APEX 信任库**（`--capath /apex/com.android.conscrypt/cacerts`）
+   两条路径都必须通过（负控-c §3：两条路径均 `HTTP 200`、正文 `vscan-baseline-ok`）。
+   只验一条不够，应用真正读的是 APEX 那份。
+2. **同进程同秒差分**：**同一信任库**下，同一秒内他域握手成功、目标域失败。
+   本轮 11:23:39：同进程 `api.protonmail.ch` 成功并发出
+   `POST /core/v4/reports/sentry/api/41/envelope/`，同一秒 `mail-api.proton.me` 失败。
+   这一条把信任锚从嫌疑里摘出去，比 alert 类型可靠得多。
+3. **失败形态记录**：TLS alert 具体码（本轮 `certificate_unknown(46)`）原样落盘，
+   并记录**是否出现新的失败形态**（形态变了，说明钩子生效但方向不对）。
+   `certificate_unknown(46)` 在"pin 失败"与"信任锚失败"下**同形**，只能用于排除/发现新形态，
+   **不能单独用作归因**。
+
+**原文可得时仍以原文为准**：可调试构建、有自有源码、或能开应用侧日志时，优先补 N2 原文，
+等价物只作退路。等价物最多支撑到"失败在信任锚之外"，**不能**写成
+"已证明是 pin，而不是别的自定义校验"。
+
+#### 10.10.4 修订二：P1 不绑定手法
+
+P1 改为：**`PINNING_ARMED` 事件 + 命中记录（哪条接缝、哪个 host）**，不要求出现
+`SSLContext.init` 类手法。命中记录要能指到日志里的具体行，例如本轮 `SEAM_SKIP` 中
+`okhttp.CertificatePinner` 那条带 `"host":"mail-api.proton.me"`。
+
+#### 10.10.5 修订三：新增必填字段「接缝归属」
+
+判据新增一个必填字段：**实际生效的接缝**。可选值至少包含：
+
+- `android.security.net.config.NetworkSecurityTrustManager.checkPins`（NSC 声明式 pin）
+- `okhttp3.CertificatePinner.check$okhttp`（握手之后的请求闸）
+- `com.android.org.conscrypt.TrustManagerImpl`（`hookTrustManagerImpl`）
+- `SSLContext.init` 注入 TrustManager（`hookSslContextInit`）
+- 其它：写类名 + 方法名，并说明怎么确认的
+
+**接缝不是单选。** 本轮 Proton 是**两道分立的闸**：握手闸 `checkPins`（不绕 → 客户端
+alert 46，握手失败）+ 请求闸 `CertificatePinner.check$okhttp`（握手通了但 pin 不符 →
+OkHttp 直接关连接、不发请求）。只写"绕过了"而不写走哪条接缝，**不算结案**；
+握手通了却判不出为什么通，同样只能写"不能结案"。
+
+#### 10.10.6 修订四：`server_connect = 0` 仍是硬指标
+
+抓解密流量时上游连接数必须为 **0**（`--set connection_strategy=lazy`，请求由本地 addon
+就地应答），并且**原样贴出计数与地址列表**：
+
+```text
+ON7 fail_total=26 est_total=9  mailapi_fail=0 mailapi_est=1 mailapi_req=1 server_connect=0 []
+```
+
+`[]` 是地址列表原文，空即没有建任何上游连接。不贴计数就无法区分"解密成功"和
+"其实放行了真实上游"，也无法证明 lazy 生效。
+
+#### 10.10.7 修订五：关钩子对照必须紧邻正控前后各一次
+
+正控最容易出的假阳是"其实本来就能通"。**同一设备、同一会话配置**下，正控前与正控后
+各跑一次**关钩子**对照，两次都必须失败（本轮 C1′ / C2′ 各 6 次失败、0 次成功、0 条请求）。
+两次都失败而正控成功，才排得掉"本来就能通"。
+
+#### 10.10.8 修订六（新增）：禁止"只挂一条接缝就判成功"
+
+**明确禁止**：只要握手成功就判 `POS_BYPASS_OK`。本轮两条实测教训：
+
+| 轮次 | 挂载范围 | `mail-api` 握手 | HTTP 请求 |
+| --- | --- | --- | --- |
+| ON3 | 只挂 `checkPins` | 成功 6 次 | **0 条** |
+| ON5 | 多接缝 | 成功 1 次（另 1 次在途失败） | 2 条 |
+
+ON3 说明**握手通 ≠ 采到流量**（请求被第二道闸掐掉）；ON5 说明武装时刻之前已在途的握手
+仍会失败，不能把窗口内第一次失败当成"钩子无效"。判据必须同时满足"握手成功 **且** 有解密后
+请求"，并写清两道闸各由哪条接缝放行。
+
+#### 10.10.9 结论码口径（沿用 §8，不新增码）
+
+本轮正控结论码 `POS_BYPASS_OK`（按本节修订后的判据）。同时必须写明：按
+`DEVICE-VALIDATION-PLAN.md` §7.3 **P1 原文**（要求 `SSLContext.init` 类手法）**不满足**，
+如实标注"不宣称满足原文 P1"。不得为凑码表新增结论码。
 
 ---
 

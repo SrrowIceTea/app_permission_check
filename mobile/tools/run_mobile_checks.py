@@ -56,7 +56,17 @@ def main() -> int:
         # 断链未知。判错的方向是「把断链当不可达」——会静默地把真读取藏起来。
         ("reachability", MOBILE / "tools",
          [PY, "-m", "unittest", "test_reachability", "test_reachability_wrapper"]),
+        # L2 只读覆盖统计（2026-11-10）：含**正对照**——现场 javac+d8 编一个夹具，
+        # 里面故意放一条闭集没登记的敏感调用（method_gap / class_gap / 字段读取），
+        # 报不出来就说明 observed_surface 只是在复述闭集。缺 SDK 时该组 skip 而不是假红。
+        ("observed_surface", MOBILE / "tools",
+         [PY, "-m", "unittest", "test_observed_surface"]),
         ("hooks_dispatch", MOBILE / "hooks", ["node", "test_dispatch.mjs"]),
+        # 类晚加载补挂（2026-11-10）：该文件原先就在仓库里，但既不进任何套件、又一跑就
+        # SyntaxError（多行 import 未剥离），属于"存在却从未执行"的假守卫。补挂的
+        # 幂等 / 有界 / 可观测三项只能靠它钉住，所以并入本组（31 → 32）。
+        ("hooks_privacy_impl", MOBILE / "hooks",
+         ["node", "test_privacy_implementation.mjs"]),
         # 两侧同源钩子 JS 的漂移守卫（跨 mobile ↔ vehicle，纯离线；RESEARCH_OUTLOOK §5.4）。
         ("hooks_parity", MOBILE, [PY, str(MOBILE / "tools" / "test_hooks_parity.py")]),
         # A1 分档扫描的汇总口径（三态：有效/环境无效/崩）。表是给 A1 定性的唯一依据，
@@ -108,7 +118,49 @@ def main() -> int:
         # 样本 runner 的还原口径（2026-11-04）：只删自己插入的 _id、还原必须回读比对。
         # "发了还原命令"曾被当成"已还原"，这份守卫把断言钉在回读值上。
         ("sample_runtime", MOBILE / "tools", [PY, "-m", "unittest", "test_sample_runtime"]),
+        # 以下 5 个原先"文件在、但从没被收集"（2026-11-10 僵尸测试盘点，见
+        # docs/ZOMBIE_TESTS_20261110.md）：它们只是被同目录测试当辅助模块 import，
+        # TestCase 一次没跑过。逐个确认不依赖设备/真机/外部服务后并入本套件。
+        # cwd 分两种：需要 `mobile.*` 包路径的用 ROOT + dotted module，
+        # 只有兄弟模块裸 import 的用所在目录 + 裸模块名。
+        ("workbench_adapters", ROOT,
+         [PY, "-m", "unittest", "mobile.workbench.test_adapters"]),
+        ("workbench_http", ROOT,
+         [PY, "-m", "unittest", "mobile.workbench.test_http"]),
+        ("audit_cipher_storage", MOBILE / "audit", [PY, "-m", "unittest", "test_cipher_storage"]),
+        ("lab_pcap_inventory", ROOT,
+         [PY, "-m", "unittest", "mobile.lab.test_pcap_inventory"]),
+        ("lab_core_capture", ROOT,
+         [PY, "-m", "unittest", "mobile.lab.test_core_capture"]),
     ]
+    # mobile/lab/ 剩下的 24 个（2026-11-10 第二轮并入，单跑手册见
+    # docs/MOBILE_LAB_MANUAL_INDEX_20261110.md）：守护 root/非 root 采集、UI 触发、
+    # PCAP/JSONL 解析与国内正式评审的口径，全部纯离线（adb/APK/网络一律 mock）。
+    # 隔离：每一项都是独立的 `python -m unittest` 子进程（见 run()），不共享解释器
+    # 状态，因此不存在模块级全局 / os.environ / sys.path / 临时目录的跨文件污染。
+    lab_root = [
+        "test_compat_control", "test_core_capture_ui", "test_core_compile_entry",
+        "test_core_observer_start", "test_core_pipeline", "test_core_task_binding",
+        "test_domestic_formal", "test_domestic_static", "test_domestic_summary",
+        "test_enrich_risk", "test_jsonl_unicode", "test_nonroot_capture",
+        "test_nonroot_capture_ui", "test_nonroot_traffic", "test_nonroot_vpn_identity",
+        "test_pcap_cooked", "test_readyou_ui", "test_root_runner", "test_root_tcp",
+        "test_sdk_hook_scope",
+    ]
+    # 这 4 个是裸兄弟模块 import（from x import ...），cwd 必须是 mobile/lab。
+    lab_local = ["test_pcap_sidecar", "test_probe_transport",
+                 "test_root_assessment", "test_validate_network"]
+    for name in lab_root:
+        unit.append((f"lab_{name[5:]}", ROOT,
+                     [PY, "-m", "unittest", f"mobile.lab.{name}"]))
+    for name in lab_local:
+        unit.append((f"lab_{name[5:]}", MOBILE / "lab", [PY, "-m", "unittest", name]))
+    # 测试清单守卫（2026-11-10）：仓库里每个 test_* 文件要么被三个 runner 之一引用，
+    # 要么在 tools/test_inventory_allowlist.json 里带具体 reason 登记；否则判红并打印路径。
+    # 判定方式（字符串常量 / f-string 模板 / unittest discover 规则）见该脚本 docstring。
+    unit.append(("test_inventory", ROOT,
+                 [PY, str(ROOT / "tools" / "test_inventory_guard.py")]))
+
     for name, cwd, cmd in unit:
         if not cwd.exists():
             checks.append({"name": name, "exit_code": None, "skipped": "目录不存在"})

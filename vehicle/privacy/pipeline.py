@@ -80,6 +80,32 @@ def _export_catalog(output, expected, snapshot):
     return revision, contract_sha256(catalog), refs
 
 
+def _contract_gate(summary, name, key, manifest, expected):
+    """Run an evaluator only when the capture bound the same contract.
+
+    Returns True when it may run. A mismatch is recorded instead of skipped
+    silently: "the evaluator never ran" must never look like "the application did
+    nothing". This is the same distinction the observation-condition layer makes
+    for collection defects, applied to per-sample contracts.
+
+    Review 2026-11-10: mg4-post's manifest carries no mg4 contract key at all, so
+    both mg4 blocks were skipped and the run reported zero findings with no
+    explanation. That is a capture-side gap, not an absence of behaviour.
+    """
+    found = manifest.get(key)
+    if found == expected:
+        return True
+    summary.setdefault('evaluator_gaps', []).append({
+        'evaluator': name,
+        'status': 'contract_absent' if found is None else 'contract_mismatch',
+        'manifest_key': key,
+        'found': str(found)[:16] if found else None,
+        'expected': str(expected)[:16],
+        'note': '本求值器未运行；该项零 finding 不等于应用没有行为。重采并绑定契约后再判。',
+    })
+    return False
+
+
 def append_general(summary, output, capture, package, session, version='15', *, rules_path=None, catalog_snapshot=None):
     manifest = read_json(capture / 'session-manifest.json')
     revision, catalog_sha, refs = _export_catalog(output, manifest.get('privacy_catalog_sha256'), catalog_snapshot)
@@ -93,27 +119,31 @@ def append_general(summary, output, capture, package, session, version='15', *, 
     if manifest.get('data_scope') == 'general':
         summary['inputs']['reads'] = stats['events']
         summary['version_profile'] = general_profile(version, revision)
-    if manifest.get('ha_webhook_contract_sha256') == ha_contract.contract_hash():
+    if _contract_gate(summary, 'ha_webhook', 'ha_webhook_contract_sha256', manifest,
+                      ha_contract.contract_hash()):
         from vehicle.privacy.ha_evaluation import evaluate as evaluate_ha
         ha_records, summary['ha_webhook'] = evaluate_ha(reads, session, manifest['user_id'])
         records.extend(ha_records)
         summary['inputs']['reads'] += summary['ha_webhook']['power_field_events']
-    if manifest.get(ha_socket.MANIFEST_KEY) == ha_socket.contract_hash():
+    if _contract_gate(summary, 'ha_socket', ha_socket.MANIFEST_KEY, manifest,
+                      ha_socket.contract_hash()):
         from vehicle.privacy.ha_socket_diagnostics import add_capture_gaps
         user = manifest['user_id']
         summary['ha_websocket'] = add_capture_gaps(ha_socket.summarize(reads, session, user),
                                                   reads, session, user)
-    if manifest.get(mg4.MANIFEST_KEY) == mg4.contract_hash():
+    if _contract_gate(summary, 'mg4', mg4.MANIFEST_KEY, manifest, mg4.contract_hash()):
         from vehicle.privacy.mg4_write_evidence import audit as audit_mg4_writes
         summary['mg4_native_http'] = audit_mg4_writes(capture, session)
         summary['mg4_webview'] = {'request_refs': [{'src': r['src'], 'evt_id': r['evt_id']} for r in reads
             if r.get('src') == 'mg4_webview' and r.get('ev') == 'WEBVIEW_POST_REQUEST'
             and r.get('pkg') == package and r.get('session_id') == session],
             'scope': 'app_process_request_metadata_requires_separate_server_receipt'}
-    if manifest.get(abs_scope.MANIFEST_KEY) == abs_scope.contract_hash():
+    if _contract_gate(summary, 'abs', abs_scope.MANIFEST_KEY, manifest,
+                      abs_scope.contract_hash()):
         from vehicle.privacy.abs_runtime import audit_requests
         summary['abs_native_send'] = audit_requests(capture, reads, session, manifest['user_id'])
-    if manifest.get(owntracks.MANIFEST_KEY) == owntracks.contract_hash():
+    if _contract_gate(summary, 'owntracks', owntracks.MANIFEST_KEY, manifest,
+                      owntracks.contract_hash()):
         from vehicle.privacy import owntracks_evidence
         location_records, summary['owntracks_location'] = owntracks_evidence.evaluate(
             reads, flows, session, manifest['user_id'], manifest.get('owntracks_endpoint_host', '198.18.0.1'))

@@ -12,6 +12,7 @@ from pathlib import Path
 import frida
 from device_acceptance import ADB, ROOT, read_events, wait_for
 from core.collector.collector_server import Collector
+from core.frida_host import freshness
 
 sys.path.insert(0, str(ROOT / 'vehicle/traffic'))
 sys.path.insert(0, str(ROOT / 'vehicle/analyze'))
@@ -24,6 +25,11 @@ PACKAGES = ['com.vscanner.targetapp', 'com.vscanner.targetapp2']
 
 
 def main():
+    # 产物新鲜度闸（2026-11-10）：本脚本既走 run.py，也自己 create_script 装载
+    # fixture_control——后者绕过 run.py，所以入口这里先自己过闸。
+    gate = freshness.verify(ROOT / 'vehicle/hooks/dist/fixture_control.bundle.js')
+    if gate['tier'] == 'refuse':
+        raise SystemExit(freshness.refusal_text(gate))
     session = 'multi-' + datetime.now().strftime('%Y%m%d-%H%M%S')
     out = ROOT / 'output' / session
     out.mkdir(parents=True)

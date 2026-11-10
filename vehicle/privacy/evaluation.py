@@ -69,6 +69,23 @@ def request_hashes(flow):
     return hashes
 
 
+OBSERVED_CRITERION = (
+    'collection_state=obtained ∧ uid 归属一致 ∧ 同一 session ∧ data_type 命中；'
+    'call_only/empty/unknown/denied/error 一律不升级')
+CORRELATED_CRITERION = (
+    '先满足 observed 判据，且同一数值哈希出现在出站 JSON 正文中且落在窗口内；'
+    '仅读取不出站、或正文不可见时不得超过 observed')
+
+
+def observed_rows(hits, limit=20):
+    """把升级依据逐条摊开，第三方只看 findings.jsonl 就能复核，不必回读 reads.jsonl。"""
+    return [{'evt_id': r.get('evt_id'), 'src': r.get('src'), 'api': r.get('api'),
+             'collection_state': read_state(r), 'outcome': r.get('outcome'),
+             'value_hash': r.get('value_hash'), 'value_len': r.get('value_len'),
+             'count': r.get('count'), 'host_received_ts': r.get('host_received_ts')}
+            for r in hits[:limit]]
+
+
 def evidence(dtype, hits, egress, rule, platform=None, catalog_revision=2):
     rule_id = ('VSC-GE-' if egress else 'VSC-GR-') + dtype
     expected = 'data_egress' if egress else 'sensitive_read'
@@ -90,6 +107,15 @@ def evidence(dtype, hits, egress, rule, platform=None, catalog_revision=2):
         'session_id': hits[0]['session_id'], 'read_count': len(hits),
         'event_ids': [r['evt_id'] for r in hits],
         'event_refs': [{'src': r['src'], 'evt_id': r['evt_id']} for r in hits],
+        'observed_basis': {
+            'criterion': (CORRELATED_CRITERION if egress else OBSERVED_CRITERION),
+            'collection_state': 'obtained',
+            'states_seen': sorted({read_state(r) for r in hits}),
+            'value_hash_present': sum(1 for r in hits if r.get('value_hash')),
+            'value_len_present': sum(1 for r in hits
+                                     if isinstance(r.get('value_len'), int) and r['value_len'] > 0)},
+        'read_evidence': observed_rows(hits),
+        'read_evidence_total': len(hits),
         'basis_refs': json.loads(rule['basis_refs_json']),
         'source_refs': json.loads(rule['source_refs_json']),
         'privacy_catalog_sha256': catalog_hash(catalog_revision),
@@ -165,9 +191,22 @@ def evaluate(reads, flows, package, session, version='15', rules=None, *, catalo
                                declared_conclusion_level=egress_rule['conclusion_level'],
                                conclusion_capped_by='attribution_loose')
             findings.append(finding)
+    registrations = [r for r in reads if r.get('ev') == 'PRIVACY_REGISTER'
+                     and r.get('pkg') == package and r.get('session_id') == session]
+    reg_by_type = defaultdict(Counter)
+    for row in registrations:
+        for dtype in row.get('data_types', []):
+            reg_by_type[dtype][row.get('registration_kind') or 'unknown'] += 1
+    observed_types = {dtype for (dtype, _uid) in grouped}
     return findings, {'events': len(events), 'states': dict(Counter(read_state(r) for r in events)),
         'by_data_type': {dtype: dict(Counter(read_state(r) for r in events
             if dtype in r.get('data_types', []))) for dtype in types},
+        # 注册/异步调用的可见性：只回答"调用过没有"，不参与任何结论分级。
+        'registrations': {'events': len(registrations),
+            'by_data_type': {dtype: dict(counts) for dtype, counts in reg_by_type.items()},
+            'apis': sorted({r.get('api') for r in registrations if r.get('api')}),
+            'not_observed': sorted(dtype for dtype in reg_by_type if dtype not in observed_types),
+            'note': '注册/异步接口无返回值，回调交付值不计为读取；有注册无取值不得读成未采集。'},
         'catalog_sha256': catalog_hash(catalog_revision),
         'hook_gaps': [r for r in reads if r.get('ev') == 'PRIVACY_GAP'],
         'caveats': [row['gap'] for row in types.values()]}

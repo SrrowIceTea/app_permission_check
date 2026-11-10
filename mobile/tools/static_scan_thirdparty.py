@@ -48,6 +48,26 @@ def _sha256(p: Path) -> str:
     return h.hexdigest()
 
 
+def _surface_manifest(surface: dict | None, target_set: dict) -> dict | None:
+    """把 L2 结果压成 manifest 的独立字段；只有「压根没跑」才是 None。"""
+    if surface is None:
+        return None
+    status = surface.get("status")
+    block = {"status": status,
+             "denominators": surface.get("denominators"),
+             "invisible": surface.get("invisible"),
+             # 只有真产出才有文件；skipped/unavailable 时文件不存在，写名字会误导成"读不到文件"
+             "file": "observed_surface.json" if status == "ok" else None}
+    if status == "ok":
+        block["target_set"] = {k: target_set.get(k)
+                               for k in ("target_set_id", "version", "sha256")}
+        block["note"] = "样本内口径的覆盖统计，不是行业结论，也不得与四桶相加"
+    else:
+        block["reason"] = surface.get("reason") or "未产出（无进一步原因）"
+        block["note"] = "L2 未产出：这是「不可用 / 已跳过」，不是「没有这一项」"
+    return block
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="第三方 APK 静态分析（移动规则库）")
     ap.add_argument("--apk", required=True)
@@ -58,6 +78,8 @@ def main() -> int:
     ap.add_argument("--skip-decompile", action="store_true")
     ap.add_argument("--skip-reachability", action="store_true",
                     help="不跑可达性过滤（退回只按 API 引用计数）")
+    ap.add_argument("--skip-observed-surface", action="store_true",
+                    help="不跑 L2 只读覆盖统计（observed_surface，多一次 dexdump）")
     args = ap.parse_args()
 
     from core.static import analysis, static_rules, toolchain  # noqa: E402
@@ -101,6 +123,31 @@ def main() -> int:
     (out / "static_mobile_supplement.json").write_text(
         json.dumps(supp, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    # --- 3.5) L2 只读覆盖统计（独立文件；与四桶并列，不合并/不加权） --------------
+    # run() 返回的是整份 doc（target_set 在顶层，observed_surface 是其子字典），
+    # 两者要分开取：只取子字典会让 manifest 里的 target_set 拿不到。
+    #
+    # **L2 的任何失败都不得拖垮静态结论**（四桶与 static.json 已经落盘在上一步）：
+    # 目标集 sha 不匹配、目标集文件丢失、dexdump 崩溃，一律收敛成 status=unavailable + 原因。
+    # 但也不许静默省略：显式跳过与失败是两种不同的 status，不能都写成 None。
+    surface = None
+    surface_target_set = {}
+    if args.skip_observed_surface:
+        surface = {"status": "skipped",
+                   "reason": "显式跳过 --skip-observed-surface（L2 未产出，不是「没有这一项」）"}
+    else:
+        try:
+            from mobile.tools import observed_surface  # noqa: E402
+
+            surface_doc = observed_surface.run(apk, out, rules_src, args.version)
+            surface = surface_doc["observed_surface"]
+            surface_target_set = surface_doc.get("target_set") or {}
+        except SystemExit as exc:  # 目标集 sha 不匹配 / 规则库版本不存在
+            surface = {"status": "unavailable",
+                       "reason": f"目标集或规则库校验失败：{str(exc).strip() or 'SystemExit'}"}
+        except Exception as exc:  # noqa: BLE001
+            surface = {"status": "unavailable", "reason": f"{type(exc).__name__}: {exc}"}
+
     # --- 4) 反编译 --------------------------------------------------------------
     decompile_summary = None
     if not args.skip_decompile:
@@ -140,6 +187,9 @@ def main() -> int:
             "framework": (reach_summary or {}).get("framework"),
         },
         "decompile": decompile_summary,
+        # L2 只读覆盖统计：**独立字段**，与 mobile_supplement 的四桶并列，不合并、不加权、
+        # 不折算成检出率。skipped / unavailable 都带 reason，不写成 None 冒充"没有这一项"。
+        "observed_surface": _surface_manifest(surface, surface_target_set),
         "gaps": [
             "core/static 静态侧只评估 over_permission / sensitive_read / data_egress 三类规则；"
             "移动库另外五类（no_consent_read / over_collection / plaintext_transmission / "
@@ -163,6 +213,14 @@ def main() -> int:
         "internet_declared": has_internet,
         "reachability_buckets": manifest["mobile_supplement"]["reachability_buckets"],
         "framework": manifest["mobile_supplement"]["framework"],
+        "observed_surface": None if surface is None else {
+            "status": surface.get("status"),
+            "reason": surface.get("reason"),
+            "target_set_sha256": (surface_target_set.get("sha256") or "")[:12],
+            "invisible_signature_share": (surface.get("invisible") or {}).get("signature_share"),
+            "invisible_call_point_share": (surface.get("invisible") or {}).get(
+                "call_point_share"),
+        },
         "decompile": decompile_summary,
     }, ensure_ascii=False, indent=2))
     return 0

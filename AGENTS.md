@@ -65,7 +65,7 @@ vscanner/
 | `vehicle/privacy/` | 通用隐私来源（定位/麦克风/联系人/Android ID/AAID）规则与设备验收 | [vehicle/privacy/README.md](vehicle/privacy/README.md) |
 | `vehicle/bench/` | 基准/盲测套件与窗口标定（B1–B3 指标） | [vehicle/bench/README.md](vehicle/bench/README.md) |
 | `vehicle/lab/` | 一次性实验与第三方设备验收记录（root/non-root、HA、API 34 等） | `vehicle/lab/P1_P2_RESULTS.md` |
-| `mobile/` | 移动端产品线（MOB-* 规则库/钩子/政策/AI/报告/工具）+ `pipeline/` 一键审计（16 阶段 + SSE）+ `workbench/` 静态工作台 | [mobile/CLAUDE.md](mobile/CLAUDE.md) |
+| `mobile/` | 移动端产品线（MOB-* 规则库/钩子/政策/AI/报告/工具）+ `pipeline/` 一键审计（17 阶段 + SSE）+ `workbench/` 静态工作台 | [mobile/CLAUDE.md](mobile/CLAUDE.md) |
 | `frontend/` | 零构建前端：`index.html` 落地页 + `app.html`「一键审计」工作台 | [frontend/README.md](frontend/README.md) |
 
 各目录的实测教训记录在各自 `DECISIONS.md`（D101–D7xx 编号），
@@ -118,7 +118,7 @@ clone 后 `skills/` 下只有两个索引文件。需要时按 [skills/SKILLS.md
                                                       #       runtime/privacy-runtime/parity/workbench/hook-bundles/
                                                       #       frida-bundle-config
 
-.\tools\python313.ps1 mobile/tools/run_mobile_checks.py   # 移动侧 31 项（另一条入口，改 mobile 后必须跑）
+.\tools\python313.ps1 mobile/tools/run_mobile_checks.py   # 移动侧 63 项（另一条入口，改 mobile 后必须跑）
 .\tools\python313.ps1 tools/check_mobile_branch.py        # 移动分支 24 组（含 workbench / policy / AI / 7 个前端契约）
 ```
 
@@ -156,7 +156,8 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
 - **工程小项闭环**：M034 修 `conn_probe` 并发防撞、加 `run_regressions --mobile` 开关
   （归档文档 TWO_DEV_PLAN 的工程-6/工程-7 已完成）。
 - **隐私工作台**：`mobile/workbench/`（工作流 / 运行时导入 / 合并布局，独立测试齐备）。
-- **一键审计流水线**：`mobile/pipeline/`（16 阶段 + SSE 事件流，`stages.py`/`runner.py`/`server.py`），
+- **一键审计流水线**：`mobile/pipeline/`（17 阶段 + SSE 事件流，`stages.py`/`runner.py`/`server.py`；
+  第 4 阶段 `surface` 是 L2 只读覆盖统计，见 `docs/MOBILE_OBSERVED_SURFACE_20261110.md`），
   前端是根 `frontend/app.html`。**端口分工**：`mobile/pipeline/server.py` 默认 **8771**、
   `mobile/workbench/server.py` 默认 **8772**，两套可同时起；旧文档里"都为 8771"已过时，
   见根 `README.md`「运行入口」。

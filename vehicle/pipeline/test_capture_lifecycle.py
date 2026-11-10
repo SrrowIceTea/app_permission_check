@@ -38,9 +38,14 @@ class CaptureLifecycleTests(unittest.TestCase):
             device.call.side_effect = lambda *args: '123' if args[:2] == ('shell', 'pidof') else ''
             proxy = MagicMock(returncode=0, stdout=io.BytesIO(b'Authorization: Bearer do-not-save\n'))
             reads = MagicMock(returncode=0)
+            # 本用例验证的是"代理日志过滤失败也要恢复 proxy"，不是产物新鲜度；
+            # 新鲜度门禁由 core/frida_host 自己的用例覆盖，这里显式放行。
+            clean = {'tier': 'pass', 'code': 'clean'}
             with patch.multiple(capture, ROOT=root, Device=MagicMock(return_value=device),
                                 write_manifest=MagicMock(), wait_until=MagicMock(),
                                 observe_until=MagicMock(return_value={'reason': 'duration_elapsed'})), \
+                    patch.object(capture.freshness, 'verify', return_value=clean), \
+                    patch.object(capture.freshness, 'identity', return_value={'bundle': 'test'}), \
                     patch.object(capture.socket, 'socket'), \
                     patch.object(capture.subprocess, 'Popen', side_effect=[proxy, reads]), \
                     patch.object(capture, 'restore_proxy', return_value=True) as restore, \

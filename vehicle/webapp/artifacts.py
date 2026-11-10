@@ -5,6 +5,7 @@ from pathlib import Path
 from core.static import jadx
 from vehicle.pipeline.contracts import AuditError
 from vehicle.webapp import finding_reviews
+from vehicle.webapp.observation import annotate
 from vehicle.webapp.presentation import finding_uids, project_summary
 from vehicle.webapp.rule_titles import resolve
 from vehicle.webapp.workflow import RULES
@@ -55,6 +56,7 @@ def review_rows(rows, out):
 def findings(rows, out, version):
     for row, uid in zip(rows, finding_uids(rows)):
         row['finding_uid'] = uid
+    annotate(rows)
     return review_rows(with_titles(rows, version), out)
 
 
@@ -81,7 +83,7 @@ def serve(handler, job, action, query):
     if state != 'done':
         raise AuditError('audit_not_completed', '动态审计尚未完整完成。', '查看任务状态；静态结果仍可单独查看。')
     if action == 'summary':
-        return handler.json(project_summary(document(out / 'audit/summary.json')))
+        return handler.json(project_summary(document(out / 'audit/summary.json'), out))
     if action == 'findings':
         version = (job.data.get('options') or {}).get('version')
         summary = out / 'audit/summary.json'

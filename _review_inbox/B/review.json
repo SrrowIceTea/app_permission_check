@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "slot": "B",
+  "evidence_sha256": "10f7193ccd550d1b7a09a75a3c84434e08d606a03b5394cfbb4132a4292daa39",
+  "plan_sha256": "7db356515c579a46d1ecd09260cd33bc5da13f5652199b0d236233e4a7a36efc",
+  "reviewer": "subagent-slot-B-fresh-context",
+  "agent_id": "bc76da76-dd69-4ad9-84ed-a5e04b3b7de3",
+  "reviewer_kind": "subagent",
+  "context_mode": "fresh",
+  "review_session_id": "479336e5-3677-4ef3-a2a9-57b1c8e8e450",
+  "reviewed_at": "2026-11-10T15:39:17.982088+08:00",
+  "decisions": [
+    {
+      "id": "P01",
+      "decision": "absent",
+      "reason": "lab_power evt_id=14 level=100 (ts 1793691793048) 与 ha_transport evt_id=2 state=73 (request_started_ts 1793691791448, ts 1793691791458) 不对齐：值不等(100≠73)，且读取晚于请求起点约1600ms(设备时钟, 二者同 uid=1010251/pid=3254)。evt_id=2 携带的 73 由 lab_power evt_id=2 产生，evt_id=14 无对应请求，命题被证据否定。"
+    },
+    {
+      "id": "P02",
+      "decision": "absent",
+      "reason": "lab_power evt_id=14 level=100 (ts 1793691793048) 与 ha_transport evt_id=3 state=61 (request_started_ts 1793691792625, ts 1793691792635) 不对齐：值不等(100≠61)，读取晚于请求起点约423ms(设备时钟)。evt_id=3 的 61 对应 lab_power evt_id=8，故 evt_id=14 不能与 ha_transport evt_id=3 构成同一轮。"
+    },
+    {
+      "id": "P03",
+      "decision": "present",
+      "reason": "lab_power evt_id=8 level=61 (ts 1793691791925) 与 ha_transport evt_id=3 state=61 (request_started_ts 1793691792625) 对齐：值相等(61=61)，读取早于请求起点约700ms(设备时钟)，同 uid=1010251/pid=3254。independent_device_server_steps 显示 emulator_level=61、server last_changed=2026-11-03T07:43:12.631021+00:00(epoch ms≈1793691792631) 与请求 ts 1793691792635 相符。命题成立。"
+    },
+    {
+      "id": "P04",
+      "decision": "absent",
+      "reason": "lab_power evt_id=8 level=61 (ts 1793691791925) 与 ha_transport evt_id=2 state=73 (request_started_ts 1793691791448, ts 1793691791458) 不对齐：值不等(61≠73)，且读取晚于请求起点约477ms(设备时钟)。evt_id=2 的 73 对应 lab_power evt_id=2。命题被证据否定。"
+    },
+    {
+      "id": "P05",
+      "decision": "present",
+      "reason": "lab_power evt_id=2 level=73 (ts 1793691790747) 与 ha_transport evt_id=2 state=73 (request_started_ts 1793691791448, ts 1793691791458) 对齐：值相等(73=73)，读取早于请求起点约701ms(设备时钟)，同 uid=1010251/pid=3254。independent_device_server_steps 的 emulator_level=73、server last_changed=2026-11-03T07:43:11.453048+00:00(epoch ms≈1793691791453) 与请求 ts 1793691791458 相符。命题成立。"
+    },
+    {
+      "id": "P06",
+      "decision": "absent",
+      "reason": "lab_power evt_id=2 level=73 (ts 1793691790747) 与 ha_transport evt_id=3 state=61 (request_started_ts 1793691792625) 不对齐：值不等(73≠61)；虽读取早于请求约1878ms(设备时钟)，但 evt_id=3 携带的 61 由 lab_power evt_id=8 产生，故 evt_id=2 不能与之构成同一轮。命题被证据否定。"
+    },
+    {
+      "id": "W01",
+      "decision": "present",
+      "reason": "两次 HTTP 控制回执均 status=200 (ha_transport evt_id=3 turn_on request_started_ts 1793711318872, evt_id=4 turn_off request_started_ts 1793711321845)；同连接订阅响应成功：ha_socket evt_id=4 SEND / evt_id=5 RESULT(conn=2, message_id=1981, success=true) 后 evt_id=6 HA_WS_STATE on(ts 1793711319071)、evt_id=7 off(ts 1793711321856)，两条状态推送分别落在对应 HTTP 请求窗口 [request_started_ts, ts] 内。独立 server_states on last_changed≈1793711319048(距 turn_on 起点+176ms)、off≈1793711321855(距 turn_off 起点+10ms)。三类证据跨设备/服务端时钟相互吻合，支持本轮两次控制。"
+    },
+    {
+      "id": "W02",
+      "decision": "absent",
+      "reason": "ha_transport evt_id=2 (turn_on, request_started_ts 1793691699525, ts 1793691699548) status=503，非成功回执；websocket=[] 且 server_states=[] 无任何成功旁证。命题(本轮有成功 HTTP 控制回执)被证据否定。"
+    },
+    {
+      "id": "W03",
+      "decision": "insufficient",
+      "reason": "server_post_receipts 有 POST status=200 marker-1/body-1(ts_ms 1793691826284)，proxy_observed_post=true、post_marker_matched=true；但 app_request_events=[]、captured_proxy_flow_count=0、post_flow_attributed=0，没有任何可归属到目标应用(uid/pid)的应用侧请求事件或已归属流。代理观察与标记匹配属代理证据，落盘归属计数为 0 属另一类证据；缺一条带目标应用身份且 marker_ref=marker-1 的 app_request_event 或一条可归属代理流，无法完成绑定，也无法据此否定，保留为待补证。"
+    },
+    {
+      "id": "W04",
+      "decision": "present",
+      "reason": "mg4_webview evt_id=2 (uid=1010252/pid=28856, path=/submit, marker_ref=marker-1, ts 1793711782395, host_received_ts 1793711783435) 与 server_post_receipts POST marker_ref=marker-1/body-1(ts_ms 1793711783451) 标记一致；宿主侧对齐：host_received_ts 与 server ts_ms 仅差 16ms(server 稍后)，路径同为 /submit。post_marker_matched=true。虽然 captured_proxy_flow_count=0、post_flow_attributed=0(代理未落盘归属)，但题目所指的“应用内请求标记”已具备携带目标应用身份的 app_request_event，足以将服务端 POST 绑定到本次测试动作。"
+    },
+    {
+      "id": "W05",
+      "decision": "present",
+      "reason": "全部 5 条 wire_requests 的 session_ref=media-session-1，与 server_receipts.session_ref 一致。进度对齐：progress_before=5 对应 body-1 currentTime 5.0(首个)、progress_after=19.499 对应 body-5 currentTime 19.499(末个)；listening_delta 12.070885 等于五条 timeListened 之和(0.161028+5.871496+0.0+6.038361+0.0=12.070885)。暂停后停止增长：pause_progress=10.852(对应 body-3 currentTime 10.852 且 timeListened=0.0)，progress_six_seconds_later 仍为 10.852，六秒采样间进度未变化。同一会话请求与服务端进度对齐且暂停后不再增长，命题成立。"
+    },
+    {
+      "id": "W06",
+      "decision": "present",
+      "reason": "逐条对应成立(均在设备时钟，端口/时间/正文标记三项全等)：wire body-1(device_ts_ms 1793694856040, port 37608, bytes 65) ↔ abs_native_send evt_id=2(device_start_ms 1793694856040, local_port 37608, write_size 65, returned_bytes 65, body_ref body-1)；wire body-2(device_ts_ms 1793694856086, port 37608, bytes 57) ↔ evt_id=3(device_start_ms 1793694856086, device_end_ms 1793694856086, local_port 37608, write_size 57, returned_bytes 57, body_ref body-2)。device_ts_ms==device_start_ms、connection_port==local_port、body_ref 与字节数一致，同 uid=1010253/pid=2066。命题成立。"
+    }
+  ]
+}

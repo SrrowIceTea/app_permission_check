@@ -15,13 +15,14 @@ import time
 import uuid
 from contextlib import nullcontext
 from pathlib import Path
+from core.frida_host import freshness  # noqa: F401  闸的补丁锚点（测试会 patch 它）
 from core.io_utils import load_jsonl
 from vehicle.pipeline.capture_device import Device, wait_until, write_manifest
 from vehicle.pipeline.capture_lifecycle import observe_until, stop_workers
 from vehicle.pipeline.capture_proxy import proxy_state, restore_proxy, verify_reversible
 from vehicle.pipeline.proxy_log import ProxyLog
 from vehicle.pipeline.contracts import ROOT, AuditError, digest, write_json
-from vehicle.pipeline.prepare import new_output
+from vehicle.pipeline.prepare import gated_hook_bundle, new_output
 from vehicle.privacy import ha_contract as ha
 from vehicle.privacy import ha_socket_evidence as ha_socket
 from vehicle.privacy import mg4_contract as mg4
@@ -31,7 +32,7 @@ from vehicle.privacy import owntracks_contract as owntracks
 
 def capture_app(package, serial, user, seconds, output, activity=None, scope='all',
                 preserve_system_proxy=False, frida_port=27043, ha_webhook=False, ha_websocket=False,
-                mg4_webview=False, abs_send=False, owntracks_location=False, owntracks_host='198.18.0.1'):
+                mg4_webview=False, abs_send=False, owntracks_location=False, owntracks_host='198.18.0.1', tls_bypass=True, multi_process=True):
     if not re.fullmatch(r'[A-Za-z]\w*(?:\.\w+)+', package) or seconds <= 0:
         raise AuditError('invalid_capture_target', '包名无效或采集时长非正数。', '明确指定授权包名与时长。')
     if sum((ha_webhook, ha_websocket, mg4_webview, abs_send, owntracks_location)) > 1:
@@ -41,17 +42,17 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
     if owntracks_location:
         sample_mode = owntracks
     output = Path(output).resolve()
+    # 产物新鲜度闸（2026-11-10）：在**任何**设备动作之前拒绝落后的 dist 产物。
+    bundle, hook_bundle = gated_hook_bundle(scope, sample_mode)
+    bundle_name = bundle.name
     output.mkdir(parents=True, exist_ok=False)
     device, session = Device(serial), output.name + '-' + uuid.uuid4().hex
     processes, handles = [], []
     proxy_log = None
     proxy_before, reverse_owned, proxy_owned = None, False, False
     identity, initial_pid = None, None
-    verification = {'passed': False, 'session': session, 'checks': {}}
-    bundle_name = 'hook_vehicle_general.bundle.js' if scope == 'general' else 'hook_vehicle_all.bundle.js'
-    if sample_mode:
-        bundle_name = sample_mode.BUNDLE
-    bundle = ROOT / 'vehicle/hooks/dist' / bundle_name
+    verification = {'passed': False, 'session': session, 'checks': {},
+                    'tls_bypass': bool(tls_bypass), 'multi_process': bool(multi_process), 'hook_bundle': hook_bundle}
     used = None
     abs_rows = None
     for name in ('reads.jsonl', 'flows.jsonl'):
@@ -94,6 +95,7 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
         archived.parent.mkdir()
         shutil.copyfile(bundle, archived)
         used = digest(archived)
+        hook_bundle['sha256'] = used
         with socket.socket() as probe:
             probe.bind(('127.0.0.1', 8888))
         if any('tcp:8888' in line for line in device.call('reverse', '--list').splitlines()):
@@ -146,15 +148,20 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
             '--user', str(user), '--allow-package', package, '--script', str(archived), '--port', str(frida_port),
             '--stop-file', str(output / '.stop'), '--seconds', str(seconds + 40),
             '--out', str(output / 'reads.jsonl'), '--session', session,
-            '--event-db', str(output / 'events.sqlite')], 'reads', env)
-
+            '--event-db', str(output / 'events.sqlite'),
+            # 显式开关（2026-11-10）：默认传，保持既有交付行为；--no-tls-bypass 才关。
+            # 开关值可 grep 处：reads.log「分档模式」行、reads.jsonl TLS_SWITCH 事件、verification.json。
+            *(['--tls-bypass'] if tls_bypass else []),
+            *(['--multi-process'] if multi_process else [])], 'reads', env)
         def hooks_ready():
             if driver.poll() is not None:
                 raise AuditError('driver_exited', 'Hook 驱动提前退出。', '查看 reads.log。')
             armed = {(r.get('src'), r.get('ev')) for r in load_jsonl(output / 'reads.jsonl')}
             from vehicle.privacy.catalog import catalog_hash
             required = {('privacy', 'ARMED')}
-            required.update(sample_mode.REQUIRED if sample_mode else {('egress', 'ARMED'), ('tls', 'PINNING_ARMED')})
+            # 关掉收宽时没有 PINNING_ARMED，改用 TLS_BYPASS_DISABLED 作为「开关确实生效且未武装」标记。
+            tls_mark = ('tls', 'PINNING_ARMED') if tls_bypass else ('tls', 'TLS_BYPASS_DISABLED')
+            required.update(sample_mode.REQUIRED if sample_mode else {('egress', 'ARMED'), tls_mark})
             if mg4_webview:
                 required.add(('http_write', 'ARMED'))
             if scope == 'all':
@@ -245,7 +252,8 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
                            ('reads.jsonl', 'flows.jsonl', 'egress.jsonl', 'verification.json', 'mitm.log',
                             'requested-permissions.txt', 'collector-health.json', 'scope-discarded.json',
                             *((abs_scope.INPUT,) if abs_send else ())), bundle_name,
-                           preserve_system_proxy=preserve_system_proxy)
+                           preserve_system_proxy=preserve_system_proxy,
+                           hook_bundle=hook_bundle)
     return verification
 
 
@@ -267,15 +275,23 @@ def main(argv=None):
     ha_modes.add_argument('--owntracks-location', action='store_true', help='观察指定 OwnTracks 测试 APK 的定位回调')
     parser.add_argument('--preserve-system-proxy', action='store_true',
                         help='保留设备代理设置。仅观察 Hook，业务流量正文可能不可见。')
-    parser.add_argument('--scope', choices=('all', 'general'), default='all',
-                        help='all: API35 VHAL + 通用来源；general: API33–36 通用来源，不套用 VHAL')
+    parser.add_argument('--scope', choices=('all', 'general'), default='all', help='all: API35 VHAL + 通用来源；general: API33–36 通用来源，不套用 VHAL')
+    parser.add_argument('--tls-bypass', dest='tls_bypass', action='store_true', default=True,
+                        help='对目标进程武装 TLS 校验收宽（默认开，保持既有交付行为）。'
+                             '开关值写入 verification.json 的 tls_bypass 字段')
+    parser.add_argument('--no-tls-bypass', dest='tls_bypass', action='store_false',
+                        help='不武装 TLS 校验收宽（G0 对照用）：只发 TLS_SWITCH/TLS_BYPASS_DISABLED，'
+                             '不创建任何 pinning 接缝')
+    parser.add_argument('--no-multi-process', dest='multi_process', action='store_false',
+                        help='只 attach 主进程（对照用）；默认附加子进程')
     args = parser.parse_args(argv)
     output = args.out or new_output('vehicle-capture')
     result = capture_app(args.package, args.serial, args.user, args.seconds, output, args.activity,
                          args.scope, preserve_system_proxy=args.preserve_system_proxy,
                          frida_port=args.frida_port, ha_webhook=args.ha_webhook, ha_websocket=args.ha_websocket,
                          mg4_webview=args.mg4_webview, abs_send=args.abs_send,
-                         owntracks_location=args.owntracks_location, owntracks_host=args.owntracks_host)
+                         owntracks_location=args.owntracks_location, owntracks_host=args.owntracks_host,
+                         tls_bypass=args.tls_bypass, multi_process=args.multi_process)
     print(json.dumps({'passed': result['passed'], 'out': str(output)}, ensure_ascii=False))
     return 0 if result['passed'] else 1
 

@@ -16,7 +16,7 @@
 | 入口 | 前端 `frontend/index.html` → 工作台 `frontend/app.html` → `mobile/pipeline/server.py`（端口 **8771**） |
 | 兼容旧端 | `mobile/workbench/server.py`（端口 **8772**，旧隐私工作台，可并行） |
 | 运行模式 | Root 模拟器（frida-server 直挂）/ 非 root Gadget 重签衍生包（两轮正控均已通过） |
-| 离线优先 | 绝大多数能力无需设备即可回归（`run_mobile_checks.py` 31 项、`check_mobile_branch.py` 24 组） |
+| 离线优先 | 绝大多数能力无需设备即可回归（`run_mobile_checks.py` 63 项、`check_mobile_branch.py` 24 组） |
 
 ---
 
@@ -32,7 +32,7 @@
                                  │ HTTP + SSE 事件流（唯一契约）
 ┌───────────────────────────────┴──────────────────────────────────────┐
 │                    编排层  mobile/pipeline/  (端口 8771)                │
-│   stages.py 16 阶段  ·  runner.py 执行器  ·  server.py SSE 服务         │
+│   stages.py 17 阶段  ·  runner.py 执行器  ·  server.py SSE 服务         │
 └───────┬───────────────┬───────────────┬───────────────┬──────────────┘
         │               │               │               │
 ┌───────▼──────┐ ┌──────▼───────┐ ┌─────▼──────┐ ┌──────▼───────┐
@@ -104,11 +104,11 @@
 - `report_mobile.py`：PDF（十章 + 三附录），含工具结论 + AI 研判 + 校验问题清单；中文字体链路照抄车载（SimHei → DengXian → 雅黑 → STSong）。
 
 ### 3.7 编排层 `pipeline/`（一键审计）
-- `stages.py`：16 阶段定义（前端时间线唯一契约 `{"ts","stage","status","message"}`）。
-- `runner.py` 执行器、`server.py` HTTP+SSE（端口 8771）、`history.py` 历史任务、`formal_runner.py` 真实 AI 硬门控。
+- `stages.py`：17 阶段定义（前端时间线唯一契约 `{"ts","stage","status","message"}`）。
+- `runner.py` 执行器、`server.py` HTTP+SSE（端口 8771）、`history.py` 历史任务、`formal_runner.py` 真实 AI 硬门控、`surface_stage.py` L2 只读覆盖统计（软着陆）。
 - 前端对应 `frontend/app.html`；旧 `workbench/server.py` 端口 8772 保留兼容。
 
-**16 阶段顺序**：`prepare 环境准备 → boot 模拟器就绪 → static 静态剖析 → frida_server → network → install 安装样本 → launch 启动应用 → conn_probe 连接采样 → mitm 流量镜像 → hooks 插桩 → explore 交互驱动 → death_probe 存活取证 → correlate 关联分析 → bundle 证据封装 → ai_review AI 研判 → report 报告生成`。
+**17 阶段顺序**：`prepare 环境准备 → boot 模拟器就绪 → static 静态剖析 → surface 敏感面统计（L2，只读） → frida_server → network → install 安装样本 → launch 启动应用 → conn_probe 连接采样 → mitm 流量镜像 → hooks 插桩 → explore 交互驱动 → death_probe 存活取证 → correlate 关联分析 → bundle 证据封装 → ai_review AI 研判 → report 报告生成`。
 
 ---
 

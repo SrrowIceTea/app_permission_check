@@ -5,16 +5,20 @@
 // 本模块只管"怎么把校验放宽"，不管"什么时候该放宽、对哪个进程放宽"——
 // 后者是入口脚本（ssl_pinning_bypass.js）的白名单判断。分开的理由：
 // 入口脚本的职责随场景变（附加哪个进程、白名单是谁），
-// 而这些绕过手法是固定的四条，改动它们的理由和改白名单的理由完全不同。
+// 而这些绕过手法是固定的五条，改动它们的理由和改白名单的理由完全不同。
 //
-// 四条手法（覆盖范围同 ssl_pinning_bypass.js 的 PINNING_ARMED 事件，那里也逐条报）：
+// 五条手法（覆盖范围同 ssl_pinning_bypass.js 的 PINNING_ARMED 事件，那里也逐条报）：
 //   1) conscrypt.TrustManagerImpl 的 checkTrustedRecursive / verifyChain / checkTrusted
-//      —— 吞掉证书类异常，覆盖：未知 CA / 自签证书、Network Security Config
-//      <pin-set>（NSC 固定走 conscrypt 同一条校验路径）、主机名不匹配
+//      —— 吞掉证书类异常，覆盖：未知 CA / 自签证书、主机名不匹配
 //   2) javax.net.ssl.SSLContext.init(...) 传入的自定义 TrustManager：
 //      checkServerTrusted/checkClientTrusted 全部重载置为放行（按类钩，进程内生效）
-//   3) okhttp3.CertificatePinner（check / check$okhttp）：置为 no-op（若类存在）
-//   4) javax.net.ssl.HttpsURLConnection 的默认/实例 HostnameVerifier：替换为恒真
+//   3) okhttp3.CertificatePinner（check / check$okhttp）：置为 no-op（若类存在）——**请求**层 pin
+//   4) android.security.net.config.NetworkSecurityTrustManager.checkPins：
+//      声明式 pin（network_security_config 的 <pin-set enforcePinning="true">）的**握手**层实施点，
+//      置为 no-op。3) 与 4) 是两道独立的闸：只放行 3) 握手仍失败；只放行 4) 握手成功但请求 0 条
+//      （Proton Mail 3.0.17 实测，2026-11-10）。4) 在类/方法不存在时发 SEAM_SKIP 跳过，不中断武装。
+//      注意 1) 只吞"证书链校验"抛出的异常，声明式 pin 走的是 4) 这条独立路径（1) 对这类样本 0 命中）。
+//   5) javax.net.ssl.HttpsURLConnection 的默认/实例 HostnameVerifier：替换为恒真
 // 不覆盖：native TLS（BoringSSL/libssl 自定义 verify callback）、应用手写的证书指纹
 // 比对、WebView/Chromium 引擎自身（非 conscrypt）的校验、非 Java 运行时（Flutter/RN）。
 //
@@ -151,8 +155,15 @@ export function makeBypasses(vlog) {
         try {
           var ov = cls[mName].overloads.find(o => o.argumentTypes.map(t => t.className).join(",") === typesArr.join(","));
           ov.implementation = function () {
-            logCapped('okhttp:' + mName, { target: 'okhttp3.CertificatePinner.' + mName,
-                                           detail: 'pin check skipped (no-op)' });
+            var args = Array.prototype.slice.call(arguments);
+            // host = 该签名的第一个字符串参数（check(host, chain) / check$okhttp(host, …)）。
+            var host = '';
+            for (var k = 0; k < args.length; k++) {
+              if (typeof args[k] === 'string') { host = String(args[k]); break; }
+            }
+            logCapped('okhttp:' + mName, { seam: 'okhttp.CertificatePinner',
+                                           target: 'okhttp3.CertificatePinner.' + mName,
+                                           host: host, detail: 'pin check skipped (no-op)' });
             return undefined; // check() 返回 void；no-op 即绕过固定校验
           };
           hooked.push('okhttp3.CertificatePinner.' + mName + '(' + typesArr.join(',') + ')');
@@ -162,7 +173,69 @@ export function makeBypasses(vlog) {
     return hooked;
   }
 
-  // ---- 4) HttpsURLConnection HostnameVerifier：默认/实例 替换为恒真 ----
+  // ---- 4) NetworkSecurityTrustManager.checkPins：**声明式 pin 的握手闸** ----
+  // 与 3) 的分工不许合并成一个判断：
+  //   · 这里（checkPins）管**握手**：network_security_config 里
+  //     <pin-set enforcePinning="true"> 的证书链 pin 校验在本方法内完成；
+  //     不放行它，握手阶段就抛 CertificateException，连 HTTP 都发不出去；
+  //   · 3) okhttp3.CertificatePinner 管**请求**：握手过了之后 OkHttp 再校一遍 pin。
+  // 实测定性（Proton Mail 3.0.17，2026-11-10）：只放行 3) → 握手失败；只放行这里 →
+  // 握手成功但 HTTP 请求 0 条；两条都放行才出流量。声明式 pin 是当前主流做法，
+  // 而 1)/2) 对这类样本 0 命中，说明它走的是这条独立路径。
+  // 运行期事件用 seam 字段区分两道闸：okhttp.CertificatePinner 带 host；
+  // NetworkSecurityTrustManager.checkPins 的 host 恒为空串（签名里没有 host 参数）。
+  var NSC_TM = 'android.security.net.config.NetworkSecurityTrustManager';
+
+  function hookNscCheckPins() {
+    var cls = tryUse(NSC_TM);
+    // 老 API 没有声明式 pin 的实施点：静默跳过，不许因一条接缝缺席中断整包武装。
+    if (cls === null) {
+      vlog('SEAM_SKIP', { target: NSC_TM + '.checkPins',
+                          note: '类不存在（该 API 无声明式 pin 实施点），跳过；其余手法照常' });
+      return [];
+    }
+    var holder = null;
+    try { holder = cls.checkPins; } catch (e0) { holder = null; }
+    if (!holder) {
+      vlog('SEAM_SKIP', { target: NSC_TM + '.checkPins',
+                          note: '方法未被 bridge 暴露（可能被内联），跳过；其余手法照常' });
+      return [];
+    }
+    var overloads = [];
+    try { overloads = holder.overloads || []; } catch (e1) { overloads = []; }
+    if (overloads.length === 0) {
+      vlog('SEAM_SKIP', { target: NSC_TM + '.checkPins', note: '无可用的重载，跳过' });
+      return [];
+    }
+    var hooked = [];
+    for (var i = 0; i < overloads.length; i++) {
+      (function (ov, idx) {
+        try {
+          ov.implementation = function () {
+            // 平台签名是 checkPins(X509Certificate[])，argc=1 —— 物理上拿不到 host。
+            // 不猜 host、也不用 SNI 反填：留空并写明原因，否则就是假证据。
+            logCapped('nsc:checkPins#' + idx,
+                      { seam: 'NetworkSecurityTrustManager.checkPins',
+                        target: NSC_TM + '.checkPins', host: '',
+                        host_absent: 'checkPins(X509Certificate[]) has no host argument',
+                        detail: 'declarative <pin-set> handshake check relaxed' });
+            return undefined; // void：不抛 CertificateException 即放行握手
+          };
+          hooked.push(NSC_TM + '.checkPins#' + idx);
+        } catch (e2) {
+          vlog('ERROR', { where: 'hook ' + NSC_TM + '.checkPins#' + idx, msg: String(e2) });
+        }
+      })(overloads[i], i);
+    }
+    // 可检索的武装标记（与 PINNING_ARMED 并列）：这里报接缝名与已挂重载；
+    // 运行期 PINNING_BYPASS{seam=NetworkSecurityTrustManager.checkPins, host=''} 报"被走到没有"。
+    // host 恒为空串且带 host_absent 原因，别按空串判定"没走到"。
+    vlog('PIN_SET_ARMED', { target: NSC_TM + '.checkPins', hooked: hooked,
+                            note: '声明式 <pin-set> 握手闸已武装；请求闸见 okhttp3.CertificatePinner' });
+    return hooked;
+  }
+
+  // ---- 5) HttpsURLConnection HostnameVerifier：默认/实例 替换为恒真 ----
   function hookHostnameVerifier() {
     var hooked = [];
     try {
@@ -208,6 +281,7 @@ export function makeBypasses(vlog) {
       hooked = hooked.concat(hookTrustManagerImpl());
       hooked = hooked.concat(hookSslContextInit(logCapped, vlog));
       hooked = hooked.concat(hookOkhttpPinner());
+      hooked = hooked.concat(hookNscCheckPins());
       hooked = hooked.concat(hookHostnameVerifier());
       return hooked;
     },

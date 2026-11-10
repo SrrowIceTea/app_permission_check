@@ -40,6 +40,21 @@ def load_report_evidence(args):
     return load_jsonl(args.findings), summary, flows
 
 
+def hook_bundle_line(hook):
+    """产物身份行（2026-11-10）：bundle sha256 + 构建时间 + dirty 标记。
+
+    `dist/` 被 gitignore 之后，报告里没有这一行就无法回答"这批结论是哪份钩子代码
+    产生的"——2026-11-10 之前的所有车载实测正是这种情况。
+    """
+    if not isinstance(hook, dict) or not hook.get('sha256'):
+        return '旧数据：未记录产物哈希（无法判断代码基线）'
+    dirty = (hook.get('dirty_at_build') or {}).get('dirty')
+    files = (hook.get('dirty_at_build') or {}).get('files') or []
+    return (f"{hook.get('bundle') or '-'} @ {hook['sha256'][:32]}… / "
+            f"{hook.get('built_at') or '构建时间未知'} / "
+            + (f"dirty 构建（{len(files)} 个文件未提交，基线非提交）" if dirty else 'clean 构建'))
+
+
 def fingerprint_rows(summary):
     if not summary.get('evidence_artifacts'):
         return []

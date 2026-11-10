@@ -7,7 +7,9 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from vehicle.bench.blind_evidence import PILOT_IDS, REVIEW_TITLES, WORKFLOWS, Sources, battery
 from vehicle.bench.labels import LABEL_SCHEMA, canonical_sha, reference_identity
-from vehicle.bench.review_policy import DEFAULT_REVIEW_MODE, REVIEW_MODES, comparison_mode, identity, signoff_fields
+from vehicle.bench.review_policy import (DEFAULT_REVIEW_MODE, AGENT_MODES, REVIEW_MODES,
+                                         comparison_mode, identity, reviewer_kind,
+                                         signoff_fields)
 from vehicle.pipeline.contracts import ROOT, digest, read_json, write_json
 
 SUITE = ROOT / 'vehicle/bench/aaos35-suite.json'
@@ -25,6 +27,8 @@ GUIDE = """# O3 首轮独立标注
 reviewer 填实际复核者，reviewer_kind 按本轮填写 human 或 subagent；ai 仅供旧初评。
 subagent 另填实际 agent_id、context_mode=fresh 和独立 UUID review_session_id；不得冒充真人。
 reviewed_at 填带时区的 ISO 8601 时间。同模型可能有共同错误，独立上下文不保证结论正确。
+跨模型轮次还须填 model_family（同一厂商/同一底座算同一家族）与 model_id；
+两位审阅人和仲裁人必须是三个不同家族，否则本轮只能算同模型复核。
 两位审阅者分别把填写完的 review.json 交回组织者。
 
 电量题逐对判断同一次读取与请求是否能对齐。可核对 level、scale、实际请求字段、
@@ -85,17 +89,20 @@ def prepare(suite, out, root=ROOT, review_mode=DEFAULT_REVIEW_MODE):
     write_json(evidence_path, evidence)
     evidence_sha = digest(evidence_path)
     plan = {'schema_version': 1, 'review_mode': review_mode,
+            'reviewer_kind': reviewer_kind(review_mode),
             'suite_sha256': digest(suite), 'evidence_sha256': evidence_sha,
             'cases': bindings, 'items': items, 'status': 'awaiting_independent_reviews'}
     plan_path = private / 'plan.json'
     write_json(plan_path, plan)
     plan_sha = digest(plan_path)
+    kind = reviewer_kind(review_mode)
     for slot in ('A', 'B'):
         review = {'schema_version': 1, 'slot': slot, 'evidence_sha256': evidence_sha,
                   'plan_sha256': plan_sha,
-                  'reviewer': None, 'reviewer_kind': review_mode, 'reviewed_at': None,
-                  **({'agent_id': None, 'context_mode': 'fresh', 'review_session_id': None}
-                     if review_mode == 'subagent' else {}),
+                  'reviewer': None, 'reviewer_kind': kind, 'reviewed_at': None,
+                  **({'agent_id': None, 'context_mode': 'fresh', 'review_session_id': None,
+                      'model_family': None, 'model_id': None}
+                     if kind == 'subagent' else {}),
                   'decisions': [{'id': item['id'], 'decision': None, 'reason': None} for item in items]}
         with ZipFile(out / f'reviewer-{slot}.zip', 'x', compression=ZIP_DEFLATED) as archive:
             archive.writestr('README.md', GUIDE)
@@ -167,7 +174,7 @@ def build_comparison(private, first, second, root=ROOT):
         if 'insufficient' in (a_row['decision'], b_row['decision']):
             insufficient.append(key)
     pair_insufficient = [x['id'] for x in pair_items if x['id'] in insufficient]
-    if not all(row.get('reviewer_kind') == mode for row in (a, b)):
+    if not all(row.get('reviewer_kind') == reviewer_kind(mode) for row in (a, b)):
         status = f'awaiting_{mode}_reviews'
     elif pair_insufficient:
         status = 'awaiting_pair_evidence'
@@ -185,7 +192,7 @@ def build_comparison(private, first, second, root=ROOT):
     if not result['pair_items_with_insufficient_evidence']:
         binding = next(case for case in plan['cases'] if case['id'] == 'ha-battery')
         label = {key: binding[key] for key in ('id', 'apk_sha256', 'session_id')}
-        origin = ('subagent_review' if mode == 'subagent' else 'agent_review'
+        origin = ('subagent_review' if mode in AGENT_MODES else 'agent_review'
                   if any(row.get('reviewer_kind') == 'ai' for row in (a, b)) else 'independent_review')
         label.update(schema_version=LABEL_SCHEMA, pair_schema=2, sample_origin='independent',
             origin=origin, **signoff_fields(mode, 'pending'),

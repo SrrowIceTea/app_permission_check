@@ -72,7 +72,8 @@ def wait_until(predicate, seconds, operation):
 
 
 def write_manifest(output, session, package, identity, used, input_names,
-                   bundle_name='hook_vehicle_all.bundle.js', preserve_system_proxy=False):
+                   bundle_name='hook_vehicle_all.bundle.js', preserve_system_proxy=False,
+                   hook_bundle=None):
     from vehicle.privacy.catalog import catalog_hash
     from vehicle.privacy import ha_contract as ha
     from vehicle.privacy import ha_socket_evidence as ha_socket
@@ -88,6 +89,9 @@ def write_manifest(output, session, package, identity, used, input_names,
         'input_sha256': {name: digest(output / name) for name in input_names if (output / name).is_file()},
         'capture_mode': 'attach_preserve_proxy' if preserve_system_proxy else 'attach_system_proxy',
         'gaps': ['仅覆盖 attach 后与所附加进程；多进程、忽略系统代理或未知协议可能漏采。']}
+    if hook_bundle:
+        # 产物身份（2026-11-10）：bundle sha256 + 构建时间 + 源码指纹 + 构建时 dirty 标记。
+        manifest['hook_bundle'] = hook_bundle
     if preserve_system_proxy:
         manifest['gaps'].append('未修改设备代理。未经过本采集代理的业务正文不可见。')
     if bundle_name == ha.BUNDLE:

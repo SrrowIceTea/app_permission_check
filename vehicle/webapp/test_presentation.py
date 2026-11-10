@@ -5,6 +5,7 @@
 import json
 import unittest
 
+from vehicle.webapp.observation import annotate, observation
 from vehicle.webapp.presentation import count_bands, finding_uids, stage_timings
 from vehicle.webapp.rule_titles import resolve
 from vehicle.webapp.workflow import RULES
@@ -104,6 +105,80 @@ class CountAndTimingTest(unittest.TestCase):
         self.assertIn('跳过', timings[1]['unavailable_reason'])
         self.assertIsNone(timings[2]['duration_ms'])
         self.assertEqual('pending', timings[2]['status'])
+
+
+class ObservationProjectionTest(unittest.TestCase):
+    """三态投影：只按 general_privacy 与结论行分档，不把注册当读取、不把未观测当安全。"""
+
+    def general(self, **overrides):
+        data = {'by_data_type': {'location': {'obtained': 2}, 'microphone': {},
+                                 'contacts': {'denied': 1}, 'android_id': {}, 'advertising_id': {}},
+                'registrations': {'events': 2, 'by_data_type': {'location': {'listener_registration': 2}}},
+                'hook_gaps': [{'where': 'api_unavailable', 'evt_id': 3, 'message':
+                               'android.provider.Settings$Secure.getString('
+                               '(Landroid/content/ContentResolver;Ljava/lang/String;)'
+                               'Ljava/lang/String;: Error: java.lang.ClassNotFoundException'}]}
+        data.update(overrides)
+        return data
+
+    def test_states_are_distinct_and_never_imply_safety(self):
+        rows = [{'data_type': 'location', 'rule_id': 'VSC-GR-location',
+                 'observed_basis': {'value_hash_present': 2},
+                 'read_evidence': [{'evt_id': 5}, {'evt_id': 9}]}]
+        data = observation({'general_privacy': self.general()}, rows)
+        items = {item['data_type']: item for item in data['data_types']}
+        self.assertEqual('observed', items['location']['state'])
+        self.assertEqual(2, items['location']['value_hash_present'])
+        self.assertEqual([5, 9], items['location']['evidence_event_ids'])
+        self.assertEqual('read_not_obtained', items['contacts']['state'])
+        self.assertEqual('no_events_in_session', items['microphone']['reason_code'])
+        self.assertEqual('no_events_with_hook_gaps', items['android_id']['reason_code'])
+        self.assertEqual([3], items['android_id']['observation_gap_event_ids'])
+        self.assertNotIn('observation_gap_event_ids', items['microphone'])
+        self.assertIn('未观测不等于未采集', items['microphone']['reason_text'])
+        self.assertIn('也不代表安全', items['microphone']['reason_text'])
+        self.assertEqual(['microphone', 'android_id', 'advertising_id'], data['not_observed'])
+        self.assertEqual(2, data['call_only_events'])
+
+    def test_registration_without_value_does_not_upgrade(self):
+        general = self.general(by_data_type={'location': {}, 'microphone': {}, 'contacts': {},
+                                             'android_id': {}, 'advertising_id': {}})
+        item = {i['data_type']: i for i in observation({'general_privacy': general})['data_types']}['location']
+        self.assertEqual('registration_only', item['state'])
+        self.assertEqual('call_only_no_value', item['reason_code'])
+        self.assertIn('注册了定位订阅，但未取到值，按判据不升级', item['reason_text'])
+        self.assertEqual(0, item['read_events'])
+
+    def test_read_not_obtained_reason_code_takes_strongest_state(self):
+        """真实产物 org.fossify.contacts 是 call_only=72、empty=6：原因码必须写 empty 而不是占比最大的 call_only。"""
+        general = self.general(by_data_type={'location': {}, 'microphone': {},
+                                             'contacts': {'call_only': 72, 'empty': 6},
+                                             'android_id': {}, 'advertising_id': {}},
+                               registrations={'events': 0, 'by_data_type': {}})
+        item = {i['data_type']: i for i in observation({'general_privacy': general})['data_types']}['contacts']
+        self.assertEqual('read_not_obtained', item['state'])
+        self.assertEqual('empty', item['reason_code'])
+        self.assertEqual({'call_only': 72, 'empty': 6}, item['read_states'])
+        self.assertIn('call_only=72、empty=6', item['reason_text'])
+        self.assertIn('不能证明取得数据', item['reason_text'])
+
+    def test_missing_artifact_is_explicit_not_null(self):
+        data = observation({'package': 'x.y'})
+        self.assertEqual('not_available', data['status'])
+        self.assertEqual('no_general_privacy_artifact', data['reason_code'])
+        self.assertEqual([], data['data_types'])
+        self.assertIn('不能当作安全', data['reason_text'])
+
+    def test_finding_annotation_requires_read_evidence(self):
+        rows = [{'conclusion_level': 'observed', 'read_evidence': [{'evt_id': 1}]},
+                {'conclusion_level': 'observed'},
+                {'conclusion_level': 'candidate'}]
+        annotate(rows)
+        self.assertEqual(['observed', 'unverified', 'unverified'],
+                         [row['observation_state'] for row in rows])
+        self.assertEqual('observed_without_read_evidence', rows[1]['observation_reason_code'])
+        self.assertEqual(1, rows[0]['read_evidence_count'])
+        self.assertNotIn('read_evidence_count', rows[2])
 
 
 if __name__ == '__main__':

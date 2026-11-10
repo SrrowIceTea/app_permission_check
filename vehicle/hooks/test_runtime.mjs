@@ -215,6 +215,64 @@ check('原始值和展示值共用一次读取；不可用属性不尝试取值'
     unavailable.value === 'CarPropertyValue{status=1,value=null}', '不可用值不应再探测或展示');
 });
 
+// ---- 5. 定位规范形态（privacy_location.js）--------------------------------
+
+const { locationEvidence, LOCATION_FORM_NAMES } = await import('./privacy_location.js');
+const { sha256hex16 } = await import('../../core/privacy/values.js');
+
+const fakeLocation = (lat, lon) => ({ getLatitude: () => lat, getLongitude: () => lon });
+
+check('定位主形态是 6 位小数的 lat,lon 对，且带 value_len', () => {
+  const out = locationEvidence(fakeLocation(30.2741, 120.1551));
+  const canonical = '30.274100,120.155100';
+  assert(out.collection_state === 'obtained' && out.non_empty === true, '应记为 obtained');
+  assert(out.location_form === 'pair_d6', `主形态错：${out.location_form}`);
+  assert(out.value_hash === sha256hex16(canonical), '主哈希与规范串不一致');
+  assert(out.value_len === canonical.length, `value_len 错：${out.value_len}`);
+  // 最弱的一环：求值器有 value_len >= 8 的硬门槛，规范形态必须自己越过它。
+  assert(out.value_len >= 8, 'value_len 低于求值器门槛');
+});
+
+check('形态表顺序固定，主形态永远是第一项', () => {
+  assert(LOCATION_FORM_NAMES[0] === 'pair_d6', `第一项应为 pair_d6：${LOCATION_FORM_NAMES[0]}`);
+  const out = locationEvidence(fakeLocation(30.2741, 120.1551));
+  assert(out.location_forms.length === LOCATION_FORM_NAMES.length, '形态数量与表不一致');
+  assert(out.location_forms.map((f) => f.form).join(',') === LOCATION_FORM_NAMES.join(','),
+         '返回顺序与形态表不一致');
+  assert(out.location_forms[0].hash === out.value_hash, '主形态哈希应与 value_hash 相同');
+  // 经纬度顺序不能混：交换后必须得到不同哈希，否则两种顺序会互相误配。
+  const swapped = out.location_forms.find((f) => f.form === 'pair_d6_lonlat');
+  assert(swapped.hash !== out.value_hash, 'lat,lon 与 lon,lat 不应同哈希');
+});
+
+check('定位证据不含经纬度原文（POLICY 不留样本）', () => {
+  const out = locationEvidence(fakeLocation(30.2741, 120.1551));
+  const text = JSON.stringify(out);
+  for (const leak of ['30.2741', '120.1551', '30.274100', '120.155100']) {
+    assert(!text.includes(leak), `事件里泄露了坐标原文：${leak}`);
+  }
+  assert(text.includes('"hash"'), '至少应保留哈希');
+});
+
+check('零坐标与越界坐标不出哈希（否则是高频误配源）', () => {
+  const zero = locationEvidence(fakeLocation(0, 0));
+  assert(zero.collection_state === 'obtained', '零坐标不应改写成 empty（语义保持不变）');
+  assert(zero.location_fix === 'zero_pair_unverified', `零坐标标记错：${zero.location_fix}`);
+  assert(!('value_hash' in zero) && !('value_len' in zero), '零坐标不得产出可匹配哈希');
+  const far = locationEvidence(fakeLocation(91, 0));
+  assert(far.location_fix === 'out_of_range' && !('value_hash' in far), '越界坐标不得产出哈希');
+});
+
+check('null 记 empty；字段读不到记 unknown 且不抛', () => {
+  assert(locationEvidence(null).collection_state === 'empty', 'null 应为 empty');
+  const broken = { getLatitude: () => { throw new Error('boom'); },
+                   getLongitude: () => 1 };
+  const out = locationEvidence(broken);  // 不得抛出
+  assert(out.collection_state === 'unknown', `读不到字段应为 unknown：${out.collection_state}`);
+  const nan = locationEvidence(fakeLocation(NaN, 1));
+  assert(nan.collection_state === 'unknown' && !('value_hash' in nan), 'NaN 应为 unknown');
+});
+
 // ---- 汇总 -----------------------------------------------------------------
 
 const failed = results.filter((r) => !r.ok);

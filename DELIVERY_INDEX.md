@@ -39,7 +39,7 @@
 移动端文档入口（合并 ch / junzhe 后按这个顺序读）：
 
 - 总览与两条运行入口：根 [README.md](README.md)（`pipeline` 默认 8771、`workbench` 默认 8772）
-- 一键审计流水线：[mobile/pipeline/README.md](mobile/pipeline/README.md)（16 阶段 + SSE 契约）
+- 一键审计流水线：[mobile/pipeline/README.md](mobile/pipeline/README.md)（17 阶段 + SSE 契约）
 - 静态/动态工作台：[mobile/workbench/README.md](mobile/workbench/README.md)、
   完整检测 API：[README.audit.md](mobile/workbench/README.audit.md)
 - 政策库（含《用户协议》分册）：[mobile/policy/README.local.md](mobile/policy/README.local.md)
@@ -85,7 +85,7 @@
 
 ```powershell
 & $VScanPython tools/run_regressions.py          # 根回归 18 组（带 --mobile 为 19 组）
-& $VScanPython mobile/tools/run_mobile_checks.py # 移动侧 31 项
+& $VScanPython mobile/tools/run_mobile_checks.py # 移动侧 63 项（2026-11-10 并入 test_privacy_implementation.mjs 等 6 个僵尸测试模块 + mobile/lab 的 24 个 + 1 个测试清单守卫 + 并发线同日加入的 observed_surface）
 & $VScanPython tools/check_mobile_branch.py      # 移动分支 24 组（含 workbench/policy/AI/前端契约）
 & $VScanPython tools/device_acceptance.py
 & $VScanPython tools/gadget_acceptance.py

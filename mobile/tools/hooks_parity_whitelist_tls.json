@@ -111,19 +111,6 @@
       "date": "2026-11-10"
     },
     {
-      "id": "ssl-tlsbypass-switch",
-      "pair": "ssl_pinning",
-      "kind": "block",
-      "mobile_lines": [
-        "logPath: '/data/local/tmp/vscan.log', whitelist: packages(), tlsBypass: String('__VSCAN_TLS_BYPASS__') === '1'"
-      ],
-      "vehicle_lines": [
-        "logPath: '/data/local/tmp/vscan.log', whitelist: packages()"
-      ],
-      "reason": "平台策略差异（非纯能力修复）：移动端被测对象是不可控第三方样本，TLS 校验收宽会改变其行为（2026-11-10 Organic Maps + OkHttp 6 实证崩溃），故由宿主 run.py --tls-bypass / VSCAN_TLS_BYPASS=1 逐样本 opt-in；车载端是自有夹具 + 固定流水线（vehicle/traffic/README 的 run.py 调用不带 --tls-bypass，另还有 frida -U -f -l 直接注入与 hook_vehicle_all.js 导入），同步此门卫会让 PINNING_ARMED 永不发生、交付物 3 静默失效",
-      "date": "2026-11-10"
-    },
-    {
       "id": "tls-okhttp-note",
       "pair": "tls_bypasses",
       "kind": "block",
@@ -203,19 +190,13 @@
       "date": "2026-10-16"
     },
     {
-      "id": "ssl-tlsbypass-guard",
+      "id": "ssl-tls-switch-line",
       "pair": "ssl_pinning",
-      "side": "mobile",
+      "side": "vehicle",
       "lines": [
-        "if (!CFG.tlsBypass) {",
-        "vlog('TLS_BYPASS_DISABLED', {",
-        "pkg: STATE.pkg, note: '显式开关未开启：本轮不做 TLS 校验收宽（未传 --tls-bypass / VSCAN_TLS_BYPASS=1）；' + '隐私/流量采集不受影响'",
-        "});",
-        "console.log('ssl_pinning_tp.js TLS_BYPASS_DISABLED in ' + STATE.pkg + ' — pass --tls-bypass to enable.');",
-        "return;",
-        "}"
+        "vlog('TLS_SWITCH', { tls_bypass: CFG.tlsBypass, source: 'run.py --tls-bypass' });"
       ],
-      "reason": "与 block «ssl-tlsbypass-switch» 配套：移动侧独占的「未开开关 → 记 TLS_BYPASS_DISABLED 并直接返回、不挂任何绕过手法」门卫。车载侧无此门卫（固定夹具恒需绕过），故按单侧差异登记",
+      "reason": "2026-11-10 车载侧补上显式开关：此前车载 TLS 校验收宽是**无条件武装**（无开关），本轮起改为 __VSCAN_TLS_BYPASS__ 门控（门卫与 CFG 开关行已与移动侧逐字一致，故原 «ssl-tlsbypass-switch»/«ssl-tlsbypass-guard» 两条单侧差异登记已随本次同步删除）。这条单侧事件是「本轮到底开没开」的启动行证据，开/关都发，用于事后 grep；移动侧无等价事件，按单侧差异登记",
       "date": "2026-11-10"
     }
   ]

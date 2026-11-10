@@ -49,10 +49,18 @@ def build_coverage(version='15', rules_path=None):
             'permission_mapping_status': mapping_status,
             'ordinary_app_access': 'restricted_expect_denial' if restricted else 'permission_and_availability_dependent',
             'read_apis': ['CarPropertyManager.getProperty', 'getFloatProperty', 'getIntProperty',
-                          'getBooleanProperty', 'subscribePropertyEvents/onChangeEvent'],
+                          'getBooleanProperty', 'subscribePropertyEvents/onChangeEvent',
+                          'getPropertiesAsync(List)', 'getIntArrayProperty'],
             'hook_coverage': {'status': 'implemented' if hooked else 'missing',
-                'artifact': 'vehicle/hooks/hook_vhal.js', 'legacy_registerCallback': 'not_hooked',
-                'async_getProperties': 'not_hooked'},
+                'artifact': 'vehicle/hooks/hook_vhal.js',
+                'legacy_registerCallback': 'implemented',
+                # 2026-11-10 设备实测（cpm-signatures-device35.json）：AAOS 35 没有
+                # getProperties(int[])，也没有 getPropertyAsync；真实签名是
+                # getPropertiesAsync(java.util.List, ...) 与 getIntArrayProperty(int,int)。
+                # 两者已由 vehicle/hooks/vhal_batch.js 覆盖，7/7 场景实测 ARMED 且零 ERROR。
+                'async_getProperties': 'implemented',
+                'int_array_property': 'implemented',
+                'batch_int_array_getProperties': 'absent_on_aaos35'},
             'rule_ids': [r['rule_id'] for r in matched],
             'acceptance_examples': ['tools/vehicle_scenario_acceptance.py',
                 'vehicle/analyze/test_vehicle_evidence.py'],
@@ -60,7 +68,9 @@ def build_coverage(version='15', rules_path=None):
             'uncovered_reasons': (['该规则版本缺少属性权限定义。策略候选与设备实际授予分开记录。']
                 if mapping_status != 'definition_recorded' else []) +
                 (['普通第三方签名/特权权限预期被拒绝；拒绝不算采集。'] if restricted else []) +
-                ['厂商 ROM/独立样本未完成逐属性验收。', '异步读取/旧 registerCallback 路径未覆盖。',
+                ['厂商 ROM/独立样本未完成逐属性验收。',
+                 'getPropertyList 返回配置列表而非属性值，不需要 Hook；'
+                 '批量异步与 int 数组读取已覆盖（vhal_batch.js）。',
                  '值级匹配要求属性绑定 JSON；二进制协议无值级保证。'],
             'definition_status': prop['definition_status'],
             'source_refs': json.loads(prop['source_refs_json']),
@@ -124,6 +134,10 @@ def export_coverage(output, version='15', vhal_capture=None, catalog_snapshot=No
     (output / 'coverage.json').write_bytes(coverage_bytes(data))
     lines = ['# 普通第三方车载 App 覆盖链', '',
         '仅用于授权测试。VHAL 行由规则库与 hook_vhal 生成，通用来源行由 vehicle/privacy 目录与 hook_privacy 生成；JSON 保留来源及详细缺口。', '',
+        '范围声明：本表只说明"能观测哪些 API"（覆盖链），**不含本轮实际观测结果**。'
+        '位置/麦克风/联系人/Android ID/广告标识的四态（已观测、仅注册未取值、有读取但未取到值、未观测）'
+        '只在同轮 PDF 报告《七、车载场景与证据覆盖》与工作台「动态审计」页给出；'
+        '本表没有出现某个数据类型，不等于该类型未被采集，也不等于安全。', '',
         '| 数据类型 | 所需权限 | 读取 API | Hook 覆盖 | 判断规则 | 验收样例 | 未覆盖原因 |',
         '|---|---|---|---|---|---|---|']
     for row in data['rows']:

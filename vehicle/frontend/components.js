@@ -147,7 +147,9 @@
         '后端结论行未提供时间戳；summary 只有任务创建时间，不能当作结论时间。'],
       ['读取 / 外发配对', pairing(row),
         '后端结论行未返回 event_ids / predicate，无法确认读取与外发的配对关系。'],
-      ['证据类型', row.evidence_kind, '后端未返回 evidence_kind。']
+      ['证据类型', row.evidence_kind, '后端未返回 evidence_kind。'],
+      ['观测状态', U.observationWord && U.observationWord(row.observation_state),
+        row.observation_reason_text || '后端未返回 observation_state，无法确认该结论是否有可逐条复核的读取证据。']
     ].forEach(item => {
       const cell = U.node('div', 'evidence-fact');
       const text = U.node('span', 'evidence-fact__value');
@@ -187,7 +189,10 @@
       U.node('span', 'evidence-card__meta', metaLine(row)),
       U.node('span', 'evidence-card__cue', '展开证据链'));
     const body = U.node('div', 'evidence-card__body');
-    body.append(facts(row), rawDrawer(row));
+    body.append(facts(row));
+    const reads = U.readEvidenceSection && U.readEvidenceSection(row);
+    if (reads) body.append(reads);
+    body.append(rawDrawer(row));
     card.append(head, body);
     return card;
   };

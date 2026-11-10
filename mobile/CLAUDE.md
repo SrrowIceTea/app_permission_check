@@ -20,7 +20,7 @@
 | `report/` | PDF 报告（工具结论 + AI 研判 + 校验问题清单） |
 | `tools/` | 离线回归总入口、合成演示会话生成器、设备跑批；**完整报文链路** `pcap_capture.py`（设备端 tcpdump，只能 `su 0` 用）、`pcap_http.py`（keylog + `tshark` 重组）、`flutter_probe.py`（剥符号 BoringSSL 静态探测） |
 | `workbench/` | 隐私审计工作台（工作流 / 运行时导入 / 合并布局 / 一键审计，带独立测试）；自带前端 `workbench/frontend/` |
-| `pipeline/` | **一键审计流水线**：16 阶段定义 `stages.py`、执行器 `runner.py`、HTTP+SSE `server.py`；前端在根 `frontend/`。默认 **8771**（`workbench/server.py` 默认 **8772**，两套可同时起），见根 `README.md` |
+| `pipeline/` | **一键审计流水线**：17 阶段定义 `stages.py`（第 4 阶段 `surface` = L2 只读覆盖统计）、执行器 `runner.py`、HTTP+SSE `server.py`、`surface_stage.py`；前端在根 `frontend/`。默认 **8771**（`workbench/server.py` 默认 **8772**，两套可同时起），见根 `README.md` |
 | `fixture-app/` | 自有靶子 App（隐私演示），用于端到端验证 |
 
 ## 怎么跑（离线优先，不需要设备）
@@ -166,7 +166,14 @@ crash 缓冲 0 行）。
 39 类 App 必要信息 / 16 条政策条款）、移动钩子（敏感读取 + 同意时序）、流量打标
 （含值哈希令牌）、隐私政策三件套（获取 / 抽取 / 检查）、关联引擎（八种谓词）、
 AI 三阶段研判（含编造校验）、PDF 报告（十章 + 三附录）、自有靶子 App 与设备端端到端
-均已实现。离线回归 **31 项**全过（`mobile/tools/run_mobile_checks.py`）；
+均已实现。离线回归 **63 项**全过（`mobile/tools/run_mobile_checks.py`；
+2026-11-10 先并入 `test_privacy_implementation.mjs`（31→32），再并入 5 个原先
+"文件在但从没被收集"的模块（32→37），接着把 `mobile/lab/` 剩余 24 个全部并入（37→61，
+均独立子进程、纯离线；见根 `docs/ZOMBIE_TESTS_20261110.md` 与
+`docs/MOBILE_LAB_MANUAL_INDEX_20261110.md`），最后加 1 项**测试清单守卫**
+（61→62，`tools/test_inventory_guard.py`：每个 `test_*` 文件要么被三个 runner 之一引用、
+要么在 `tools/test_inventory_allowlist.json` 里带具体 reason 登记，否则判红并打印路径；
+同日并发线又并入 `observed_surface` 一组 ⇒ 62→63））；
 分支全量（含 workbench/policy/AI/前端契约）**24 组**见 `tools/check_mobile_branch.py`。
 
 **2026-10-13（外部评估核对后的落地，见 [EVAL_CROSSCHECK.md](EVAL_CROSSCHECK.md)、DECISIONS M021–M025）**：

@@ -27,14 +27,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from mobile.tools import dex_callgraph, graph_reach, wrapper_map
-from mobile.tools.apk_entrypoints import framework_signals, manifest
-
-LIBRARY_PREFIXES = (
-    "androidx", "android", "kotlin", "kotlinx", "org.jetbrains",
-    "com.google.android.material", "com.google.android.gms", "com.bumptech.glide",
-    "okhttp3", "com.squareup", "io.reactivex", "com.facebook", "com.google.gson",
-    "com.google.protobuf", "org.apache", "org.json", "javax", "java", "dalvik",
-)
+from mobile.tools.apk_entrypoints import OUT_OF_DEX_SIGNALS, framework_signals, manifest
+from mobile.tools.library_namespaces import LIBRARY_PREFIXES
 # 不在名单内、但包路径里带 lib/libs/library/libraries 段的，按第三方库识别
 # （如 group.pals.android.lib.ui.filechooser.*）。只看包段，不看类名。
 LIBRARY_SEGMENTS = {"lib", "libs", "library", "libraries"}
@@ -58,13 +52,22 @@ def _looks_like_library(cls: str) -> bool:
     return any(seg in LIBRARY_SEGMENTS for seg in cls.split(".")[:-1])
 
 
-def attribution(cls: str, prefixes, reached_classes) -> str:
-    """归属四步（用户已定，不得放宽）；manifest 注册的类不再无条件算 App。"""
+def attribution(cls: str, prefixes, reached_classes, derived=()) -> str:
+    """归属四步（用户已定，不得放宽）；manifest 注册的类不再无条件算 App。
+
+    第 5 条 `app_derived` 是 2026-11-10 单独立项的启发式：类与某个 App 前缀共享
+    前两段（如 `chat.simplex.common.*` 对 `chat.simplex.app`）。它**排在库判断之后**，
+    所以 `com.google.foo` 这种 App 不会把 `com.google.android.gms.*` 吞成 App。
+    """
     if _under(cls, prefixes):
         return "app"
     if "." not in cls:      # R8 混淆后失去命名空间：只有从入口可达才算 App
         return "app" if cls in reached_classes else "unattributed"
-    return "library" if _looks_like_library(cls) else "unattributed"
+    if _looks_like_library(cls):
+        return "library"
+    if _under(cls, derived):
+        return "app_derived"
+    return "unattributed"
 
 
 CALLBACK_IFACES = {"java.lang.Runnable", "java.util.concurrent.Callable",
@@ -133,29 +136,55 @@ def _app_prefixes(man: dict) -> list[str]:
     return sorted(prefixes)
 
 
+def _derived_prefixes(prefixes) -> list[str]:
+    """与声明前缀共享前两段的派生前缀（`chat.simplex.app` → `chat.simplex`）。
+
+    只取两段，且必须排除两类：本身落在已知库命名空间里的（`com.facebook.*`），
+    以及比已知库更宽的根（`com.google` 会罩住 `com.google.android.gms.*`）。
+    派生归属在 `attribution` 里排在库判断之后，并单列 `app_namespace_derived`。
+    """
+    out = set()
+    for prefix in prefixes:
+        parts = prefix.split(".")
+        if len(parts) < 3:
+            continue
+        root = ".".join(parts[:2])
+        if _under(root, LIBRARY_PREFIXES):
+            continue
+        if any(lib.startswith(root + ".") for lib in LIBRARY_PREFIXES):
+            continue          # 根比已知库更宽 → 不派生，避免把库吞成 App
+        out.add(root)
+    return sorted(out - set(prefixes))
+
+
 def prepare(apk: Path, dexdump: str, aapt2: str, out: Path, api_ref_set) -> dict:
     """一次性构建上下文（manifest + 调用图 + 可达集）。产物可缓存、可复现。"""
     man = manifest(aapt2, apk, cache=out / "manifest_components.json")
     prefixes = _app_prefixes(man)
+    derived = _derived_prefixes(prefixes)
     entry_classes = {c["name"] for c in man["components"]}
     if man.get("application"):
         entry_classes.add(man["application"])
-    graph = dex_callgraph.build(apk, dexdump, prefixes, entry_classes, api_ref_set,
+    graph = dex_callgraph.build(apk, dexdump, sorted(set(prefixes) | set(derived)),
+                                entry_classes, api_ref_set,
                                 cache=out / "dex_callgraph.json",
                                 wrapper_keys=wrapper_map.keys())
     reached = graph_reach.reached_from(graph)
     from_app, any_in = _incoming(graph)
+    framework = framework_signals(apk, graph["classes"])
     return {"manifest": man, "graph": graph, "reached": reached,
             "reached_classes": {dex_callgraph._cls_of(m) for m in reached},
             "library_callers": any_in - from_app, "has_incoming": any_in,
-            "framework": framework_signals(apk, graph["classes"]),
+            "framework": framework,
+            "out_of_dex": bool(set(framework) & set(OUT_OF_DEX_SIGNALS)),
             "entry_exists": bool(graph["entry_methods"]),
-            "prefixes": prefixes, "entry_classes": entry_classes}
+            "prefixes": prefixes, "derived_prefixes": derived,
+            "entry_classes": entry_classes}
 
 
 def _method_attr(method: str, ctx: dict) -> str:
     return attribution(dex_callgraph._cls_of(method), ctx["prefixes"],
-                       ctx["reached_classes"])
+                       ctx["reached_classes"], ctx.get("derived_prefixes") or ())
 
 
 def _wrapper_evidence(api: dict, ref: str, method: str, ctx: dict) -> dict:
@@ -167,6 +196,8 @@ def _wrapper_evidence(api: dict, ref: str, method: str, ctx: dict) -> dict:
     layers = [_display(m) for m in info["wrapper_layers"]]
     if app:
         bucket = "app_reachable"
+        if info["caller_attributes"].get(app) == "app_derived":
+            reason = "app_namespace_derived"
         entry = ctx["reached"][app][1]
         path, hops = _path(app, ctx["reached"])
         path, hops = path + list(reversed(layers)), hops + len(layers)
@@ -223,6 +254,8 @@ def _hit_evidence(api: dict, ctx: dict) -> list[dict]:
                 path, hops = _path(method, reached)
         elif method in reached:
             bucket = "app_reachable"
+            if attr == "app_derived":
+                reason = "app_namespace_derived"
             entry = reached[method][1]
             path, hops = _path(method, reached)
         elif not ctx["entry_exists"]:
@@ -230,8 +263,8 @@ def _hit_evidence(api: dict, ctx: dict) -> list[dict]:
                       or ctx["manifest"].get("application") else "no_entry_points")
         elif cls in ctx["library_callers"]:
             reason = "dynamic_dispatch"    # 库/框架回调进 App 类，入口路径不可静态确定
-        elif ctx["framework"]:
-            reason = "framework_js_or_dart"
+        elif ctx["out_of_dex"]:
+            reason = "framework_js_or_dart"   # 只有 Dart/JS bundle 才是 App，dex 只是宿主
         elif _synthetic(cls, method):
             reason = "dynamic_dispatch"    # lambda 体由运行时 InvokeDynamic 调用
         elif _framework_driven(cls, graph):

@@ -22,14 +22,31 @@ frontend/
 - 动态+AI+报告：`mobile/tools/device_run_thirdparty.py`（内部 16 子阶段，经 `--events` 上报）
 
 阶段事件是三方契约（runner / server SSE / 前端时间线），schema 单一：
-`{"ts": float, "stage": str, "status": "running|done|failed|skipped", "message": str}`。
+`{"ts": float, "stage": str, "status": "running|done|failed|skipped|unavailable", "message": str}`。
+`unavailable` = 阶段跑完了但结果不可用（必须带原因），**不改流水线终态**。
 
-## 16 个阶段（前端时间线顺序）
+## 17 个阶段（前端时间线顺序）
 
-`prepare` 环境准备 · `boot` 模拟器就绪 · `static` 静态剖析 · `frida_server` Frida 服务 ·
-`network` 网络连通 · `install` 安装样本 · `launch` 启动应用 · `conn_probe` 连接采样 ·
-`mitm` 流量镜像 · `hooks` Frida 插桩 · `explore` 交互驱动 · `death_probe` 存活取证 ·
-`correlate` 关联分析 · `bundle` 证据封装 · `ai_review` AI 研判 · `report` 报告生成。
+`prepare` 环境准备 · `boot` 模拟器就绪 · `static` 静态剖析 · `surface` 敏感面统计 ·
+`frida_server` Frida 服务 · `network` 网络连通 · `install` 安装样本 · `launch` 启动应用 ·
+`conn_probe` 连接采样 · `mitm` 流量镜像 · `hooks` Frida 插桩 · `explore` 交互驱动 ·
+`death_probe` 存活取证 · `correlate` 关联分析 · `bundle` 证据封装 · `ai_review` AI 研判 ·
+`report` 报告生成。
+
+### `surface`（L2 只读覆盖统计，2026-11-10 接入，阶段数 16 → 17）
+
+- **为什么在 `static` 之后**：它是**派生统计**，输入是 APK 的 dex + 静态扫描口径；
+  排在扫描前会让时间线读成"先统计后扫描"。
+- **为什么在 `boot` 之前**：它不依赖设备。放在非设备一侧，设备起不来时它照样出数
+  （`stages.NON_DEVICE_STAGES` 含 `surface`，别把它算进 `DYNAMIC_STAGES`）。
+- **它不出结论**：不产候选、不进四桶、不折算检出率；产物是 `observed_surface.json`
+  （`job.out/observed_surface.json`），与 `job.result.static` 的四桶**并列**。
+- **软着陆**：目标集 sha256 不匹配、目标集文件丢失、dex 缺失、dexdump 崩溃，
+  一律收敛为 `status="unavailable"` + `reason`（阶段事件也发 `unavailable`），
+  流水线继续跑完；**不会**变成"没有这一项"。实现见 `surface_stage.py`。
+- 单个样本入口也照旧可用：`mobile/tools/static_scan_thirdparty.py`（默认产出，
+  流水线里传 `--skip-observed-surface` 避免重复扫两遍 dex）。
+
 
 ## 启动方式
 
@@ -85,7 +102,8 @@ cd frontend && "$PY" -m http.server 8090   # 8080 被本机 httpd.exe 占用，�
 ## 已端到端验证（2026-10-15，样本 org.fossify.voicerecorder）
 
 冷启动模拟器 → 静态 5 条命中 + 补充扫描 8 条 + 4844 类反编译 → 设备动态采集 →
-关联 → 证据包 → AI 真实调用 → 产出 `mobile-report.pdf`，16 阶段 SSE 全程推送。
+关联 → 证据包 → AI 真实调用 → 产出 `mobile-report.pdf`，16 阶段 SSE 全程推送
+（当时为 16 阶段；`surface` 于 2026-11-10 接入后为 17）。
 
 **2026-10-16 复验**（JIT-off 复证 + SLIRP 代理修复后）：冷启动命令带
 `-http-proxy http://127.0.0.1:8888`；`emulator.log` **零次** "Proxy will be ignored"；

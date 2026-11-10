@@ -1,0 +1,101 @@
+/* 改后：浅色映射、三态切换、窄屏与页脚图例。 */
+.a-screen[data-theme="light"] {
+  --bg: var(--l0); --panel: var(--l2); --panel2: var(--l3);
+  --hair: var(--lline); --hair2: var(--lline-strong);
+  --tx: var(--ltext); --tx2: var(--ltext2); --tx3: var(--ltext3); --ac: var(--laccent);
+  --pass: var(--lpass); --review: var(--lreview); --fail: var(--lfail); --gap: var(--lgap);
+  --pass-bg: rgba(20, 114, 74, .08); --review-bg: rgba(138, 90, 18, .10);
+  --fail-bg: rgba(163, 46, 46, .07); --gap-bg: rgba(86, 101, 110, .12);
+  --node-bg: #faf8f2; --well: #f6f3ea;
+}
+.a-screen[data-theme="light"]::before {
+  background: radial-gradient(90% 70% at 84% -30%, rgba(13, 107, 119, .07), transparent 62%);
+}
+.a-screen[data-theme="light"] .a-top { background: rgba(251, 249, 244, .86); }
+.a-screen[data-theme="light"] .a-new { border-color: var(--lline-strong); }
+.a-screen[data-theme="light"] .copy { background: #fff; }
+
+/* 连接态与运行态 */
+[data-state="done"] .conn--ok,
+[data-state="empty"] .conn--ok { display: inline-flex; }
+[data-state="fail"] .conn--fail { display: inline-flex; }
+[data-state="fail"] .a-steps,
+[data-state="fail"] .a-stats,
+[data-state="fail"] .a-filter,
+[data-state="fail"] .a-list { display: none; }
+[data-state="fail"] .a-failbar { display: flex; }
+[data-state="fail"] .a-fail-state { display: block; }
+[data-state="empty"] .a-filter,
+[data-state="empty"] .a-list,
+[data-state="empty"] .a-stats { display: none; }
+[data-state="empty"] .a-empty-state { display: block; }
+
+/* 失败条：替换时间线，第一行就给原因与下一步 */
+.a-failbar {
+  display: none; align-items: flex-start; gap: 10px; margin: 0 0 12px; padding: 11px 12px;
+  border: 1px solid var(--fail); border-left-width: 3px; border-radius: 4px; background: var(--fail-bg);
+}
+.a-failbar .ic { flex: 0 0 18px; height: 18px; display: grid; place-items: center; border: 1px solid var(--fail); border-radius: 2px; color: var(--fail); font: 700 10px/1 var(--font-mono); }
+.a-failbar b { display: block; font: 600 12px/1.5 var(--font-ui); color: var(--fail); }
+.a-failbar p { margin: 2px 0 0; font-size: 10.5px; line-height: 1.6; color: var(--tx2); }
+.a-failbar .act { margin-left: auto; flex: 0 0 auto; }
+
+/* 状态面板：空 / 失败 */
+.a-empty-state,
+.a-fail-state {
+  display: none; padding: 22px 20px; border-radius: 6px; background: var(--panel);
+}
+.a-empty-state { border: 1px dashed var(--gap); }
+.a-fail-state { border: 1px solid var(--fail); }
+.a-empty-state .glyph,
+.a-fail-state .glyph {
+  display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 3px;
+  font: 700 13px/1 var(--font-mono); margin-bottom: 10px;
+}
+.a-empty-state .glyph { color: var(--gap); border: 1px solid var(--gap); background: repeating-linear-gradient(135deg, var(--gap-bg) 0 4px, transparent 4px 9px); }
+.a-fail-state .glyph { color: var(--fail); border: 1px solid var(--fail); background: var(--fail-bg); }
+.a-empty-state h3,
+.a-fail-state h3 { margin: 0 0 5px; font: 600 16px/1.4 var(--font-ui); color: var(--tx); }
+.a-empty-state p,
+.a-fail-state p { margin: 0 0 4px; font-size: 11.5px; line-height: 1.7; color: var(--tx2); max-width: 62ch; }
+.a-empty-state .acts,
+.a-fail-state .acts { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.a-empty-state .legal { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--hair); font-size: 10px; color: var(--tx3); }
+
+/* 动作按钮 */
+.act {
+  display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border: 1px solid var(--hair2);
+  border-radius: 3px; background: none; color: var(--tx); font: 500 10.5px/1.4 var(--font-ui);
+  cursor: pointer; text-decoration: none;
+}
+.act--primary { background: var(--tx); border-color: var(--tx); color: var(--bg); }
+.act--ghost { color: var(--tx2); }
+.act:focus-visible, .chip:focus-visible, .copy:focus-visible, .a-new:focus-visible, .a-search:focus-visible {
+  outline: 2px solid var(--ac); outline-offset: 1px;
+}
+
+/* 页脚图例用的语义变量 */
+.cmp-foot {
+  --pass: var(--lpass); --review: var(--lreview); --fail: var(--lfail); --gap: var(--lgap); --ac: var(--laccent);
+  --pass-bg: rgba(20, 114, 74, .08); --review-bg: rgba(138, 90, 18, .10);
+  --fail-bg: rgba(163, 46, 46, .07); --gap-bg: rgba(86, 101, 110, .12);
+}
+
+@media (max-width: 760px) {
+  .a-stats { grid-template-columns: 1fr 1fr; }
+  .a-step b { font-size: 9px; }
+  .a-step span { font-size: 8.5px; }
+  .a-head { flex-direction: column; align-items: flex-start; }
+  .a-runmeta { text-align: left; }
+  .a-runmeta .line { justify-content: flex-start; }
+  .a-search { width: 100%; max-width: 100%; margin-left: 0; }
+}
+@media (max-width: 520px) {
+  .a-stats { grid-template-columns: 1fr 1fr; }
+  .a-step { padding: 7px 5px; }
+  .a-step b { font-size: 8px; letter-spacing: -.02em; }
+  .f-right { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+}

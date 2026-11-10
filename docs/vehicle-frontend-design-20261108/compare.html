@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>车载审计 · 改前 / 改后对照原型</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="compare.css">
+<link rel="stylesheet" href="after.css">
+<link rel="stylesheet" href="after-states.css">
+</head>
+<body class="cmp">
+
+<header class="cmp-bar">
+  <span class="cmp-brand">V-SCANNER <span>· DESIGN COMPARE</span></span>
+  <p class="cmp-note">同一内容区 · 改前 / 改后并排 · <a href="review.html">返回建议书</a></p>
+  <div class="cmp-controls">
+    <span class="cap">改后主题</span>
+    <div class="seg" role="group" aria-label="改后主题">
+      <button data-theme-set="dark" aria-pressed="true">深色</button>
+      <button data-theme-set="light" aria-pressed="false">浅色</button>
+    </div>
+    <span class="cap">改后状态</span>
+    <div class="seg" role="group" aria-label="改后状态">
+      <button data-state-set="done" aria-pressed="true">完成</button>
+      <button data-state-set="fail" aria-pressed="false">失败</button>
+      <button data-state-set="empty" aria-pressed="false">证据不足</button>
+    </div>
+  </div>
+</header>
+
+<main class="cmp-grid">
+  <section class="cmp-panel">
+    <div class="cmp-panel-head"><span class="tag tag--before">Before</span><b>动态审计结果</b><span class="src">results.js · 当前实现</span></div>
+    <div class="cmp-frame">
+      <div class="screen b-screen">
+        <div class="b-top">
+          <span class="b-brand">V-SCANNER <span>/ AAOS</span></span>
+          <span class="b-conn">车载服务已连接 · AAOS 35 <span class="b-pin">5</span></span>
+          <button class="b-new">新建审计</button>
+        </div>
+        <div class="b-head"><h2>动态审计</h2><p>v-ca66395c1193445fb8847ff031d387d1</p></div>
+        <div class="b-body">
+          <p class="b-notice">结论保留原始等级。无观测不代表无风险，代码行号不证明违规语义。<span class="b-pin">4</span></p>
+          <a class="b-link" href="#" onclick="return false">打开独立审计看板</a>
+          <details class="b-details"><summary>会话、设备与采集校验</summary></details>
+          <div class="b-tablewrap">
+            <table class="b-table">
+              <thead><tr><th>规则</th><th>类型</th><th>结论等级<span class="b-pin">1</span></th><th>依据与证据链<span class="b-pin">2</span></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>VSC-LAB-OWNTRACKS-LOCATION-001</td><td>sensitive_read</td><td class="lvl">observed</td>
+                  <td><details class="b-details cap-details"><summary>规则依据与原始证据</summary><pre class="b-json">{"rule_id": "VSC-LAB-OWNTRACKS-LOCATION-001",
+ "conclusion_level": "observed",
+ "event_ids": [2],
+ "code_locs": [],
+ "code_loc_gaps": [{"role": "read", "event_id": 2,
+  "reason": "事件的栈里没有应用侧帧…"}]}</pre></details></td>
+                </tr>
+                <tr>
+                  <td>VSC-LAB-OWNTRACKS-HTTP-001</td><td>data_egress</td><td class="lvl">candidate</td>
+                  <td><details class="b-details cap-details"><summary>规则依据与原始证据</summary><pre class="b-json">{"rule_id": "VSC-LAB-OWNTRACKS-HTTP-001",
+ "conclusion_level": "candidate",
+ "pairs": [{"read_event_id": 2, "flow_event_id": 2,
+  "delta_ms": 1346, "content_match": true,
+  "identity_scope": "uid_verified", "origin_proven": false}],
+ "window_ms": 30000}</pre></details></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <details class="b-details" style="margin-top:12px"><summary>覆盖范围与完整审计摘要<span class="b-pin">3</span></summary></details>
+        </div>
+      </div>
+    </div>
+    <ol class="cmp-notes">
+      <li><i>1</i><span>结论等级是裸英文，没有颜色、图标或徽标；<code>result-badge</code> 已存在但没用上。</span></li>
+      <li><i>2</i><span>每行证据 = 一个折叠 + 全量 JSON；窗口、配对、delta、代码缺口都要展开后肉眼找。</span></li>
+      <li><i>3</i><span>汇总藏在页面最后的折叠块，首屏看不到「几条待复核、几条证据不足」。</span></li>
+      <li><i>4</i><span>免责声明用黄色左线，与真正的待复核告警同色系。</span></li>
+      <li><i>5</i><span>连接状态只有文字；<code>.status-dot</code> 被 display:none，断连与正常态外观相同。</span></li>
+    </ol>
+  </section>
+
+  <section class="cmp-panel">
+    <div class="cmp-panel-head"><span class="tag tag--after">After</span><b>动态审计结果</b><span class="src">同一屏 · 建议方案（示例数据）</span></div>
+    <div class="cmp-frame">
+      <div class="screen a-screen" id="afterScreen" data-theme="dark" data-state="done">
+        <div class="a-top">
+          <span class="a-brand">V-SCANNER <span>/ AAOS</span></span>
+          <span class="conn conn--ok"><i></i>已连接 · AAOS 35</span>
+          <span class="conn conn--fail"><i></i>服务未连接 · 正在重连</span>
+          <button class="a-new">新建审计</button>
+        </div>
+        <div class="a-head">
+          <div><p class="a-eyebrow">DYNAMIC AUDIT · VSC-</p><h2>动态审计</h2></div>
+          <div class="a-runmeta">
+            <div class="line">任务 <code>v-ca66…d387d1</code><button class="copy" data-copy="v-ca66395c1193445fb8847ff031d387d1" title="复制任务编号">⧉</button></div>
+            <div class="line">运行 2:41 · 采集校验 passed</div>
+          </div>
+        </div>
+        <div class="a-body">
+          <ol class="a-steps">
+            <li class="a-step"><b>静态规则</b><span>✓ 0:12</span></li>
+            <li class="a-step"><b>反编译</b><span>✓ 1:04</span></li>
+            <li class="a-step"><b>设备采集</b><span>✓ 0:34</span></li>
+            <li class="a-step"><b>校验关联</b><span>✓ 0:21</span></li>
+            <li class="a-step"><b>看板报告</b><span>✓ 0:30</span></li>
+          </ol>
+          <p class="a-scope"><b>i</b><span>结论保留原始等级；未观测不等于安全。采集仅覆盖 attach 后与所附加进程，代码行号不证明违规语义。</span></p>
+          <div class="a-stats">
+            <div class="stat"><b>1</b><span>通过</span><small>采集校验 passed</small></div>
+            <div class="stat stat--review"><b>1</b><span>待复核</span><small>candidate 结论</small></div>
+            <div class="stat stat--fail"><b>0</b><span>失败</span><small>本轮无失败阶段</small></div>
+            <div class="stat stat--gap"><b>3</b><span>证据不足</span><small>代码定位缺口</small></div>
+          </div>
+          <div class="a-filter">
+            <button class="chip chip--on" data-filter="all">全部 <i>2</i></button>
+            <button class="chip" data-filter="observed">已观测 <i>1</i></button>
+            <button class="chip" data-filter="review">待复核 <i>1</i></button>
+            <input class="a-search" type="search" placeholder="搜索规则 / 类型 / 会话" aria-label="搜索结论">
+          </div>
+          <div class="a-list">
+            <article class="finding" data-level="observed" data-text="VSC-LAB-OWNTRACKS-LOCATION-001 位置 敏感读取 observed">
+              <i class="f-bar"></i>
+              <div class="f-body">
+                <div class="f-head">
+                  <code class="f-id">VSC-LAB-OWNTRACKS-LOCATION-001</code>
+                  <button class="copy" data-copy="VSC-LAB-OWNTRACKS-LOCATION-001" title="复制规则 ID">⧉</button>
+                  <span class="f-chip">敏感读取</span><span class="state state--observed"><b>●</b>已观测</span>
+                  <span class="f-right">severity info</span>
+                </div>
+                <h3 class="f-title">位置读取 <small>OwnTracks 侧载对照 · org.owntracks.android</small></h3>
+                <div class="f-chain">
+                  <div class="f-node"><b>读取</b><code>event #2</code><small>location · read_count 1</small></div>
+                  <div class="f-edge"><span>30 s 窗口</span><i></i><span>无外发</span></div>
+                  <div class="f-node f-node--gap"><b>外发</b><small>未观测 · 证据不足</small></div>
+                </div>
+                <div class="f-foot">
+                  <span>会话 <code>capture-31f9…</code></span><span class="f-gapflag">代码定位缺口 1</span>
+                  <span class="f-spacer"></span><span>规则 rev.1 · Android 15</span>
+                </div>
+              </div>
+            </article>
+            <article class="finding finding--review" data-level="review" data-text="VSC-LAB-OWNTRACKS-HTTP-001 外发关联 待复核 candidate">
+              <i class="f-bar"></i>
+              <div class="f-body">
+                <div class="f-head">
+                  <code class="f-id">VSC-LAB-OWNTRACKS-HTTP-001</code>
+                  <button class="copy" data-copy="VSC-LAB-OWNTRACKS-HTTP-001" title="复制规则 ID">⧉</button>
+                  <span class="f-chip">外发关联</span><span class="state state--review"><b>◐</b>待复核</span>
+                  <span class="f-right">origin_proven false</span>
+                </div>
+                <h3 class="f-title">读取 → 外发关联 <small>位置（OwnTracks 侧载对照）</small></h3>
+                <div class="f-chain">
+                  <div class="f-node"><b>读取</b><code>event #2</code><small>location · uid 1010258</small></div>
+                  <div class="f-edge"><span>1.346 s</span><i></i><span>同值 · uid</span></div>
+                  <div class="f-node"><b>外发</b><code>proxy flow #2</code><small>content_match true</small></div>
+                </div>
+                <div class="f-foot">
+                  <span>配对 1 · 窗口 30000 ms</span><span class="f-gapflag">代码定位缺口 2</span>
+                  <span class="f-spacer"></span><span>来源未证实</span>
+                </div>
+                <details class="f-drawer">
+                  <summary>完整证据 · 9 字段</summary>
+                  <div class="f-kv">
+                    <span>结论等级</span><code>candidate（规则声明）</code>
+                    <span>证据类型</span><code>read_then_egress</code>
+                    <span>配对</span><code>1 · read #2 → proxy flow #2</code>
+                    <span>delta</span><code>1346 ms · host_received_ts</code>
+                    <span>内容匹配</span><code>true · coordinate digest + timestamp</code>
+                    <span>值与身份</span><code>value_match true · uid_verified</code>
+                    <span>来源</span><code>origin_proven false · 2000 ms 内无本包出站</code>
+                    <span>窗口</span><code>30000 ms（未覆盖）</code>
+                    <span>代码定位</span><code>0 行 · 缺口 2</code>
+                  </div>
+                  <details class="f-raw"><summary>原始 JSON（截断）</summary><pre>{"pairs":[{"read_event_id":2,"flow_event_id":2,
+ "delta_ms":1346,"content_match":true,"origin_proven":false}],
+ "correlation_scope":"matching_content_candidates_origin_unproven",
+ "code_loc_gaps":[…2 条…]}</pre></details>
+                </details>
+              </div>
+            </article>
+          </div>
+          <div class="a-failbar">
+            <span class="ic">!</span>
+            <div><b>阶段 3 · AAOS 设备采集失败</b><p>设备连接中断；前两个阶段产物已保留，未执行证据关联与看板。</p></div>
+            <a class="act act--primary" href="#" onclick="return false">查看失败阶段</a>
+          </div>
+          <div class="a-fail-state">
+            <span class="glyph">✕</span><h3>动态审计未完成</h3>
+            <p><b>原因：</b>设备连接中断，采集阶段未完成。<b>已完成：</b>静态规则、反编译。<b>未执行：</b>证据关联、看板报告。</p>
+            <div class="acts"><a class="act act--primary" href="#" onclick="return false">重试采集</a><a class="act act--ghost" href="#" onclick="return false">打开服务日志</a></div>
+          </div>
+          <div class="a-empty-state">
+            <span class="glyph">▨</span><h3>本轮未生成结论</h3>
+            <p>采集校验 passed，覆盖范围内未观测到读取；<b>这不等于安全</b>。另有 3 处代码定位缺口，复核前无法把结论落到代码行。</p>
+            <div class="acts"><a class="act act--primary" href="#" onclick="return false">查看覆盖缺口</a><a class="act act--ghost" href="#" onclick="return false">打开采集摘要</a></div>
+            <p class="legal">未观测 ≠ 安全；工具不输出 policy_violation。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="cmp-fine"><b>数据：</b>结论字段取自 <code>output/vehicle-web/v-ca66…/audit/findings.jsonl</code> 与 <code>summary.json</code>；阶段耗时、运行时长与失败原因仅为示意。改后样式是视觉规格，不是已合并的产品代码。</p>
+  </section>
+</main>
+
+<footer class="cmp-foot">
+  <h2>四态语义：颜色 + 形状 + 文字</h2>
+  <p>改前只有文字和一种黄色提示条；改后任何一格都能在灰度、投影或色弱条件下读出状态。</p>
+  <div class="legend-row">
+    <div class="cell"><span class="state state--pass"><b>✓</b>通过</span><p>流程与采集校验通过；只描述流程，不等于无风险。</p></div>
+    <div class="cell"><span class="state state--review"><b>◐</b>待复核</span><p>候选结论；黄色只用于它，不再和免责声明混用。</p></div>
+    <div class="cell"><span class="state state--fail"><b>✕</b>失败</span><p>任务或阶段失败；必须带原因与下一步动作。</p></div>
+    <div class="cell"><span class="state state--gap"><b>▨</b>证据不足</span><p>未观测 / 代码定位缺口 / 仅静态；斜纹 + 虚线。</p></div>
+  </div>
+  <p class="law">仅用于授权测试（自有设备与自有 APK）。原型不含真实设备重跑，也未把「未观测」写成「安全」。</p>
+</footer>
+
+<script src="compare.js"></script>
+</body>
+</html>

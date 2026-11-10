@@ -18,6 +18,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from core.collector.collector_server import Collector
+from core.frida_host import freshness
+bundle_identity = freshness.identity          # 产物身份块（供其它验收脚本复用）
 from vehicle.pipeline.device_state import ensure_wifi
 from process_cleanup import stop_workers
 from test_proxy_cert import create
@@ -44,10 +46,18 @@ SERIAL = os.environ.get('VSCAN_SERIAL', 'emulator-5554')
 HOOK_BUNDLE_DIRS = (ROOT / 'vehicle/hooks/dist', ROOT / 'core/frida_host/dist')
 
 
-def hook_bundle(script: str) -> Path:
+def hook_bundle(script: str, verify_fresh: bool = True) -> Path:
     for base in HOOK_BUNDLE_DIRS:
         candidate = base / f'{script}.bundle.js'
         if candidate.exists():
+            # 产物新鲜度闸（2026-11-10）：解析 bundle 的地方就是设备采集的入口，闸放在这里，
+            # 任何经本模块取 bundle 的验收/跑批脚本都绕不过去。三档见 core/frida_host/freshness.py。
+            if verify_fresh:
+                gate = freshness.verify(candidate)
+                if gate['tier'] == 'refuse':
+                    raise SystemExit(freshness.refusal_text(gate))
+                if gate['tier'] == 'warn_dirty':
+                    print(freshness.warning_text(gate), flush=True)
             return candidate
     searched = '、'.join(str(b) for b in HOOK_BUNDLE_DIRS)
     raise SystemExit(f'找不到钩子 bundle：{script}.bundle.js（找过：{searched}）。'
@@ -133,6 +143,9 @@ def wait_for(predicate, seconds=30):
 
 def main():
     session = 'device-' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    # 起设备之前先过硬闸：落后的产物连 output 目录都不该建（失败运行要保留，但不应
+    # 留下一轮"看起来跑过"的空目录）。
+    hook_identity = freshness.identity(hook_bundle('hook_vehicle_all'))
     out = ROOT / 'output' / session
     out.mkdir(parents=True)
     (ROOT / 'output/latest-device.txt').write_text(str(out), encoding='utf-8')
@@ -197,6 +210,10 @@ def main():
                     # --allow-package 已无默认值（§8.2 B-1），必须显式授权。
                     '--allow-package', PACKAGE, '--allow-package', 'com.vscanner.targetapp2',
                     '--script', str(hook_bundle(script)),
+                    # 2026-11-10：ssl_pinning_bypass.js 的 TLS 校验收宽改为显式开关（默认关），
+                    # 车载验收一直依赖 PINNING_ARMED（下一行的 wait_for），这里显式打开以保持
+                    # 既有验收口径不变；命令行上看得见，产物里也有 TLS_SWITCH 事件。
+                    '--tls-bypass',
                     '--stop-file', str(out / '.stop'),
                     '--seconds', '150', '--out', str(out / (name + '.jsonl')),
                     '--session', session, '--event-db', str(out / 'events.sqlite')], name)
@@ -224,7 +241,7 @@ def main():
             'no_unanswered_requests': not unanswered,
         }
         result = dict(session=session, checks=checks, passed=all(checks.values()),
-                      unanswered_requests=len(unanswered),
+                      unanswered_requests=len(unanswered), hook_bundle=hook_identity,
                       device_fingerprint=adb('shell', 'getprop', 'ro.build.fingerprint').strip())
         (out / 'verification.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
         print(json.dumps(result, ensure_ascii=False), flush=True)
@@ -260,7 +277,8 @@ def main():
         try:
             write_manifest(out, session, SERIAL, adb,
                            {'mitm_listen_port': 8888, 'upstream_port': upstream.server_port,
-                            'hook_seconds': 150, 'session': session})
+                            'hook_seconds': 150, 'session': session,
+                            'hook_bundle': hook_identity})
         except Exception as exc:  # noqa: BLE001
             print(f'session-manifest 写入失败：{type(exc).__name__}: {exc}', flush=True)
         print('Evidence: ' + str(out), flush=True)

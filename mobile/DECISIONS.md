@@ -1610,7 +1610,7 @@ discover 133 全绿；`_risk_test_fixtures.py` 31 行。`hooks_parity` 仍为并
 - **根 README 重写**：改为「两条产品线 + 平台无关内核」结构，新增产品地图/端口分工/
   快速开始/Agent 读项目入口/能力边界五节，指向 `AGENTS.md`/`mobile/CLAUDE.md`/
   `HANDOFF.md`/`mobile/DECISIONS.md`。
-- **计数校正**：`run_mobile_checks.py` 当时为 **28 项**（非 24 组；现行 31 项），同步修正
+- **计数校正**：`run_mobile_checks.py` 当时为 **28 项**（非 24 组；现行 63 项），同步修正
   `AGENTS.md`、`mobile/CLAUDE.md`、`mobile/ARCHITECTURE.md`、`mobile/workbench/README.development.md`。
 - **复验**：`run_mobile_checks.py` 27/28 绿，唯一失败 `hooks_parity` 为既有已知失败
   （并行通道 hooks 工作区引入，非本次文档改动）；引用扫描确认无悬空链接。

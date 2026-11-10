@@ -19,12 +19,16 @@
 //   同时，该路径对本样本的**收益为零**：样本的天气请求走 loopj/Apache HttpClient，
 //   **不读 Android 系统代理**，mitmproxy 结构性看不到它的流量，因此放宽主机名校验
 //   也不会换来任何可读流量。风险 > 收益，故裁掉。
-//   这不是"覆盖不到就说没覆盖"：剩余三条手法的实际挂载结果逐条写进 PINNING_ARMED 事件。
+//   这不是"覆盖不到就说没覆盖"：其余手法的实际挂载结果逐条写进 PINNING_ARMED 事件。
 //
-// 保留的三条手法：
+// 保留的四条手法：
 //   1) conscrypt.TrustManagerImpl (checkTrustedRecursive / verifyChain / checkTrusted)
 //   2) javax.net.ssl.SSLContext.init 传入的自定义 TrustManager
-//   3) okhttp3.CertificatePinner（类存在才钩）
+//   3) okhttp3.CertificatePinner（类存在才钩）——只管**请求**层 pin
+//   4) android.security.net.config.NetworkSecurityTrustManager.checkPins——只管**握手**层
+//      的声明式 pin（network_security_config 的 <pin-set enforcePinning="true">）。
+//      3) 与 4) 是两道独立的闸：只放行 3) 握手仍失败；只放行 4) 握手成功但请求 0 条
+//      （Proton Mail 3.0.17 实测，2026-11-10）。4) 在类/方法不存在时发 SEAM_SKIP 跳过。
 // 不覆盖：HttpsURLConnection 主机名校验（本文件主动裁掉，见上）、native TLS
 // （BoringSSL/libssl 自定义 verify callback）、应用手写指纹比对、WebView/Chromium
 // 引擎自身的校验、非 Java 运行时（Flutter/RN）。
@@ -153,14 +157,83 @@ export function makeBypasses(vlog) {
           var ov = cls[mName].overloads.find(
             function (o) { return o.argumentTypes.map(function (t) { return t.className; }).join(',') === target; });
           ov.implementation = function () {
-            logCapped('okhttp:' + mName, { target: 'okhttp3.CertificatePinner.' + mName,
-                                           detail: 'pin check skipped (no-op)' });
+            var args = Array.prototype.slice.call(arguments);
+            // host = 该签名的第一个字符串参数（check(host, chain) / check$okhttp(host, …)）。
+            var host = '';
+            for (var k = 0; k < args.length; k++) {
+              if (typeof args[k] === 'string') { host = String(args[k]); break; }
+            }
+            logCapped('okhttp:' + mName, { seam: 'okhttp.CertificatePinner',
+                                           target: 'okhttp3.CertificatePinner.' + mName,
+                                           host: host, detail: 'pin check skipped (no-op)' });
             return undefined; // check() 返回 void
           };
           hooked.push('okhttp3.CertificatePinner.' + mName + '(' + target + ')');
         } catch (e) { vlog('ERROR', { where: 'hook okhttp3.CertificatePinner.' + mName, msg: String(e) }); }
       })(m.getName(), types);
     }
+    return hooked;
+  }
+
+  // ---- 4) NetworkSecurityTrustManager.checkPins：**声明式 pin 的握手闸** ----
+  // 与 3) 的分工不许合并成一个判断：
+  //   · 这里（checkPins）管**握手**：network_security_config 里
+  //     <pin-set enforcePinning="true"> 的证书链 pin 校验在本方法内完成；
+  //     不放行它，握手阶段就抛 CertificateException，连 HTTP 都发不出去；
+  //   · 3) okhttp3.CertificatePinner 管**请求**：握手过了之后 OkHttp 再校一遍 pin。
+  // 实测定性（Proton Mail 3.0.17，2026-11-10）：只放行 3) → 握手失败；只放行这里 →
+  // 握手成功但 HTTP 请求 0 条；两条都放行才出流量。声明式 pin 是当前主流做法，
+  // 而 1)/2) 对这类样本 0 命中，说明它走的是这条独立路径。
+  // 运行期事件用 seam 字段区分两道闸：okhttp.CertificatePinner 带 host；
+  // NetworkSecurityTrustManager.checkPins 的 host 恒为空串（签名里没有 host 参数）。
+  var NSC_TM = 'android.security.net.config.NetworkSecurityTrustManager';
+
+  function hookNscCheckPins() {
+    var cls = tryUse(NSC_TM);
+    // 老 API 没有声明式 pin 的实施点：静默跳过，不许因一条接缝缺席中断整包武装。
+    if (cls === null) {
+      vlog('SEAM_SKIP', { target: NSC_TM + '.checkPins',
+                          note: '类不存在（该 API 无声明式 pin 实施点），跳过；其余手法照常' });
+      return [];
+    }
+    var holder = null;
+    try { holder = cls.checkPins; } catch (e0) { holder = null; }
+    if (!holder) {
+      vlog('SEAM_SKIP', { target: NSC_TM + '.checkPins',
+                          note: '方法未被 bridge 暴露（可能被内联），跳过；其余手法照常' });
+      return [];
+    }
+    var overloads = [];
+    try { overloads = holder.overloads || []; } catch (e1) { overloads = []; }
+    if (overloads.length === 0) {
+      vlog('SEAM_SKIP', { target: NSC_TM + '.checkPins', note: '无可用的重载，跳过' });
+      return [];
+    }
+    var hooked = [];
+    for (var i = 0; i < overloads.length; i++) {
+      (function (ov, idx) {
+        try {
+          ov.implementation = function () {
+            // 平台签名是 checkPins(X509Certificate[])，argc=1 —— 物理上拿不到 host。
+            // 不猜 host、也不用 SNI 反填：留空并写明原因，否则就是假证据。
+            logCapped('nsc:checkPins#' + idx,
+                      { seam: 'NetworkSecurityTrustManager.checkPins',
+                        target: NSC_TM + '.checkPins', host: '',
+                        host_absent: 'checkPins(X509Certificate[]) has no host argument',
+                        detail: 'declarative <pin-set> handshake check relaxed' });
+            return undefined; // void：不抛 CertificateException 即放行握手
+          };
+          hooked.push(NSC_TM + '.checkPins#' + idx);
+        } catch (e2) {
+          vlog('ERROR', { where: 'hook ' + NSC_TM + '.checkPins#' + idx, msg: String(e2) });
+        }
+      })(overloads[i], i);
+    }
+    // 可检索的武装标记（与 PINNING_ARMED 并列）：这里报接缝名与已挂重载；
+    // 运行期 PINNING_BYPASS{seam=NetworkSecurityTrustManager.checkPins, host=''} 报"被走到没有"。
+    // host 恒为空串且带 host_absent 原因，别按空串判定"没走到"。
+    vlog('PIN_SET_ARMED', { target: NSC_TM + '.checkPins', hooked: hooked,
+                            note: '声明式 <pin-set> 握手闸已武装；请求闸见 okhttp3.CertificatePinner' });
     return hooked;
   }
 
@@ -171,6 +244,7 @@ export function makeBypasses(vlog) {
       hooked = hooked.concat(hookTrustManagerImpl());
       hooked = hooked.concat(hookSslContextInit(logCapped, vlog));
       hooked = hooked.concat(hookOkhttpPinner());
+      hooked = hooked.concat(hookNscCheckPins());
       return hooked;
     },
     candidates: TM_CANDIDATES

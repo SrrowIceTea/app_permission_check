@@ -18,6 +18,7 @@ import { packages } from './scope.js';
 import { propertyValue } from './property_value.js';
 
 import { hookSubscriptions } from './subscription_hooks.js';
+import { hookBatchReads } from './vhal_batch.js';
 import { makeLogger, procName, transportEnabled } from './vscan_runtime.js';
 import { createReadScope, recordDelegate } from './vhal_read_scope.js';
 
@@ -205,6 +206,11 @@ function makeReadImpl(api, propIdx, orig, selfCheck) {
   };
 }
 
+// 批量/异步读取共用同一个事件形状，避免两套字段漂移。
+function emitBatchRead(api, propId, areaId, caller, outcome, value) {
+  vlog('VHAL_READ', buildExtra(api, propId, areaId, caller, outcome, value));
+}
+
 function hookCpm() {
   var hooked = [];
   var CPM = Java.use(CFG.cpm);
@@ -283,6 +289,12 @@ function main() {
       return;
     }
     var hooked = hookCpm();
+    if (!STATE.isSystem) hooked = hooked.concat(hookBatchReads({
+      CPM: Java.use(CFG.cpm), vlog: vlog, watch: CFG.watch,
+      callerInfo: callerInfo, whitelisted: whitelisted,
+      isSystem: function () { return STATE.isSystem; },
+      emit: emitBatchRead
+    }));
     if (!STATE.isSystem) hooked = hooked.concat(hookSubscriptions(
       Java.use(CFG.cpm), vlog, CFG.watch, callerInfo, stackStr));
     if (STATE.isSystem) hooked = hooked.concat(hookCarPropertyService());

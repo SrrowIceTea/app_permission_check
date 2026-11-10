@@ -26,6 +26,10 @@ INNER = ("androidx.core.location.LocationManagerCompat$Api31Impl.requestLocation
          "(Landroid/location/LocationManager;Ljava/lang/String;"
          "Landroidx/core/location/LocationRequest;Landroid/location/LocationListener;"
          "Landroid/os/Looper;)V")
+LOC_DESC = "(Ljava/lang/String;Landroid/os/Cancelable;Ljava/util/concurrent/Executor;)V"
+LOC_API = "android.location.LocationManager.getCurrentLocation" + LOC_DESC
+LOC_ROW = {"api_key": "k-cur", "class_name": "android.location.LocationManager",
+           "method_name": "getCurrentLocation", "jvm_descriptor": LOC_DESC}
 
 
 class WrapperTest(unittest.TestCase):
@@ -37,7 +41,7 @@ class WrapperTest(unittest.TestCase):
         """决策二正例：App 经包装层读定位 → 归 App，标 via_wrapper 与 root_api。"""
         graph = _graph({self.ROOT: [self.APP], self.APP: [OUTER]}, {OUTER: [REQ_API]},
                        [self.ROOT, self.APP], [self.ROOT],
-                       wrapper_callers={wrapper_map.key(OUTER): [self.APP]})
+                       wrapper_callers={OUTER: [self.APP]})
         bucket, evidence = _bucket(REQ_ROW, _ctx(graph))
         self.assertEqual(bucket, "app_reachable")
         self.assertTrue(evidence[0]["via_wrapper"])
@@ -50,7 +54,7 @@ class WrapperTest(unittest.TestCase):
     def test_library_call_through_wrapper_is_downgraded(self):
         """决策二负例：纯库内部经包装层读 → 降级为库来源。"""
         graph = _graph({}, {OUTER: [REQ_API]}, [self.LIB], [self.ROOT],
-                       wrapper_callers={wrapper_map.key(OUTER): [self.LIB]})
+                       wrapper_callers={OUTER: [self.LIB]})
         bucket, evidence = _bucket(REQ_ROW, _ctx(graph))
         self.assertEqual(bucket, "downgraded_library")
         self.assertEqual(evidence[0]["reason_code"], "wrapper_called_by_library")
@@ -88,8 +92,7 @@ class WrapperTest(unittest.TestCase):
         graph = _graph({self.ROOT: [self.APP], self.APP: [OUTER]},
                        {OUTER: [REQ_API], INNER: [REQ_API]},
                        [self.ROOT, self.APP], [self.ROOT],
-                       wrapper_callers={wrapper_map.key(OUTER): [self.APP],
-                                        wrapper_map.key(INNER): [OUTER]})
+                       wrapper_callers={OUTER: [self.APP], INNER: [OUTER]})
         evidence = reachability._hit_evidence(REQ_ROW, _ctx(graph))
         merged = reach_report._merge_reads(evidence)
         self.assertEqual(len(evidence), 2)
@@ -116,8 +119,74 @@ class WrapperTest(unittest.TestCase):
         self.assertEqual(evidence[0]["reason_code"], "obfuscated_class")
         self.assertEqual(evidence[0]["attribution"], "unattributed")
 
+    def test_overload_forwarding_is_not_dropped_as_self_loop(self):
+        """同名重载互相转发：4 参版调 5 参版，不能被当成自环丢掉（2026-11-10 修）。"""
+        hit5 = ("androidx.core.location.LocationManagerCompat.getCurrentLocation"
+                "(Landroid/content/Context;Landroid/location/LocationRequest;"
+                "Landroidx/core/location/LocationListenerCompat;Ljava/lang/String;)V")
+        hit4 = ("androidx.core.location.LocationManagerCompat.getCurrentLocation"
+                "(Landroid/content/Context;Ljava/lang/String;"
+                "Landroidx/core/location/LocationRequestCompat;"
+                "Landroidx/core/location/LocationListenerCompat;)V")
+        self.assertNotEqual(wrapper_map.key(hit4), hit4)      # 映射表仍按类.方法名
+        graph = _graph({self.ROOT: [self.APP], self.APP: [hit4]},
+                       {hit5: [LOC_API]}, [self.ROOT, self.APP], [self.ROOT],
+                       wrapper_callers={hit5: [hit4], hit4: [self.APP]})
+        bucket, evidence = _bucket(LOC_ROW, _ctx(graph))
+        self.assertEqual(bucket, "app_reachable")
+        self.assertEqual(len(evidence[0]["wrapper_layers"]), 2)
+
+    def test_derived_namespace_is_app_but_separately_labelled(self):
+        """与声明前缀共享前两段的类 → App，但必须带 app_namespace_derived。"""
+        hit = "chat.simplex.common.views.helpers.Utils_androidKt.getFileSize()J"
+        graph = _graph({self.ROOT: [hit]}, {hit: [API]}, [self.ROOT, hit], [self.ROOT])
+        bucket, evidence = _bucket(API_ROW, _ctx(graph, derived=["chat.simplex"]))
+        self.assertEqual(bucket, "app_reachable")
+        self.assertEqual(evidence[0]["reason_code"], "app_namespace_derived")
+        self.assertEqual(evidence[0]["attribution"], "app_derived")
+
+    def test_derived_never_swallows_known_library(self):
+        """派生排在库判断之后：`com.google` 派生不得把 GMS 类判成 App。"""
+        hit = "com.google.android.gms.location.FusedLocationProviderClient.get()V"
+        graph = _graph({}, {hit: [API]}, [hit], [self.ROOT])
+        bucket, evidence = _bucket(API_ROW, _ctx(graph, derived=["com.google"]))
+        self.assertEqual(evidence[0]["attribution"], "library")
+        self.assertEqual(bucket, "downgraded_library")
+
+    def test_webview_assets_do_not_suppress_app_reachability(self):
+        """webview_shell 只说明打包了 Web 资源，不能把 App 自己的类压成框架代码。"""
+        hit = "com.example.files.FileUtils.getFileNameFromUri()V"
+        graph = _graph({}, {hit: [API]}, [hit], [self.ROOT])
+        bucket, evidence = _bucket(API_ROW, _ctx(graph, framework=["webview_shell"]))
+        self.assertEqual(bucket, "downgraded_unreachable")
+        self.assertEqual(evidence[0]["reason_code"], "no_path_from_entry")
+
+    def test_out_of_dex_shell_still_suppresses(self):
+        """Flutter/RN：业务逻辑不在 dex，仍落未判定（有意为之）。"""
+        hit = "com.example.files.FileUtils.getFileNameFromUri()V"
+        graph = _graph({}, {hit: [API]}, [hit], [self.ROOT])
+        bucket, evidence = _bucket(API_ROW, _ctx(graph, framework=["react_native"]))
+        self.assertEqual(bucket, "unknown_findings")
+        self.assertEqual(evidence[0]["reason_code"], "framework_js_or_dart")
+
 
 class ApplyTest(unittest.TestCase):
+    def test_derived_namespace_counted_separately(self):
+        """派生命名空间的候选在 counts 里单列，不混进「已确认 App」。"""
+        hit = "chat.simplex.common.views.helpers.Utils_androidKt.getFileSize()J"
+        graph = _graph({"com.example.MainActivity.onCreate()V": [hit]}, {hit: [API]},
+                       ["com.example.MainActivity.onCreate()V", hit],
+                       ["com.example.MainActivity.onCreate()V"])
+        supp = {"findings": [{"rule_id": "MOB-R009", "rule_type": "sensitive_read",
+                              "matched_apis": [API_ROW]}]}
+        out = reach_report.apply(supp, _ctx(graph, derived=["chat.simplex"]))
+        rc = out["reachability"]["counts"]
+        self.assertEqual(rc["buckets"]["app_reachable"], 1)
+        self.assertEqual(rc["app_reachable_kind"],
+                         {"confirmed": 0, "namespace_derived": 1})
+        self.assertEqual(rc["app_namespace_derived_sites"], 1)
+        self.assertEqual(out["reachability"]["derived_app_prefixes"], ["chat.simplex"])
+
     def test_no_candidate_is_deleted(self):
         app = "com.example.MainActivity.onCreate()V"
         repo = "com.example.Repo.load()V"

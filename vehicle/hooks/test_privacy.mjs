@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { describe, sha256hex16 } from '../../core/privacy/values.js';
 import { describeException } from '../../core/privacy/dispatch.js';
+import { locationEvidence } from './privacy_location.js';
 import { WATCH, META } from './privacy_targets.generated.js';
 import { webhookSummary } from './ha_webhook_body.js';
 import { syncBody } from './abs_sync_body.js';
@@ -12,7 +13,7 @@ const methods = new Map(), events = [];
 let returnValue = 'abcdef1234567890', originalError = null, calls = 0, observerFails = false;
 let adIdPermission = 0;
 const context = {
-  WATCH, META, describe, sha256hex16, describeException,
+  WATCH, META, describe, sha256hex16, describeException, locationEvidence,
   packages: () => ['test.owned'], procName: () => 'test.owned',
   makeLogger: () => (ev, extra) => events.push({ev, ...extra}),
   contactTracker: () => () => {},
@@ -75,8 +76,14 @@ assert.equal(returned({capture: 'audio_count'}, 0).collection_state, 'empty');
 assert.equal(returned({capture: 'audio_count'}, -3).collection_state, 'error');
 assert.equal(returned({capture: 'audio_count'}, 320).collection_state, 'obtained');
 assert.equal(returned({capture: 'location'}, null).collection_state, 'empty');
-assert.equal(returned({capture: 'location'}, {getLatitude: () => 31.2, getLongitude: () => 121.4})
-  .collection_state, 'obtained');
+const located = returned({capture: 'location'}, {getLatitude: () => 31.2, getLongitude: () => 121.4});
+assert.equal(located.collection_state, 'obtained');
+// 求值器有 value_len >= 8 的硬门槛：规范形态必须自己带长度，且不得泄露坐标原文。
+assert.ok(located.value_len >= 8 && /^[0-9a-f]{16}$/.test(located.value_hash), '定位须带可匹配哈希与长度');
+assert.ok(!JSON.stringify(located).includes('31.2'), '定位事件不得带坐标原文');
+const noFix = returned({capture: 'location'}, {getLatitude: () => 0, getLongitude: () => 0});
+assert.equal(noFix.collection_state, 'obtained');
+assert.ok(!noFix.value_hash && noFix.location_fix === 'zero_pair_unverified', '零坐标不得产出哈希');
 const idTarget = WATCH.find(t => t.capture === 'aaid');
 const idMethod = methods.get(idTarget.cls + '.getId[]');
 returnValue = '00000000-0000-0000-0000-000000000000';

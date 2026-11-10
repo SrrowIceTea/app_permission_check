@@ -3,6 +3,31 @@
 **仅用于授权测试（自有设备与自有 APK）。** 观察模式：不阻断调用、不改写返回值、不篡改数据。
 默认只注入白名单包名。**已完成。** 决策见 `DECISIONS.md`（D301–D310），全局约束见根 `CLAUDE.md`。
 
+## ⚠ 改完任何 `.js` 必须重建（2026-11-10 起是硬闸，不是提醒）
+
+`vehicle/hooks/dist/` 在 `.gitignore` 里（构建产物不入库），所以「设备实际执行的代码」
+和「工作区源码」之间本来有一条没人看的缝：2026-11-10 实测设备跑的是 **11-06** 的 bundle，
+源码已是 **11-10**，而当时没有任何检查会发现。现在有四道闸：
+
+```powershell
+# 唯一支持的重建命令（一次重建全部车载 bundle，并写 <bundle>.sha256.json 清单）
+.\tools\python313.ps1 core\frida_host\build.py --platform vehicle
+```
+
+- **`run.py` 起设备前校验**：清单里的源码指纹 ≠ 当前源码 → **拒绝开跑**（exit 2），
+  打印"产物是 X 时间的、源码已变、请先重建"。没有清单的 bundle 同样拒绝。
+- **入口先过闸**：`vehicle/pipeline/capture.py`、`tools/device_acceptance.py`（`hook_bundle()`
+  解析即校验）、`tools/vehicle_scenario_acceptance.py`、`tools/multi_acceptance.py`、
+  `vehicle/bench/overhead.py` 都在建目录/装 APK/起代理之前失败。
+- **三档判定**：产物与源码一致 + 源码干净 → 放行；一致但 dirty（有未提交改动）→
+  显著告警放行，证据里打 dirty 标记；**落后 → 拒绝**。
+- **产物身份进证据**：bundle sha256 / 构建时间 / 源码指纹 / dirty 文件列表写进
+  `verification.json`、`session-manifest.json`、`summary.json` 与报告头部「钩子产物」行。
+
+**已知缺口**：移动端 `mobile/hooks/dist` 由 `mobile/hooks/build.mjs` 构建，不产清单，
+因此不在本闸范围内（`run.py` 会打印 `FRESHNESS not_covered`）；模块自述见
+`core/frida_host/freshness.py` 文件头。
+
 ## 目录
 
 | 路径 | 作用 |
@@ -17,7 +42,7 @@
 | `stack_capture.js` | 多个钩子共用的 Java 栈采集（按归属筛应用帧，见 hook_egress 的教训） |
 | `hook_cipher.js` | 观察 `javax.crypto.Cipher` 自绘加密，截获加密前明文（内存 Hook，梯度一） |
 | `hook_native_ssl.js` | 观察 native TLS（BoringSSL SSL_write/SSL_read），截获明文 buffer（内存 Hook，梯度二） |
-| `build.py` | 注入 bridge shim + 调 frida-compile → `dist/*.bundle.js` |
+| `build.py` | 注入 bridge shim + 调 frida-compile → `dist/*.bundle.js` + 产物清单（本机推荐用 `core/frida_host/build.py`，见上） |
 | `run.py` | 主机侧驱动：attach、接收 `send()`、落 JSONL |
 | `analyze_log.py` | 解析 JSONL，统计与还原 |
 | `dist/` `logs/` | 构建产物（勿手改）、采集到的 JSONL |
@@ -34,8 +59,8 @@ PY313="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 只有它装了 f
 "$PY313" run.py --package com.vscanner.targetapp \
     --script dist/hook_vhal.bundle.js --seconds 45 --out logs/hook_vhal.jsonl
 
-# 改完钩子源码：先离线回归，再重新打包（四个 bundle 都要重建）
-node test_runtime.mjs && "$PY313" build.py
+# 改完钩子源码：先离线回归，再重建（固定命令，见文件顶部「改完任何 .js 必须重建」）
+node test_runtime.mjs && "$PY313" ../../core/frida_host/build.py --platform vehicle
 ```
 
 点击按钮用 `vehicle/targets/trigger.py --package … --button btnRead`，不要写死坐标。

@@ -113,9 +113,19 @@ def main() -> int:
     parser.add_argument("--window-override-ms", type=int,
                         help="用实测校准值覆盖规则里声明的 window_ms；不改规则库。"
                              "实测靶子 App 的读取→外发间隔为 10.9s/19.1s，3000ms 会全部漏掉。")
+    parser.add_argument("--hook-bundle-json", default=None,
+                        help="产物身份 JSON（bundle sha256 / 构建时间 / dirty 标记）。"
+                             "由 pipeline/audit.py 从 session-manifest 的 hook_bundle 传进来，"
+                             "让每条 finding 都自带代码基线（2026-11-10）。")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--summary", type=Path, required=True)
     args = parser.parse_args()
+    hook_bundle = None
+    if args.hook_bundle_json:
+        try:
+            hook_bundle = json.loads(args.hook_bundle_json)
+        except ValueError:
+            hook_bundle = None
 
     for target in (args.out, args.summary):
         if target.exists():
@@ -194,6 +204,10 @@ def main() -> int:
     completeness = input_manifest(paths)
     verify_refs(snapshot['inputs'])
 
+    if hook_bundle:
+        # 每条 finding 自带产物哈希：单独拿一行也能回答"这是哪份钩子代码跑出来的"。
+        for finding in findings:
+            finding["hook_bundle_sha256"] = hook_bundle.get("sha256")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("x", encoding="utf-8") as handle:
         for finding in findings:
@@ -231,6 +245,14 @@ def main() -> int:
     }
     summary.update(fingerprints(args.rules, args.android_version, completeness,
                                 coverage=args.coverage, findings=args.out))
+    # 观测条件判定 / 来源候选集合 / 分层证据缺口：只增补 summary 字段，
+    # 不改 findings、规则或结论上限。CLI 独立运行时没有策略与场景输入，
+    # 相应层会诚实标成 not_supplied，而不是猜测为零。
+    from vehicle.analyze.method_evidence import attach as attach_method_evidence
+    summary = attach_method_evidence(
+        summary, reads=reads, flows=flows, findings=findings,
+        capture=args.reads.parent, coverage_path=args.coverage,
+        enabled_properties=coverage(rules, reads)['enabled_read_properties'])
     args.summary.parent.mkdir(parents=True, exist_ok=True)
     args.summary.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
                             encoding="utf-8")

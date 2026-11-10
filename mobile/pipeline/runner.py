@@ -114,8 +114,11 @@ def run_pipeline(job: PipelineJob) -> None:
         # 注释里的同款坑）。放兄弟目录即可规避。
         static_dir = out.parent / (job.id + "-static")
         stages.emit_events(events, "static", "running", "反编译 + dex 规则匹配（移动规则库）")
+        # `--skip-observed-surface`：L2 统计改由紧随其后的 `surface` 阶段自己做。
+        # 两处都做会白跑一遍 dexdump（同一份 dex 扫两次），且静态阶段会因目标集校验失败而整单失败
+        # ——那正是本轮要避免的"L2 拖垮主链"。
         rc = _run([PY, str(TOOLS / "static_scan_thirdparty.py"), "--apk", str(job.apk),
-                   "--out", str(static_dir), "--version", "36"],
+                   "--out", str(static_dir), "--version", "36", "--skip-observed-surface"],
                   out / "static.log", timeout=1800)
         stages.emit_events(events, "static", "done" if rc == 0 else "failed",
                            "静态结论已出" if rc == 0 else f"静态分析失败 rc={rc}")
@@ -141,6 +144,13 @@ def run_pipeline(job: PipelineJob) -> None:
             except (OSError, json.JSONDecodeError, KeyError):
                 pass
         job.result["static"] = static_summary
+
+        # ---- 1.5) 敏感面统计（L2，只读、派生）----
+        # 位置：静态扫描之后、设备之前。它只读 APK + 目标集，设备不参与，
+        # 所以设备不可用时它照样出数（这正是放在这一侧的理由）；失败只标 unavailable。
+        from mobile.pipeline import surface_stage
+
+        surface_stage.run(job, events)
 
         # ---- 2) 设备就绪 ----
         # 冷启动前置：模拟器启动时探测代理可达性，不可达会把 SLIRP 强制代理整条

@@ -11,7 +11,23 @@ class CoverageTests(unittest.TestCase):
         rows = [r for r in build_coverage()['rows'] if 'property_id' in r]
         self.assertEqual(8, len(rows))
         self.assertTrue(all(r['rule_ids'] and r['uncovered_reasons'] for r in rows))
-        self.assertTrue(all(r['hook_coverage']['async_getProperties'] == 'not_hooked' for r in rows))
+        # 2026-11-10 设备实测：异步批量与 int 数组读取已由 vhal_batch.js 覆盖。
+        # 之前这里断言 not_hooked，而那本身就是错的——它把不存在的
+        # getProperties(int[]) 当成缺口，同时漏掉了真实存在的两个签名。
+        self.assertTrue(all(r['hook_coverage']['async_getProperties'] == 'implemented'
+                            for r in rows))
+        self.assertTrue(all(r['hook_coverage']['int_array_property'] == 'implemented'
+                            for r in rows))
+        self.assertTrue(all(r['hook_coverage']['batch_int_array_getProperties']
+                            == 'absent_on_aaos35' for r in rows))
+
+    def test_hook_coverage_names_real_device_signatures(self):
+        rows = [r for r in build_coverage()['rows'] if 'property_id' in r]
+        for row in rows:
+            apis = ' '.join(row['read_apis'])
+            self.assertIn('getPropertiesAsync(List)', apis)
+            self.assertIn('getIntArrayProperty', apis)
+            self.assertNotIn('getPropertyAsync', apis)  # 该签名在 AAOS 35 不存在
 
     def test_null_device_permission_map_not_source_verified(self):
         rows = [r for r in build_coverage()['rows'] if 'property_id' in r]

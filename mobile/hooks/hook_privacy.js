@@ -27,6 +27,15 @@ var CFG = { whitelist: packages() };
 var RAW_WATCH_LIMIT = "__VSCAN_WATCH_LIMIT__";
 var STATE = { pkg: null, uid: -1, failed: [] };
 var ARMED = [];
+// 幂等：同一个 cls.method.desc 只能成功挂一次。重复 Java.use + implementation 会让
+// 事件翻倍（甚至递归），所以用显式集合去重，不靠"应该不会重复"。
+var ARMED_KEYS = {};
+var FAILED_KEYS = {};    // TARGET_ABSENT 只记一次，但每轮仍继续重试
+var MIGRATED_KEYS = {};  // native 已接管：永久跳过，不计入 pending
+// 类晚加载兜底（与 hook_privacy_native.js 的 RESCAN_STOPPED 对齐）：
+// 初始 Java.use 失败的类每 2s 重试，最多 30 轮；到点必须收尾，不把开销堆在采样窗口。
+var RESCAN = { intervalMs: 2000, maxRounds: 30 };
+var RESCAN_TIMER = null;
 var unmappedSeen = {};
 var SENS_RANK = { personal: 0, sensitive_personal: 1, children: 2 };
 
@@ -97,14 +106,29 @@ var NATIVE_KEY_BY_API = {
   // 实现（无 JNI），留在 Java 层。
 };
 
+function keyOf(entry) {
+  return entry.cls + '.' + entry.method + entry.desc;
+}
+
+function markFailed(entry) {
+  var key = keyOf(entry);
+  if (FAILED_KEYS[key]) return false;
+  FAILED_KEYS[key] = true;
+  STATE.failed.push(entry.cls + '.' + entry.method);
+  return true;
+}
+
 function armOne(entry) {
+  var key = keyOf(entry);
+  if (ARMED_KEYS[key]) return 'already';
   var migrate = NATIVE_KEY_BY_API[entry.cls + '.' + entry.method];
   var natArmed = globalThis.__vscanNat || {};
   if (migrate && natArmed[migrate]) {
+    MIGRATED_KEYS[key] = true;
     vlog('SKIPPED_JAVA', { cls: entry.cls, api: entry.method, desc: entry.desc,
                            migrated_key: migrate,
                            note: '已由 hook_privacy_native 接管（NATIVE_MIGRATED）。' });
-    return;
+    return 'migrated';
   }
   var cls;
   // PackageManager is abstract: hooking its declaration reports ARMED but
@@ -114,9 +138,13 @@ function armOne(entry) {
     ? 'android.app.ApplicationPackageManager' : entry.cls;
   try { cls = Java.use(hookClass); }
   catch (e) {
-    vlog('TARGET_ABSENT', { cls: entry.cls, api: entry.method });
-    STATE.failed.push(entry.cls + '.' + entry.method);
-    return;
+    // 只记一次（30 轮重试不等于 30 条失败），但每轮仍会重试：类可能稍后才加载。
+    if (markFailed(entry)) {
+      vlog('TARGET_ABSENT', { cls: entry.cls, api: entry.method,
+                              note: '类尚未加载；进入补挂轮询（最多 ' +
+                                    RESCAN.maxRounds + ' 轮）。' });
+    }
+    return 'absent';
   }
   try {
     var holder = cls[entry.method];
@@ -142,12 +170,68 @@ function armOne(entry) {
       if (err) throw err;
       return ret;
     };
-    ARMED.push(entry.cls + '.' + entry.method + entry.desc);
+    ARMED.push(key);
+    ARMED_KEYS[key] = true;
+    return 'armed';
   } catch (e) {
-    vlog('ARM_FAIL', { cls: entry.cls, api: entry.method, desc: entry.desc,
-                       types: entry.types, msg: String(e).slice(0, 300) });
-    STATE.failed.push(entry.cls + '.' + entry.method);
+    if (markFailed(entry)) {
+      vlog('ARM_FAIL', { cls: entry.cls, api: entry.method, desc: entry.desc,
+                         types: entry.types, msg: String(e).slice(0, 300) });
+    }
+    return 'failed';
   }
+}
+
+// ----------------------------------------------------------------------------
+// 类晚加载兜底（与 hook_privacy_native.js 的 RESCAN_STOPPED 同构）。
+// 初始 Java.use 失败的类不会自己出现——SDK 懒加载、插件化、ClassLoader 延迟
+// 解析都属这类。每 RESCAN.intervalMs 重试一轮，最多 RESCAN.maxRounds 轮。
+// 幂等由 ARMED_KEYS 保证（已在 armOne 入口返回 'already'，不会重复 implementation）；
+// 每轮都落 JAVA_RESCAN_ROUND——**0 个补挂也记**，否则事后无法区分
+// "这个类一直没加载" 与 "补挂根本没跑"。
+// ----------------------------------------------------------------------------
+function pendingEntries(limit) {
+  var out = [];
+  for (var i = 0; i < limit; i++) {
+    var key = keyOf(WATCH[i]);
+    if (ARMED_KEYS[key] || MIGRATED_KEYS[key]) continue;
+    out.push(WATCH[i]);
+  }
+  return out;
+}
+
+function rescanRound(limit) {
+  var pending = pendingEntries(limit);
+  var added = [];
+  for (var i = 0; i < pending.length; i++) {
+    if (armOne(pending[i]) === 'armed') added.push(keyOf(pending[i]));
+  }
+  // remaining 是本轮**结束后**仍未挂上的数量：用它做终止判据，补上的那轮就能停表，
+  // 不必空转一轮。
+  return { attempted: pending.length, added: added,
+           remaining: pendingEntries(limit).length };
+}
+
+function stopRescan(reason, round, limit) {
+  if (RESCAN_TIMER !== null) clearInterval(RESCAN_TIMER);
+  RESCAN_TIMER = null;
+  vlog('JAVA_RESCAN_STOPPED', {
+    round: round, reason: reason, hooks: ARMED.length,
+    unresolved: pendingEntries(limit).map(function (e) { return keyOf(e); }),
+  });
+}
+
+function startJavaRescan(limit) {
+  var rounds = 0;
+  RESCAN_TIMER = setInterval(function () {
+    rounds++;
+    var r = rescanRound(limit);
+    vlog('JAVA_RESCAN_ROUND', { round: rounds, attempted: r.attempted,
+                                added: r.added.length, added_keys: r.added,
+                                pending: r.remaining, hooks: ARMED.length });
+    if (r.remaining === 0) stopRescan('all_armed', rounds, limit);
+    else if (rounds >= RESCAN.maxRounds) stopRescan('max_rounds', rounds, limit);
+  }, RESCAN.intervalMs);
 }
 
 export function main() {
@@ -175,12 +259,19 @@ export function main() {
                            note: '不在白名单：不挂任何钩子。' });
       return;
     }
-    for (var i = 0; i < limit; i++) armOne(WATCH[i]);
+    var absent = 0;
+    for (var i = 0; i < limit; i++) {
+      var how = armOne(WATCH[i]);
+      if (how === 'absent' || how === 'failed') absent++;
+    }
     vlog('ARMED', { hooks: ARMED.length, failed: STATE.failed.length,
-                    watch_limit: limit,
+                    watch_limit: limit, pending: absent,
                     failed_apis: STATE.failed, apis: ARMED });
     console.log('[privacy] armed ' + ARMED.length + '/' + limit +
-                ' apis; failed=' + STATE.failed.length);
+                ' apis; failed=' + STATE.failed.length + '; pending=' + absent);
+    // 有未挂上的才启动轮询——全部一次挂上时不起定时器，零额外开销。
+    if (absent > 0) startJavaRescan(limit);
+    else stopRescan('all_armed_at_arm_time', 0, limit);
   } catch (e) {
     vlog('ERROR', { where: 'main', msg: String((e && e.stack) || e) });
   }

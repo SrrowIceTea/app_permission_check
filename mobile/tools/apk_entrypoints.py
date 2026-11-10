@@ -93,8 +93,14 @@ def manifest(aapt2: str, apk: Path, cache: Path | None = None) -> dict:
     return result
 
 
+# 业务逻辑**真正不在 dex 里**的壳：Dart / JS bundle 才是 App，Java/Kotlin 只是宿主。
+# `webview_shell` 不在此列——它只说明打包了 Web 资源，Android 业务代码仍在 dex 中，
+# 因此不能用来把 App 自己的 Kotlin 类压制成「框架代码」（2026-11-10 kiwix 实测）。
+OUT_OF_DEX_SIGNALS = ("flutter", "react_native")
+
+
 def framework_signals(apk: Path, classes) -> list[str]:
-    """框架壳标记：这些样本的业务逻辑不在 dex 里，调用图必然覆盖不到。"""
+    """框架壳标记。`OUT_OF_DEX_SIGNALS` 内的业务逻辑不在 dex 里，调用图必然覆盖不到。"""
     with zipfile.ZipFile(apk) as archive:
         names = set(archive.namelist())
     signals = set()

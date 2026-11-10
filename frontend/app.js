@@ -884,7 +884,7 @@
       if (errEl) errEl.textContent = jobEl && /^上传失败/.test(jobEl.textContent) ? jobEl.textContent : '';
     }
     if (rail && list) {
-      var n = list.querySelectorAll('.pl-done, .pl-failed, .pl-skipped').length;
+      var n = list.querySelectorAll('.pl-done, .pl-failed, .pl-skipped, .pl-unavailable').length;
       rail.style.setProperty('--p', n);
       if (rail.parentNode) rail.parentNode.style.setProperty('--p', n);
     }

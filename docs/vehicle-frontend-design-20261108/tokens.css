@@ -1,0 +1,46 @@
+@import url("../../vehicle/frontend/fonts.css");
+
+/* 共享设计令牌：建议书与对照原型共用。仅用于授权测试（自有设备与自有 APK）。 */
+:root {
+  --font-ui: "Manrope", "Noto Sans SC", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans SC", monospace;
+  --ease: cubic-bezier(.16, 1, .3, 1);
+
+  /* 暗色（产品现状与改后主色） */
+  --d0: #05080c;
+  --d1: #0a1017;
+  --d2: #0e1720;
+  --d3: #13202b;
+  --dline: rgba(214, 230, 240, .12);
+  --dline-strong: rgba(214, 230, 240, .26);
+  --dtext: #e9eff3;
+  --dtext2: #a8b7c2;
+  --dtext3: #7a8b98;
+  --daccent: #8fe3f2;
+  --dpass: #6bd6a0;
+  --dreview: #e7c06f;
+  --dfail: #ff8585;
+  --dgap: #93a6b3;
+
+  /* 浅色（建议新增，不是现状） */
+  --l0: #f2efe7;
+  --l1: #fbf9f4;
+  --l2: #ffffff;
+  --l3: #ece8de;
+  --lline: #d8d2c4;
+  --lline-strong: #b9b1a0;
+  --ltext: #121a1f;
+  --ltext2: #44545e;
+  --ltext3: #6d7b84;
+  --laccent: #0d6b77;
+  --lpass: #14724a;
+  --lreview: #8a5a12;
+  --lfail: #a32e2e;
+  --lgap: #56656e;
+
+  /* 四态语义：颜色 + 形状 + 文字，禁止只靠颜色区分 */
+  --st-pass-glyph: "✓";
+  --st-review-glyph: "◐";
+  --st-fail-glyph: "✕";
+  --st-gap-glyph: "▨";
+}

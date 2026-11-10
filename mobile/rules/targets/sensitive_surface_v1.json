@@ -1,0 +1,410 @@
+{
+  "target_set_id": "MOB-SURFACE-V1",
+  "version": "1",
+  "status": "frozen",
+  "generated_at": "2026-11-10",
+  "generated_by": "mobile/tools/target_set_build.py",
+  "purpose": "L2 只读覆盖统计（observed_surface）的作用域：哪些类算「敏感面」。给 observed_surface 用，规则引擎不读它；不进 dangerous_apis、不碰 rules.db。",
+  "scope_rule": {
+    "unit": "敏感类上的全部 invoke 目标 (类, 方法, 描述符)",
+    "class_source": "本文件的 categories 是**独立枚举**（品类 → 类名/前缀），不从 dangerous_apis 反推——反推会让分母被闭集定义，比例永远 100%",
+    "signature_source": "样本 APK 的 dex（dexdump -d 的实测 invoke 目标）。不取 android.jar 的方法全表，因为那会把几百个从未被调用的重载也算进分母，得到的比例不对应任何真实行为",
+    "why_not_aosp": "AOSP 源码树版本与本机 API 36 不一致，且 androidx 不在 AOSP platform 里；只有 android.jar 能一对一核对，故 android.jar 只用于**核对类是否存在**",
+    "distortion": [
+      "混入「样本没碰过的 API 就不在分母里」：分母是样本内口径，跨样本只能比各自比例，不能比大小。",
+      "方法句柄 / invoke-custom / invoke-polymorphic 不展开，经它们发起的敏感调用不可见（低估分母）。",
+      "静态 final 字段值会被编译期内联（Build.MODEL 等），字段通道单列、不进本分母。",
+      "只扫 classes*.dex；assets/ 内的二次 dex（加固、动态加载）不在内，加固样本会失真。",
+      "androidx / GMS / 国内 SDK 的类不在 android.jar 里，类是否敏感只能靠命名空间枚举。"
+    ],
+    "android_jar": "C:\\Users\\m1866\\AppData\\Local\\Android\\Sdk\\platforms\\android-36\\android.jar",
+    "android_jar_sha256": "d9eb9da824d9e247a352f570f01e1169e725b2954bca9e283a71786c59b59f9a",
+    "javap": "D:\\Android\\JDK\\bin\\javap.exe"
+  },
+  "groups": [
+    {
+      "key": "platform",
+      "zh": "平台 android/androidx/java",
+      "prefixes": [
+        "android.",
+        "androidx.",
+        "java.",
+        "javax."
+      ]
+    },
+    {
+      "key": "gms",
+      "zh": "Google Play 服务",
+      "prefixes": [
+        "com.google.android.gms."
+      ]
+    },
+    {
+      "key": "cn",
+      "zh": "国内 SDK",
+      "prefixes": [
+        "com.amap.",
+        "com.tencent.",
+        "com.baidu.",
+        "com.autonavi.",
+        "com.iflytek.",
+        "com.qq."
+      ]
+    }
+  ],
+  "method_allowlists": {
+    "android.content.ContentResolver": [
+      "query",
+      "openInputStream",
+      "openOutputStream",
+      "openFileDescriptor",
+      "openAssetFileDescriptor",
+      "insert",
+      "update",
+      "delete",
+      "bulkInsert",
+      "call"
+    ]
+  },
+  "method_allowlist_note": "ContentResolver 只算取数/写数的 10 个方法；registerContentObserver / notifyChange 之类不算读取",
+  "categories": [
+    {
+      "key": "location",
+      "zh": "定位",
+      "entries": [
+        {
+          "kind": "prefix",
+          "value": "android.location.LocationManager",
+          "in_android_jar": true,
+          "jar_method_count": 87,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 87 个）"
+        },
+        {
+          "kind": "exact",
+          "value": "android.location.Geocoder",
+          "in_android_jar": true,
+          "jar_method_count": 9,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 9 个）"
+        },
+        {
+          "kind": "exact",
+          "value": "androidx.core.location.LocationManagerCompat",
+          "in_android_jar": false,
+          "source": "公开命名空间枚举；本机 android.jar(API 36) 不含该类，方法面只能从样本 dex 实测"
+        },
+        {
+          "kind": "prefix",
+          "value": "com.google.android.gms.location.",
+          "probe_class": "com.google.android.gms.location",
+          "in_android_jar": false,
+          "source": "公开命名空间枚举；本机 android.jar(API 36) 不含该类，方法面只能从样本 dex 实测"
+        },
+        {
+          "kind": "prefix",
+          "value": "com.amap.api.location.",
+          "probe_class": "com.amap.api.location",
+          "in_android_jar": false,
+          "source": "公开命名空间枚举；本机 android.jar(API 36) 不含该类，方法面只能从样本 dex 实测"
+        },
+        {
+          "kind": "prefix",
+          "value": "com.baidu.location.",
+          "probe_class": "com.baidu.location",
+          "in_android_jar": false,
+          "source": "公开命名空间枚举；本机 android.jar(API 36) 不含该类，方法面只能从样本 dex 实测"
+        },
+        {
+          "kind": "prefix",
+          "value": "com.tencent.map.geolocation.",
+          "probe_class": "com.tencent.map.geolocation",
+          "in_android_jar": false,
+          "source": "公开命名空间枚举；本机 android.jar(API 36) 不含该类，方法面只能从样本 dex 实测"
+        },
+        {
+          "kind": "prefix",
+          "value": "com.autonavi.",
+          "probe_class": "com.autonavi",
+          "in_android_jar": false,
+          "source": "公开命名空间枚举；本机 android.jar(API 36) 不含该类，方法面只能从样本 dex 实测"
+        }
+      ]
+    },
+    {
+      "key": "contacts",
+      "zh": "通讯录",
+      "entries": [
+        {
+          "kind": "prefix",
+          "value": "android.provider.ContactsContract",
+          "in_android_jar": true,
+          "jar_method_count": 13,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 13 个）"
+        },
+        {
+          "kind": "exact",
+          "value": "android.accounts.AccountManager",
+          "in_android_jar": true,
+          "jar_method_count": 86,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 86 个）"
+        }
+      ]
+    },
+    {
+      "key": "camera",
+      "zh": "相机",
+      "entries": [
+        {
+          "kind": "prefix",
+          "value": "android.hardware.Camera",
+          "in_android_jar": true,
+          "jar_method_count": 37,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 37 个）"
+        },
+        {
+          "kind": "prefix",
+          "value": "android.hardware.camera2.CameraManager",
+          "in_android_jar": true,
+          "jar_method_count": 18,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 18 个）"
+        },
+        {
+          "kind": "prefix",
+          "value": "android.hardware.camera2.CameraDevice",
+          "in_android_jar": true,
+          "jar_method_count": 24,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 24 个）"
+        },
+        {
+          "kind": "prefix",
+          "value": "android.hardware.camera2.CameraCaptureSession",
+          "in_android_jar": true,
+          "jar_method_count": 20,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 20 个）"
+        },
+        {
+          "kind": "exact",
+          "value": "androidx.camera.lifecycle.ProcessCameraProvider",
+          "in_android_jar": false,
+          "source": "公开命名空间枚举；本机 android.jar(API 36) 不含该类，方法面只能从样本 dex 实测"
+        }
+      ]
+    },
+    {
+      "key": "microphone",
+      "zh": "麦克风",
+      "entries": [
+        {
+          "kind": "prefix",
+          "value": "android.media.AudioRecord",
+          "in_android_jar": true,
+          "jar_method_count": 59,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 59 个）"
+        },
+        {
+          "kind": "prefix",
+          "value": "android.media.MediaRecorder",
+          "in_android_jar": true,
+          "jar_method_count": 66,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 66 个）"
+        }
+      ]
+    },
+    {
+      "key": "sensor",
+      "zh": "传感器",
+      "entries": [
+        {
+          "kind": "prefix",
+          "value": "android.hardware.SensorManager",
+          "in_android_jar": true,
+          "jar_method_count": 90,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 90 个）"
+        },
+        {
+          "kind": "exact",
+          "value": "android.hardware.TriggerEventListener",
+          "in_android_jar": true,
+          "jar_method_count": 2,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 2 个）"
+        }
+      ]
+    },
+    {
+      "key": "clipboard",
+      "zh": "剪贴板",
+      "entries": [
+        {
+          "kind": "prefix",
+          "value": "android.content.ClipboardManager",
+          "in_android_jar": true,
+          "jar_method_count": 10,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 10 个）"
+        },
+        {
+          "kind": "prefix",
+          "value": "android.content.ClipData",
+          "in_android_jar": true,
+          "jar_method_count": 17,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 17 个）"
+        },
+        {
+          "kind": "exact",
+          "value": "android.text.ClipboardManager",
+          "in_android_jar": true,
+          "jar_method_count": 4,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 4 个）"
+        }
+      ]
+    },
+    {
+      "key": "device_id",
+      "zh": "设备标识",
+      "entries": [
+        {
+          "kind": "prefix",
+          "value": "android.telephony.TelephonyManager",
+          "in_android_jar": true,
+          "jar_method_count": 342,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 342 个）"
+        },
+        {
+          "kind": "exact",
+          "value": "android.os.Build",
+          "in_android_jar": true,
+          "jar_method_count": 34,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 34 个）"
+        },
+        {
+          "kind": "prefix",
+          "value": "android.os.Build$",
+          "probe_class": "android.os.Build",
+          "in_android_jar": true,
+          "jar_method_count": 34,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 34 个）"
+        },
+        {
+          "kind": "prefix",
+          "value": "android.provider.Settings$Secure",
+          "in_android_jar": true,
+          "jar_method_count": 82,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 82 个）"
+        },
+        {
+          "kind": "prefix",
+          "value": "android.provider.Settings$System",
+          "in_android_jar": true,
+          "jar_method_count": 119,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 119 个）"
+        },
+        {
+          "kind": "prefix",
+          "value": "android.provider.Settings$Global",
+          "in_android_jar": true,
+          "jar_method_count": 58,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 58 个）"
+        },
+        {
+          "kind": "prefix",
+          "value": "android.net.wifi.WifiInfo",
+          "in_android_jar": true,
+          "jar_method_count": 52,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 52 个）"
+        },
+        {
+          "kind": "prefix",
+          "value": "android.net.wifi.WifiManager",
+          "in_android_jar": true,
+          "jar_method_count": 197,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 197 个）"
+        },
+        {
+          "kind": "exact",
+          "value": "java.net.NetworkInterface",
+          "in_android_jar": true,
+          "jar_method_count": 24,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 24 个）"
+        },
+        {
+          "kind": "prefix",
+          "value": "com.google.android.gms.ads.identifier.",
+          "probe_class": "com.google.android.gms.ads.identifier",
+          "in_android_jar": false,
+          "source": "公开命名空间枚举；本机 android.jar(API 36) 不含该类，方法面只能从样本 dex 实测"
+        }
+      ]
+    },
+    {
+      "key": "installed_apps",
+      "zh": "已装应用",
+      "entries": [
+        {
+          "kind": "prefix",
+          "value": "android.content.pm.PackageManager",
+          "in_android_jar": true,
+          "jar_method_count": 382,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 382 个）"
+        },
+        {
+          "kind": "exact",
+          "value": "android.app.ActivityManager",
+          "in_android_jar": true,
+          "jar_method_count": 51,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 51 个）"
+        },
+        {
+          "kind": "exact",
+          "value": "android.app.usage.UsageStatsManager",
+          "in_android_jar": true,
+          "jar_method_count": 21,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 21 个）"
+        }
+      ]
+    },
+    {
+      "key": "storage",
+      "zh": "存储",
+      "entries": [
+        {
+          "kind": "prefix",
+          "value": "android.provider.MediaStore",
+          "in_android_jar": true,
+          "jar_method_count": 96,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 96 个）"
+        },
+        {
+          "kind": "prefix",
+          "value": "android.provider.DocumentsContract",
+          "in_android_jar": true,
+          "jar_method_count": 47,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 47 个）"
+        },
+        {
+          "kind": "exact",
+          "value": "android.os.Environment",
+          "in_android_jar": true,
+          "jar_method_count": 42,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 42 个）"
+        },
+        {
+          "kind": "exact",
+          "value": "androidx.documentfile.provider.DocumentFile",
+          "in_android_jar": false,
+          "source": "公开命名空间枚举；本机 android.jar(API 36) 不含该类，方法面只能从样本 dex 实测"
+        },
+        {
+          "kind": "exact",
+          "value": "android.content.ContentResolver",
+          "in_android_jar": true,
+          "jar_method_count": 118,
+          "source": "android.jar:android-36（javap -public -s 实测存在，方法 118 个）"
+        }
+      ]
+    }
+  ],
+  "not_in_scope": [
+    "字段读取（Build.MODEL / Settings$Secure.ANDROID_ID 等）：闭集是方法签名表，字段本就不在它的表达力内，单列在 observed_surface.field_reads",
+    "写操作与覆写型服务（ContentResolver.insert/update 已按 allowlist 部分计入；无障碍/通知监听未计入）",
+    "GMS 之外的商业 SDK（Firebase、广告、归因）：本地池子里 0 样本，无法评估"
+  ],
+  "sha256": "4c0b939d42fb36662facfe38459788b08c699a5927e58205d117f37db1aa31dd"
+}

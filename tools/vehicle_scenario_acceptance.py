@@ -13,8 +13,8 @@ from datetime import datetime
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
-from device_acceptance import (ADB, ROOT, PACKAGE, SERIAL, hook_bundle, read_events,
-                               wait_for, write_manifest)
+from device_acceptance import (ADB, ROOT, PACKAGE, SERIAL, bundle_identity, hook_bundle,
+                               read_events, wait_for, write_manifest)
 from core.collector.collector_server import Collector
 from vehicle.pipeline.device_state import (ensure_wifi, wait_device_ready,
                                            wait_framework_ready)
@@ -135,9 +135,9 @@ def run_case(base, name, mode, user, *, denied=False, background=False, session_
         target_pid = resolve_pid(PACKAGE, int(user))
         for label, script in (('reads', 'hook_vehicle_all'),):
             launch([sys.executable, str(ROOT / 'core/frida_host/run.py'), '--package', PACKAGE,
-                '--user', user,
-                '--stop-file', str(out / '.stop'),
-                '--allow-package', PACKAGE, '--script', str(hook_bundle(script)), '--seconds', '90',
+                '--user', user, '--stop-file', str(out / '.stop'), '--allow-package', PACKAGE,
+                '--script', str(hook_bundle(script)),
+                '--seconds', '90', '--tls-bypass', '--multi-process',  # 明文通道 + 子进程读取
                 '--out', str(out / (label + '.jsonl')), '--session', session,
                 '--event-db', str(out / 'events.sqlite')], label)
         wait_for(lambda: all(any(e.get('ev') == ev and e.get('src') == src
@@ -289,8 +289,8 @@ def main():
         grant_car_permissions(adb, user, False)
         adb('reverse', '--remove', 'tcp:8888')
     document = {'passed': bool(results) and len(results) == len(cases) and all(r['passed'] for r in results),
-                'cases': results, 'uncovered': ['real OEM ROM', 'real consent UI', 'driver switch remnants',
-                                              'ICC taint analysis', 'native proprietary protocols']}
+                'hook_bundle': bundle_identity(hook_bundle('hook_vehicle_all')),
+                'cases': results, 'uncovered': ['real OEM ROM', 'real consent UI', 'driver switch remnants', 'ICC taint analysis', 'native proprietary protocols']}
     (base / 'verification.json').write_text(json.dumps(document, indent=2), encoding='utf-8')
     print('Evidence: ' + str(base), flush=True)
     return 0 if document['passed'] else 1

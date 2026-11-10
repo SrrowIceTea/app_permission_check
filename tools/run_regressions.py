@@ -31,6 +31,7 @@ CHECKS = [
         'vehicle.bench.test_blind_round', 'vehicle.bench.test_subagent_signoff', 'vehicle.bench.test_handoff',
         'vehicle.bench.test_overhead',
         'core.frida_host.test_message_stream', 'core.frida_host.test_shutdown',
+        'core.frida_host.test_device_target',
         'vehicle.bench.test_window_calibration',
         'core.collector.test_scope', 'core.collector.test_response_capture', 'core.collector.test_health',
         'core.collector.test_parse',
@@ -55,6 +56,16 @@ CHECKS = [
                                      'test_binary_probe', 'test_response_observation',
                                      'test_experiment', 'test_montecarlo',
                                      'test_uid_sampler', 'test_targets', 'test_native_write']),
+    # 车载证据方法层（观测条件判定 / 来源候选集合 / 分层差集 / AI 能力校验 / 消融实验）。
+    # 全部离线、纯合成事件，不依赖 output/ 冻结产物，干净检出也能跑。
+    ('vehicle-method', '.', [sys.executable, '-m', 'unittest',
+        'core.evidence.test_decidability', 'core.evidence.test_ambiguity',
+        'vehicle.analyze.test_method_evidence', 'vehicle.analyze.test_coverage_layers',
+        'vehicle.analyze.test_detection_summary', 'vehicle.analyze.test_batch_alignment',
+        'vehicle.ai.test_evidence_capability',
+        'vehicle.bench.test_ablation', 'vehicle.bench.test_governance',
+        'vehicle.bench.test_cross_model_review', 'vehicle.bench.test_claim_verdicts',
+        'vehicle.bench.test_blind_evidence', 'vehicle.bench.test_samples', 'vehicle.bench.test_scheduler']),
     ('tagging-vehicle', 'vehicle/traffic', [sys.executable, '-m', 'unittest', 'test_tagging']),
     ('dashboard', 'vehicle/dashboard', [sys.executable, '-m', 'unittest', 'test_dashboard']),
     ('vehicle-webapp', '.', [sys.executable, '-m', 'unittest',
@@ -81,7 +92,7 @@ CHECKS = [
      [sys.executable, '-m', 'unittest', 'test_bundle_config']),
 ]
 
-# 工程-7（2026-10-16 定语义）：`--mobile` 时在 18 组之后追加移动侧 31 项检查。
+# 工程-7（2026-10-16 定语义）：`--mobile` 时在离线检查组之后追加移动侧 63 项检查。
 # 语义定为：**移动侧失败 = 根回归失败（非零退出）**——"根回归绿了但移动端已经烂了"
 # 的静默状态正是文档状态列不可信教训的来源；不想让移动侧影响结论时，
 # 直接跑本入口（不带 --mobile）或单独跑 mobile/tools/run_mobile_checks.py 即可。
@@ -106,7 +117,7 @@ def run_check(out, name, cwd, command, timeout):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--mobile', action='store_true',
-                    help='追加跑移动侧 31 项检查（mobile/tools/run_mobile_checks.py），'
+                    help='追加跑移动侧 63 项检查（mobile/tools/run_mobile_checks.py），'
                          '失败计入根回归失败（语义见 MOBILE_GROUP 注释）')
     ap.add_argument('--prepare', action='store_true', help='先按锁文件准备 Hook 产物，用于干净检出')
     ap.add_argument('--out', type=Path, help='本次回归日志目录，必须是新目录')

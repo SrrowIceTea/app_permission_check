@@ -6,7 +6,7 @@ from pathlib import Path
 
 from core.io_utils import load_jsonl
 from vehicle.pipeline.contracts import ROOT, AuditError, digest
-from vehicle.bench.review_policy import label_mode, validate_agents
+from vehicle.bench.review_policy import AGENT_MODES, MODEL_FIELDS, label_mode, reviewer_kind, validate_agents
 
 LABEL_SCHEMA = 1
 SAMPLE_ORIGINS = {'owned_fixture', 'independent'}
@@ -111,15 +111,16 @@ def adjudicated_labels(label, apk_sha, session, sample_origin, *, refs=None, roo
         reject('必须提供两份独立标注及一份仲裁记录。')
     people = [*reviews, adjudication]
     typed = any('reviewer_kind' in record for record in people)
-    if mode == 'subagent':
+    if mode in AGENT_MODES:
         try:
-            validate_agents(people)
+            validate_agents(people, require_distinct_models=(mode == 'cross_model'))
         except ValueError as exc:
             reject(str(exc))
-        if label.get('reviewer_kind') != 'subagent':
+        if label.get('reviewer_kind') != reviewer_kind(mode):
             reject('subagent 标签必须明确标注签核来源。')
         if any(label.get(key) != adjudication.get(key) for key in (
-                'reviewer', 'reviewer_kind', 'reviewed_at', 'agent_id', 'context_mode', 'review_session_id')):
+                'reviewer', 'reviewer_kind', 'reviewed_at', 'agent_id', 'context_mode',
+                'review_session_id', *MODEL_FIELDS)):
             reject('subagent 签核身份与仲裁记录不一致。')
     elif label.get('reviewer_kind') not in (None, 'human') or (
             typed and any(record.get('reviewer_kind') != 'human' for record in people)):

@@ -133,8 +133,11 @@
 2. 重跑移动侧两套：核心 `core/collector/` 与 `mobile/tools/` 今天有改动，但
    `mobile-regression`/`mobile-branch` 最后一次通过是 11-09 23:5x，**早于今天的改动**；
    至少跑 `mobile/tools/run_mobile_checks.py` 与 `tools/check_mobile_branch.py` 各一次留档。
-   （同日已复跑：31 项 / 24 组，退出码均 1，各只有 1 项未过且同为 `hooks_parity`
-   真回归——不是缺库假红；待 parity 修复后**再复跑一次**才算闭环。）
+   （同日已复跑：**当时 31 项** / 24 组，退出码均 1，各只有 1 项未过且同为 `hooks_parity`
+   真回归——不是缺库假红；待 parity 修复后**再复跑一次**才算闭环。
+   2026-11-10 起 `run_mobile_checks` 先并入 `test_privacy_implementation.mjs`（31→32），
+   再并入 5 个"文件在、但从没被收集"的模块（32→37；见 `docs/ZOMBIE_TESTS_20261110.md`），
+   **现行 63 项**。）
 3. 决定 `docs/vehicle-frontend-design-20261108/`（8 个设计对照文件）是入库还是不入库——现在挂着未跟踪，
    两种选择都需要显式记录，否则提交后会变成“不明来源的 html”。
    （**未闭环**：2026-11-10 复核仍为未跟踪 `?? docs/vehicle-frontend-design-20261108/`，待定。）

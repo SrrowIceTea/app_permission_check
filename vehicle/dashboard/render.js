@@ -40,6 +40,7 @@
                    ' · 流 ' + DATA.meta.inputs.proxy_flows +
                    ' · 清单权限 ' + DATA.meta.inputs.requested_permissions],
     ];
+    chips.push(['隐私观测', '不在本页 · 见同轮 PDF 第七节或工作台动态审计页']);
     chips.forEach(function (pair) {
       var c = el('span', 'meta-chip');
       c.appendChild(el('b', null, pair[0] + ' '));
@@ -180,6 +181,9 @@
     if (DATA.summary.caveat) bullets.push(DATA.summary.caveat);
     if (DATA.verify && DATA.verify.caveat) bullets.push('代码位置核对：' + DATA.verify.caveat);
     bullets = bullets.concat([
+      '本看板不含通用隐私来源的观测结果（位置/麦克风/联系人/Android ID/广告标识的已观测、' +
+        '仅注册未取值、有读取但未取到值、未观测）。这一节只在同轮 PDF 报告《七、车载场景与证据覆盖》' +
+        '与工作台「动态审计」页给出；未观测不等于未采集，也不代表安全。',
       '时间相邻本身不构成外泄证据；只有 content_match 为真，才说明外发报文中确实出现了被读取的属性。',
       '包名归因依赖时间配对（容差2000ms、亚军距离500ms、等待3000ms）；歧义流不参与关联，仍有统计误差。',
       '覆盖限于已挂钩Java路径；native TLS、Cronet、MQTT、QUIC与未解析gRPC消息不在明文验证范围。',

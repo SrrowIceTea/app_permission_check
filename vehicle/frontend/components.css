@@ -188,3 +188,89 @@
   .state-panel { padding:18px; }
   .check-label { min-width:84px; }
 }
+
+/* 隐私观测三态：已观测 / 仅注册未取值 / 有读取未取到值 / 未观测。
+   颜色只用既有灰阶 + --live + --fail，图标 ◐/◑/◔/?，没有任何一种表达「通过」或「安全」。 */
+.obs-panel {
+  margin-top:14px;padding:14px 16px;border:1px solid var(--line);border-radius:6px;
+  background:rgba(255,255,255,.02);
+}
+.obs-panel__head { display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 12px; }
+.obs-panel__title { font:500 10.5px/1.4 var(--font-mono);letter-spacing:.12em;color:var(--paper-3);text-transform:uppercase; }
+.obs-panel__meta { font:400 10.5px/1.6 var(--font-mono);color:var(--paper-3);overflow-wrap:anywhere; }
+.obs-panel__note { margin-top:8px;font:400 10.5px/1.7 var(--font-mono);color:var(--paper-4);overflow-wrap:anywhere; }
+.obs-panel__gap { margin-top:8px;font:400 11.5px/1.8 var(--font-ui);color:var(--paper-2);overflow-wrap:anywhere; }
+.obs-list { display:grid;gap:8px;margin-top:12px; }
+.obs-row {
+  min-width:0;padding:8px 10px;border:1px solid var(--line);border-left-width:2px;border-radius:4px;
+  background:rgba(255,255,255,.015);
+}
+.obs-row[data-state="observed"] { border-left-style:solid;border-left-color:var(--paper); }
+.obs-row[data-state="registration_only"] { border-left-style:dashed;border-left-color:var(--live); }
+.obs-row[data-state="read_not_obtained"] { border-left-style:dotted;border-left-color:var(--fail); }
+.obs-row[data-state="not_observed"] {
+  border-left-style:dotted;border-left-color:var(--paper-4);
+  background:repeating-linear-gradient(135deg,rgba(255,255,255,.02) 0 6px,transparent 6px 12px);
+}
+.obs-row__head { display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px; }
+.obs-row[data-state="observed"] > summary.obs-row__head { cursor:pointer;list-style:none; }
+.obs-row[data-state="observed"] > summary.obs-row__head::-webkit-details-marker { display:none; }
+.obs-row__name { font:500 12.5px/1.5 var(--font-ui);color:var(--paper); }
+.obs-row__meta { flex:1 1 180px;min-width:0;font:400 10.5px/1.6 var(--font-mono);color:var(--paper-3);overflow-wrap:anywhere; }
+.obs-row__cue { font:400 10.5px/1.6 var(--font-mono);color:var(--paper-4);white-space:nowrap; }
+.obs-row[open] .obs-row__cue { color:var(--paper-3); }
+.obs-row__text { margin-top:6px;font:400 12px/1.75 var(--font-ui);color:var(--paper-2);overflow-wrap:anywhere; }
+.obs-row__code { margin-top:2px;font:400 10.5px/1.6 var(--font-mono);color:var(--paper-4);overflow-wrap:anywhere; }
+.obs-row__body { padding-top:10px;margin-top:8px;border-top:1px solid var(--line); }
+.obs-badge {
+  display:inline-flex;align-items:baseline;gap:5px;padding:2px 8px;border:1px solid var(--line);
+  border-radius:999px;font:500 10.5px/1.6 var(--font-mono);color:var(--paper-3);white-space:nowrap;
+}
+.obs-badge__mark { font-size:10px;line-height:1; }
+.obs-badge[data-state="observed"] { color:var(--paper);border-color:rgba(207,223,235,.4); }
+.obs-badge[data-state="registration_only"] { color:var(--live);border-style:dashed; }
+.obs-badge[data-state="read_not_obtained"] { color:var(--fail);border-style:dotted; }
+.obs-badge[data-state="not_observed"] { color:var(--paper-4);border-style:dotted; }
+.obs-basis { display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px 14px; }
+.obs-basis__cell { display:grid;gap:2px;min-width:0; }
+.obs-basis__cell:first-child { grid-column:1/-1; }
+.obs-basis__label { font:400 10px/1.4 var(--font-mono);letter-spacing:.06em;color:var(--paper-4); }
+.obs-basis__value { font:400 11.5px/1.7 var(--font-mono);color:var(--paper-2);overflow-wrap:anywhere; }
+.obs-evidence { margin-top:10px;overflow-x:auto;overflow-y:clip; }
+.obs-evidence__table { width:100%;min-width:520px;border-collapse:collapse;table-layout:fixed; }
+.obs-evidence__table th,
+.obs-evidence__table td {
+  padding:5px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;
+  font:400 11px/1.7 var(--font-mono);color:var(--paper-2);overflow-wrap:anywhere;
+}
+.obs-evidence__table th { font-size:10px;letter-spacing:.06em;color:var(--paper-4); }
+.obs-evidence__table th:nth-child(1),.obs-evidence__table td:nth-child(1) { width:15%;white-space:nowrap; }
+.obs-evidence__table th:nth-child(2),.obs-evidence__table td:nth-child(2) { width:22%;white-space:nowrap; }
+.obs-evidence__table th:nth-child(3),.obs-evidence__table td:nth-child(3) { width:33%;word-break:break-all; }
+.obs-evidence__table th:nth-child(4),.obs-evidence__table td:nth-child(4) { width:30%; }
+.obs-evidence-block { margin-top:10px;padding-top:8px;border-top:1px solid var(--line); }
+.obs-evidence-block__title { font:500 10px/1.4 var(--font-mono);letter-spacing:.1em;color:var(--paper-3);margin-top:6px; }
+.obs-gaps { margin-top:10px; }
+.obs-gaps > summary { cursor:pointer;font:400 11px/1.6 var(--font-mono);color:var(--paper-3); }
+.obs-gaps__item { margin-top:4px;font:400 10.5px/1.7 var(--font-mono);color:var(--paper-4);overflow-wrap:anywhere; }
+
+/* 窄视口把证据表改成逐条堆叠：不横向滚动、不压缩列宽，hash 仍可整段换行 */
+@media(max-width:700px) {
+  .obs-panel { padding:12px 12px; }
+  .obs-evidence { overflow-x:visible; }
+  .obs-evidence__table { min-width:0;table-layout:auto; }
+  .obs-evidence__table thead { display:none; }
+  .obs-evidence__table tr { display:block;padding:6px 0;border-bottom:1px solid var(--line); }
+  .obs-evidence__table td {
+    display:flex;gap:8px;width:auto!important;white-space:normal!important;border:0;padding:2px 0;
+  }
+  .obs-evidence__table td::before {
+    flex:0 0 108px;font-size:10px;letter-spacing:.02em;color:var(--paper-4);white-space:nowrap;
+  }
+  .obs-evidence__table td:nth-child(1)::before { content:"evt_id"; }
+  .obs-evidence__table td:nth-child(2)::before { content:"collection_state"; }
+  .obs-evidence__table td:nth-child(3)::before { content:"value_hash"; }
+  .obs-evidence__table td:nth-child(4)::before { content:"时间"; }
+  .obs-row__meta { flex-basis:100%; }
+}
+

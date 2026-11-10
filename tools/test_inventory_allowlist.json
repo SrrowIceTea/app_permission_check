@@ -1,0 +1,40 @@
+{
+  "_about": "未被 tools/run_regressions.py、mobile/tools/run_mobile_checks.py、tools/check_mobile_branch.py 任一引用的 test_* 文件，必须逐条登记。字段：path / category / reason。category 见 tools/test_inventory_guard.py 的 CATEGORIES；reason 必须具体到为什么不能进 runner，禁止统一写「暂未接入」。守卫会因以下情况判红：未登记的未引用文件、白名单过期（文件已被引用或已不存在）、reason 过短、category 非法。",
+  "entries": [
+    {
+      "path": "core/collector/test_derive.py",
+      "category": "pending_evaluation",
+      "reason": "根回归的 collector 组按模块名显式列举（test_body/test_parse/test_scope/test_response_capture/test_health/test_vehicle_lifecycle + 一条 dotted），漏了本文件。它是 C1 派生值匹配（md5/sha*/base64/urlencode/hex/gzip+b64）的离线契约、12 个用例、无设备依赖，可随 collector 组一起收；先要确认与 test_body 的职责边界，故本轮只登记不并入。"
+    },
+    {
+      "path": "mobile/audit/test_storage_crypto.mjs",
+      "category": "pending_evaluation",
+      "reason": "node 测试。mobile/audit 目录由 python 的 `unittest discover -p test_*.py` 收集，.mjs 不会被它执行；check_mobile_branch 的 node 组只跑 frontend/test_audit_results.mjs、mobile/analyze/test_values.mjs 和 7 个 workbench frontend model，未收本文件。要执行它必须新增一个 node 组，属于改 runner 结构，本轮不做。"
+    },
+    {
+      "path": "mobile/tools/test_pcap_pipeline.py",
+      "category": "script_style",
+      "reason": "不是 TestCase：顶层是 `def test_xxx(tmp: Path)` + 自定义 `check()`，靠 `python test_pcap_pipeline.py` 跑，`-m unittest` 收集到 0 个用例。进套件前必须先改造成 unittest 类（本轮不允许改测试），否则只会产出「0 tests OK」的假绿。"
+    },
+    {
+      "path": "mobile/tools/test_split_events.py",
+      "category": "pending_evaluation",
+      "reason": "6 个用例的事件拆分离线契约。mobile/tools 没有任何 discover 规则，check_mobile_branch 在该目录只按名字显式列了 fixture_pipeline / apk_packer / coverage_window 等模块，未列本文件；归属组待定（与 batch / coverage 相邻），本轮只登记。"
+    },
+    {
+      "path": "tools/test_proxy_cert.py",
+      "category": "not_a_test",
+      "reason": "命名命中但不是测试：被 tools/device_acceptance.py 当库导入的自签 CA 工具（生成/校验代理证书），0 个 TestCase。收进套件只会得到「0 tests OK」的假绿，因此显式标成 not_a_test 而不是「未接入」。"
+    },
+    {
+      "path": "vehicle/hooks/test_mg4_form.mjs",
+      "category": "pending_evaluation",
+      "reason": "node 测试（MG4 表单/字段一致性）。run_regressions 的 vehicle/hooks node 组只跑 test_runtime.mjs 与 test_privacy.mjs，未收本文件；要收编得改根回归清单，本轮不动。"
+    },
+    {
+      "path": "vehicle/pipeline/test_support.py",
+      "category": "not_a_test",
+      "reason": "命名命中但不是测试：被 vehicle/pipeline 的多个测试当辅助模块导入（fake adb / 会话构造），0 个 TestCase。"
+    }
+  ]
+}

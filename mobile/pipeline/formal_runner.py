@@ -44,6 +44,10 @@ def run(job, runtime, finalize):
             'findings_total':len(raw.get('findings',[])),'rules_evaluated':raw.get('rules_evaluated'),
             'decompile':raw.get('decompile')}
         emit('static','done','全 DEX 静态完成；源码反编译 '+task['stages']['decompile']['state'])
+        # L2 只读覆盖统计：同一位置（静态之后、设备之前），只读 APK 与目标集；
+        # 失败收敛为 unavailable，绝不把这一步的失败算进整单门控。
+        from mobile.pipeline import surface_stage
+        surface_stage.run(job, job.events)
         # Scenario is explicit and package-bound, never substitute a different APK.
         scenario={'com.absinthe.libchecker':'libchecker','me.ash.reader':'readyou'}.get(task['apk']['package'],'launch')
         operation=runtime.operate(task_id,'audit',{'authorized':True,**{k:binding[k] for k in ('mode','serial')},

@@ -249,6 +249,7 @@
     if (U.current !== job.id) return;
     host.replaceChildren();
     if (U.summaryBar) host.append(U.summaryBar(summary));
+    if (U.observationPanel) host.append(U.observationPanel(summary, rows));
     host.append(U.node('p', 'notice', '结论保留原始等级。无观测不代表无风险，代码行号不证明违规语义。'));
     host.append(U.link('打开独立审计看板', prefix + '/dashboard'));
     host.append(details('会话、设备与采集校验', summary.capture_validation));

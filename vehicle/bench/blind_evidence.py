@@ -104,6 +104,12 @@ def alias(value, values, prefix):
     return values.setdefault(value, prefix + str(len(values) + 1))
 
 
+MARKER_MATCH_SCOPE = (
+    'post_marker_matched 只表示 marker 出现在服务端收到的 POST 正文中；'
+    '它不表示该请求已绑定到目标应用进程。绑定还需要 app_request_events 里的一条 App 侧事件，'
+    '或一条归因成功的代理流；post_flow_attributed=0 时二者皆无。')
+
+
 def browser(source):
     markers, bodies = {}, {}
     post = [dict(pick(row, 'method', 'status', 'ts_ms'),
@@ -116,8 +122,15 @@ def browser(source):
                     for row in source.events('reads.jsonl')
                     if row.get('src') == 'mg4_webview' and row.get('ev') == 'WEBVIEW_POST_REQUEST']
     flows = source.events('flows.jsonl')
+    # 2026-11-10: the bare boolean made all three reviewers name this item their
+    # least certain one -- they had to guess whether "matched" meant server-side
+    # or app-side. Ship the definition and the receipt's own recorded gaps.
     return {'server_post_receipts': post, 'app_request_events': app_requests,
             'captured_proxy_flow_count': len(flows),
+            'post_marker_matched_scope': MARKER_MATCH_SCOPE,
+            'recorded_gaps': list(source.business.get('gaps') or []),
+            **({'attribution_basis': source.business['attribution_basis']}
+               if source.business.get('attribution_basis') else {}),
             **pick(source.business, 'proxy_observed_post', 'post_marker_matched', 'post_flow_attributed')}
 
 

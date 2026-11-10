@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "platform": "vehicle",
+  "bundle": "ssl_pinning_bypass.bundle.js",
+  "bundle_sha256": "37726f10bbfa5e38cc226550cea486382c05237cb56805b7eda0664b9a78f44f",
+  "bundle_bytes": 749578,
+  "entry": "vehicle/hooks/ssl_pinning_bypass.js",
+  "built_at": "2026-11-10T16:33:40+08:00",
+  "builder": {
+    "path": "core/frida_host/build.py",
+    "sha256": "b9821b3601bbf8d69b0a04de50e368ea5ff5208de9372cc75568d23df7c6beff"
+  },
+  "source_fingerprint": "d3c035fb5b67ee0d795f4c4a0a81e793c1ab2b072b269a41fa07814c8d249886",
+  "sources": {
+    "vehicle/hooks/pinning_bypasses.js": "36e3ef6d88384ae8e724849a8aeebda359955591f98aa53efbc9036bd622bacb",
+    "vehicle/hooks/scope.js": "e0feaa386042b532eb569215ec600e9c591e270c1e693fc2555b6f33bf8eb2cb",
+    "vehicle/hooks/ssl_pinning_bypass.js": "2c566a8f62533f2a6360283ddefbf3c775a3c8d4d3afcf2d6266af206a3e6d1b",
+    "vehicle/hooks/tls_relax.js": "4a9fdd251da180e866946da622a0da2008c0627df1dae6a1a67401843fc9e94f",
+    "vehicle/hooks/vscan_runtime.js": "8906b4c5061ed9a57bd44e6e2ff9c55336df5c9068281ae2141a093cdfe1a132"
+  },
+  "dirty_at_build": {
+    "available": true,
+    "dirty": true,
+    "files": [
+      "vehicle/hooks/pinning_bypasses.js",
+      "vehicle/hooks/ssl_pinning_bypass.js"
+    ]
+  }
+}

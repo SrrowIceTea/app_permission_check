@@ -23,6 +23,10 @@ EXTRA_LIMITATIONS = [
     "via_wrapper；调用方仍是库 → 降级；未归属 / 找不到 / 上溯超限 → 未判定。"
     "映射表未覆盖的包装类不猜，沿用其自身归属。",
     "同一次读取若被包装链上多层同时命中，合并为一条并保留各层命中点，不重复计入候选。",
+    "`app_namespace_derived`：与某个声明前缀共享前两段的类（`chat.simplex.common` 对 "
+    "`chat.simplex.app`）按 App 归属，但**单列**在 counts.app_reachable_kind，"
+    "不计入「已确认 App」。它排在库判断之后；根比已知库更宽时不派生（`com.google` 会罩住 "
+    "`com.google.android.gms.*`，该情形直接跳过派生）。混合命中的 finding 保守计入派生。",
 ]
 
 
@@ -69,10 +73,15 @@ def _failure_statement(counts: dict, non_library: int, unknown_share: float,
             f"命名空间不一致：manifest package 为 {package}，而入口类在 "
             f"{'、'.join(entry_prefixes[:3])}。包前缀归属会把后者判为「未归属」（未判定），"
             "调用图剪枝也不覆盖这些类，本方法对该样本的可达性判定失效。")
-    if ctx["framework"]:
+    if ctx.get("out_of_dex"):
         statement = ((statement + " ") if statement else "") + (
             f"该样本含 {'/'.join(ctx['framework'])} 壳：业务逻辑不在 dex 中，"
             "调用图覆盖不到 JS/Dart 侧的读取，本方法对这些读取失效（未判定）。")
+    elif ctx["framework"]:
+        statement = ((statement + " ") if statement else "") + (
+            f"该样本含 {'/'.join(ctx['framework'])}（打包的 Web 资源）："
+            "Java/Kotlin 业务代码仍在 dex 中，可达性判定不因此失效；"
+            "但 WebView/JS 侧的读取不在静态覆盖内（未判定）。")
     return statement
 
 
@@ -99,6 +108,14 @@ def apply(supp: dict, ctx: dict) -> dict:
         1 for f in buckets["unknown_findings"]
         if any(e.get("reason_code") == "obfuscated_class"
                for e in f["reachability"]["hit_sites"]))
+    derived_ns = sum(
+        1 for f in buckets["app_reachable"]
+        if any(e.get("reason_code") == "app_namespace_derived"
+               for e in f["reachability"]["hit_sites"]))
+    derived_sites = sum(
+        1 for f in buckets["app_reachable"]
+        for e in f["reachability"]["hit_sites"]
+        if e.get("reason_code") == "app_namespace_derived")
     package = ctx["manifest"].get("package")
     entry_prefixes = sorted({c.rsplit(".", 1)[0] for c in ctx["entry_classes"]
                              if not _under(c, LIBRARY_PREFIXES)})
@@ -112,12 +129,19 @@ def apply(supp: dict, ctx: dict) -> dict:
         "manifest": ctx["manifest"],
         "entry_classes": sorted(ctx["entry_classes"]),
         "framework": ctx["framework"],
+        "derived_app_prefixes": list(ctx.get("derived_prefixes") or []),
         "counts": {
             "buckets": counts,
             "app_origin_candidates": non_library,
             "unknown_share_of_non_library": unknown_share,
             "unknown_findings_with_entry_path": unknown_reached,
             "obfuscated_findings": obfuscated,
+            # 「已确认 App」与「派生命名空间」分开数：buckets 里都算 app_reachable，
+            # 但后者是启发式，不得当成已确认的 App 业务代码。
+            "app_reachable_kind": {
+                "confirmed": counts["app_reachable"] - derived_ns,
+                "namespace_derived": derived_ns},
+            "app_namespace_derived_sites": derived_sites,
             "app_reachable_via_wrapper": sum(
                 1 for f in buckets["app_reachable"]
                 if any(e.get("via_wrapper") for e in f["reachability"]["hit_sites"])),

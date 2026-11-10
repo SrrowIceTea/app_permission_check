@@ -76,11 +76,31 @@ def download(url, path):
     return total
 
 
+# Catalog constraints the download step cannot satisfy. They are recorded, never
+# silently dropped: an APK that installs but cannot be exercised produces an
+# empty capture, and an empty capture is indistinguishable from "no behaviour"
+# unless the reason travels with the sample.
+HARDWARE_KEYS = {'needs_usb_media': 'usb_media'}
+SERVICE_KEYS = {'needs_backend': 'backend_service'}
+
+
+def requirements(sample):
+    """Declared prerequisites, split by what a capture host could actually supply.
+
+    ``audiowagon`` declares ``needs_usb_media``; the AAOS emulator exposes only
+    ``emulated``/``self`` storage, so a capture of it can only ever be empty.
+    Recording that here keeps a later zero from being read as a clean result.
+    """
+    return {'hardware': sorted(label for key, label in HARDWARE_KEYS.items() if sample.get(key)),
+            'service': sorted(label for key, label in SERVICE_KEYS.items() if sample.get(key))}
+
+
 def fetch_sample(sample, folder):
     folder.mkdir(parents=True, exist_ok=False)
     row = {**sample, 'status': 'failed', 'retrieved_at': datetime.now(timezone.utc).isoformat(),
            'authorization': 'user_requested_public_third_party_apk_download',
-           'runtime_status': 'not_run', 'ground_truth': 'not_labelled'}
+           'runtime_status': 'not_run', 'ground_truth': 'not_labelled',
+           'requirements': requirements(sample)}
     try:
         (tag, url), retries = retry(lambda: release_asset(sample))
         row.update(release_tag=tag, release_url=f'https://github.com/{sample["repo"]}/releases/tag/{tag}',
@@ -125,7 +145,12 @@ def fetch_samples(catalog, output, only=None):
     document = {'samples': results, 'downloaded': sum(s['status'] == 'downloaded' for s in results),
         'independent_families': len({s['family'] for s in results if s['status'] == 'downloaded'}),
         'runtime_verified': 0, 'precision': None, 'recall': None,
+        'hardware_blocked': [s['id'] for s in results if (s.get('requirements') or {}).get('hardware')],
         'caveat': '下载或静态扫描不证明可安装、可运行或无隐私风险。'}
+    if document['hardware_blocked']:
+        print(json.dumps({'hardware_blocked': document['hardware_blocked'],
+                          'note': '这些样本需要物理介质才有行为；在缺少该介质的设备上采集，'
+                                  '得到的零不代表没有行为。'}, ensure_ascii=False), flush=True)
     write_json(output / 'manifest.json', document)
     return document
 

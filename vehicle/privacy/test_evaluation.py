@@ -2,7 +2,9 @@
 import copy
 import hashlib
 import json
+import re
 import unittest
+from core.privacy.semantics import read_state
 from vehicle.privacy.catalog import TARGETS, HERE, TYPES, contract, catalog_hash
 from vehicle.privacy.evaluation import evaluate, load_general_rules, request_hashes
 
@@ -152,6 +154,80 @@ class GeneralPrivacyTests(unittest.TestCase):
         self.assertEqual(64, len(catalog_hash()))
         frozen = json.loads((HERE / 'device-observation.json').read_text(encoding='utf-8'))
         self.assertEqual(frozen['privacy_catalog_sha256'], catalog_hash(1))
+
+
+def registration_targets():
+    """从钩子源码取注册目标，避免测试与实现各写一份清单。"""
+    source = (HERE.parent / 'hooks/privacy_registration.js').read_text(encoding='utf-8')
+    pattern = re.compile(r"cls: '([^']+)', method: '([^']+)'[\s\S]{0,240}?desc: '([^']+)'")
+    return pattern.findall(source), source
+
+
+class RegistrationObservationTests(unittest.TestCase):
+    """注册/异步接口只回答"调用过"，任何路径都不得升级成读取。"""
+
+    def test_registration_never_produces_a_finding(self):
+        reg = {'ev': 'PRIVACY_REGISTER', 'src': 'privacy', 'pkg': PACKAGE, 'session_id': SESSION,
+            'uid': 1012345, 'user_id': 10, 'evt_id': 4, 'data_types': ['location'],
+            'outcome': 'ok', 'collection_state': 'call_only',
+            'registration_kind': 'listener_registration',
+            'api': 'android.location.LocationManager.requestLocationUpdates(java.lang.String,long,float,'
+                   'android.location.LocationListener)V'}
+        records, stats = evaluate([reg], [flow()], PACKAGE, SESSION)
+        self.assertEqual([], records)
+        self.assertEqual(0, stats['events'])
+        self.assertEqual(1, stats['registrations']['events'])
+        self.assertEqual({'location': {'listener_registration': 1}},
+                         stats['registrations']['by_data_type'])
+        self.assertEqual(['location'], stats['registrations']['not_observed'])
+        self.assertEqual('call_only', read_state(reg))
+
+    def test_registration_for_other_package_or_session_is_not_counted(self):
+        reg = {'ev': 'PRIVACY_REGISTER', 'src': 'privacy', 'pkg': 'other.app', 'session_id': SESSION,
+               'uid': 1012345, 'data_types': ['location'], 'outcome': 'ok',
+               'collection_state': 'call_only', 'registration_kind': 'async_current_location'}
+        _, stats = evaluate([reg], [], PACKAGE, SESSION)
+        self.assertEqual(0, stats['registrations']['events'])
+
+    def test_obtained_read_still_wins_with_registration_present(self):
+        reg = {'ev': 'PRIVACY_REGISTER', 'src': 'privacy', 'pkg': PACKAGE, 'session_id': SESSION,
+               'uid': 1012345, 'user_id': 10, 'data_types': ['location'], 'outcome': 'ok',
+               'collection_state': 'call_only', 'registration_kind': 'listener_registration'}
+        records, stats = evaluate([reg, read('location')], [flow()], PACKAGE, SESSION)
+        self.assertEqual(['observed'], [r['conclusion_level'] for r in records])
+        self.assertEqual([], stats['registrations']['not_observed'])
+
+    def test_observed_finding_carries_replayable_read_evidence(self):
+        record = findings([read()], [flow()])[0]
+        self.assertEqual('observed', record['conclusion_level'])
+        self.assertEqual(1, record['read_evidence_total'])
+        self.assertEqual([record['event_ids'][0]],
+                         [row['evt_id'] for row in record['read_evidence']])
+        self.assertEqual('obtained', record['read_evidence'][0]['collection_state'])
+        self.assertEqual(['obtained'], record['observed_basis']['states_seen'])
+        self.assertEqual(1, record['observed_basis']['value_hash_present'])
+        self.assertTrue(record['observed_basis']['criterion'])
+
+    def test_observed_read_evidence_is_bounded(self):
+        record = findings([read(evt_id=i) for i in range(30)], [flow()])[0]
+        self.assertEqual(30, record['read_evidence_total'])
+        self.assertEqual(20, len(record['read_evidence']))
+
+    def test_registration_descriptors_are_recorded_not_invented(self):
+        evidence = json.loads((HERE / 'registration-signatures.json').read_text(encoding='utf-8'))
+        targets, _source = registration_targets()
+        hook = (HERE.parent / 'hooks/hook_privacy.js').read_text(encoding='utf-8')
+        self.assertGreaterEqual(len(targets), 10)
+        for cls, method, desc in targets:
+            with self.subTest(cls=cls, method=method, desc=desc):
+                self.assertTrue(any(r['class'] == cls and (' ' + method + '(') in r['declaration']
+                                    and r['descriptor'] == 'descriptor: ' + desc
+                                    for r in evidence['methods']))
+                self.assertTrue(desc.endswith(')V'), '注册/异步接口必须是 void 返回')
+        # 事件必须被钉成 call_only，且注册清单不得改变已冻结的读契约。
+        self.assertIn("log('PRIVACY_REGISTER'", hook)
+        self.assertIn("collection_state: 'call_only'", hook)
+        self.assertNotIn('PRIVACY_REGISTER', (HERE / 'catalog.py').read_text(encoding='utf-8'))
 
 
 if __name__ == '__main__':

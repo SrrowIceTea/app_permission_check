@@ -10,7 +10,8 @@ import hashlib
 import math
 from collections import defaultdict
 from vehicle.bench.labels import adjudicated_labels, canonical_sha, captured_event_refs
-from vehicle.bench.review_policy import SUBAGENT_LIMITS
+from vehicle.bench.label_gate import classify_label
+from vehicle.bench.review_policy import limits as review_limits_for
 
 
 def matched_pairs(findings):
@@ -62,10 +63,16 @@ def pair_metrics(findings, label, apk_sha256, session_id, *, root=None):
         actual = legacy
     expected = {tuple(row) for row in label['expected_pairs']}
     tp, fp, fn = len(actual & expected), len(actual - expected), len(expected - actual)
+    tier = classify_label(label)
     return {'status': {'agent_review': 'agent_reviewed', 'subagent_review': 'subagent_reviewed'}.get(
                 label['origin'], 'labelled'),
             'label_origin': label['origin'], 'human_signoff': label.get('human_signoff'),
             'subagent_signoff': label.get('subagent_signoff'), 'review_mode': label.get('review_mode'),
+            # Tier and its limits travel with every number so a cross-model
+            # result can never be quoted as "expert verified".
+            'label_tier': tier['tier'], 'gold_kind': tier['gold_kind'],
+            'usable_as_gold': tier['usable_as_gold'],
+            'review_limits': review_limits_for(label.get('review_mode')),
             'independent_human_review': label['origin'] == 'independent_review',
             'tp': tp, 'fp': fp, 'fn': fn,
             'precision': tp / (tp + fp) if tp + fp else None,
@@ -177,7 +184,7 @@ def stratified_metrics(findings, label, apk_sha, session, sample_origin, *,
             'precision': None, 'recall': None, 'label_origin': truth['label_origin'],
             'review_mode': truth['review_mode'],
             'independent_human_review': truth['review_mode'] == 'human',
-            'review_limits': SUBAGENT_LIMITS if truth['review_mode'] == 'subagent' else [],
+            'review_limits': review_limits_for(truth['review_mode']),
             'label_set_sha256': truth['label_set_sha256'],
             'not_measured_reasons': sorted({row['reason'] for row in strata if row['status'] == 'not_measured'}),
             'strata': strata}

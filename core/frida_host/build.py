@@ -22,6 +22,8 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from core.frida_host import freshness  # noqa: E402  产物身份清单（新鲜度闸）
 MOBILE_SCRIPTS = (
     "hook_privacy.js", "hook_consent.js", "hook_egress_tp.js", "ssl_pinning_tp.js",
     "hook_cipher.js", "hook_native_ssl.js",
@@ -133,6 +135,13 @@ def build_one(item: dict, compiler, root: Path = ROOT) -> dict:
         if not isinstance(bundle, str) or not bundle.strip() or "frida-java-bridge" not in bundle:
             raise BuildError(f"{source.name}: compiler returned no usable Java bridge bundle")
         write_atomic(target, bundle)
+        # 产物身份（2026-11-10）：dist/ 被 gitignore 之后，"设备跑的是哪份源码"不能靠
+        # 文件名或时间猜。清单与 bundle 同目录、同一次原子替换，采集前的 freshness.verify
+        # 就是拿它比对源码指纹。
+        try:
+            provenance = freshness.write_manifest(target, source, item["platform"], root)
+        except Exception as exc:
+            raise BuildError(f"{source.name}: 产物清单写入失败 {type(exc).__name__}: {exc}") from exc
     except Exception as exc:
         if isinstance(exc, BuildError):
             raise
@@ -141,7 +150,10 @@ def build_one(item: dict, compiler, root: Path = ROOT) -> dict:
         if created:
             entry.unlink(missing_ok=True)
     return {"script": source.name, "output": str(target), "bridge": str(bridge),
-            "bytes": target.stat().st_size}
+            "bytes": target.stat().st_size,
+            "bundle_sha256": provenance["bundle_sha256"],
+            "source_fingerprint": provenance["source_fingerprint"],
+            "dirty_at_build": provenance["dirty_at_build"].get("dirty")}
 
 
 def main(argv=None) -> int:

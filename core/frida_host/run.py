@@ -39,9 +39,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent.parent))
 from core.event_store import EventStore
+from core.frida_host import freshness
 from core.frida_host.bundle_config import configure
 from core.frida_host.shutdown import OwnedResources
 from core.frida_host.device_target import adb, resolve_pid
+from core.frida_host.multi_attach import attach_children
 from core.frida_host.message_stream import MessageStream, TRANSPORT
 # frida-server on this device is started with `-l 127.0.0.1:27043`, not the default
 # 27042. Connecting to 27042 fails with "connection closed"; the forward is required.
@@ -68,6 +70,10 @@ def main() -> int:
     target.add_argument("--pid", type=int)
     target.add_argument("--package")
     parser.add_argument('--user', type=int, help='AAOS user ID; reject cross-user attach')
+    parser.add_argument("--multi-process", action="store_true",
+                        help="同时 attach 该包的其他进程（:remote / :webview 等）。"
+                             "默认只 attach 主进程；子进程的读取在单进程模式下完全不可见。"
+                             "上限 MAX_PROCESSES，事件按 pid 区分。")
     parser.add_argument("--script", required=True, type=Path,
                         help="a dist/*.bundle.js produced by build.py")
     parser.add_argument("--seconds", type=float, default=30.0)
@@ -158,6 +164,23 @@ def main() -> int:
               file=sys.stderr)
         return 2
 
+    # 产物新鲜度闸（2026-11-10）：在连设备**之前**确认设备将执行的这份 bundle 就是当前
+    # 源码的产物。dist/ 被 gitignore，旧产物与"什么都没发生"长得一模一样，靠人记着重
+    # 建已经失败过一次（设备跑 11-06 产物、源码 11-10）。
+    # 三档见 core/frida_host/freshness.py：落后→拒绝；dirty→告警放行；干净→放行。
+    mobile_dist = (HERE.parent.parent / 'mobile' / 'hooks' / 'dist').resolve()
+    if mobile_dist in args.script.resolve().parents:
+        print("FRESHNESS not_covered: mobile/hooks/dist 由移动侧 build.mjs 构建，"
+              "本闸只覆盖车载产物（见 core/frida_host/freshness.py 文件头）。", flush=True)
+    else:
+        gate = freshness.verify(args.script)
+        print("FRESHNESS " + freshness.summary_line(gate), flush=True)
+        if gate['tier'] == 'refuse':
+            print(freshness.refusal_text(gate), file=sys.stderr)
+            return 2
+        if gate['tier'] == 'warn_dirty':
+            print(freshness.warning_text(gate), flush=True)
+
     ensure_forward()
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -189,10 +212,13 @@ def main() -> int:
 
         owned.detached = detached
         session.on('detached', detached)
-        script = owned.script = session.create_script(
-            configure(body, allowed, watch_limit=args.watch_limit, no_stack=no_stack,
-                      args_only=args_only, deoptimize=args.deoptimize,
-                      tls_bypass=tls_bypass))
+        def make_script(target_session):
+            return target_session.create_script(
+                configure(body, allowed, watch_limit=args.watch_limit, no_stack=no_stack,
+                          args_only=args_only, deoptimize=args.deoptimize,
+                          tls_bypass=tls_bypass))
+
+        script = owned.script = make_script(session)
         if (args.watch_limit is not None or no_stack or args_only
                 or args.deoptimize is not None or tls_bypass):
             print(f"分档模式：watch_limit={args.watch_limit} no_stack={no_stack} "
@@ -205,6 +231,16 @@ def main() -> int:
         if args.gadget or args.spawn:
             device.resume(pid)
         print(f"attached pid {pid}; collecting for {args.seconds:.0f}s -> {args.out}", flush=True)
+
+        # 多进程（2026-11-10）：子进程的读取在单进程模式下完全不可见，
+        # 而"看不见"与"没发生"在 JSONL 里长得一模一样。只在显式开启时附加，
+        # 单进程路径的 session/script/清理行为保持不变。
+        if args.multi_process and args.package and not (args.spawn or args.gadget):
+            owned.extra, failed, skipped = attach_children(
+                device, args.package, args.user, pid, make_script, stream)
+            print('multi-process: 附加 ' + str([row['pid'] for row in owned.extra])
+                  + (' 超出上限 ' + str(skipped) if skipped else '')
+                  + (' 失败 ' + str([row['pid'] for row in failed]) if failed else ''), flush=True)
 
         # 轮询而不是一觉睡到底：**进程中途死掉的话，钩子跟着消失**，此后一个事件也收不到。
         # 而"钩子掉了"与"应用什么都没做"的结果**完全一样**——一个空 JSONL，
@@ -225,9 +261,11 @@ def main() -> int:
                     # 这里 break 后走 finally 的 session.detach()，正常卸载。
                     print("stop-file 出现：优雅收尾（正常 detach）", flush=True)
                     break
-                if not args.gadget and died_at is None and not pid_alive(pid):
+                watched = [pid] + [item['pid'] for item in owned.extra]
+                dead = [item for item in watched if not pid_alive(item)]
+                if not args.gadget and died_at is None and dead:
                     died_at = time.monotonic()
-                    print(f"\n!! pid {pid} 在第 {died_at - started:.0f}s 消失——钩子已随之失效，"
+                    print(f"\n!! pid {dead} 在第 {died_at - started:.0f}s 消失——钩子已随之失效，"
                           f"此后的事件一条也收不到。\n"
                           f"!! 这**不是**「应用没有动作」：两者都表现为记录为空。"
                           f"请确认 pid 是否变了（adb shell pidof {args.package or ''}）。", flush=True)

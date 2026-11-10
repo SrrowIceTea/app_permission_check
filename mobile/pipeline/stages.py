@@ -4,7 +4,8 @@
 
 阶段事件是流水线（runner）、编排服务（server SSE）、前端（时间线）三方的**唯一契约**，
 schema 就一种：`{"ts": float, "stage": str, "status": str, "message": str}`。
-status 取值：running（进入）/ done（成功）/ failed（失败）/ skipped（跳过）。
+status 取值：running（进入）/ done（成功）/ failed（失败）/ skipped（跳过）/
+unavailable（阶段跑完了但结果不可用，**不影响流水线终态**，必须带原因）。
 """
 from __future__ import annotations
 
@@ -13,10 +14,18 @@ import time
 from pathlib import Path
 
 # 阶段顺序即前端时间线的展示顺序。动态侧各阶段对应 device_run_thirdparty.py 的埋点。
+#
+# `surface`（敏感面统计，L2）插在 `static` 之后、`boot` 之前，理由：
+#   * 它是**派生统计**，输入是 APK 的 dex + 静态扫描口径，设备不参与；
+#   * 因此绝不能抢在 `static` 之前（会让时间线看起来"统计先于扫描"），
+#     也不该排在动态阶段后面（设备不可用时它照样能出数，这正是它的价值）；
+#   * 它**不出结论**：不产候选、不进四桶、不折算检出率。
+# 加了它之后阶段数由 16 变 17（见 mobile/pipeline/README.md「阶段」）。
 STAGES: list[tuple[str, str]] = [
     ("prepare", "环境准备"),
     ("boot", "模拟器就绪"),
     ("static", "静态剖析"),
+    ("surface", "敏感面统计"),
     ("frida_server", "Frida 服务就绪"),
     ("network", "网络连通"),
     ("install", "安装样本"),
@@ -36,7 +45,10 @@ STAGE_ORDER: dict[str, int] = {sid: i for i, (sid, _) in enumerate(STAGES)}
 STAGE_LABEL: dict[str, str] = dict(STAGES)
 
 # 设备不可用时，这些动态阶段会整段降级为 skipped（静态阶段仍正常出结论）。
-DYNAMIC_STAGES = [sid for sid, _ in STAGES if sid not in ("prepare", "boot", "static")]
+# `surface` 必须留在非设备一侧：它只读 APK 与目标集，设备挂了也照样出数，
+# 若误算进 DYNAMIC_STAGES，会在一台设备不可用时被标成 skipped（假的"没跑"）。
+NON_DEVICE_STAGES = ("prepare", "boot", "static", "surface")
+DYNAMIC_STAGES = [sid for sid, _ in STAGES if sid not in NON_DEVICE_STAGES]
 
 
 def emit_events(path: Path | None, stage: str, status: str, message: str = "") -> None:

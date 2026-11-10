@@ -84,6 +84,15 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(len(data["meta"]["rules_sha256"]), 64)
         self.assertTrue(data["meta"]["rules_total"] > 0)
 
+    def test_privacy_observation_scope_is_not_silent(self):
+        # 看板不渲染四态矩阵，但必须明说"不含"并指向真正包含它的交付物，不能默认沉默。
+        html = self.build()
+        self.assertIn("隐私观测", html)
+        self.assertIn("不在本页", html)
+        self.assertIn("本看板不含通用隐私来源的观测结果", html)
+        self.assertIn("未观测不等于未采集，也不代表安全", html)
+        self.assertIn("PDF 报告《七、车载场景与证据覆盖》", html)
+
     def test_verify_absent_means_no_badges(self):
         # 没给核对结果时看板必须照常生成，只是没有 dex 徽章
         data = extract_data(dashboard.build(

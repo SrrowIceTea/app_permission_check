@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "platform": "vehicle",
+  "bundle": "hook_egress.bundle.js",
+  "bundle_sha256": "240c5ac0733721bfd09c933d3efb3fca73efd3b57cb9da8d5193b1fd4e3330f6",
+  "bundle_bytes": 733493,
+  "entry": "vehicle/hooks/hook_egress.js",
+  "built_at": "2026-11-10T16:33:40+08:00",
+  "builder": {
+    "path": "core/frida_host/build.py",
+    "sha256": "b9821b3601bbf8d69b0a04de50e368ea5ff5208de9372cc75568d23df7c6beff"
+  },
+  "source_fingerprint": "54e330a77e09717f49cc2db76820fa4b73fc31edf79835f53a1538f0fd986bd4",
+  "sources": {
+    "core/frida_host/request_targets.js": "141e06687f5c2d5059fddc778486a0ce6ea87aa01a55e5bbc84a6c7705956d5b",
+    "vehicle/hooks/hook_egress.js": "f87d604db5d00ebc913c1d229dce9c57c125788c71e7b3516f79397fbd2b0cd8",
+    "vehicle/hooks/scope.js": "e0feaa386042b532eb569215ec600e9c591e270c1e693fc2555b6f33bf8eb2cb",
+    "vehicle/hooks/vscan_runtime.js": "8906b4c5061ed9a57bd44e6e2ff9c55336df5c9068281ae2141a093cdfe1a132"
+  },
+  "dirty_at_build": {
+    "available": true,
+    "dirty": false,
+    "files": []
+  }
+}

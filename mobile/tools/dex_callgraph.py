@@ -40,7 +40,7 @@ INVOKE_RE = re.compile(
 DYNAMIC_RE = re.compile(r"\binvoke-(?:custom|polymorphic)\b")
 INSNS_RE = re.compile(r"^      insns size    : \d+")
 
-GRAPH_VERSION = 4   # 语义变更（剪枝/边口径/包装索引）必须 +1，否则旧缓存会被静默复用
+GRAPH_VERSION = 5   # 语义变更（剪枝/边口径/包装索引）必须 +1，否则旧缓存会被静默复用
 
 LIMITATIONS = [
     "只沿真实 invoke 指令连边；父类/接口实现关系不自动成边，避免 AppCompat 父类把全图变可达。",
@@ -49,6 +49,7 @@ LIMITATIONS = [
     "会落「可达性未知」而不是「不可达」。",
     "invoke-custom（lambda）与反射/JNI 的目标无法从 dex 常量池静态解析，只作为不确定性信号记录。",
     "节点按方法签名（含描述符）区分重载；输出排序，不含时间戳。",
+    "包装调用方索引同样按完整签名分键（GRAPH_VERSION 5 起），同名重载不合并。",
 ]
 
 
@@ -168,7 +169,9 @@ def parse_dump(stream, state: dict, app_prefixes, entry_classes, api_refs,
                 state["hits"].setdefault(method, set()).add(target)
             target_key = _method_key(target)
             if target_key in wrapper_keys:
-                state["wrapper_callers"].setdefault(target_key, set()).add(method)
+                # 键用**完整签名**（含描述符）：同名的重载是不同的节点，
+                # 用 `类.方法名` 分键会把 `f(4 参)` 调 `f(5 参)` 误判成自环丢掉。
+                state["wrapper_callers"].setdefault(target, set()).add(method)
             target_cls = _cls_of(target)
             if (_graph_class(target_cls, app_prefixes, entry_classes)
                     or _graph_class(cur_cls, app_prefixes, entry_classes)):

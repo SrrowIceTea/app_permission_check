@@ -756,7 +756,8 @@ button, input, select { font: inherit; color: inherit; }
 }
 
 #pipeline-timeline > .pl-done,
-#pipeline-timeline > .pl-skipped {
+#pipeline-timeline > .pl-skipped,
+#pipeline-timeline > .pl-unavailable {
   display: grid;
   grid-template-columns: 16px 1fr auto;
   align-items: center;
@@ -770,6 +771,9 @@ button, input, select { font: inherit; color: inherit; }
 
 #pipeline-timeline > .pl-done .pl-dot { background: var(--pass); }
 #pipeline-timeline > .pl-skipped .pl-dot { background: var(--paper-4); }
+/* unavailable：阶段跑完了但没数据（带原因）。不许画成 skipped 的删除线——它不是"没跑" */
+#pipeline-timeline > .pl-unavailable .pl-dot { background: var(--warn, #d08b3e); }
+#pipeline-timeline > .pl-unavailable .pl-msg { color: var(--warn, #d08b3e); }
 #pipeline-timeline > .pl-done .pl-msg { display: none; }
 #pipeline-timeline > .pl-skipped .pl-label { color: var(--paper-4); text-decoration: line-through; }
 

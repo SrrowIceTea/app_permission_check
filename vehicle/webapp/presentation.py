@@ -7,6 +7,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from vehicle.webapp.observation import observation
+
 CONCLUDED = ('correlated', 'observed', 'candidate')
 UNJUDGED = 'unjudged'
 TERMINAL_STATUS = ('done', 'failed', 'skipped')
@@ -212,12 +214,13 @@ def decorate(snapshot, out, stages):
         'stage_timings': stage_timings(events, stages),
         'stage_timings_elapsed_ms': elapsed_ms(events),
         'stage_timings_note': TIMING_NOTE,
+        'privacy_observation': observation(summary, _rows(out / 'audit/findings.jsonl')),
         'field_gaps': {**identity['gaps'], **gaps},
     })
     return data
 
 
-def project_summary(summary):
+def project_summary(summary, out=None):
     """/summary 的对外投影：四档键恒定，其余字段逐字保留。"""
     if not isinstance(summary, dict):
         return summary
@@ -228,6 +231,8 @@ def project_summary(summary):
     data['findings_by_conclusion_level_note'] = COUNT_NOTE
     if gaps:
         data['findings_by_conclusion_level_gaps'] = gaps
+    rows = _rows(Path(out) / 'audit/findings.jsonl') if out is not None else None
+    data['privacy_observation'] = observation(summary, rows)
     return data
 
 

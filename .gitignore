@@ -137,3 +137,9 @@ core/collector/logs/
 
 # Local user-provided AAOS system image; retain on disk, exclude large binaries.
 /x86_64/
+
+# ── 构建器临时产物（绝不提交）────────────────────────────────
+# 点开头 + 随机后缀的 shim，由打包/一致性测试反复生成，均为几十字节的
+# import 转发文件；真正交付物在 vehicle/hooks/dist 与 core/frida_host/dist。
+mobile/hooks/.core-*.js
+mobile/hooks/.entry.*.js

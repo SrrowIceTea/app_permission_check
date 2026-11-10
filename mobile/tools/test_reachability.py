@@ -87,7 +87,7 @@ def _graph(edges, hits, app_methods, entry_methods, supers=None, dynamic=False,
     }
 
 
-def _ctx(graph, framework=(), manifest=None):
+def _ctx(graph, framework=(), manifest=None, derived=()):
     entry_classes = set(graph["meta"]["entry_classes"])
     from_app, any_in = reachability._incoming(graph)
     reached = graph_reach.reached_from(graph)
@@ -95,8 +95,11 @@ def _ctx(graph, framework=(), manifest=None):
         "graph": graph, "reached": reached,
         "reached_classes": {dex_callgraph._cls_of(m) for m in reached},
         "library_callers": any_in - from_app, "has_incoming": any_in,
-        "framework": list(framework), "entry_exists": bool(graph["entry_methods"]),
-        "prefixes": ["com.example"], "entry_classes": entry_classes,
+        "framework": list(framework),
+        "out_of_dex": bool(set(framework) & set(apk_entrypoints.OUT_OF_DEX_SIGNALS)),
+        "entry_exists": bool(graph["entry_methods"]),
+        "prefixes": ["com.example"], "derived_prefixes": list(derived),
+        "entry_classes": entry_classes,
         "manifest": manifest or {"package": "com.example", "application": "com.example.App",
                                  "components": [], "gaps": []},
     }

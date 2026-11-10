@@ -59,7 +59,7 @@ vscanner/
 | `mobile/ai/` | 三阶段提示词 + 证据包 + 输出校验 | `evidence_bundle.py` / `ai_review.py` |
 | `mobile/report/` | 十章节 PDF 报告 | |
 | `mobile/tools/` | 设备端脚本 `device_run.py`/`device_run_thirdparty.py`（+ split 子模块）、`batch_thirdparty.py`、`pcap_capture.py`/`pcap_http.py`、`conn_probe.py`、`run_mobile_checks.py`、`validate_keylog.py` 等 | 入口集合 |
-| `mobile/pipeline/` | 一键审计流水线：`stages.py`(16 阶段)/`runner.py`/`server.py`，SSE 事件流，默认端口 **8771** | |
+| `mobile/pipeline/` | 一键审计流水线：`stages.py`(17 阶段)/`runner.py`/`server.py`，SSE 事件流，默认端口 **8771** | |
 | `mobile/workbench/` | 静态工作台 `server.py`，默认端口 **8772**，与新流水线互不抢端口 | |
 | `mobile/lab/` | 实验室交付入口：`core`/`nonroot`/`root`（README.nonroot.md / README.root.md 等） | |
 | `frontend/` | 零构建前端：`index.html` 落地页 + `app.html` 工作台 | 不新增 package.json、不引框架，`python -m http.server` 直接开 |
@@ -106,7 +106,7 @@ $py = "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
 # 1) 仓库级离线回归（不需要设备/网络/API key）
 & $py tools/run_regressions.py                 # 18 组（带 --mobile 为 19 组）：completion/rules-contract/event-store/...
 
-# 2) 移动侧离线回归 + 端点干跑（31 项；看 output/mobile-regression-*/verification.json）
+# 2) 移动侧离线回归 + 端点干跑（63 项；看 output/mobile-regression-*/verification.json）
 & $py mobile/tools/run_mobile_checks.py
 
 # 3) 移动分支回归（含 workbench / policy / AI / 前端契约）

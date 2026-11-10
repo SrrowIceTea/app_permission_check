@@ -2,10 +2,12 @@
 import { packages } from './scope.js';
 import { makeLogger, procName } from './vscan_runtime.js';
 import { withStack } from './stack_capture.js';
-import { describe, sha256hex16 } from '../../core/privacy/values.js';
+import { describe } from '../../core/privacy/values.js';
+import { locationEvidence } from './privacy_location.js';
 import { describeException } from '../../core/privacy/dispatch.js';
 import { contactTracker } from './privacy_contacts.js';
 import { WATCH, META } from './privacy_targets.generated.js';
+import { REGISTER, armRegistration } from './privacy_registration.js';
 
 const log = makeLogger('privacy', '/data/local/tmp/vscan-vehicle-privacy.log');
 const AD_ID = 'com.google.android.gms.permission.AD_ID';
@@ -42,11 +44,8 @@ export function returned(entry, ret) {
       value_capture_gap: 'audio samples intentionally not retained; no audio egress value matching'};
   }
   if (entry.capture === 'location') {
-    if (ret === null) return {collection_state: 'empty', non_empty: false};
-    // No extra location request: read only fields of the already-returned value.
-    const pair = JSON.stringify([Number(ret.getLatitude()), Number(ret.getLongitude())]);
-    return {collection_state: 'obtained', non_empty: true, value_hash: sha256hex16(pair),
-      value_capture_gap: 'location pair hash only; location egress matching not implemented'};
+    // 规范形态在 privacy_location.js：只读已返回 Location 的字段，含 value_len。
+    return locationEvidence(ret);
   }
   return describe([entry.data_type], {}, ret);
 }
@@ -147,6 +146,19 @@ function main() {
     log('ARMED', {pkg, uid, user_id: Math.floor(uid / 100000), sdk,
       privacy_catalog_sha256: META.sha256, hooks: armed.length, apis: armed, failed_apis: failed});
     if (!armed.length) log('ERROR', {where: 'privacy_arm', pkg, message: 'No general-source hooks installed'});
+    // 注册/异步接口单独记：只说明"调用过"，永远不升级为读取。
+    const emitRegister = (entry, outcome, error) => {
+      const extra = {pkg, uid, user_id: Math.floor(uid / 100000), data_types: [entry.data_type],
+        api: entry.cls + '.' + entry.method + entry.desc, outcome,
+        collection_state: 'call_only', registration_kind: entry.registration_kind,
+        value_capture_gap: 'registration_or_async_no_return_value',
+        privacy_catalog_sha256: META.sha256};
+      if (error) extra.exc_class = error.class_name;
+      log('PRIVACY_REGISTER', withStack(extra, pkg, 8, 48));
+    };
+    const reg = armRegistration(REGISTER, emitRegister, gap);
+    log('ARMED', {pkg, uid, user_id: Math.floor(uid / 100000), sdk,
+      kind: 'registration', hooks: reg.armed.length, apis: reg.armed, failed_apis: reg.failed});
   } catch (e) { log('ERROR', {where: 'privacy_main', message: String(e)}); }
 }
 

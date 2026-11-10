@@ -7,6 +7,7 @@ the identical workload; only the Frida Hook is attached in the `with_hook` arm.
 import argparse
 import hashlib
 import json
+import shutil
 import socket
 import subprocess
 import sys
@@ -23,6 +24,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'tools'))
 
 from device_acceptance import ADB, PACKAGE, SERIAL, hook_bundle, read_events  # noqa: E402
+from core.frida_host import freshness  # noqa: E402
 from core.collector.collector_server import Collector  # noqa: E402
 from process_cleanup import stop_workers  # noqa: E402
 from vehicle.bench.overhead_report import cpu_ms, render_markdown, summarize  # noqa: E402
@@ -113,6 +115,8 @@ def run_arm(out, user, pair, arm, order, actions, session, bundle):
                 hook = subprocess.Popen([sys.executable, str(ROOT / 'core/frida_host/run.py'),
                     '--package', PACKAGE, '--user', str(user), '--stop-file', str(stop),
                     '--allow-package', PACKAGE, '--script', str(bundle),
+                    # 2026-11-10：显式打开 TLS 校验收宽（默认关），否则 armed() 等的 PINNING_ARMED 永不出现。
+                    '--tls-bypass',
                     '--seconds', '120', '--out', str(hook_log), '--session', f'{session}-{pair}',
                     '--event-db', str(out / 'events.sqlite')],
                     cwd=ROOT, stdout=handle, stderr=handle)
@@ -186,8 +190,13 @@ def main(argv=None):
     out = (args.out or ROOT / 'output' /
            ('vehicle-hook-overhead-' + datetime.now().strftime('%Y%m%d-%H%M%S'))).resolve()
     out.mkdir(parents=True)
+    source_bundle = hook_bundle('hook_vehicle_all')     # 解析时已过硬闸（新鲜度）
     bundle = out / 'hook_vehicle_all.bundle.js'
-    bundle.write_bytes(hook_bundle('hook_vehicle_all').read_bytes())
+    bundle.write_bytes(source_bundle.read_bytes())
+    # 清单必须跟着复制：run.py 拿到的如果是没有清单的副本，闸会（正确地）拒绝开跑。
+    sidecar = source_bundle.with_name(source_bundle.name + freshness.SUFFIX)
+    if sidecar.is_file():
+        shutil.copyfile(sidecar, bundle.with_name(bundle.name + freshness.SUFFIX))
     buffered = 'vehicle_buffered_v1' in bundle.read_text(encoding='utf-8')
     session = 'overhead-' + uuid.uuid4().hex
     runs = []
@@ -253,6 +262,7 @@ def main(argv=None):
         'fingerprint': identity['device_fingerprint'], 'sdk': str(identity['device_sdk']),
         'apk_sha256': identity['installed_apk_sha256'],
         'hook_bundle_sha256': hashlib.sha256(bundle.read_bytes()).hexdigest(),
+        'hook_bundle_identity': freshness.identity(bundle),
         'session': session, 'measured_at': datetime.now().isoformat(timespec='seconds'),
         'cpu_clock': 'USER_HZ=100 (/proc/<pid>/stat utime+stime)'}
     document = {'environment': environment, 'pairs_requested': args.pairs,

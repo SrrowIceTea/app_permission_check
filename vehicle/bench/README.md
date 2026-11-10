@@ -119,25 +119,37 @@ HA 电量配对与其他业务问题分开。候选由同会话电量读取与�
 
 两份答卷须由不同审阅者完成，且绑定同一份证据和配对表。比较命令生成分歧清单及单独的业务答卷。
 配对题存在证据不足时保留补证项并暂停生成计分草稿。草稿始终待签，第三位审阅者填写分歧决定和
-全部负控标记后再人工签核。历史 HA 电量会话绑定当时的规则库，后续重放须使用匹配的历史规则快照。
+全部负控标记后再签核。支持三种模式，层级不可互换：
+
+| `--review-mode` | 复核人 | 可作金标准 | 说明 |
+|---|---|---|---|
+| `human` | 两位具名人类 + 人类仲裁人 | 是（`human_signed`） | 最强，需人工投入 |
+| `cross_model` | 两个不同模型家族的隔离 subagent + 第三家族仲裁人 | 是（`cross_model_signed`） | 无人工介入，`model_family` 为自述 |
+| `subagent` | 两个隔离 subagent，可为同一模型 | 否（`subagent_signed`） | 共享模型错误未排除，只能指导工程 |
+
+`cross_model` 的三条限定随标签进入 `review_limits`：`no_human_in_the_loop`、
+`model_identity_is_self_declared`、`families_can_share_upstream_weights`。
+任何报告引用该结果时须同时引用这三条，不得表述为「经专家验证」。
+历史 HA 电量会话绑定当时的规则库，后续重放须使用匹配的历史规则快照。
 
 从复核包中选取支持配对评分的样本，使用其 APK、会话、来源、参考文件及 SHA-256。
 评审人根据独立业务回执和采集事件构建 `universe`，包含未被工具命中的正例和明确负控。
 每项形如 `{"pair":[rule_id, read_src, read_event_id, flow_src, flow_event_id],"negative_control":false}`。
 `reviews` 包含两名独立标注人的 `reviewer/reviewed_at/decisions`。每项决策包含 `pair` 和布尔值
 `present`。两人各自标注全部范围。第三位仲裁人用同结构在 `adjudication` 中处理全部分歧。
-时间使用带时区的 ISO 8601。完成后设置 `human_signoff=signed`，把配对案例放入
-`{"samples":[...]}` 并通过 `--labels` 提交。
+时间使用带时区的 ISO 8601。签核字段随模式而定：`human` 设 `human_signoff=signed`，
+`subagent`／`cross_model` 设 `subagent_signoff=signed` 且 `human_signoff=not_applicable`。
+完成后把配对案例放入 `{"samples":[...]}` 并通过 `--labels` 提交。
 
 每案输出 `metrics.json`，汇总写入 `benchmark-metrics.json`。各层按读取来源、传输路径、
 样本来源、标注来源及证据指纹区分。输出 Wilson 95% 区间、Cohen's κ 和显式负控误报率。
 空分母、未审阅预测及待签层保留空值和原因。旧三元组继续供历史窗口重放使用。
-O2 的 agent 初评单列，人工签核和独立样本规模决定对外验收状态。
+O2 的 agent 初评单列，签核层级（`cross_model_signed` / `human_signed`）和独立样本规模决定对外验收状态。
 
 统计包含观测量、歧义/无法归因、正文不可用和已关联间隔分位数。后者存在选择偏差，
 不能据此宣称窗口覆盖率；Hook 开销用上面的 `overhead` 配对实验测，旧文档里
 「当前不编造」的缺口已由该入口补上；准确率仍须独立标注才能计算。
-夹具初评见 [窗口校准记录](WINDOW_CALIBRATION.md)。独立应用的延迟分布与人工签核仍待积累。
+夹具初评见 [窗口校准记录](WINDOW_CALIBRATION.md)。独立应用的延迟分布仍待积累；跨模型签核已可计分，但不含人工环节。
 命令正常退出表示该轮评估流程执行完成；是否完成动态评估应读 `completion`、样本状态和标注状态，不能只看退出码。
 
 ## 政策快照

@@ -12,6 +12,10 @@
 // 绕过手法本身在 pinning_bypasses.js，事件记录格式在 vscan_runtime.js。
 //
 // 事件记录于 /data/local/tmp/vscan.log（JSONL，src=tls）。
+// 显式开关（2026-11-10）：默认**关闭**——宿主不注入 __VSCAN_TLS_BYPASS__ 时只发一条
+// TLS_SWITCH{tls_bypass:false} + TLS_BYPASS_DISABLED，不挂任何接缝；run.py 传
+// --tls-bypass（或 VSCAN_TLS_BYPASS=1）才武装。车载流水线默认显式传该参数以保持
+// 既有交付行为，开关值同时落 verification.json 与本文件的 TLS_SWITCH 事件，可 grep。
 // 运行：frida -U -f <白名单包> -l ssl_pinning_bypass.js（见 vehicle/hooks/README.md）
 // ============================================================================
 'use strict';
@@ -22,7 +26,12 @@ import { makeBypasses } from './pinning_bypasses.js';
 
 var CFG = {
   logPath: '/data/local/tmp/vscan.log',
-  whitelist: packages() // 默认白名单
+  whitelist: packages(), // 默认白名单
+  // 显式开关（2026-11-10）：未注入占位符 = 保持字面量 = 关闭；注入 '1' 才武装。
+  // 只允许出现**一次**字面量：宿主替换是全局的，再写一次比较字面量会被一起替换。
+  // 车载流水线（vehicle/pipeline/capture.py）默认传 --tls-bypass 保持既有交付行为；
+  // 直接手跑 core/frida_host/run.py 不给该开关即关闭（与移动侧同名语义）。
+  tlsBypass: String('__VSCAN_TLS_BYPASS__') === '1'
 };
 
 var vlog = makeLogger('tls', CFG.logPath);
@@ -42,8 +51,20 @@ function main() {
     vlog('START', { script: 'ssl_pinning_bypass.js', pkg: STATE.pkg, uid: STATE.uid,
                     whitelist: CFG.whitelist, frida: Frida.version,
                     scope_note: 'process-local only; bypasses trust verification for audit traffic capture' });
+    // 开关的**启动行**证据：不论开/关都先记一条，事后可 grep「本轮到底开没开」。
+    // 不放进 START 是为了让两侧 START 保持同形（parity 守卫）。
+    vlog('TLS_SWITCH', { tls_bypass: CFG.tlsBypass, source: 'run.py --tls-bypass' });
     if (CFG.whitelist.indexOf(STATE.pkg) < 0) {
       vlog('NOT_TARGET', { pkg: STATE.pkg, note: 'package not in whitelist; no hooks armed (pinning bypass disabled)' });
+      return;
+    }
+    if (!CFG.tlsBypass) {
+      vlog('TLS_BYPASS_DISABLED', {
+        pkg: STATE.pkg,
+        note: '显式开关未开启：本轮不做 TLS 校验收宽（未传 --tls-bypass / VSCAN_TLS_BYPASS=1）；' +
+              '隐私/流量采集不受影响'
+      });
+      console.log('ssl_pinning_bypass.js TLS_BYPASS_DISABLED in ' + STATE.pkg + ' — pass --tls-bypass to enable.');
       return;
     }
     vlog('PINNING_ARMED', { hooks: bypasses.arm(),

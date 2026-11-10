@@ -28,7 +28,8 @@ from xml.sax.saxutils import escape
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.rules_contract import rules_db_meta  # noqa: E402  规则库元信息（§8.2 B-2）
 
-from report_extras import FONT_CANDIDATES, evidence_summary, extra_story, fingerprint_rows, footer, load_report_evidence
+from report_extras import (FONT_CANDIDATES, evidence_summary, extra_story, fingerprint_rows,
+                           footer, hook_bundle_line, load_report_evidence)
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
@@ -98,6 +99,8 @@ def build_story(findings: list[dict], summary: dict, rules_meta: dict, font: str
         ["采集会话", summary.get("session_id") or "旧数据：未验证会话"],
         ["规则库版本", ", ".join(rules_meta["rule_versions"])],
         ["规则库摘要", summary.get('rules_sha') or f"{rules_meta['sha256'][:32]}…"],
+        # 产物身份（2026-11-10）：dist/ 被 gitignore，没有这一行报告就没有代码基线。
+        ["钩子产物", hook_bundle_line(summary.get('hook_bundle'))],
         ["规则总数 / 已启用", f"{rules_meta['rules_total']} / {rules_meta['rules_enabled']}"],
         ["时间基准", summary.get("clock_basis", "旧数据：须复核时钟校准")],
         ["输入规模", f"读取 {summary['inputs']['reads']} 条 / "
@@ -246,7 +249,7 @@ def build_story(findings: list[dict], summary: dict, rules_meta: dict, font: str
         story.append(Paragraph("· " + line, small))
     story.extend(extra_story(summary, flows or [], ownership or [], image_dir, body, h2, findings))
     from vehicle.analyze.profile_report import profile_story
-    story.extend(profile_story(summary, body, h2))
+    story.extend(profile_story(summary, body, h2, findings))
     return story
 
 
