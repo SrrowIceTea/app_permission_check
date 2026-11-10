@@ -38,6 +38,7 @@ CHECKS = [
         'core.collector.test_parse',
         'vehicle.pipeline.test_environment', 'vehicle.pipeline.test_acceptance',
         'vehicle.pipeline.test_diagnostics', 'vehicle.privacy.test_evaluation', 'vehicle.privacy.test_location_match',
+        'vehicle.privacy.test_location_review_fixes',
         'vehicle.privacy.test_versions',
         'vehicle.pipeline.test_capture_lifecycle',
         'vehicle.pipeline.test_capture_proxy',

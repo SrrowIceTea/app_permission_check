@@ -204,3 +204,11 @@ regular 保留 request.host 与实际 peer IP；reverse 才用 pretty_host，并
 候选 POST 在内存保留到采集结束，整轮重复请求或重复写入均弃权；不允许时间候选救回不匹配正文。
 严格范围仍只持久化已归属正文，独立进程负控只增加丢弃计数。SLIRP 改写端口，源端口仅作诊断。
 MG4 实测见 [本轮交付](../../docs/VEHICLE_MAIN_CLOSEOUT_20261105.md)。该匹配不是通用 socket 确定性归因。
+
+## D420 区分 wire 与持久化文本的摘要（2026-11-10）
+
+raw_sha256/raw_bytes 始终描述原始传输字节；解压或凭据脱敏后的 text 不与它们直接比较。
+新增 text_sha256/text_bytes 只绑定实际持久化的完整文本，摘要在脱敏后计算，不恢复凭据。
+旧会话不补写字段：转换文本缺少独立摘要时只能依赖清单中的 JSONL 摘要，并显式标注限制。
+未转换正文仍核对 wire/text 等价，截断、解码错误、摘要冲突和不保留状态不能获得匹配。
+原文研究与真实 collector 产物反例见 docs/LOCATION_REVIEW_FIXES_20261110.md。

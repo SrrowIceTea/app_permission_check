@@ -6,8 +6,9 @@ import subprocess
 from pathlib import Path
 
 from core.io_utils import load_jsonl
-from vehicle.privacy import location_fixtures, location_match
+from vehicle.privacy import location_fixtures, location_match, location_inputs, location_payload
 from vehicle.privacy.evaluation import load_general_rules
+from vehicle.analyze import pair_ambiguity
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -16,18 +17,12 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _json(path):
-    return json.loads(path.read_text(encoding='utf-8-sig'))
-
-
 def replay(capture, package, window_ms):
     manifest_path = capture / 'session-manifest.json'
     manifest_sha256 = digest(manifest_path)
-    manifest = _json(manifest_path)
-    packages, session = manifest.get('packages'), manifest.get('session')
-    if not isinstance(packages, list) or package not in packages or not isinstance(session, str) or not session:
-        raise ValueError('Package/session not bound to capture manifest')
-    hashes = manifest.get('input_sha256') or {}
+    manifest = location_inputs.read_manifest(manifest_path, package)
+    session, user = manifest['session'], manifest['user_id']
+    hashes = manifest['input_sha256']
     inputs = {}
     for name in ('reads.jsonl', 'flows.jsonl'):
         path = capture / name
@@ -38,15 +33,17 @@ def replay(capture, package, window_ms):
     version = str(manifest.get('android_version'))
     rules = load_general_rules(version)
     rule = rules.get('VSC-GE-location')
-    result = location_match.evaluate(load_jsonl(capture / 'reads.jsonl'),
-        load_jsonl(capture / 'flows.jsonl'), package, session, window_ms=window_ms)
+    reads, flows = load_jsonl(capture / 'reads.jsonl'), load_jsonl(capture / 'flows.jsonl')
+    location_inputs.bind_user(reads, flows, manifest, package)
+    result = location_match.evaluate(reads, flows, package, session, window_ms=window_ms)
     # Re-check after reading: a concurrently growing capture is not a frozen input.
     if digest(manifest_path) != manifest_sha256:
         raise ValueError('Capture manifest changed during replay')
     if any(digest(capture / name) != value for name, value in inputs.items()):
         raise ValueError('Capture inputs changed during replay')
     result.update(input_kind='historical_capture', capture_manifest_sha256=manifest_sha256,
-        input_sha256=inputs, android_version=version,
+        input_sha256=inputs, android_version=version, user_id=user,
+        identity_binding='capture_manifest_user_and_record_uid',
         registered_location_egress_rule=rule,
         capture_health_note='Input hashes checked; this experiment does not certify full capture health.',
         real_validation=('supported_content_observed' if result['pair_count']
@@ -90,14 +87,16 @@ def main(argv=None):
         result = (synthetic(args.window_ms) if args.synthetic
                   else replay(args.capture, args.package, args.window_ms))
         result['implementation_sha256'] = {p.name: digest(p) for p in
-            (Path(__file__), Path(location_match.__file__), Path(location_fixtures.__file__))}
+            (Path(__file__), Path(location_match.__file__), Path(location_fixtures.__file__),
+             Path(location_inputs.__file__), Path(location_payload.__file__))}
+        result['implementation_sha256']['pair_ambiguity.py'] = digest(Path(pair_ambiguity.__file__))
         git = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True, text=True)
         result['git_head'] = git.stdout.strip() if git.returncode == 0 else None
         result['note'] = 'Only experiment output; default evaluator/rules/Hook/catalog are unchanged.'
         (args.out / 'result.json').write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n',
                                                encoding='utf-8')
         return 0 if result.get('all_passed', True) else 1
-    except (OSError, ValueError, TypeError, KeyError) as exc:
+    except (OSError, ValueError, TypeError, KeyError, RecursionError, OverflowError) as exc:
         (args.out / 'failure.json').write_text(json.dumps(
             {'status': 'experiment_failed', 'error': type(exc).__name__, 'message': str(exc),
              'note': 'No audit success or negative conclusion; failed experiment preserved.'},

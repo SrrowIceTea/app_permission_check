@@ -161,7 +161,7 @@ class LocationExperimentTests(unittest.TestCase):
                 path = capture / name
                 path.write_text(''.join(json.dumps(r) + '\n' for r in rows), encoding='utf-8')
                 hashes[name] = hashlib.sha256(path.read_bytes()).hexdigest()
-            manifest = {'packages': [PACKAGE], 'session': SESSION, 'android_version': '15',
+            manifest = {'packages': [PACKAGE], 'session': SESSION, 'android_version': '15', 'user_id': 10,
                         'input_sha256': hashes}
             (capture / 'session-manifest.json').write_text(json.dumps(manifest), encoding='utf-8')
             result = location_experiment.replay(capture, PACKAGE, 30000)

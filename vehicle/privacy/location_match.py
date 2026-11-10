@@ -1,6 +1,4 @@
 """Limited offline location-content candidates. 仅用于授权测试；不生成规则结论。"""
-import hashlib
-import json
 import math
 import re
 from collections import Counter, defaultdict
@@ -9,6 +7,7 @@ from core.collector.attribution import is_loose
 from core.collector.identity import compatible, identity_scope, uid_of, user_of
 from core.privacy.semantics import read_state
 from vehicle.analyze.pair_ambiguity import annotate_candidates
+from vehicle.privacy.location_payload import request_values
 
 PAIR_FORMS = ('pair_d6', 'pair_d6_lonlat', 'pair_raw', 'pair_raw_lonlat', 'geo_d6')
 ATTRIBUTIONS = ('app_process_hook', 'system_sample', 'native_http_write')
@@ -23,12 +22,14 @@ LIMITS = [
 
 
 def _number(value):
-    return type(value) in (int, float) and math.isfinite(value) and value >= 0
+    return (type(value) is int or type(value) is float and math.isfinite(value)) and value >= 0
 
 
-def _ref(row):
+def _ref(row, process_scoped=False):
     return (isinstance(row.get('src'), str) and bool(row['src'])
-            and type(row.get('evt_id')) is int and row['evt_id'] >= 0)
+            and type(row.get('evt_id')) is int and row['evt_id'] >= 0
+            and (not process_scoped and row.get('pid') is None
+                 or type(row.get('pid')) is int and row['pid'] > 0))
 
 
 def _identity(row):
@@ -67,59 +68,13 @@ def _forms(row):
     return result, None
 
 
-def _unique_fields(items):
-    result = dict(items)
-    if len(result) != len(items):
-        raise ValueError('duplicate JSON fields')
-    return result
-
-
-def _invalid_constant(_value):
-    raise ValueError('non-JSON number')
-
-
-def _request_values(flow):
-    payload = flow.get('request_payload')
-    if not isinstance(payload, dict):
-        return set(), 'request_body_unavailable'
-    if any(payload.get(k) for k in ('raw_truncated', 'text_truncated', 'decode_error')):
-        return set(), 'request_body_incomplete'
-    text = payload.get('text')
-    if not isinstance(text, str) or len(text) > 2 * 1024 * 1024:
-        return set(), 'request_body_unavailable_or_oversized'
-    try:
-        raw = text.encode('utf-8')
-        if ('raw_sha256' in payload and payload['raw_sha256'] != hashlib.sha256(raw).hexdigest()
-                or 'raw_bytes' in payload and payload['raw_bytes'] != len(raw)):
-            return set(), 'request_body_digest_or_length_mismatch'
-        stack = [json.loads(text, object_pairs_hook=_unique_fields, parse_constant=_invalid_constant)]
-    except (ValueError, RecursionError, UnicodeError):
-        return set(), 'request_body_invalid_json'
-    values, visited = set(), 0
-    while stack:
-        visited += 1
-        if visited > 10000:
-            return set(), 'request_json_node_limit'  # No partial match from a partial traversal.
-        node = stack.pop()
-        if isinstance(node, dict):
-            stack.extend(node.values())
-        elif isinstance(node, list):
-            stack.extend(node)
-        elif isinstance(node, str) and 8 <= len(node) <= 256:
-            try:
-                values.add((hashlib.sha256(node.encode('utf-8')).hexdigest()[:16], len(node)))
-            except UnicodeError:
-                return set(), 'request_body_invalid_unicode'
-    return values, None
-
-
-def _deduplicate(rows, diagnostics):
+def _deduplicate(rows, diagnostics, process_scoped=False):
     groups = defaultdict(list)
     for row in rows:
-        if not _ref(row):
+        if not _ref(row, process_scoped):
             diagnostics['invalid_event_reference'] += 1
             continue
-        groups[row['src'], row['evt_id']].append(row)
+        groups[row['src'], row.get('pid'), row['evt_id']].append(row)
     result = []
     for group in groups.values():
         if any(row != group[0] for row in group[1:]):
@@ -150,7 +105,7 @@ def evaluate(reads, flows, package, session, *, window_ms=30000):
         diagnostics['no_scoped_general_location_reads'] += 1
     if not scoped_flows:
         diagnostics['no_scoped_flows'] += 1
-    for row in _deduplicate(scoped_reads, diagnostics):
+    for row in _deduplicate(scoped_reads, diagnostics, process_scoped=True):
         if read_state(row) != 'obtained':
             diagnostics['location_not_obtained'] += 1
             continue
@@ -172,14 +127,14 @@ def evaluate(reads, flows, package, session, *, window_ms=30000):
                 or row.get('clock_basis', 'host_received_ts') != 'host_received_ts'):
             diagnostics['flow_clock_or_attribution_distance_unavailable'] += 1
             continue
-        values, reason = _request_values(row)
+        values, reason, provenance = request_values(row)
         if reason:
             diagnostics[reason] += 1
         else:
-            usable.append((row, values))
+            usable.append((row, values, provenance))
     pairs = []
     for read, forms in candidates:
-        for flow, values in usable:
+        for flow, values, provenance in usable:
             delta = flow['ts'] - read['host_received_ts']
             if not compatible(read, flow) or not 0 <= delta <= window_ms:
                 continue
@@ -187,12 +142,14 @@ def evaluate(reads, flows, package, session, *, window_ms=30000):
             if not matched:
                 continue
             pairs.append({'read_src': read['src'], 'read_event_id': read['evt_id'],
+                'read_pid': read['pid'], 'flow_pid': flow.get('pid'),
                 'flow_src': flow['src'], 'flow_event_id': flow['evt_id'],
                 'uid': read['uid'], 'user_id': read['user_id'], 'delta_ms': delta,
                 'clock_basis': 'host_received_ts', 'identity_scope': identity_scope(read, flow),
                 'evidence_level': 'content_match_candidate', 'content_match': True,
                 'content_match_basis': 'complete_outgoing_json_whole_coordinate_pair_string',
                 'value_transform': 'hook_recorded_canonical_coordinate_pair',
+                'payload_provenance': provenance,
                 'matched_forms': [{'form': name, 'hash': forms[name][0], 'len': forms[name][1]}
                                   for name in matched],
                 'attribution_loose': is_loose(flow), 'origin_proven': False})

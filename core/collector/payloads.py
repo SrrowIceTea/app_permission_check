@@ -26,6 +26,9 @@ def capture(message):
     result = {'raw_base64': '', 'raw_sha256': hashlib.sha256(raw).hexdigest() if raw is not None else None,
               'raw_bytes': len(raw or b''), 'raw_truncated': len(raw or b'') > LIMIT,
               'text': '', 'text_truncated': False, 'decode_error': None,
+              # Persisted text is a distinct representation after decoding/redaction.
+              # Never compare its bytes with the wire raw_sha256/raw_bytes.
+              'text_sha256': None, 'text_bytes': None,
               # 报文格式声明是解析判据的一部分：只存正文、不存 Content-Type，离线重放
               # 就只能嗅探，表单正文会被记成 unparsed_unknown_content_type。
               'content_type': _declared(headers, 'content-type'),
@@ -68,6 +71,8 @@ def capture(message):
     except (ValueError, RecursionError):
         return omitted('omitted_invalid_json')
     result['text'] = clean
+    text_bytes = clean.encode('utf-8')
+    result.update(text_sha256=hashlib.sha256(text_bytes).hexdigest(), text_bytes=len(text_bytes))
     if clean != text:
         return omitted('redacted')
     if raw != decoded:
