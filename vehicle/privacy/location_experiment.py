@@ -12,9 +12,87 @@ from vehicle.analyze import pair_ambiguity
 
 ROOT = Path(__file__).resolve().parents[2]
 
+# B 周 D3：分层计数只做投影，不改 evaluate() 的任何判定或产物。
+# 键与 location_match / location_payload 的 diagnostics 一一对应；新增原因若未登记，
+# 会进入 unclassified_rejections 而不是被静默丢掉（由单测守住）。
+READ_REJECTIONS = frozenset({
+    'no_scoped_general_location_reads', 'location_not_obtained',
+    'read_identity_or_clock_unavailable', 'no_usable_location_pair',
+    'invalid_primary_location_form', 'invalid_location_forms',
+    'primary_location_form_conflict',
+})
+FLOW_REJECTIONS = frozenset({
+    'no_scoped_flows', 'flow_identity_unresolved_or_failed',
+    'flow_clock_or_attribution_distance_unavailable', 'request_body_unavailable',
+    'request_body_incomplete', 'request_body_not_retained',
+    'request_body_unavailable_or_oversized', 'request_text_digest_or_length_mismatch',
+    'request_body_digest_or_length_mismatch', 'request_body_invalid_json',
+    'request_json_node_limit', 'request_body_invalid_unicode',
+})
+SHARED_REFERENCE = frozenset({
+    'invalid_event_reference', 'conflicting_event_reference', 'duplicate_event_reference',
+})
+
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def layer_accounting(result):
+    """从一次 evaluate 结果派生「输入 → 可比 → 候选」每层计数与逐条拒绝原因。
+
+    只读投影：不修改 ``result``、不新增候选、不把「未匹配」写成「未外发」。
+    """
+    diagnostics = dict(result.get('diagnostics') or {})
+    inputs = result.get('inputs') or {}
+    known = READ_REJECTIONS | FLOW_REJECTIONS | SHARED_REFERENCE
+    unknown = {key: value for key, value in sorted(diagnostics.items()) if key not in known}
+    pick = lambda keys: {key: diagnostics[key] for key in sorted(keys) if key in diagnostics}
+    return {
+        'scoped': {'location_reads': inputs.get('scoped_location_reads'),
+                   'flows': inputs.get('scoped_flows')},
+        'comparable': {'location_reads': inputs.get('comparable_reads'),
+                       'flows': inputs.get('comparable_flows')},
+        'candidates': {'pairs': result.get('pair_count'),
+                       'ambiguous_flows': result.get('ambiguous_flows'),
+                       'matched_forms': dict(result.get('matched_form_counts') or {}),
+                       'status': result.get('status')},
+        'rejections': {'read_layer': pick(READ_REJECTIONS),
+                       'flow_layer': pick(FLOW_REJECTIONS),
+                       'shared_reference': pick(SHARED_REFERENCE)},
+        'unclassified_rejections': unknown,
+        'all_reasons_classified': not unknown,
+        'note': ('shared_reference 含去重计数（不是拒绝）；0 候选仅表示本有限方法内未观测到，'
+                 '不等于没有定位外发。'),
+    }
+
+
+def summarize_layers(accounts):
+    """合并多个 case 的分层计数；只做加法，不产生新的判定。"""
+    def total(section, key):
+        return sum((a[section][key] or 0) for a in accounts)
+    reasons, unknown = {}, {}
+    for account in accounts:
+        for layer, rows in account['rejections'].items():
+            target = reasons.setdefault(layer, {})
+            for key, value in rows.items():
+                target[key] = target.get(key, 0) + value
+        for key, value in account['unclassified_rejections'].items():
+            unknown[key] = unknown.get(key, 0) + value
+    return {
+        'scoped': {'location_reads': total('scoped', 'location_reads'),
+                   'flows': total('scoped', 'flows')},
+        'comparable': {'location_reads': total('comparable', 'location_reads'),
+                       'flows': total('comparable', 'flows')},
+        'candidates': {'pairs': sum(a['candidates']['pairs'] or 0 for a in accounts),
+                       'ambiguous_flows': sum(a['candidates']['ambiguous_flows'] or 0
+                                             for a in accounts)},
+        'rejections': reasons,
+        'unclassified_rejections': unknown,
+        'all_reasons_classified': all(a['all_reasons_classified'] for a in accounts),
+        'case_count': len(accounts),
+        'note': '六类合成用例的合计；合成输入不是设备采集，也不能据此计算真实 P/R。',
+    }
 
 
 def replay(capture, package, window_ms):
@@ -48,6 +126,7 @@ def replay(capture, package, window_ms):
         capture_health_note='Input hashes checked; this experiment does not certify full capture health.',
         real_validation=('supported_content_observed' if result['pair_count']
                          else 'not_validated_on_supported_real_content'))
+    result['layer_accounting'] = layer_accounting(result)
     return result
 
 
@@ -59,9 +138,11 @@ def synthetic(window_ms):
         passed = (result['pair_count'] == case['expected_pairs']
                   and result['ambiguous_flows'] == case.get('expected_ambiguous_flows', 0))
         reports.append({'name': case['name'], 'passed': passed,
-                        'expected_pairs': case['expected_pairs'], 'result': result})
+                        'expected_pairs': case['expected_pairs'], 'result': result,
+                        'layer_accounting': layer_accounting(result)})
     return {'input_kind': 'synthetic', 'experimental_only': True, 'emits_rule_findings': False,
             'all_passed': all(c['passed'] for c in reports), 'cases': reports,
+            'layer_accounting': summarize_layers([c['layer_accounting'] for c in reports]),
             'real_validation': 'not_device_validation'}
 
 

@@ -41,6 +41,8 @@ CHECKS = [
         'vehicle.pipeline.test_environment', 'vehicle.pipeline.test_acceptance',
         'vehicle.pipeline.test_diagnostics', 'vehicle.privacy.test_evaluation',         'vehicle.privacy.test_location_match',
         'vehicle.privacy.test_location_review_fixes',
+        # B 周 D3/D4：定位实验分层计数、只读重放与正负控边界（小 PR 2）
+        'vehicle.privacy.test_location_layers',
         'vehicle.privacy.test_versions',
         'vehicle.pipeline.test_capture_lifecycle',
         'vehicle.pipeline.test_capture_proxy',
