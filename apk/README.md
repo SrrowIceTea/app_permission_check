@@ -33,7 +33,7 @@ apk/
 ## 怎么用
 
 ```bash
-PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
+PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
 
 # 移动端批处理（默认读 apk/mobile/）
 "$PY" mobile/tools/batch_thirdparty.py

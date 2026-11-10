@@ -5,13 +5,35 @@
 ## 统一回归入口
 
 ```powershell
-python -m pip install -r requirements.txt
-python tools/run_regressions.py --prepare --mobile --out output/ci-local
+.\tools\python313.ps1 -m pip install -r requirements.txt
+.\tools\python313.ps1 tools/run_regressions.py --prepare --mobile --out output/ci-local
 ```
 
 `--prepare` 调用现有的车载准备入口，安装锁文件对应的 Hook 依赖并构建车载与共享 bundle。
 准备失败时停止本轮测试，保存 `prepare.log`、准备阶段的独立日志和 `verification.json`。
-准备成功后运行 16 组根回归及 1 组移动侧检查。每次运行使用新目录。GitHub Actions 和 Jenkins 共用此入口。
+准备成功后运行 18 组根回归及 1 组移动侧检查。每次运行使用新目录。GitHub Actions 和 Jenkins 共用此入口。
+
+## 解释器与缺库
+
+本机默认 `python` 是 WindowsApps 别名指向的 **3.15**，没有 `frida`/`mitmproxy`/`cryptography`/
+`jsonschema`/`pypdf`。用它跑回归会让每个测试各自抛 `ModuleNotFoundError`，看上去像代码回归失败
+（实测两次误判：根回归 `vehicle-pipeline`/`collector`/`hook-bundles` 三组，分支回归
+`upstream_mobile`/`mobile_workbench`/`ai_gates`/`pipeline_api`/`mobile_lab` 五组）。
+同样的代码换成 **3.13** 即全绿，因此解释器必须显式指定。
+
+- **固定入口** `tools/python313.ps1`：`.\tools\python313.ps1 <脚本及参数>`。它只转发到项目解释器，
+  不修改系统默认 `python`、不改 `PATH`、不安装任何包。选择顺序与 `environment.ps1` 一致：
+  `VSCAN_PYTHON` > 项目 `.venv\Scripts\python.exe` > `%LOCALAPPDATA%\Programs\Python\Python313`。
+- **前置检查** `core/env_guard.py`：三个回归入口（`tools/run_regressions.py`、
+  `tools/check_mobile_branch.py`、`mobile/tools/run_mobile_checks.py`）在创建输出目录之前探测
+  各自实际 `import` 的第三方包。缺包时打印缺哪些包、当前解释器和该用的解释器命令，随即退出，
+  **不运行任何测试、不产生空产物**。探测自身出错按缺包记录，不会变成新的假红。
+- **只要求真正 import 的包**：`maxminddb` 虽在 `requirements.txt` 里，但仓库没有任何 import，
+  故意不纳入检查；反过来，`PIL`（pip 名 `Pillow`）这类 import 名与包名不同的会同时列出。
+- **退出码约定**：`0` 通过；`1` 测试失败；`3` 环境缺库（`env_guard`）；`2` 包装脚本找不到解释器。
+  看到 `3` 先查解释器，不要按代码回归失败处理。
+
+换机或建 venv 后，用 `.\tools\python313.ps1 -c "import frida, mitmproxy, cryptography"` 自检一次。
 
 隐私目录中按字节计算摘要的来源文件由 `.gitattributes` 固定换行格式。
 第一版目录使用封存的 `POLICY_20261102.md`，审计导出采用同一份政策，便于干净检出时复核旧观测摘要。
@@ -34,11 +56,15 @@ Gitee Go 官方云端 Python 插件文档列出 Linux 镜像和最高 Python 3.9
 1. 准备专用 Jenkins Windows 节点，标签设为 `windows`。在节点执行账号的 PATH 配置 Python 3.13、Node.js 24、npm 和 Git。使用专用检出目录，并在 Git 配置启用 **Clean before checkout**，使每轮从源码和锁文件准备依赖。
 2. 安装 Gitee 插件。分别创建 **Push** 与 **PR** 两个 Pipeline 任务，Definition 选择 **Pipeline script from SCM**，指向同一 Gitee 仓库的 `Jenkinsfile`。Git 读取凭据与 Webhook 密码在各自的服务配置中填写。
 3. Push 任务拉取 `+refs/heads/*:refs/remotes/origin/*`，分支填写 `origin/${giteeSourceBranch}`。PR 任务拉取 `+refs/pull/*/MERGE:refs/pull/*/MERGE`，分支填写 `pull/${giteePullRequestIid}/MERGE`。分别启用 Push 与 PR 新建、源分支更新事件。对两个任务分别在 Gitee 填写 Jenkins 提供的回调地址和密码。 [插件触发及检出配置](https://plugins.jenkins.io/gitee/)
-4. 用一次测试分支推送和一次测试 PR 检查触发与检出。验收时将构建日志中的提交与 Gitee 对应分支或 PR 合并引用核对，并检查 `verification.json`。通过需包含准备步骤与 17 组回归全部退出为 0，失败构建仍可下载已写出的日志。
+4. 用一次测试分支推送和一次测试 PR 检查触发与检出。验收时将构建日志中的提交与 Gitee 对应分支或 PR 合并引用核对，并检查 `verification.json`。通过需包含准备步骤与 19 组回归（18 组根回归 + 移动侧 1 组）全部退出为 0，失败构建仍可下载已写出的日志。
 
 仓库中的配置负责执行和归档。Gitee 与 Jenkins 的首次远端触发需要在有权限的部署环境验证。
 
 ## 本机部署验收（2026-11-05）
+
+> 本节至「主线接管」各段的组数是 2026-11-05 的当时口径：16 组根回归 + 移动侧 1 组 = 17 组，
+> 移动侧 29 项。现行口径为 18 组根回归（带 `--mobile` 为 19 组）、移动侧 31 项，
+> 见上文「统一回归入口」。下文数字按当时构建如实保留，不按现行口径改写。
 
 本机 Jenkins 2.580.2 位于 `output/jenkins/`，使用 JDK 21，入口为
 [本机 Jenkins](http://127.0.0.1:8080/)。账号为 `vscanner-admin`，密码保存在

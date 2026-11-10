@@ -31,12 +31,12 @@ vscanner/
 
 | 项 | 值 |
 | --- | --- |
-| Python | `C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe`（**只有它**装了 frida/mitmproxy/reportlab，默认 `python` 没有；`environment.ps1` 用 `$env:LOCALAPPDATA` 派生，换机不硬编码用户名） |
-| SDK | `D:\Anroid\SDK`；`JAVA_HOME=D:\Anroid\JDK`（JDK 21，**不要用 JBR 25**） |
-| 设备 | AAOS 模拟器 `emulator-5554`，Android 15 / API 35 / userdebug；**应用跑在 user 10** |
+| Python | **本机实测** `%LOCALAPPDATA%\Programs\Python\Python313\python.exe`（3.13.9，`requirements.txt` 依赖齐全；默认 `python` 是 WindowsApps 3.15，缺 frida/mitmproxy/cryptography/jsonschema/pypdf）。`environment.ps1` 用 `$env:LOCALAPPDATA` 派生，统一入口 `.\tools\python313.ps1`；旧文档里的 `C:/Users/毛宇淇/...` 是原开发机记录 |
+| SDK / JDK | **本机实测**：SDK `%LOCALAPPDATA%\Android\Sdk`（`platforms/` 有 `android-36`、`android-37.0`，两者 `optional/android.car.jar` 都在；**没有** `android-35`，`system-images/` 下**没有** automotive 镜像）；`JAVA_HOME=D:\Android\JDK`（Temurin 21.0.12.1）。**原开发机**记录为 `D:\Anroid\SDK` / `D:\Anroid\JDK`（目录名就是这种拼写）；换机用 `VSCAN_SDK` / `VSCAN_JDK` 覆盖，别把文档改回旧路径。**不要用 JBR 25** |
+| 设备 | AAOS 模拟器 `emulator-5554`：Android 15 / API 35 / userdebug / `ro.build.characteristics=automotive` / `ro.product.device=emulator_car64_x86_64`；**应用跑在 user 10**。镜像与 AVD **不在** SDK `system-images/`：AVD 在 `output/vehicle-device-setup/avd/`（`target=android-35-ext15`），镜像在 `output/vehicle-device-setup/image/x86_64/`；`ANDROID_AVD_HOME=D:\AVD` 下只有手机 AVD |
 | frida-server | 设备 `/data/local/tmp/frida-server -l 127.0.0.1:27043`（**27043 不是 27042**）；spawn 超时，用 attach |
 | 网络 | 设备只走 wifi 且会掉线；宿主机 `dl.google.com` 不通 → maven 用阿里云镜像；Git Bash 的 `$PWD` 是 POSIX 形式，写进 Windows 环境变量要用 `$(pwd -W)` |
-| 编译 | Gradle 8.13 / AGP 8.11.1 / Kotlin 2.2.0 / KSP 2.2.0-2.0.2 / Room 2.8.5，compileSdk 36（唯一带 android.car.jar 的平台）；工程路径含非 ASCII 需 `android.overridePathCheck=true` |
+| 编译 | Gradle 8.13 / AGP 8.11.1 / Kotlin 2.2.0 / KSP 2.2.0-2.0.2 / Room 2.8.5，compileSdk 36（本机 `android-36` 与 `android-37.0` 都带 `optional/android.car.jar`，工程钉 36）；工程路径含非 ASCII 需 `android.overridePathCheck=true` |
 
 ## 跑移动端测试集（agent 操作手册）
 
@@ -51,7 +51,7 @@ vscanner/
 | --- | --- | --- |
 | `core/` | 平台无关内核（车载/移动共用） | `event_store.py` 时序事件库；`collector/` 流量采集；`evidence/` 代码行号+dex 核对；`rules_contract.py` 规则库契约 |
 | `core/privacy/` | 通用隐私来源的规则与设备观测冻结（车载/移动共用） | [core/privacy/DECISIONS.md](core/privacy/DECISIONS.md) |
-| `vehicle/rules/` | 车载规则库（VSC-*，双版本 rules.db）+ Room 工程 | [vehicle/rules/CLAUDE.md](vehicle/rules/CLAUDE.md) |
+| `vehicle/rules/` | 车载规则库（VSC-*，四版本 rules.db：13/14/15/16）+ Room 工程 | [vehicle/rules/CLAUDE.md](vehicle/rules/CLAUDE.md) |
 | `vehicle/targets/` | 靶子 App×2（被测对象）+ trigger.py | [vehicle/targets/CLAUDE.md](vehicle/targets/CLAUDE.md) |
 | `vehicle/hooks/` | Frida 钩子（VHAL 读取/出站/TLS 绕过/内存明文/侦察） | [vehicle/hooks/CLAUDE.md](vehicle/hooks/CLAUDE.md) |
 | `vehicle/traffic/` | Mitmproxy 反向代理 + 按包名归因 + 敏感打标（VHAL 指纹表） | [vehicle/traffic/CLAUDE.md](vehicle/traffic/CLAUDE.md) |
@@ -105,25 +105,30 @@ clone 后 `skills/` 下只有两个索引文件。需要时按 [skills/SKILLS.md
 已放入 5 个技能 + 1 个指向 `.workbuddy/skills/` 的符号链接，共 37 文件 / 573 KB，**随仓库分发**。
 选型判定、加/删技能步骤、本次装的 3 个 DSH 插件（需重启生效）、以及**没做的 MCP 配置**，
 全部见 [.agents/README.md](.agents/README.md)。那里还记录了**当前主机与本文环境表的实测漂移**
-（Python 依赖全缺 → 离线回归会假红；SDK/`android-36` 缺失 → 编译会失败；`D:\Anroid` 实为 `D:\Android` 拼写）——
+（截至 2026-11-10：Python 3.13 依赖已齐、`android-36` 已装；`D:\Anroid` 是原开发机路径，不是本机拼写错误）——
 换机或跑不通用例前先读它。
 
 ## 离线回归（改完代码先跑，不需要设备）
 
 ```bash
-PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
-"$PY" tools/run_regressions.py        # 16 组：completion/rules-contract/event-store/codeloc/correlate/
-                                      #       vehicle-evidence/vehicle-pipeline/collector/tagging-vehicle/
-                                      #       dashboard/runtime/privacy-runtime/parity/workbench/
-                                      #       hook-bundles/frida-bundle-config
+# 统一入口：固定解析到项目 Python 3.13（VSCAN_PYTHON > .venv > Python313 安装目录）
+.\tools\python313.ps1 tools/run_regressions.py        # 18 组：completion/rules-contract/event-store/codeloc/correlate/
+                                                      #       vehicle-evidence/vehicle-pipeline/collector/tagging-vehicle/
+                                                      #       dashboard/vehicle-webapp/vehicle-expanded-review/
+                                                      #       runtime/privacy-runtime/parity/workbench/hook-bundles/
+                                                      #       frida-bundle-config
 
-"$PY" mobile/tools/run_mobile_checks.py   # 移动侧 29 项（另一条入口，改 mobile 后必须跑）
-"$PY" tools/check_mobile_branch.py        # 移动分支 24 组（含 workbench / policy / AI / 7 个前端契约）
+.\tools\python313.ps1 mobile/tools/run_mobile_checks.py   # 移动侧 31 项（另一条入口，改 mobile 后必须跑）
+.\tools\python313.ps1 tools/check_mobile_branch.py        # 移动分支 24 组（含 workbench / policy / AI / 7 个前端契约）
 ```
 
-> **先确认解释器再判红**：这两条都依赖 `requirements.txt`（`reportlab`/`Pillow`/`mitmproxy`/
-> `cryptography`/`frida`/`pypdf`）。若解释器没装，会冒出 6 处 `ModuleNotFoundError` 的**假红**，
-> 把真正的回归失败盖住。看到红先跑一次 `"$PY" -c "import reportlab, PIL, mitmproxy, cryptography"`。
+> **先确认解释器再判红**：本机默认 `python` 是 WindowsApps 的 **3.15**，缺 `frida`/`mitmproxy`/
+> `cryptography`/`jsonschema`/`pypdf`；用它跑会冒出成片 `ModuleNotFoundError` 的**假红**（实测：
+> 根回归 3 组、分支回归 5 组），把真正的回归失败盖住。改用 `.\tools\python313.ps1` 启动即可
+> （选择顺序 `VSCAN_PYTHON` > `.venv` > `%LOCALAPPDATA%\Programs\Python\Python313`）。
+> 三个回归入口已内置 `core/env_guard.py` 前置检查：缺库时打印缺哪些包、该用哪个解释器，
+> 并以**退出码 3** 结束（`1` 才是测试失败），不会让每组测试各自报错。
+> 细节见 [docs/REGRESSION_CI.md](docs/REGRESSION_CI.md)「解释器与缺库」。
 
 ## 当前交付与拆分进度（2026-10-19）
 
@@ -133,7 +138,8 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
 
 已补齐：RDAP 归属与 IP 位置估计/离线缓存、PDF 载荷截图、SQLite 单机时序事件库、
 自有源码 Gadget 模式、OkHttp 固定证书夹具、订阅回调、规则覆盖缺口展示、/collect 200 接收端。
-外发规则每版 8 条已正式启用，窗口 30000ms，revision=2；双版本 44 条风险规则全部启用。
+外发规则每版 10 条（revision 2 的 8 条 + revision 1 的 2 条），窗口 30000ms，仅 14/15 全启用、
+13/16 登记未启用；四版本 116 条风险规则启用 96 条（13/14/15/16 = 19/29/29/19）。
 启用依据与范围见 vehicle/rules/EGRESS_CALIBRATION.md，不再依赖分析时窗口覆盖。
 
 **移动端进展（M034–M040，2026-10-16 → 10-19；详见 `mobile/DECISIONS.md`）**：
@@ -168,7 +174,8 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
 
 仍**未做**（勿当成已完成）：B1 窗口校准**已出初评**（见
 [vehicle/bench/WINDOW_CALIBRATION.md](vehicle/bench/WINDOW_CALIBRATION.md)），人工签核待完成；
-A5-1 protectionLevel 标定（库内 `protection_level_raw` 仍 0/40）、B2 VScanBench、
+A5-1 protectionLevel 标定（`permissions` 表 180 行：`protection_level_raw` **180/180 有值**，
+`protection_level_value` **180/180 为 NULL**——缺的是级别映射，不是原始值）、B2 VScanBench、
 F1 类加载归因（无 `hook_classload.js`）、G1 UI 探索覆盖率度量、A4 分段自愈。
 
 **拆分进度**（已提交、每步回归全绿）：

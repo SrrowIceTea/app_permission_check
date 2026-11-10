@@ -202,7 +202,7 @@
 | 老师可能问 | 一句话应答 |
 | --- | --- |
 | **为什么不用现成工具？** | 现成的移动端隐私扫描工具只看权限和 API，**不懂车载 VHAL 属性体系**——车机里读车辆数据写的是一串数字 ID，通用工具识别不出来。 |
-| **规则库有多少条？** | 双版本共 56 条启用规则（每版 28 条）：超权申请 6 条、敏感读取 12 条、数据外发 10 条。VHAL 规则指回 `android.car` 源码或 API 35 设备实测；6 条通用隐私规则挂在 `vehicle/privacy/POLICY.md` 与 SDK 参考，不冒充源码抽取。 |
+| **规则库有多少条？** | 四个 Android 版本（13/14/15/16）共 116 条规则、启用 96 条：14/15 每版 29 条全启用（超权申请 6 条、敏感读取 13 条、数据外发 10 条），13/16 各启用 19 条（外发 10 条只登记未启用）。VHAL 规则指回 `android.car` 源码或 API 35 设备实测；6 条通用隐私规则挂在 `vehicle/privacy/POLICY.md` 与 SDK 参考，不冒充源码抽取。 |
 | **时间窗口怎么定的？** | 声明 3 秒实测漏报，根据靶子实测的读取→外发间隔（HTTP 10.6s / HTTPS 20.3s）校准为 30 秒，有独立校准文档。 |
 | **和 PriDrive 比新在哪？** | PriDrive 用 **PID 归因**，我们发现在 SLIRP 网络下 PID 保留不了源端口、短连接抓不到，改成**在应用进程内挂钩 socket 连接**做归因。 |
 | **会不会破坏被测 App？** | 不会。**观察不改写**是硬约束——只记录、不拦截、不篡改（TLS 绕过脚本是唯一例外，且仅对白名单进程、仅为捕获流量）。 |
@@ -238,7 +238,7 @@
 **若需现场跑工作台**（提前 5 分钟准备）：
 
 ```bash
-PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
+PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
 "$PY" vehicle/workbench/server.py --port 8770 \
     --session output/device-20260928-015125 \
     --findings output/delivery-20260928-015231/findings.jsonl

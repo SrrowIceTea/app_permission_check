@@ -15,6 +15,7 @@
 - 原用户数据库逐字节不变，原 APK 恢复，临时测试用户移除。
 - debug 的两个入口受 DUMP 保护，release 合并清单不含这些入口。
 - prepare + 17 组回归全部通过，vehicle-pipeline 192 个用例、移动侧 29 项通过。
+  （当时口径；现行为 18 组根回归、带 `--mobile` 19 组、移动侧 31 项。）
 
 [设备汇总](../output/rules-crossprocess-20261106-095505/device-003/verification.json)、
 [回归汇总](../output/rules-crossprocess-20261106-095505/regressions/verification.json)、

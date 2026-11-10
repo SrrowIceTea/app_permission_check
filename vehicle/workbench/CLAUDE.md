@@ -24,7 +24,7 @@
 ## 怎么跑
 
 ```bash
-PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
+PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
 
 # 起服务（--session 给清单证明"同一个 APK"，--findings 给动态结论）
 "$PY" vehicle/workbench/server.py --port 8770 \

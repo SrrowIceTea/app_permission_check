@@ -40,7 +40,7 @@
 ## 快速开始（不需要设备、不需要网络、不需要 API key）
 
 ```bash
-PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
+PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
 
 # 1) 构建规则库（从本机 android.jar 抽签名）
 cd mobile/rules
@@ -103,6 +103,10 @@ verification.json  本轮判据（**看这个判断成败，不要只看目录�
    AI 提示词强制要求在这种情况下输出「证据不足」而不是猜测。
 3. **形态不等于事实**。报文里出现 15 位数字不等于就是 IMEI（IMEI 与 IMSI 都是 15 位）；
    只有值哈希匹配才构成「确实传输了该值」。
+
+> **静态可达性分桶（App / 库 / 不可达 / 未判定）的口径与失效条件**：
+> 未知占比 ≥50% 时不得按「过滤成功」使用。方法边界、四类失效条件实测占比与报告写法见
+> [docs/MOBILE_REACHABILITY_BOUNDARIES_20261110.md](../docs/MOBILE_REACHABILITY_BOUNDARIES_20261110.md)。
 
 ## 与车载版的关系
 

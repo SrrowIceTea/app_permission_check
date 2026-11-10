@@ -12,7 +12,7 @@
 
 ### 车载（AAOS）
 
-- [审计报告 PDF](frontend/pdfs/car-audit-report.pdf)：12 页、含真实载荷截图与结论。
+- [审计报告 PDF](frontend/pdfs/car-audit-report.pdf)：6 页、含真实载荷截图与结论。
 - 审计复核工作台：`vehicle/dashboard/` 的**生成物**，按轮次写入 `output/<轮次>/`（不在库里）；
   仓库内保留的静态示例见 [evidence/dashboard-refactor.html](vehicle/dashboard/evidence/dashboard-refactor.html)。
 - 前端验证结果（`verification.json` / `viewport-verification.json`）与验收原始材料（`output/completion/`）：
@@ -20,8 +20,10 @@
   `tools/verify_presentation.py`；不要引用已不存在的目录路径。
 - 夹具 APK：`app/build/outputs/` 的构建产物不入库，需在 `vehicle/targets/target-app/`、
   `vehicle/targets/target-app2/` 本地构建（Debug 与 Gadget 变体）。
-- [规则库](vehicle/rules/rules_library/rules.db)：双版本 44 条风险规则全部启用，
-  外发规则每版 8 条、窗口 30000ms、revision=2（依据见 `vehicle/rules/EGRESS_CALIBRATION.md`）。
+- [规则库](vehicle/rules/rules_library/rules.db)：四版本共 116 条风险规则、启用 96 条
+  （13/14/15/16 = 19/29/29/19）；外发规则每版 10 条，14/15 全启用（窗口 30000ms，
+  revision 2 的 8 条 + revision 1 的 2 条），13/16 登记未启用
+  （依据见 `vehicle/rules/EGRESS_CALIBRATION.md`）。
 
 ### 移动端
 
@@ -47,17 +49,43 @@
 
 ### 2026-10-19 后的产物
 
-2026-10-19 之后 `output/` 按轮次重新积累（当前为 11-02~11-04 的新跑批），旧目录不可再引用；
+2026-10-19 之后 `output/` 按轮次重新积累（当前为 11-02 ~ 11-10 的多轮跑批），旧目录不可再引用；
 需要质量分析或前端截图时按需重跑（质量分析走 `mobile/tools/batch_thirdparty.py`，
 前端截图按 [frontend/README.md](frontend/README.md) 的说明）。
+
+### 2026-11-10 新增可交付物
+
+> 只加条目，不改上文结构。上面第 23 行已按实测改写为四版本口径（116 条规则、启用 96 条），
+> 与本节第 1 条一致；本节只补充证据链接。
+
+- [规则库四版本](vehicle/rules/rules_library/rules.db)：13/14/15/16 同库（权限 10/10/150/10、风险规则 29×4，
+  启用 19/29/29/19；13/16 的 `data_egress` 登记未启用）——回答「同一套规则怎么覆盖四个 AAOS 版本」。
+- [规则库与 App 资产一致性](vehicle/rules/android/app/src/main/assets/rules.db)：与 `rules_library/rules.db`
+  同为 `DDF57F6F…3026F29`——回答「装进 App 的规则库和仓库里的是不是同一份」。
+- [车载工作台后端字段契约](vehicle/webapp/FIELD_CONTRACT.md)：四档计数、阶段耗时、`apk_sha256`、
+  `rule_title` 的五级来源、`finding_uid`、复核写接口防护与残余风险——回答「前端能拿到哪些字段、缺字段怎么显示」。
+- 车载前端三档改动：B 档组件层 `vehicle/frontend/components.js` / `components.css`（结论汇总条、证据链两级折叠、
+  空态/未完成/失败三态）、B 档上传校验 `vehicle/frontend/upload.js`、C 档任务头耗时（`app.js:17` 起）——
+  回答「结论、证据、进度和失败原因分别怎么呈现」；验收截图在 `output/vehicle-frontend-{a,b,c}-tier-2026110*/`（不入库）。
+- [移动端可达性边界](docs/MOBILE_REACHABILITY_BOUNDARIES_20261110.md)：9 个 F-Droid 样本、110 条可达候选、
+  7 个样本触发「本方法对该样本失效」声明——回答「静态可达性到哪一步就不能再下判断」。
+- [证书固定样本与设备验证方案](output/memhook-pinning-samples-20261110/REPORT.md)：Proton Mail 3.0.17（首选）与
+  Wire 4.36.0（备选）的静态 pinning 证据、判据与排除项；`DEVICE-VALIDATION-PLAN.md` 是尚未执行的上机步骤——
+  回答「第三层证书固定场景要用什么样本、怎么验」。
+- [内存 Hook 设备证据](output/memhook-evidence-20261109/)：JCE 与 native SSL 正控各一份、不挂 hook 的负控一份——
+  回答「Hook 能不能真拿到明文、不挂 hook 时是不是干净的」。
+- [跑批手册 §10](docs/AGENT_TEST_SUITE_RUNBOOK_20261019.md#L388)：AAOS 模拟器单样本动态采集的 5 个已知坑
+  （多显示器、UXR 吞触摸、EGL 周期失败、verity 装不进系统 CA、TLS 绕过反噬）——回答「在车载模拟器上跑动态采集会卡在哪」。
+- [项目真实状态（2026-11-10）](docs/PROJECT_STATUS_20261110.md)：已闭环/进行中/已知缺口/口径易错点——
+  回答「现在到底完成了什么、哪些结论还不能说」。
 
 ## 复现
 
 先按 [COMPLETION.md](COMPLETION.md) 初始化 `environment.ps1`，再按需运行：
 
 ```powershell
-& $VScanPython tools/run_regressions.py          # 根回归 16 组
-& $VScanPython mobile/tools/run_mobile_checks.py # 移动侧 29 项
+& $VScanPython tools/run_regressions.py          # 根回归 18 组（带 --mobile 为 19 组）
+& $VScanPython mobile/tools/run_mobile_checks.py # 移动侧 31 项
 & $VScanPython tools/check_mobile_branch.py      # 移动分支 24 组（含 workbench/policy/AI/前端契约）
 & $VScanPython tools/device_acceptance.py
 & $VScanPython tools/gadget_acceptance.py

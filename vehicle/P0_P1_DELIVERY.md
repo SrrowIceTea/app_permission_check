@@ -45,7 +45,8 @@ Frida 17.18.0 与宿主一致，回环 27043；被测普通 App 位于 user 10�
   `output/vehicle-hook-overhead-20261102-213242`（6 配对 × 4 动作）与
   `output/vehicle-hook-overhead-20261102-213504`（4 配对 × 12 动作，中位 CPU 增量 845 ms、
   276 条 VHAL_READ/轮）。检测准确率仍为未测量。
-- 本轮完整回归收口：`run_regressions.py --mobile` 17 组全 0（`output/regression-20261102-221059`）、
+- 本轮完整回归收口：`run_regressions.py --mobile` 17 组全 0（`output/regression-20261102-221059`；当时口径，
+  现行为 18 组根回归、带 `--mobile` 19 组）、
   `run_mobile_checks.py` 28/28（`output/mobile-regression-20261102-221335`）、
   `check_mobile_branch.py` 24/24（`output/mobile-branch-20261102-221336`）；
   汇总见 `output/vehicle-p0p1-verification-final-20261102.json`。
@@ -105,6 +106,7 @@ P1 全量验收尚未完成，仍需独立样本完整业务、统计标定与 A
 普通/反向代理按实际模式选择目标，延迟归因复用首次目标；通用规则来源改用独立采集快照，
 只更新 6 条 Android15 通用规则的来源字段，VHAL 数据与其余字段逐项核对未变。
 失败开销臂及其配对排除统计；基准读取合计 VHAL/通用来源，并仅将 obtained 计入通用成功。
-验证：17 组离线回归、6 个真实设备上下文场景、Android 规则工程构建均通过；APK 内规则摘要与
+验证：17 组离线回归（当时口径；现行为 18 组根回归、带 `--mobile` 19 组）、6 个真实设备上下文场景、
+Android 规则工程构建均通过；APK 内规则摘要与
 DEX 校验常量一致。另修复已有 KDoc 中通配符导致注释提前结束的编译错误。
 记录：`output/review-fixes-20261102/verification.json`；历史失败与修复前库备份均保留。

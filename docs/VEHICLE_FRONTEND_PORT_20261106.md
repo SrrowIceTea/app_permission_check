@@ -20,7 +20,7 @@
 
 | 检查 | 实际结果 | 证据 |
 | --- | --- | --- |
-| 全量回归 | 18/18 组，含新增工作台 16 项与移动侧 29 项 | `output/vehicle-frontend-regressions-002/verification.json` |
+| 全量回归 | 18/18 组，含新增工作台 16 项与移动侧 29 项（当时口径；现行为 18 组根回归、带 `--mobile` 19 组） | `output/vehicle-frontend-regressions-002/verification.json` |
 | 移动分支及前端契约 | 24/24 组 | `output/vehicle-frontend-mobile-checks-001/verification.json` |
 | 真实 Chrome 上传与历史重放 | 15/15 项；源码、动态证据、PDF、刷新恢复、新建清空、390px 无横向溢出、无 JS 异常 | `output/vehicle-frontend-acceptance/browser-1793946710703/verification.json` |
 | 新 AAOS 35 采集 | 6/6 项；自有夹具、实际 VHAL 事件、完整审计和 PDF | `output/vehicle-frontend-acceptance/live-verification.json` |

@@ -87,8 +87,11 @@ python mobile/fixture-app/gadget_prepare.py --abi x86_64 --version <与宿主相
 mobile/fixture-app/gradlew.bat -p mobile/fixture-app :app:assembleGadget --console=plain
 python mobile/audit/compile_probe.py
 
+# 本机实测（2026-11-10）：SDK system-images 只有 android-36.1/google_apis_playstore 与
+# android-37.2/google_apis_ps16k；原开发机的 D:/Android/system-images/... 在本机不存在。
+# AVD 名未核实：ANDROID_AVD_HOME=D:\AVD 下只有 VScan_Phone、VScanner_Root_API36。
 ./mobile/lab/start_emulator.ps1 -Avd VScanner_Mobile_API36_NoRoot `
-  -SystemImage D:/Android/system-images/android-36/google_apis/x86_64 `
+  -SystemImage "$env:LOCALAPPDATA\Android\Sdk\system-images\android-36.1\google_apis_playstore\x86_64" `
   -Out <本仓库output/my-audit的绝对路径> -Port 5560
 python mobile/lab/run_probe.py --out output/my-audit --serial emulator-5560 `
   --canary VSCAN_TEST_MY_AUDIT --authorize-owned-fixture

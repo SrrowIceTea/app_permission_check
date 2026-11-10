@@ -26,7 +26,7 @@
 ## 怎么跑（离线优先，不需要设备）
 
 ```bash
-PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
+PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
 
 # 1) 规则库（从本机 android.jar 抽签名，这是 source_verified 的唯一来源）
 cd mobile/rules
@@ -166,7 +166,7 @@ crash 缓冲 0 行）。
 39 类 App 必要信息 / 16 条政策条款）、移动钩子（敏感读取 + 同意时序）、流量打标
 （含值哈希令牌）、隐私政策三件套（获取 / 抽取 / 检查）、关联引擎（八种谓词）、
 AI 三阶段研判（含编造校验）、PDF 报告（十章 + 三附录）、自有靶子 App 与设备端端到端
-均已实现。离线回归 **29 项**全过（`mobile/tools/run_mobile_checks.py`）；
+均已实现。离线回归 **31 项**全过（`mobile/tools/run_mobile_checks.py`）；
 分支全量（含 workbench/policy/AI/前端契约）**24 组**见 `tools/check_mobile_branch.py`。
 
 **2026-10-13（外部评估核对后的落地，见 [EVAL_CROSSCHECK.md](EVAL_CROSSCHECK.md)、DECISIONS M021–M025）**：

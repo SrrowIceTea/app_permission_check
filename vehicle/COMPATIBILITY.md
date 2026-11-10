@@ -62,6 +62,7 @@ Android 16 的 AAOS 25Q2 官方说明新增了面向第三方的车辆属性访�
 - [Honda Accord 官方车型页](https://automobiles.honda.com/accord-sedan)
 - [厂商属性与权限配置](https://source.android.com/docs/automotive/vhal/special-properties)
 
-本轮官网下载的 AAOS 35 镜像是 `android-35-ext15 / android-automotive / x86_64 / r04`；
+本轮官网下载的 AAOS 35 镜像是 `android-35-ext15 / android-automotive / x86_64 / r04`（本机存放在仓库
+`output/vehicle-device-setup/image/x86_64/`，**没有**安装进 SDK `system-images/`，SDK Manager 里找不到）；
 索引为 https://dl.google.com/android/repository/sys-img/android-automotive/sys-img2-1.xml 。
 它与旧校准镜像属于同 API 的不同构建；新设备验收不能由旧记录替代。

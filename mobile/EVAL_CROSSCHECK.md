@@ -86,7 +86,7 @@
 ## 五、复现
 
 ```bash
-PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
+PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
 
 # 规则库：抽取 → 构建（含覆盖守护）
 cd mobile/rules

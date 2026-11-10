@@ -39,7 +39,7 @@ mitmdump -s addon.py --mode reverse:http://127.0.0.1:8080 \
 cd ../vehicle/hooks
 python build.py                                   # 首次需要（共享 bundle 会输出到 core/frida_host/dist）
 cd ../core/frida_host
-PY313="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
+PY313="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
 "$PY313" run.py --package com.vscanner.targetapp \
     --script dist/hook_egress.bundle.js --seconds 60 \
     --out ../../traffic/logs/egress_events.jsonl &

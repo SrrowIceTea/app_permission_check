@@ -21,7 +21,7 @@
 | Gadget | `vehicle/hooks/gadget_prepare.py` 为自有源码生成 Gadget 构建变体，在 Application.attachBaseContext 加载，loopback:27044、on_load=wait；`run.py --gadget` 注入后恢复。 |
 | OkHttp | 两个夹具增加错误 pin 的 OkHttp 4.12 请求按钮；已实测触发 CertificatePinner 绕过并收到200。 |
 | 订阅 | 两夹具增加10秒订阅按钮；已实测 GEAR_SELECTION 回调。注册事件不算成功读取。 |
-| 外发规则 | 每版 E001–E008 启用，window_ms=30000，revision=2；双版本共16条外发规则，全部44条风险规则启用。见 `vehicle/rules/EGRESS_CALIBRATION.md`。 |
+| 外发规则 | 14/15 每版启用 E001–E008（window_ms=30000，revision=2），另各有 2 条 revision 1 规则同启用；四版本规则库共 116 条风险规则、启用 96 条（13/14/15/16 = 19/29/29/19），13/16 的外发规则仅登记未启用。见 `vehicle/rules/EGRESS_CALIBRATION.md`。 |
 | 关联加固 | 只关联同会话、同包、非歧义的请求内容；默认用主机接收时间，禁用规则不求值，启动日志与失败连接不参与归因。 |
 | 覆盖缺口 | PDF 和看板按本轮数据计算无规则属性。核对备份库发现原库已含8属性规则，CURRENT_GEAR对应R004；不沿用“只有3属性”的旧描述。 |
 | 接收端 | `vehicle/traffic/collector_server.py` 实现 POST /collect，返回200、字节数和摘要。 |
@@ -36,10 +36,14 @@ node vehicle/hooks/node_modules/frida-compile/dist/cli.js vehicle/hooks/fixture_
 & $VScanPython tools/run_regressions.py
 ```
 
-SDK 为 `D:\Anroid\SDK`，`JAVA_HOME=D:\Anroid\JDK`（JDK 21，不是 JBR 25）；使用 Python313 实际解释器，WindowsApps 是别名。
+本机 SDK 为 `%LOCALAPPDATA%\Android\Sdk`（`platforms/`：`android-36`、`android-37.0`），
+`JAVA_HOME=D:\Android\JDK`（JDK 21，不是 JBR 25）；原开发机文档写的 `D:\Anroid\{SDK,JDK}` 不适用于本机；使用 Python313 实际解释器，WindowsApps 是别名。
 Gradle8.13、API36 与构建工具36 已装（Gradle 由各工程 gradlew 包装器提供，发行版缓存于 `~\.gradle\wrapper\dists`）。
 `environment.ps1` 配置 JDK 的短临时目录，避免 Windows 非ASCII路径导致 NIO 本地套接字失败。
-新建独立 AVD `VScanner_AAOS_35`，Android15，应用 user10，不改既有 Pixel AVD。
+新建独立 AVD `VScanner_AAOS_35_P1`（旧文档写作 `VScanner_AAOS_35`；本机实测 AVD 定义在
+`output/vehicle-device-setup/avd/VScanner_AAOS_35_P1.avd/`，`target=android-35-ext15`，镜像取自仓库
+`output/vehicle-device-setup/image/x86_64/`，**没有**装进 SDK `system-images/`——SDK Manager 里找不到），
+Android15，应用 user10，不改既有 Pixel AVD。
 
 > 注：本文件早先段落里的 `E:\Android\android-sdk` / `.tools\jdk21` 是**旧开发机**（OneKyubey 用户）的
 > 路径，已于 2026-10-12 拆分收尾时校正为当前主机；换机只改 `environment.ps1` 顶部三个 `$VScan*` 默认值。

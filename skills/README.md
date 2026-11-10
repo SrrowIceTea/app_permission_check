@@ -129,7 +129,7 @@ shadcn 官方 MCP 无独立仓库，内置于 CLI：`npx shadcn@latest mcp`。
 
 ### browser-use
 Python 实现，Agent 可自主操作浏览器。安装：
-`C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe -m pip install browser-use`
+`%LOCALAPPDATA%\Programs\Python\Python313\python.exe -m pip install browser-use`（原文档写的是原开发机用户名路径）
 需要 LLM API key。
 
 ---

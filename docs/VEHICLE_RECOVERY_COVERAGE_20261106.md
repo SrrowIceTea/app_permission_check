@@ -59,6 +59,7 @@ corruption-repro 的有效头损坏反例在添加自定义 handler 前也通过
 
 [最终回归](../output/rules-recovery-20261105-231119/regressions-final/verification.json)：prepare + 17 组全部通过；
 vehicle-pipeline 190 项用例、其中新增的异常路径反例通过；移动侧 29 项通过。
+（当时口径；现行为 18 组根回归、带 `--mobile` 19 组、移动侧 31 项。）
 所有新增/修改源文件均控制在 300 行内。
 
 签核采用用户指定的 subagent 流程。初轮发现的问题及答卷保留，不把 changes_requested 改成成功。

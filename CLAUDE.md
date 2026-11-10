@@ -33,12 +33,12 @@ vscanner/
 
 | 项 | 值 |
 | --- | --- |
-| Python | `C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe`（**只有它**装了 frida/mitmproxy/reportlab，默认 `python` 没有；`environment.ps1` 用 `$env:LOCALAPPDATA` 派生，换机不硬编码用户名） |
-| SDK | `D:\Anroid\SDK`；`JAVA_HOME=D:\Anroid\JDK`（JDK 21，**不要用 JBR 25**） |
-| 设备 | AAOS 模拟器 `emulator-5554`，Android 15 / API 35 / userdebug；**应用跑在 user 10** |
+| Python | **本机实测** `%LOCALAPPDATA%\Programs\Python\Python313\python.exe`（3.13.9，`requirements.txt` 依赖齐全；默认 `python` 是 WindowsApps 3.15，缺 frida/mitmproxy/cryptography/jsonschema/pypdf）。`environment.ps1` 用 `$env:LOCALAPPDATA` 派生，统一入口 `.\tools\python313.ps1`；旧文档里的 `C:/Users/毛宇淇/...` 是原开发机记录 |
+| SDK / JDK | **本机实测**：SDK `%LOCALAPPDATA%\Android\Sdk`（`platforms/` 有 `android-36`、`android-37.0`，两者 `optional/android.car.jar` 都在；**没有** `android-35`，`system-images/` 下**没有** automotive 镜像）；`JAVA_HOME=D:\Android\JDK`（Temurin 21.0.12.1）。**原开发机**记录为 `D:\Anroid\SDK` / `D:\Anroid\JDK`（目录名就是这种拼写）；换机用 `VSCAN_SDK` / `VSCAN_JDK` 覆盖，别把文档改回旧路径。**不要用 JBR 25** |
+| 设备 | AAOS 模拟器 `emulator-5554`：Android 15 / API 35 / userdebug / `ro.build.characteristics=automotive` / `ro.product.device=emulator_car64_x86_64`；**应用跑在 user 10**。镜像与 AVD **不在** SDK `system-images/`：AVD 在 `output/vehicle-device-setup/avd/`（`target=android-35-ext15`），镜像在 `output/vehicle-device-setup/image/x86_64/`；`ANDROID_AVD_HOME=D:\AVD` 下只有手机 AVD |
 | frida-server | 设备 `/data/local/tmp/frida-server -l 127.0.0.1:27043`（**27043 不是 27042**）；spawn 超时，用 attach |
 | 网络 | 设备只走 wifi 且会掉线；宿主机 `dl.google.com` 不通 → maven 用阿里云镜像；Git Bash 的 `$PWD` 是 POSIX 形式，写进 Windows 环境变量要用 `$(pwd -W)` |
-| 编译 | Gradle 8.13 / AGP 8.11.1 / Kotlin 2.2.0 / KSP 2.2.0-2.0.2 / Room 2.8.5，compileSdk 36（唯一带 android.car.jar 的平台）；工程路径含非 ASCII 需 `android.overridePathCheck=true` |
+| 编译 | Gradle 8.13 / AGP 8.11.1 / Kotlin 2.2.0 / KSP 2.2.0-2.0.2 / Room 2.8.5，compileSdk 36（本机 `android-36` 与 `android-37.0` 都带 `optional/android.car.jar`，工程钉 36）；工程路径含非 ASCII 需 `android.overridePathCheck=true` |
 
 ## 命名对照（Phase N → vehicle/*）
 
@@ -47,7 +47,7 @@ vscanner/
 
 | 旧名 | 新目录 | 内容 |
 | --- | --- | --- |
-| Phase 1 | `vehicle/rules/` | 车载规则库（VSC-*，双版本 rules.db）+ Room 工程 |
+| Phase 1 | `vehicle/rules/` | 车载规则库（VSC-*，四版本 rules.db：13/14/15/16）+ Room 工程 |
 | Phase 2 | `vehicle/targets/` | 靶子 App×2（被测对象）+ trigger.py |
 | Phase 3 | `vehicle/hooks/` | Frida 钩子（VHAL 读取/出站/TLS 绕过/内存明文/侦察） |
 | Phase 4 | `vehicle/traffic/` | Mitmproxy 反向代理 + 按包名归因 + 敏感打标 |
@@ -60,7 +60,7 @@ vscanner/
 | 目录 | 内容 | 详情 |
 | --- | --- | --- |
 | `core/` | 平台无关内核（车载/移动共用） | `event_store.py` 时序事件库；`collector/` 流量采集；`evidence/` 代码行号+dex 核对；`rules_contract.py` 规则库契约；`frida_host/` Frida 驱动；`static/` 静态内核 |
-| `vehicle/rules/` | 车载规则库（VSC-*，双版本 rules.db）+ Room 工程 | [vehicle/rules/CLAUDE.md](vehicle/rules/CLAUDE.md) |
+| `vehicle/rules/` | 车载规则库（VSC-*，四版本 rules.db：13/14/15/16）+ Room 工程 | [vehicle/rules/CLAUDE.md](vehicle/rules/CLAUDE.md) |
 | `vehicle/targets/` | 靶子 App×2（被测对象）+ trigger.py | [vehicle/targets/CLAUDE.md](vehicle/targets/CLAUDE.md) |
 | `vehicle/hooks/` | Frida 钩子（VHAL 读取/出站/TLS 绕过/内存明文/侦察） | [vehicle/hooks/CLAUDE.md](vehicle/hooks/CLAUDE.md) |
 | `vehicle/traffic/` | Mitmproxy 反向代理 + 按包名归因 + 敏感打标（VHAL 指纹表） | [vehicle/traffic/CLAUDE.md](vehicle/traffic/CLAUDE.md) |
@@ -104,12 +104,13 @@ vscanner/
 ## 离线回归（改完代码先跑，不需要设备）
 
 ```bash
-PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
-"$PY" tools/run_regressions.py            # 车载/内核 16 组：completion/rules-contract/event-store/
+PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
+"$PY" tools/run_regressions.py            # 车载/内核 18 组：completion/rules-contract/event-store/
                                           #   codeloc/correlate/vehicle-evidence/vehicle-pipeline/
-                                          #   collector/tagging-vehicle/dashboard/runtime/privacy-runtime/
-                                          #   parity/workbench/hook-bundles/frida-bundle-config
-"$PY" mobile/tools/run_mobile_checks.py   # 移动端 29 项
+                                          #   collector/tagging-vehicle/dashboard/vehicle-webapp/
+                                          #   vehicle-expanded-review/runtime/privacy-runtime/parity/
+                                          #   workbench/hook-bundles/frida-bundle-config
+"$PY" mobile/tools/run_mobile_checks.py   # 移动端 31 项
 "$PY" tools/check_mobile_branch.py        # 移动分支 24 组（含 workbench/policy/AI/前端契约）
 ```
 

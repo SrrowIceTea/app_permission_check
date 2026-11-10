@@ -16,7 +16,7 @@
 | 入口 | 前端 `frontend/index.html` → 工作台 `frontend/app.html` → `mobile/pipeline/server.py`（端口 **8771**） |
 | 兼容旧端 | `mobile/workbench/server.py`（端口 **8772**，旧隐私工作台，可并行） |
 | 运行模式 | Root 模拟器（frida-server 直挂）/ 非 root Gadget 重签衍生包（两轮正控均已通过） |
-| 离线优先 | 绝大多数能力无需设备即可回归（`run_mobile_checks.py` 29 项、`check_mobile_branch.py` 24 组） |
+| 离线优先 | 绝大多数能力无需设备即可回归（`run_mobile_checks.py` 31 项、`check_mobile_branch.py` 24 组） |
 
 ---
 
@@ -148,7 +148,7 @@
 ## 7. 怎么跑（最小验证路径）
 
 ```bash
-PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
+PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
 
 # 1) 规则库（android.jar 抽签名，source_verified 唯一来源）
 cd mobile/rules && "$PY" extract_android_apis.py && "$PY" build_mobile_rules.py

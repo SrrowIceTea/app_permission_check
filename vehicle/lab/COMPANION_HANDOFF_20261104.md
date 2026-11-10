@@ -87,7 +87,8 @@ OpenTracks 未复核业务触发，因此没有据零调用新增 Hook 缺口结
 ## 验证与交接
 
 - 相关 16 项离线测试通过，含真实本地 HTTP 503 接收端、错误摘要、跨用户身份、重复/过期回执、前后台状态缺失。
-- 完整 `tools/run_regressions.py --mobile`：17 组中 16 组通过，含移动端组。
+- 完整 `tools/run_regressions.py --mobile`：17 组中 16 组通过，含移动端组
+  （当时口径；现行为 18 组根回归、带 `--mobile` 19 组）。
   `vehicle-pipeline` 组有一个失败及一个错误，涉及冻结 `device-observation.json` 的 catalog 摘要。
   这些输入与 catalog 逻辑本轮未改，不通过重写历史观测来消除失败。
   详细日志见 `output/companion-20261104/evidence-index.json` 引用的回归目录。

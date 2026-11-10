@@ -23,7 +23,7 @@
 
 | 验收 | 结果 | 本机证据 |
 | --- | --- | --- |
-| 完整回归，含移动端 28 项检查 | 15 组全部通过 | output/regression-20261101-224022/verification.json |
+| 完整回归，含移动端 28 项检查 | 15 组全部通过（当时口径；现行为 18 组根回归、带 `--mobile` 19 组） | output/regression-20261101-224022/verification.json |
 | 移动分支兼容及前端契约 | 24 组全部通过 | output/mobile-branch-20261101-222807/verification.json |
 | 车载订阅、HTTP/HTTPS、OkHttp、收尾 | 8 项通过 | output/device-20261101-222703/verification.json |
 | 7 类车载场景 | 全部通过；原 PID 存活 | output/vehicle-scenarios-20261101-224007/verification.json |

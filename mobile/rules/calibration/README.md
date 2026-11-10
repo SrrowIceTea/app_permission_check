@@ -28,7 +28,7 @@
 adb shell pm list permissions -f -g > permissions-phone-android35.txt
 
 # 2) 解析成标定文件（复用车载那份解析器，只换前缀）
-PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
+PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
 "$PY" vehicle/rules/python/extract_device_calibration.py \
       --pm-output permissions-phone-android35.txt \
       --prefix android.permission. \

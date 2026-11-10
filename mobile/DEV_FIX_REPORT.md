@@ -32,8 +32,8 @@
 两条回归命令（纯离线、不需要设备）：
 
 ```bash
-PYTHONIOENCODING=utf-8 "C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe" mobile/tools/run_mobile_checks.py
-PYTHONIOENCODING=utf-8 "C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe" tools/run_regressions.py
+PYTHONIOENCODING=utf-8 "$LOCALAPPDATA/Programs/Python/Python313/python.exe" mobile/tools/run_mobile_checks.py
+PYTHONIOENCODING=utf-8 "$LOCALAPPDATA/Programs/Python/Python313/python.exe" tools/run_regressions.py
 ```
 
 ---

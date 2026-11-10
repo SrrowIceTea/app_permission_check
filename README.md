@@ -87,14 +87,15 @@ vscanner/
 | 项 | 值 |
 | --- | --- |
 | Python | `%LOCALAPPDATA%\Programs\Python\Python313\python.exe`（**只有它**装了 frida/mitmproxy/reportlab；`environment.ps1` 用 `$env:LOCALAPPDATA` 派生，换机不硬编码用户名） |
-| SDK | `D:\Android\SDK`；`JAVA_HOME=D:\Android\JDK`（JDK 21，**不要用 JBR 25**） |
-| 设备 | AAOS 模拟器 `emulator-5554`，Android 15 / API 35 / userdebug；**应用跑在 user 10** |
+| SDK / JDK | **本机实测**：SDK `%LOCALAPPDATA%\Android\Sdk`（`platforms/` 有 `android-36`、`android-37.0`，均有 `optional/android.car.jar`；**没有** `android-35`，也无 automotive system-image）；`JAVA_HOME=D:\Android\JDK`（Temurin 21.0.12.1）。原开发机路径 `D:\Anroid\{SDK,JDK}` 不适用于本机，换机用 `VSCAN_SDK`/`VSCAN_JDK` 覆盖；**不要用 JBR 25** |
+| 设备 | AAOS 模拟器 `emulator-5554`：Android 15 / API 35 / userdebug / automotive（`emulator_car64_x86_64`）；**应用跑在 user 10**。镜像与 AVD 在仓库 `output/vehicle-device-setup/{image,avd}/`，不在 SDK `system-images/` |
 | frida-server | 设备 `/data/local/tmp/frida-server -l 127.0.0.1:27043`（**27043 不是 27042**）；spawn 超时，用 attach |
 | 网络 | 设备只走 wifi 且会掉线；宿主机 `dl.google.com` 不通 → maven 用阿里云镜像 |
 | 编译 | Gradle 8.13 / AGP 8.11.1 / Kotlin 2.2.0 / KSP 2.2.0-2.0.2 / Room 2.8.5，compileSdk 36 |
 
-> `.agents/README.md` 记录了当前主机与本文环境表的实测漂移（Python 依赖全缺 → 离线回归会假红；
-> SDK/`android-36` 缺失 → 编译会失败；`D:\Anroid` 实为 `D:\Android` 拼写）——跑不通用例前先读它。
+> 环境事实以本机实测为准（2026-11-10：Python 3.13 依赖齐全、`android-36`/`android-37.0` 已装、
+> AAOS 镜像在仓库 `output/vehicle-device-setup/`）。部分历史文档里的 `D:\Anroid\{SDK,JDK}` 是
+> **另一台开发机**的路径记录，照抄会找不到文件——换机先读 [.agents/README.md](.agents/README.md) §6。
 
 ## 快速开始
 
@@ -103,9 +104,9 @@ vscanner/
 $py = "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
 
 # 1) 仓库级离线回归（不需要设备/网络/API key）
-& $py tools/run_regressions.py                 # 16 组：completion/rules-contract/event-store/codeloc/correlate/...
+& $py tools/run_regressions.py                 # 18 组（带 --mobile 为 19 组）：completion/rules-contract/event-store/...
 
-# 2) 移动侧离线回归 + 端点干跑（29 项；看 output/mobile-regression-*/verification.json）
+# 2) 移动侧离线回归 + 端点干跑（31 项；看 output/mobile-regression-*/verification.json）
 & $py mobile/tools/run_mobile_checks.py
 
 # 3) 移动分支回归（含 workbench / policy / AI / 前端契约）
@@ -116,8 +117,10 @@ $py = "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
 python -m http.server 8090 --bind 127.0.0.1 --directory frontend   # 浏览器开 127.0.0.1:8090
 ```
 
-> **先确认解释器再判红**：若该解释器缺少 `reportlab`/`mitmproxy`/`cryptography`/`frida`/`pypdf`
-> 会冒出 6 处 `ModuleNotFoundError` 假红。先跑 `& $py -c "import reportlab, PIL, mitmproxy, cryptography"`。
+> **先确认解释器再判红**：若该解释器缺少 `reportlab`/`mitmproxy`/`cryptography`/`frida`/`jsonschema`/`pypdf`
+> 会冒出成片 `ModuleNotFoundError` 假红（实测根回归 3 组、分支回归 5 组）。三个回归入口已内置
+> `core/env_guard.py` 前置检查：缺库时直接报缺哪些包并以退出码 3 结束，不会逐组报错。
+> 也可用固定入口 `.\tools\python313.ps1 <脚本>`，详见 [docs/REGRESSION_CI.md](docs/REGRESSION_CI.md)。
 
 ## 运行一轮设备审计（可选，需设备）
 

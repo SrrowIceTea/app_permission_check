@@ -16,6 +16,9 @@
 全程不碰 AI 阶段（`--skip-ai`）。需要 AI 研判请走 `mobile/pipeline/server.py` 的正控配置，
 不属于本文范围。
 
+> 在 **AAOS 车载模拟器**上跑单样本，或流水线走不通要改手动 attach 时，先读 §10
+> （多显示器 / 驾驶限制 / GPU / 系统 CA / TLS 绕过反噬 / 报告口径 / 触发路径）。
+
 ---
 
 ## 1. 开工前：定义变量 + 五项检查
@@ -23,24 +26,26 @@
 **每个新 shell 都要重跑这一段**（后文所有命令都依赖 `$PY` / `$ADB`）：
 
 ```bash
-cd "$USERPROFILE/Desktop/vscanner-phase1-seeds(3)/vscanner-phase1-seeds(1)"
+cd "$USERPROFILE/Desktop/vscanner-phase1-seeds(3)/vscanner-phase1-seeds(1)"   # 原开发机路径（本机实测不存在）；本机请 cd 到仓库根 D:/AAA/mobile-app-permission-check
 
 export PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"
-export ADB="D:/Anroid/SDK/platform-tools/adb.exe"
+# 本机实测（2026-11-10）：下面三行按当前机器写；原开发机是 D:/Anroid/{SDK,JDK,Jadx}。
+# 换机只改这三行，别去改 core/sdk_paths.py 的 LEGACY 兜底表。
+export VSCAN_SDK="$(cygpath -m "$LOCALAPPDATA")/Android/Sdk"
+export VSCAN_JDK="D:/Android/JDK"
+export ADB="$VSCAN_SDK/platform-tools/adb.exe"
 export MSYS_NO_PATHCONV=1                 # 见 §2.3，不加会把 /sdcard 路径改坏
-export VSCAN_SDK="D:/Anroid/SDK"
-export VSCAN_JDK="D:/Anroid/JDK"
-export VSCAN_JADX="D:/Anroid/Jadx/jadx-gui-1.5.3-with-jre-win"
-export ANDROID_SDK_ROOT="D:/Anroid/SDK"
+# export VSCAN_JADX="..."                 # 未核实：本机 D:\ 下未找到 jadx；指到含 lib/jadx-*-all.jar 的那层
+export ANDROID_SDK_ROOT="$VSCAN_SDK"
 export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 ```
 
 | 项 | 检查 | 不合格的后果 / 处理 |
 |---|---|---|
-| **Python 必须选对** | `"$PY" -c "import frida,mitmproxy,reportlab,pypdf;print('ok')"` | 裸 `python` 是 WorkBuddy 托管版，**没有 frida / mitmproxy**，动态阶段会在 `import frida` 处失败。只用 `$PY` |
+| **Python 必须选对** | `"$PY" -c "import frida,mitmproxy,cryptography,jsonschema,reportlab,pypdf;print('ok')"` | 裸 `python` 是 WindowsApps 的 3.15，**没有 frida / mitmproxy / cryptography / jsonschema / pypdf**，动态阶段会在 `import frida` 处失败。只用 `$PY`（或 `tools/python313.ps1`） |
 | SDK / JDK | `ls "$VSCAN_SDK/platform-tools/adb.exe" "$VSCAN_JDK"` | 走 `core/sdk_paths.py` 的 `VSCAN_SDK`/`VSCAN_JDK` 覆盖位，别改 LEGACY 候选表 |
 | jadx | `ls "$VSCAN_JADX"/lib/jadx-*-all.jar` | 指到含 `lib/jadx-*-all.jar` 的那层（**不是 `bin/`**），否则静态 `MissingTool` |
-| frida-server | `ls output/_frida/frida-server` | 批次默认读这个路径。没有就从 `D:/Anroid/frida-server` 复制；**版本必须等于宿主 `frida.__version__`**（本次均 17.18.0） |
+| frida-server | `ls output/_frida/frida-server` | 批次默认读这个路径（`output/_frida/` 本机尚不存在，批次会建）。没有就从仓库 `output/vehicle-device-setup/frida-server` 复制（原开发机路径 `D:/Anroid/frida-server`）；**版本必须等于宿主 `frida.__version__`**（本次均 17.18.0） |
 | 测试集 | `ls "D:/数据集/数据集/F-Droid-60"/*.apk \| wc -l` | 应为 60。**用户说的"D:/测试集"不存在**，真实位置是 `D:/数据集/数据集/F-Droid-60`。先 `ls` 再动手，别照抄用户给的路径 |
 
 ---
@@ -50,7 +55,7 @@ export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 ### 2.1 启动
 
 ```bash
-"D:/Anroid/SDK/emulator/emulator.exe" -avd VScan_Phone \
+"$VSCAN_SDK/emulator/emulator.exe" -avd VScan_Phone \   # VScan_Phone 在 ANDROID_AVD_HOME=D:\AVD 下（本机实测）
   -no-window -no-audio -no-boot-anim -no-snapshot-load \
   -writable-system -gpu swiftshader_indirect
 ```
@@ -60,6 +65,11 @@ export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 **不要用 PowerShell 的 `Start-Process` 起**：本机环境变量同时存在 `HTTPS_PROXY` 和
 `https_proxy`，PowerShell 转字典时直接抛
 `字典中的关键字:“HTTPS_PROXY”所添加的关键字:“https_proxy”`。用 bash 后台启动。
+
+> **`-gpu swiftshader_indirect` 只适用于手机 AVD `VScan_Phone`，不要照抄到 AAOS 车载模拟器。**
+> 2026-11-10 在 `VScanner_AAOS_35_P1` 上实测：软件渲染下应用周期性
+> `SIGABRT`（`Failed to create context, error = EGL_NOT_INITIALIZED`），
+> 详见 §10.4。车载 AVD 的启动参数、AVD 位置与 user 10 的差异见 §10.1。
 
 ### 2.2 必做一：连 Wi-Fi
 
@@ -114,7 +124,8 @@ sleep 10
 ### 2.5 单设备约束
 
 `thirdparty_env.device_guard()` 检测到**多台设备且未设 `ANDROID_SERIAL`** 时直接退出。
-别同时开 Android Studio 的模拟器（`Medium_Phone` 等），否则裸 adb 命令全部
+别同时开 Android Studio 的模拟器（`Medium_Phone` 等），也别同时开手机 AVD `VScan_Phone`
+与车载 AVD `VScanner_AAOS_35_P1`（两者都是 `emulator-5554` 起，冲突后裸 adb 命令全部
 `more than one device/emulator`，失败形态是**静默空结果**（pidof 空 → 写成"原因未记录"）。
 真要两台：`export ANDROID_SERIAL=emulator-5554`。
 
@@ -322,7 +333,7 @@ print([r[0] for r in c.execute('select category_key from app_categories order by
 | 症状 | 根因 | 动作 |
 |---|---|---|
 | 自检 `fixture_selftest_failed`：`按钮没点到（trigger 失败）`，`dialog.xml` 是 `System UI isn't responding` | 系统 ANR 弹窗盖屏 | §2.3：`hide_error_dialogs` + dump 找 `Wait` 点位点击，再重跑 |
-| 自检 `frida_server` 项 `missing_local_binary` | `output/_frida/frida-server` 不存在 | 从 `D:/Anroid/frida-server` 复制，核对与宿主 `frida.__version__` 一致 |
+| 自检 `frida_server` 项 `missing_local_binary` | `output/_frida/frida-server` 不存在 | 从仓库 `output/vehicle-device-setup/frida-server` 复制（原开发机是 `D:/Anroid/frida-server`），核对与宿主 `frida.__version__` 一致 |
 | `network_up` 失败 / `ping 10.0.2.2` 不可达 | `wlan0` DOWN、未关联 SSID | §2.2 `cmd wifi connect-network AndroidWifi open` |
 | 启动即 `[fatal] 检测到多台设备` | 多模拟器 + 无 `ANDROID_SERIAL` | 关掉多余模拟器，或显式 export |
 | `MissingTool: 下没有 lib/jadx-*-all.jar` | `VSCAN_JADX` 指到了 `bin/` 或空目录 | 指到含 `lib/jadx-gui-1.5.3-all.jar` 的那层 |
@@ -333,6 +344,11 @@ print([r[0] for r in c.execute('select category_key from app_categories order by
 | `covered: false` | 挂钩进程崩溃（A1） | **不是流程失败**，按 §5 降级表述，不要靠重试掩盖 |
 | `flows.jsonl` 缺失，但 pcap 有几万字节 | CA 没装上 / 没生效（HTTPS 握手被客户端拒绝） | 看 `verification.system_ca`；确认模拟器 `-writable-system`，重跑会重装。只有 `--no-system-ca` 时才允许"flows 为空" |
 | `policy.status = store_missing` | `output/local-policy-library-20261018` 被清理（10-19） | 用 `prepare_local_policies.py --manifest <APK清单> --store <目录>` 重建；**不要**因此写"该应用没有政策" |
+| 应用每 18–26s 被 `SIGABRT`，`cause` 含 `EGL_NOT_INITIALIZED` | 车载 AVD 上软件渲染创建 EGL 上下文失败 | §10.4：先换 `-gpu host`；仍复现则手动启动稳定后再 attach，并按 §5 降级 |
+| `input tap` 返回成功但界面不动 | 点到了 display 0（多显示器）或 UXR 驾驶限制吞触摸 | §10.2 先确认 display 并用 `--display`；§10.3 关 UXR + 车速归零 |
+| `system_ca` 失败且 `adb remount` 被 verity 拒 | 系统分区只读，装不进系统 CA | §10.5：改用 Java/native 明文 hook，并在结论里声明跨进程/native 不覆盖 |
+| 手动 attach 后零事件 | bundle 白名单仍是 `com.vscanner.privacydemo` | §10.7：先 `bundle_config.configure(body,[PKG])` 再 attach |
+| 开启 TLS 绕过即崩溃（okhttp `CertificateChainCleaner` NPE） | 绕过返回空证书链 | §10.6：直连真实站点时改用 no-pinning bundle |
 
 重跑原则：**换个新的 `--out` 批次目录**。同目录续跑用 `--resume`（只跳过
 "verification passed + PDF 已生成"的样本），但目录里已有 `_static/` 也会被复用——
@@ -350,6 +366,8 @@ print([r[0] for r in c.execute('select category_key from app_categories order by
 6. **不要并发跑动态**，跑批时不要另起第二台模拟器。
 7. **不要覆盖已有批次目录。**
 8. **不要照抄用户给的路径**，先 `ls` 验证。
+9. **不要把手动 attach 的结果写成流水线窗口结论**（§10.7），也不要把
+   `dumpsys location` 的 `WorkSource` 当成 hook 级归因（§10.8）。
 
 ---
 
@@ -367,7 +385,178 @@ print([r[0] for r in c.execute('select category_key from app_categories order by
 
 ---
 
-## 10. 附：修复前基线（**只作历史对照，别当回归基准**）
+## 10. AAOS 车载模拟器：单样本动态采集（2026-11-10 实测补充）
+
+> 场景：在 AAOS（`VScanner_AAOS_35_P1`，API 35，user 10）上对单个第三方 APK 做动态采集，
+> 尤其是**流水线走不通、需要手动 attach** 的情况。本轮样本 Breezy Weather 6.2.2
+> （`org.breezyweather`）与 Organic Maps web（`app.organicmaps.web`），产物与两份
+> `REPORT.md` 在 `output/thirdparty-dynamic-20261110/`。命令沿用 §1 的 `$ADB`。
+
+### 10.1 与手机 AVD 的差异
+
+| 项 | 手机 `VScan_Phone`（§2.1） | 车载 `VScanner_AAOS_35_P1` |
+| --- | --- | --- |
+| AVD 位置 | `ANDROID_AVD_HOME=D:\AVD` | `output/vehicle-device-setup/avd`（必须显式设 `ANDROID_AVD_HOME`） |
+| 启动参数 | `-no-snapshot-load` | `-no-snapshot -no-boot-anim`，端口 5554 |
+| GPU | `-gpu swiftshader_indirect` | **不要用**，见 10.4 |
+| 用户 | 主用户 | 应用跑在 **user 10** |
+
+`adb shell cmd package list packages -U` 会给出两个 uid
+（本轮 `package:org.breezyweather uid:10260,1010260`），**业务 uid 取后一个**；
+数据目录 `u10_a260` / `u10_a261` 与之一一对应。
+
+### 10.2 多显示器：`input tap` 默认打 display 0
+
+现象：`adb shell input tap x y` 返回成功、界面完全不动——**不是点击没生效，是打到了另一块屏**。
+AAOS 默认有中控（display 0）、仪表、副驾等多块屏；`input` 不指定时只投 display 0。
+
+确认应用在哪块屏：
+```bash
+"$ADB" shell dumpsys display | grep -E "DisplayDeviceInfo|mDisplayId"
+"$ADB" shell dumpsys window displays | grep -E "mCurrentFocus|mDisplayId"
+"$ADB" shell dumpsys activity activities | grep -E "mResumedActivity"
+```
+指定屏点击 / 截图（API 30+，语法先用 `"$ADB" shell input --help` 核对）：
+```bash
+"$ADB" shell input --display <id> tap <x> <y>
+"$ADB" shell screencap -p -d <id> /sdcard/d<id>.png
+```
+坐标取 `uiautomator dump` 的 `bounds` 中心点；`uiautomator dump` 只覆盖当前活动屏。
+
+> 坦白说明：本轮**没有触发**这个故障（应用与点击目标都在 display 0），所以这里没有
+> 失败原文。可复现的相关现象是：同一次 `screencap` 在多显示器下会给出警告，
+> 且 `exec-out>` 重定向会把 PNG 写坏（见 §10.9 的替代写法）。
+> 下轮一旦"tap 成功但界面不动"，先按上面三条命令确认 display，再怀疑 10.3。
+
+### 10.3 驾驶限制（UXR）吞触摸
+
+现象：界面能看到车速（本轮显示 63 km/h）时，tap / swipe 全部无效果，`input` 不报错。
+根因：CarUxRestrictions 在车速非零时限制触摸交互。
+
+采集前（本轮实测命令）：
+```bash
+"$ADB" shell cmd car_service enable-uxr false
+"$ADB" shell cmd car_service inject-vhal-event PERF_VEHICLE_SPEED 0
+"$ADB" shell dumpsys car_service | grep -i -E "uxr|restriction"   # 复核已关闭
+```
+采集结束**必须还原**（本轮收尾已执行）：
+```bash
+"$ADB" shell cmd car_service enable-uxr true
+```
+证据：`breezy/manual-session/trigger-actions.log` 的 7 次动作（Add current location /
+Save / 下拉刷新）都在解除限制后完成，随后 hook 采到 2 条 `requestLocationUpdates`。
+
+### 10.4 GPU 与周期性 `EGL_NOT_INITIALIZED`
+
+现象：应用每约 18–26 秒被 `SIGABRT` 打死，`verification.json` 的
+`coverage.detail[*].death.cause` 为
+```
+Failed to create context, error = EGL_NOT_INITIALIZED
+```
+`fatal_lines` 里是 `Fatal signal 6 (SIGABRT)`。原样见
+`output/thirdparty-dynamic-20261110/breezy/verification.json` 与
+`_attempt1-breezy-egl-crash/`（`-gpu swiftshader_indirect` 那次）。
+
+辨识特征 = **周期性崩溃 + RenderThread/EGL 报错**；偶发一次按 §5 的崩溃口径处理即可。
+
+处理顺序：
+1. `-gpu swiftshader_indirect` → `-gpu host` 重试；
+2. 仍复现时判定为镜像/应用渲染路径问题，**不要继续怀疑 hook**：本轮改为"先手动启动应用，
+   确认稳定 >10 分钟后再 attach"，应用不再崩；
+3. 崩溃段不计入有效窗口（本轮 `coverage.truncated=true`、`observed_s=59.4/180`），
+   结论按 §5 写"崩溃前有效、崩溃后盲区"。
+
+### 10.5 系统 CA 装不进：verity / 只读 `/system`
+
+`verification.json` 里 `system_ca` 的失败原文：
+```
+ModuleNotFoundError: No module named 'transparent'
+```
+（本轮是调用路径的 `sys.path` 指错；绕过它直接调
+`mobile/traffic/transparent.install_system_ca()` 后，`adb remount` 仍因 dm-verity /
+只读系统分区被拒。**该步原始输出本轮没落盘**——下轮请重定向进样本目录再判定，
+不要凭"装过了"下结论。）
+
+替代与局限（`-writable-system` 见 §2.4，第三方 TLS 解密边界见 §5；这里只补车载侧）：
+- 可用：Java 层绕过（`ssl_pinning_tp.js`）或 native 明文 hook
+  （`hook_native_ssl.js` / `hook_native_crypto.js`）。本轮 Organic Maps 靠后者拿到
+  272 条 `SSL_WRITE_PLAINTEXT` + 15633 条 `SSL_READ_PLAINTEXT`。
+- 不覆盖：**跨进程**（GMS / 系统服务）和 native 自有 TLS 栈。
+  所以"没有 flows"不能写成"没有外发"。
+- 不要为了装 CA 去关 verity 或改系统镜像。
+
+### 10.6 TLS 绕过的反噬：空链 → OkHttp NPE
+
+现象：开启绕过后再下载，Organic Maps 立即崩溃，logcat 指向
+`AndroidCertificateChainCleaner.clean()` 的 `NullPointerException`。
+（本轮终端观察；成文记录见 `output/thirdparty-dynamic-20261110/organicmaps/REPORT.md` §1。）
+根因：`ssl_pinning_tp.js` 放宽校验后返回**空证书链**，okhttp 不接受。
+
+正确做法：
+- 目标直连真实站点、不需要抓明文时，**不要开绕过**。本轮改用
+  `hook_all_nopinning.bundle.js`（920336 B，SHA256
+  `B9AE02F8E28CD6B4B3C52D3DEE525C609E1CE2EBCD90F8940E20E18BC52A5479`，
+  去掉 `ssl_pinning_tp.js` 的 import 与 `tlsMain()` 调用）后应用稳定、下载完成。
+- 必须抓包时，先确认目标 okhttp 版本能处理空链；否则优先系统 CA 或 native 明文 hook。
+- **该缺陷已在修**；修好前按上面两条执行，别把"开绕过就崩"当成样本行为。
+
+### 10.7 流水线窗口 vs 手动 attach（报告口径）
+
+| 项 | 流水线窗口 | 手动 attach |
+| --- | --- | --- |
+| 谁启动应用 | 流水线 `am start` | 人工/脚本先启动，`dev.attach(pkg)` |
+| 窗口边界 | `app_started` → `--seconds` | attach → 人工停止 |
+| 能否声明"窗口内全量" | 可以（受 §5 降级约束） | **不可以** |
+| 报告必须写 | 覆盖率、`truncated`、`app-death` | "手动受控会话，非流水线窗口；不做窗口覆盖率声明" |
+
+本轮两条流水线都没走通（Breezy `ui_taps_made=完成 0 次点击` 且 `coverage.truncated=true`；
+Organic Maps 被 TLS 绕过 NPE 打断），因此两份报告都标明手动会话，
+**没有把手动结果冒充流水线窗口**。
+
+手动 attach 的前置校验（缺一项就不许写 observed）：
+1. **bundle 新鲜**：`Get-FileHash mobile/hooks/dist/hook_all.bundle.js`，
+   mtime 晚于所有参与打包的源码。本轮 `SHA256 85CD809A...D95BBA8`，938229 B，
+   2026-11-09 23:54:12 > 最新源码 11-02。
+2. **白名单**：`core.frida_host.bundle_config.configure(body, [PKG], watch_limit=58)`。
+   不配置时 bundle 内白名单是 `com.vscanner.privacydemo`，所有 hook 报 `not in whitelist`，
+   表现为**零事件**（本轮踩过）。
+3. **`hook_armed`**：`summary.json` 的 `hook_armed_count > 0` 且事件数 > 0；本轮 14 条。
+4. **附加探针不要裸 `create_script`**：Frida 17 已移除全局 `Java`，
+   本轮报 `ReferenceError: 'Java' is not defined`（见
+   `organicmaps/manual-session/supp-events.jsonl`），必须经 bundle 编译注入。
+
+### 10.8 怎么让样本真的读定位（触发路径）
+
+| 样本 | 触发步骤 | 实测证据 |
+| --- | --- | --- |
+| Breezy 6.2.2 | 走完引导 → Add current location → 在 Weather sources 对话框**选源并 Save** → 下拉刷新 | `trigger-actions.log` 7 次动作；随后 2 条 `requestLocationUpdates`（fused，`coarse_location`）+ 6 条传感器 |
+| Organic Maps web | 进地图 → 点 **MyPosition**；只下载离线地图不会触发定位 | `trigger-actions.log` 两次 MyPosition；同秒 `dumpsys location` 出现 `WorkSource{1010261 app.organicmaps.web}` 的 `HIGH_ACCURACY` 注册 |
+
+**Organic Maps 的覆盖缺口必须写进结论**：应用经 GMS fused provider 跨进程取位置，
+且 `LocationManager.getCurrentLocation`（API 30+）**不在 watch 集**，所以 hook 层只采到
+1 条传感器读取、`LocationManager` 读取为 0。系统层能证明它发起了高精度请求，
+但**归不到某条 `MOB-*` 运行时 API**，只能写"系统层 observed + hook 未覆盖"，
+既不能写"未读取"，也不能把 `WorkSource` 当 hook 归因。随手留证：
+```bash
+"$ADB" shell dumpsys location | grep -E "WorkSource|last location|registration" \
+  > "$OUT/<样本>/manual-session/location-system-trace.txt"
+```
+
+### 10.9 车载截图与进程收尾（本轮踩到的小坑）
+
+- `adb exec-out screencap -p > x.png` 在 PowerShell 下会把二进制写坏
+  （重定向按文本处理）。改用：
+  ```bash
+  "$ADB" shell screencap -p /sdcard/x.png && "$ADB" pull /sdcard/x.png .
+  ```
+- 收尾顺序（本轮已验证）：`am force-stop` 两个包 → `pm revoke` 定位权限 →
+  `pm uninstall` → `cmd car_service enable-uxr true` → 停 frida-server →
+  `adb forward --remove-all` → `adb emu kill` → `adb devices` 应为空；
+  再确认无残留 `qemu-system-x86_64` / `emulator` 进程。
+
+---
+
+## 11. 附：修复前基线（**只作历史对照，别当回归基准**）
 
 > 下表是 **2026-10-19 19:17 之前**（系统 CA 修复前）的结果：三个样本 `flows.jsonl` 为空、
 > `consent_observation` 字段还不存在。修复后同一份 openmensa 单样本重跑

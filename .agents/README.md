@@ -130,12 +130,12 @@ profile `node_modules` 里，宿主启动判定不兼容后**禁用了核心行 
 
 本仓库 `AGENTS.md`/`CLAUDE.md` 记的环境事实与**当前这台机器**不符：
 
-| 文档写的 | 本机实际 | 后果 |
+| 文档写的 | 本机实测（2026-11-10 复核） | 后果 / 处理 |
 | --- | --- | --- |
-| Python `C:/Users/毛宇淇/.../Python313` | 用户名是 `m1866`；`environment.ps1` 用 `$env:LOCALAPPDATA` 派生 → 解析到 `.../m1866/.../Python313`（**存在**） | 只要走 `environment.ps1` 就没事；**硬编码那个路径的脚本/文档直接失效** |
-| 该 Python 装了 frida/mitmproxy/reportlab | **一个都没装**（`reportlab`/`PIL`/`mitmproxy`/`cryptography`/`frida`/`pypdf` 全 `ModuleNotFoundError`） | 三条离线回归会冒 6 处 `ModuleNotFoundError` 的**假红**，把真失败盖住。修：`python -m pip install -r requirements.txt`（pip 26.2.1 可用） |
-| SDK `D:\Anroid\SDK`、`JAVA_HOME=D:\Anroid\JDK` | 文档里 `Anroid` 是**拼写错误**：本机只有 `D:\Android\JDK`（Temurin 21.0.12.1，可用）；SDK 在 `%LOCALAPPDATA%\Android\Sdk`，`platforms/` **只有 `android-37.0`** | 编译大概率失败：文档称 compileSdk 36 是"唯一带 `android.car.jar` 的平台"，本机**没有 36** → 先装 platform 36 再谈编译 |
-| 设备/frida-server/模拟器 | 未核对（`adb` 不在 PATH，SDK 里有 `platform-tools/adb.exe`） | 换机后先读 `docs/AGENT_TEST_SUITE_RUNBOOK_20261019.md`，别从零试错 |
+| Python `C:/Users/毛宇淇/.../Python313` | 用户名是 `m1866`；`environment.ps1` 用 `$env:LOCALAPPDATA` 派生 → `.../m1866/.../Python313`（**存在**，3.13.9） | 走 `environment.ps1` 或 `.\tools\python313.ps1` 就没事；**硬编码旧用户名的脚本/文档会失效** |
+| 该 Python 装了 frida/mitmproxy/reportlab | **已装齐**（含 `frida-tools`）：`core/env_guard.py` 要求的 import（`frida`/`mitmproxy`/`cryptography`，移动侧再加 `jsonschema`/`PIL`/`pypdf`/`reportlab`）全在。裸 `python`（WindowsApps 3.15）仍缺 6 个 | 裸 `python` 跑回归会成片 `ModuleNotFoundError` 假红；三个入口已加 `env_guard`，缺库**退出码 3**。`maxminddb` 在 `requirements.txt` 里声明但全仓无 import，检查故意不要求 |
+| SDK `D:\Anroid\SDK`、`JAVA_HOME=D:\Anroid\JDK` | `D:\Anroid\*` 与 `D:\Android\SDK` **都不存在**；SDK 在 `%LOCALAPPDATA%\Android\Sdk`，`platforms/` 有 `android-36`、`android-37.0`（都有 `optional/android.car.jar`），**没有** `android-35`；JDK 在 `D:\Android\JDK`（Temurin 21.0.12.1） | 照抄旧路径会找不到工具；`core/sdk_paths.py` 按 `VSCAN_SDK`/`ANDROID_HOME`/PATH 解析，`D:\Anroid` 只是最后兜底。原开发机目录名确实是 `Anroid`，不是本机笔误 |
+| 设备/frida-server/模拟器 | `emulator-5554` 在线：API 35 / Android 15 / userdebug / automotive / `emulator_car64_x86_64`。AAOS 镜像与 AVD 在仓库 `output/vehicle-device-setup/`（`ANDROID_AVD_HOME=D:\AVD` 下只有手机 AVD），**不在** SDK `system-images/`；`output/_frida/` 本机不存在 | 别去 SDK Manager 找"AAOS 35 镜像"——它从官网单独下载，存放位置见 `vehicle/COMPATIBILITY.md`。换机先读 `docs/AGENT_TEST_SUITE_RUNBOOK_20261019.md`，但注意其中 `D:/Anroid/*` 已按本机改注 |
 
-> 这些我没有擅自改 `AGENTS.md`（改环境事实属于决策，且文档说"换机不硬编码用户名"是有意的）。
-> 要我按本机实测重写这张表 + 顺手把 `Anroid` 拼写改掉，说一声。
+> 2026-11-10 已按本机实测改写 `AGENTS.md`/`CLAUDE.md`/`README.md` 的环境表（SDK 路径、平台列表、
+> 镜像位置、Python 解释器）。本表保留为"原开发机记录 → 本机实测"的漂移索引，别再照抄左列。
