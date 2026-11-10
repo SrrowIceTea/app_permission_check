@@ -121,10 +121,22 @@ def run_one(spec, out_root):
         record['status'] = 'output_dir_exists_use_new_directory'
         return record
     staging = stage(source, staged_dir)
-    proc = subprocess.run(
-        [sys.executable, '-m', 'vehicle.privacy.location_experiment',
-         '--capture', str(staged_dir), '--package', str(package), '--out', str(out_dir)],
-        cwd=ROOT, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
+    try:
+        proc = subprocess.run(
+            [sys.executable, '-m', 'vehicle.privacy.location_experiment',
+             '--capture', str(staged_dir), '--package', str(package), '--out', str(out_dir)],
+            cwd=ROOT, capture_output=True, text=True, encoding='utf-8', errors='replace',
+            timeout=120)
+    except subprocess.TimeoutExpired as exc:
+        # 评审 F3：超时不能让整份 index 丢失；原样保留失败，不产出半份结果。
+        staging['source_unchanged_after'] = {name: sha(source / name) for name in FILES}
+        staging['source_readonly_verified'] = (staging['before'] == staging['source_unchanged_after'])
+        record['staging'] = staging
+        record['cli_returncode'] = None
+        record['cli_timeout'] = {'seconds': 120, 'error': type(exc).__name__}
+        record['attempt_status'] = 'replay_failed_before_interpretation'
+        record['attempt_note'] = '重放超过 120 秒被终止；保留 staging 证据，不产出 result.json。'
+        return record
     staging['source_unchanged_after'] = {name: sha(source / name) for name in FILES}
     staging['source_readonly_verified'] = (staging['before'] == staging['source_unchanged_after'])
     staging['staged_unchanged_after_replay'] = all(
