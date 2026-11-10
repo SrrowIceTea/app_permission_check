@@ -132,12 +132,13 @@ def evaluate(reads, flows, package, session, *, window_ms=30000):
             diagnostics[reason] += 1
         else:
             usable.append((row, values, provenance))
-    pairs = []
+    pairs, comparisons = [], 0
     for read, forms in candidates:
         for flow, values, provenance in usable:
             delta = flow['ts'] - read['host_received_ts']
             if not compatible(read, flow) or not 0 <= delta <= window_ms:
                 continue
+            comparisons += 1
             matched = [name for name, value in forms.items() if value in values]
             if not matched:
                 continue
@@ -159,7 +160,8 @@ def evaluate(reads, flows, package, session, *, window_ms=30000):
         'window_calibrated_for_location': False,
         'status': 'content_candidates' if pairs else 'not_observed_within_supported_scope',
         'inputs': {'scoped_location_reads': len(scoped_reads), 'scoped_flows': len(scoped_flows),
-                   'comparable_reads': len(candidates), 'comparable_flows': len(usable)},
+                   'comparable_reads': len(candidates), 'comparable_flows': len(usable),
+                   'compatible_comparisons': comparisons},
         'pairs': pairs, 'pair_count': len(pairs), 'ambiguous_flows': ambiguous,
         'matched_form_counts': dict(Counter(f['form'] for p in pairs for f in p['matched_forms'])),
         'diagnostics': {k: v for k, v in sorted(diagnostics.items()) if v}, 'limits': LIMITS.copy()}

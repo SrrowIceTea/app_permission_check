@@ -50,6 +50,18 @@ STATE_LABELS = {
     dc.NOT_APPLICABLE: '不可判（未运行/缺统计）',
     UNSCOPED: '未登记契约·旧口径',
 }
+UNSCORED_REASONS = {
+    'no_audit_output': '缺少本命题审计产物',
+    'invalid_audit_output': '本命题审计产物不可读取或格式错误',
+    'reviewers_disagreed': '两份参考裁决不一致',
+    'review_decision_missing': '缺少参考裁决',
+    'reference_not_binary': '参考裁决不是 present/absent',
+}
+
+
+def unscored_text(row):
+    code = (row or {}).get('unscored_reason')
+    return UNSCORED_REASONS.get(code, '未提供具体原因（旧产物或未知原因）')
 
 
 def required_evaluators(case):
@@ -152,6 +164,8 @@ def classify(adjudicated, *, observed, evidence_present):
 
 def report_cell(row):
     """报告表格「本命题观测」一列的唯一映射（周四口径修复，只此一处）。"""
+    if (row or {}).get('status') == 'unscored':
+        return '不可计分：' + unscored_text(row)
     state = (row or {}).get('observation_state')
     return STATE_LABELS.get(state, '—（无观测状态）')
 

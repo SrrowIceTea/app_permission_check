@@ -155,3 +155,12 @@ Q01–Q10：6 题三票一致 `present`，Q03/Q09 为多数 `present`（A 因证
 `fixed`、F5 `partially_fixed`、无 `not_fixed`、无 `regression`；并补强 F5 证据——两次
 `mobile_lab.log` 的 sha256 不同（随机临时名、耗时 4.054s vs 3.697s、各含 4 处守卫堆栈），
 直接佐证两次独立进程。复验者同为 `hy4free` 同模型 subagent、无人工介入，不作金标准。
+
+## B013 双人计划B侧报告尾项（2026-11-11）
+
+real_sample_result的业务证据列只读business_evidence_scoped；缺字段显示未知，不借整轮total。
+unscored细分无审计产物、审计结构损坏、裁决缺失、裁决不一致及非二元裁决，投影同源说明。
+有效既有记录的七态和三个比率公式不变；无效裁决/损坏输入不能冒充可计分阴性。
+未观测的漏检不再用“碰巧正确”描述；不从旧SLIRP或样本状态推断本轮能力。
+独立定位验收可由--location-acceptance加入报告，候选不进入规则、业务计数和总体P/R。
+新增反例与交接验收测试由B登记根回归；历史冻结盲评产物缺失时不补造兼容重放通过。

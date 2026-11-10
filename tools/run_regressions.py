@@ -39,6 +39,7 @@ CHECKS = [
         'vehicle.pipeline.test_environment', 'vehicle.pipeline.test_acceptance',
         'vehicle.pipeline.test_diagnostics', 'vehicle.privacy.test_evaluation', 'vehicle.privacy.test_location_match',
         'vehicle.privacy.test_location_review_fixes',
+        'vehicle.privacy.test_location_acceptance',
         'vehicle.privacy.test_versions',
         'vehicle.pipeline.test_capture_lifecycle',
         'vehicle.pipeline.test_capture_proxy',
@@ -70,6 +71,7 @@ CHECKS = [
         'vehicle.bench.test_cross_model_review', 'vehicle.bench.test_claim_verdicts',
         # 四种判定口径反例 + 命题↔求值器契约（2026-11-17 周二小 PR）
         'vehicle.bench.test_claim_scope',
+        'vehicle.bench.test_duo_projection',
         'vehicle.bench.test_blind_evidence', 'vehicle.bench.test_samples', 'vehicle.bench.test_scheduler']),
     ('tagging-vehicle', 'vehicle/traffic', [sys.executable, '-m', 'unittest', 'test_tagging']),
     ('dashboard', 'vehicle/dashboard', [sys.executable, '-m', 'unittest', 'test_dashboard']),

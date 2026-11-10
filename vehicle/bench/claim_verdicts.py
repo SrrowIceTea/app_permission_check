@@ -83,9 +83,15 @@ def read_detection(path):
     并带出 per-evaluator 明细与 evaluator_gaps 供命题裁剪，旧三键保持不变。
     """
     document = json.loads(Path(path).read_text(encoding='utf-8'))
+    if not isinstance(document, dict):
+        raise ValueError('audit_summary_not_object')
     raw = document.get('detection_summary')
     present = isinstance(raw, dict)
     summary = raw if present else {}
+    if any(value is not None and not isinstance(value, expected) for value, expected in (
+            (summary.get('rule_hits'), dict), (summary.get('evaluators_that_ran'), list),
+            (document.get('evaluator_gaps'), list))):
+        raise ValueError('invalid_detection_summary_structure')
     per = summary.get('business_evidence')
     return {
         'business_evidence_total': _num(summary.get('business_evidence_total')),
@@ -102,6 +108,8 @@ def read_detection(path):
 def _settled(item):
     """The agreed decision, or None when the two reviewers disagreed."""
     first, second = item.get('A') or {}, item.get('B') or {}
+    if not isinstance(first, dict) or not isinstance(second, dict):
+        return None
     if first.get('decision') and first.get('decision') == second.get('decision'):
         return first['decision']
     return None
@@ -114,14 +122,26 @@ def report(adjudications, audit_dir, *, label_tier=None):
         decision = _settled(item)
         summary_path = Path(audit_dir) / str(case) / 'correlation-summary.json'
         if decision is None:
+            reviews = [item[k].get('decision') if isinstance(item.get(k), dict) else None
+                       for k in ('A', 'B')]
             rows.append({'item': item_id, 'case': case, 'status': 'unscored',
-                         'unscored_reason': 'reviewers_disagreed'})
+                         'unscored_reason': ('reviewers_disagreed' if all(reviews)
+                                             else 'review_decision_missing')})
+            continue
+        if decision not in ('present', 'absent'):
+            rows.append({'item': item_id, 'case': case, 'adjudicated': decision,
+                         'status': 'unscored', 'unscored_reason': 'reference_not_binary'})
             continue
         if not summary_path.is_file():
             rows.append({'item': item_id, 'case': case, 'adjudicated': decision,
                          'status': 'unscored', 'unscored_reason': 'no_audit_output'})
             continue
-        observed = read_detection(summary_path)
+        try:
+            observed = read_detection(summary_path)
+        except (OSError, ValueError):
+            rows.append({'item': item_id, 'case': case, 'adjudicated': decision,
+                         'status': 'unscored', 'unscored_reason': 'invalid_audit_output'})
+            continue
         obs = scope.observation(observed, case)
         scoped = obs['business_evidence_scoped']
         evidence = ((scoped if scoped is not None else 0)
