@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="vehicle.css">
 <link rel="stylesheet" href="typography.css">
+<link rel="stylesheet" href="components.css">
 <link rel="stylesheet" href="review.css">
 </head>
 <body>
@@ -133,11 +134,14 @@
             <span>AAOS 35</span><i></i><span>OBSERVE ONLY</span>
           </div>
           <div class="upload-error" id="upload-error" role="alert"></div>
+          <div id="upload-checks" role="status" aria-live="polite"></div>
           <div class="pipeline-progress" id="pipeline-progress" style="display:none">
             <div class="progress-head">
               <span class="progress-eyebrow mono">车载审计进度</span>
+              <span class="progress-elapsed mono" id="pipeline-elapsed" hidden></span>
               <span class="progress-note mono">OBSERVE ONLY</span>
             </div>
+            <div class="job-identity" id="job-identity"></div>
             <div class="pipeline-job" id="pipeline-job"></div>
             <ol class="pipeline-timeline" id="pipeline-timeline"></ol>
             <div class="progress-empty">
@@ -241,6 +245,8 @@
 </main>
 <script src="../../frontend/highlight.js"></script>
 <script src="results.js"></script>
+<script src="components.js"></script>
+<script src="upload.js"></script>
 <script src="source.js"></script>
 <script src="review.js"></script>
 <script src="app.js"></script>

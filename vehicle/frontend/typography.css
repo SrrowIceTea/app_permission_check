@@ -4,6 +4,11 @@
   --font-display:"Noto Serif SC","Noto Sans SC","Microsoft YaHei",serif;
   --font-mono:"Cascadia Code",Consolas,"Noto Sans SC",monospace;
   --topbar:76px;
+  /* A-01 字号与行高阶梯：只在此定值，其余选择器一律引用变量 */
+  --fs-2xs:10.5px; --fs-xs:11.5px; --fs-sm:12.5px; --fs-md:13px;
+  --fs-lg:14px; --fs-xl:17px; --fs-title:24px; --fs-2xl:28px;
+  --fs-hero:clamp(30px,3.5vw,48px);
+  --lh-meta:1.5; --lh-table:1.6; --lh-body:1.75; --lh-prose:1.9;
 }
 body { font-family:var(--font-ui);font-synthesis:none;text-rendering:optimizeLegibility;letter-spacing:0; }
 button,input,select { font-family:var(--font-ui); }
@@ -38,34 +43,39 @@ button,input,select { font-family:var(--font-ui); }
 .vehicle-brand { font-family:"Manrope",var(--font-ui);font-size:19px;font-weight:600;letter-spacing:-.04em;margin-bottom:24px; }
 .vehicle-brand span { font-size:10px;letter-spacing:.08em;font-weight:500;vertical-align:middle;margin-left:12px;color:#b9c9d5; }
 .stage-brand h1 {
-  font-family:var(--font-display);font-size:clamp(42px,4.6vw,64px);font-weight:400;
+  font-family:var(--font-display);font-size:var(--fs-hero);font-weight:400;
   line-height:1.3;letter-spacing:.02em;color:#f0f0eb;
 }
-.vehicle-lead { font:400 14px/1.9 var(--font-ui);letter-spacing:.015em;color:#b6c0ca;margin-top:18px; }
+.vehicle-lead { font:400 var(--fs-lg)/var(--lh-prose) var(--font-ui);letter-spacing:.015em;color:#b6c0ca;margin-top:18px; }
 .vehicle-options { gap:20px;padding:26px;border-color:rgba(207,223,235,.14);background:rgba(8,15,22,.82); }
-.vehicle-options label { font-family:var(--font-ui);font-weight:400;font-size:12px;color:#bec9d2; }
+.vehicle-options label { font-family:var(--font-ui);font-weight:400;font-size:var(--fs-sm);color:#bec9d2; }
 .vehicle-options select,.vehicle-options input:not([type=checkbox]) {
-  font-family:var(--font-ui);font-size:13px;line-height:1.6;background:#12202b;border-color:rgba(207,223,235,.19);
+  font-family:var(--font-ui);font-size:var(--fs-md);line-height:var(--lh-table);background:#12202b;border-color:rgba(207,223,235,.19);
+  font-variant-numeric:tabular-nums;
 }
-.vehicle-options .authorization { font-size:12px;line-height:1.85;color:#aab7c2; }
-.pipeline-dz-title { font:500 18px/1.5 var(--font-ui);letter-spacing:.015em; }
-.pipeline-dz-sub { font:400 12px/1.8 var(--font-ui);color:#a8b6c1; }
-.dz-action { font:500 12px/1.5 var(--font-ui); }
+.vehicle-options .authorization { font-size:var(--fs-sm);line-height:var(--lh-body);color:#aab7c2; }
+.pipeline-dz-title { font:500 var(--fs-xl)/var(--lh-meta) var(--font-ui);letter-spacing:.015em; }
+.pipeline-dz-sub { font:400 var(--fs-sm)/var(--lh-body) var(--font-ui);color:#a8b6c1; }
+.dz-action { font:500 var(--fs-sm)/var(--lh-meta) var(--font-ui); }
 .stage-meta,.progress-head .mono,.pipeline-job,.progress-note,.progress-eyebrow {
-  font-family:var(--font-ui);letter-spacing:.015em;font-size:11px;
+  font-family:var(--font-ui);letter-spacing:.015em;font-size:var(--fs-xs);
 }
 .pipeline-card { border-color:rgba(217,229,236,.2);background:rgba(11,21,30,.94); }
-.pipeline-card h2 { font-family:var(--font-display);font-weight:500;font-size:28px;letter-spacing:.035em;line-height:1.5; }
-.pipeline-card p { font-family:var(--font-ui);font-size:13px;line-height:1.9; }
-.pipeline-card p:last-child { font:400 11px/1.8 var(--font-ui);letter-spacing:0; }
-.pipeline-card .pl-btn { font-family:var(--font-ui);font-weight:500;font-size:13px; }
-.pl-label { font-family:var(--font-ui);font-weight:400;font-size:13px; }
-.pl-msg { font-family:var(--font-ui);font-size:12px; }
-.page-head h2 { font-family:var(--font-display);font-size:30px;font-weight:500;letter-spacing:.04em; }
-.results-table { font-family:var(--font-ui);font-size:13px; }
+.pipeline-card h2 { font-family:var(--font-display);font-weight:500;font-size:var(--fs-title);letter-spacing:.035em;line-height:var(--lh-meta); }
+.pipeline-card p { font-family:var(--font-ui);font-size:var(--fs-md);line-height:var(--lh-prose); }
+.pipeline-card p:last-child { font:400 var(--fs-xs)/var(--lh-body) var(--font-ui);letter-spacing:0; }
+.pipeline-card .pl-btn { font-family:var(--font-ui);font-weight:500;font-size:var(--fs-md); }
+.pl-label { font-family:var(--font-ui);font-weight:400;font-size:var(--fs-md); }
+.pl-msg { font-family:var(--font-ui);font-size:var(--fs-sm); }
+.page-head h2 { font-family:var(--font-display);font-size:var(--fs-2xl);font-weight:500;letter-spacing:.04em; }
+.results-table { font-family:var(--font-ui);font-size:var(--fs-md); }
 .results-table th { font-weight:500;letter-spacing:0; }
 .hint,.notice,.file-tree-item,.report-content { font-family:var(--font-ui); }
+.hint { font-size:var(--fs-sm);line-height:var(--lh-body); }
 .evidence-json,.code-content { font-family:var(--font-mono); }
+/* A-01 收口：等宽数字与长 token 断行，避免哈希把表格撑破 */
+.mono,.evidence-json,.pl-msg,.pipeline-card p:last-child { font-variant-numeric:tabular-nums; }
+.results-table td,.evidence-json,.pl-msg,.review-field,.vehicle-report h3 { overflow-wrap:anywhere;word-break:break-word; }
 @media(max-width:1100px) {
   .topbar { padding:0 24px;gap:14px; }.service-addr { display:none; }
   .topbar-left { gap:12px; }.current-apk-name { max-width:32vw; }

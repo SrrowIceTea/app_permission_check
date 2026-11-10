@@ -22,7 +22,7 @@
   function render(host, data) {
     host.replaceChildren(); host.dataset.round = data.round_id;
     const intro = U.node('div', 'review-intro');
-    intro.append(U.node('h3', '', data.round_id), U.node('p', 'notice',
+    intro.append(U.node('h3', '', data.round_id), U.node('p', 'notice notice--caveat',
       'subagent 复核 · ' + (data.signoff_status === 'signed' ? '本轮已签核' : '本轮待签核') +
       '。此标签表示 subagent 复核，不代表人工签核。'));
     intro.append(U.node('p', 'hint', '工作流完成、计分资格与审查结论分别记录。不计分不表示审计失败，也不表示应用安全；静态成功不代表动态通过。'));
@@ -51,7 +51,7 @@
       list(card, '复核发现', item.findings);
       cases.append(card);
     });
-    if (!data.cases.length) cases.append(U.node('p', 'notice', '本轮尚未发布案例。'));
+    if (!data.cases.length) cases.append(U.node('p', 'notice notice--empty', '本轮尚未发布案例。'));
     host.append(cases);
     list(host, '结论边界', data.limits);
     const binding = U.node('details', 'evidence-details');

@@ -56,7 +56,23 @@
   border:1px solid rgba(207,223,235,.16);border-radius:8px;box-shadow:none;transition:none;
 }
 .pipeline-timeline { max-height:none;overflow:visible;margin-top:12px; }
-.pipeline-timeline > .pl-pending { display:none; }
+/* A-05 未开始阶段保持可见：空点 + 低对比文字，形成“还剩几步”的预期 */
+#pipeline-timeline > .pl-pending { display:flex;color:var(--paper-3); }
+#pipeline-timeline > .pl-pending .pl-dot { background:transparent;box-shadow:inset 0 0 0 1px rgba(168,182,193,.55);opacity:1; }
+#pipeline-timeline > .pl-pending .pl-label { color:var(--paper-3); }
+#pipeline-timeline > .pl-pending .pl-msg { color:var(--paper-4); }
+/* 跳过（如重放采集）与未开始同为空心情形，用实心灰点区分“已知未做”和“还没轮到” */
+#pipeline-timeline > .pl-skipped .pl-dot { background:var(--paper-4);box-shadow:none;opacity:1; }
+#pipeline-timeline > .pl-skipped .pl-msg { color:var(--paper-3); }
+/* 失败/进行中行原本是 2 列网格却放了 3 个子项，消息会被挤进 16px 列逐字换行；显式排成两行 */
+#pipeline-timeline > .pl-failed { grid-template-columns:16px minmax(0,1fr); }
+#pipeline-timeline > .pl-running { grid-template-columns:12px minmax(0,1fr); }
+#pipeline-timeline > .pl-failed .pl-dot,
+#pipeline-timeline > .pl-running .pl-dot { grid-area:1/1; }
+#pipeline-timeline > .pl-failed .pl-label,
+#pipeline-timeline > .pl-running .pl-label { grid-area:1/2; }
+#pipeline-timeline > .pl-failed .pl-msg,
+#pipeline-timeline > .pl-running .pl-msg { grid-area:2/2; }
 .pipeline-timeline > li { display:flex;gap:12px;align-items:flex-start;padding:10px 0;line-height:1.7; }
 .pl-label { min-width:140px;font-size:13px; }
 .pl-msg { min-width:0;white-space:normal;overflow-wrap:anywhere;font-size:12px; }
@@ -76,7 +92,15 @@
 #audit-stage .upload-error { min-height:0;margin-top:12px;color:var(--fail);font-size:13px;line-height:1.7;position:relative;opacity:1; }
 .upload-error:empty { display:none; }
 .progress-empty { display:none; }
-.vehicle-table { overflow:auto;margin-top:20px; }
+/* A-02 单一滚动：桌面端由页面容器滚动，表格不再自建纵向滚动条；表头固定 */
+/* 共享 app.css 的 .results-container{overflow-x:auto} 会把 overflow-y 一并算成 auto，使它成为 th 的
+   最近滚动祖先（而它自身永远不滚），sticky 不触发；这里覆盖回 visible，让 th 贴住真正在滚的 .page-container */
+.results-container { overflow:visible; }
+.vehicle-table { overflow:visible;margin-top:20px; }
+.vehicle-table .results-table th {
+  position:sticky;top:0;z-index:3;background:#121c28;
+  box-shadow:inset 0 -1px 0 rgba(207,223,235,.26);
+}
 .evidence-details { padding:12px 0;border-bottom:1px solid var(--line); }
 .evidence-details summary { cursor:pointer;line-height:1.7; }
 .evidence-json { white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.8 var(--font-mono);max-height:500px;overflow:auto;min-width:180px; }
@@ -89,8 +113,28 @@
 .vehicle-report .pl-btn { margin:5px; }
 .pdf-frame { width:100%;height:70vh;min-height:400px; }
 .service-addr { color:var(--paper-2); }
-.status-dot { display:none; }
-.results-container { overflow:auto; }
+/* A-06 连接状态：默认未知态，data-online 由运行时写入后切换为已连接/断线/重连 */
+.status-dot {
+  display:inline-grid;place-items:center;width:8px;height:8px;border-radius:50%;
+  border:1px solid currentColor;background:transparent;color:var(--paper-3);
+  font:600 9px/1 var(--font-mono);animation:none;
+}
+.status-dot[data-online] { width:16px;height:16px; }
+.status-dot::after { content:""; }
+.status-dot[data-online="true"] { color:var(--pass);background:rgba(127,224,174,.12);opacity:1; }
+.status-dot[data-online="true"]::after { content:"✓"; }
+.status-dot[data-online="false"] { color:var(--fail);background:rgba(255,138,138,.12); }
+.status-dot[data-online="false"]::after { content:"✕"; }
+.status-dot[data-online="reconnecting"] { color:var(--warn);background:rgba(232,197,131,.12);animation:pulse 1.8s infinite; }
+.status-dot[data-online="reconnecting"]::after { content:"↻"; }
+/* 窄视口仍允许表格横向滚动，但 overflow-y 用 clip（不生成纵向滚动容器），表头继续贴页面容器 */
+@media(max-width:900px) {
+  .vehicle-table { overflow-x:auto;overflow-y:clip; }
+  /* A-07 窄屏前 3 列（规则/类型/结论等级）不折词：min-content 撑开表格，溢出交给 .vehicle-table 自己的横向滚动区，
+     页面级横向溢出仍为 0。只作用于动态结论表；静态表第 2 列是长标题，不在此列。 */
+  #dynamic-results .vehicle-table .results-table th:nth-child(-n+3),
+  #dynamic-results .vehicle-table .results-table td:nth-child(-n+3) { white-space:nowrap; }
+}
 @media(min-width:1700px) {
   #audit-stage { padding-top:10vh; }.app-bg { background-position:center; }
 }
@@ -116,4 +160,79 @@
   .pipeline-timeline > li { flex-wrap:wrap;column-gap:10px;row-gap:2px; }.pl-msg { width:100%;padding-left:18px; }
   .results-container { padding:12px; }
 }
-@media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important;transition:none!important; } }
+@media(prefers-reduced-motion:reduce) {
+  *,*::before,*::after { animation:none!important;transition:none!important; }
+  html { scroll-behavior:auto; }
+}
+
+/* ============ A 档：纯 CSS 视觉/语义收口（不改 HTML 与 JS） ============ */
+
+/* A-03 结论徽标：只表达证据强度（实心→半实心→空心→点线），不出现"通过/失败"语义 */
+.result-badge {
+  display:inline-flex;align-items:center;gap:6px;padding:2px 8px 2px 6px;border-radius:2px;
+  border:1px solid currentColor;background:transparent;font:500 11px/1.5 var(--font-mono);
+  letter-spacing:.02em;white-space:nowrap;
+}
+/* 覆盖 app.css 的红/绿：四档统一中性色，强弱靠字形填充度与边框样式区分 */
+.vehicle-table .result-badge.s-critical { color:#EAF1F6;background:rgba(234,241,246,.10); }
+.vehicle-table .result-badge.s-warning { color:var(--paper-2);background:rgba(234,241,246,.05); }
+.vehicle-table .result-badge.s-muted { color:var(--paper-3);border-style:dashed;background:transparent; }
+.vehicle-table .result-badge.s-good { color:var(--paper-3);border-style:dotted;background:transparent; }
+.vehicle-table .result-badge.s-critical::before { content:"●";font-size:10px;line-height:1; }
+.vehicle-table .result-badge.s-warning::before { content:"◐";font-size:10px;line-height:1; }
+.vehicle-table .result-badge.s-muted::before { content:"○";font-size:10px;line-height:1; }
+.vehicle-table .result-badge.s-good::before { content:"◌";font-size:10px;line-height:1; }
+
+/* A-04 提示条三语义：modifier 只负责视觉，前缀文案由上下文决定（复核页的 caveat 不是"范围"） */
+.notice--caveat,
+.results-container > .notice:not(:only-child),
+#ai-report > .notice:not(:only-child),
+.review-intro > .notice {
+  border-left:2px solid rgba(168,182,193,.55);
+  background:rgba(255,255,255,.035);color:var(--paper-3);
+}
+/* "范围 · " 只加在内容确为范围声明的上下文；复核/AI 的 caveat 不加，避免前缀与正文矛盾 */
+.results-container > .notice:not(:only-child)::before { content:"范围 · ";font:500 11px/1 var(--font-mono);letter-spacing:.04em;color:var(--paper-3); }
+.notice--error,.notice.bad {
+  border-left:2px solid var(--fail);background:rgba(255,138,138,.07);color:#ffd9d9;
+}
+.notice--error::before,.notice.bad::before { content:"错误 · ";font:500 11px/1 var(--font-mono);letter-spacing:.04em;color:var(--fail); }
+.notice--empty,
+.results-container > .notice:only-child,
+#ai-report > .notice:only-child,
+#file-tree > .notice:only-child,
+#code-view > .notice:only-child,
+#report-library > .notice:only-child,
+#review-round > .notice:only-child,
+.review-cases > .notice:only-child {
+  border:1px dashed rgba(168,182,193,.38);background:transparent;color:var(--paper-3);
+  text-align:center;padding:26px 18px;
+}
+
+/* A-07 上传三态：未选（默认虚线）/ 校验中（aria-disabled）/ 不合格（错误提示存在且不在上传中） */
+#audit-stage .pipeline-dropzone { position:relative;transition:border-color .16s ease,background .16s ease,box-shadow .16s ease; }
+#audit-stage .pipeline-dropzone[aria-disabled="true"] {
+  cursor:progress;border-style:solid;border-color:rgba(155,231,245,.55);
+  background:rgba(24,44,56,.9);box-shadow:inset 0 0 0 1px rgba(155,231,245,.12);
+}
+#audit-stage .pipeline-dropzone[aria-disabled="true"] .dz-action { opacity:.55; }
+#audit-stage .stage-slot:has(.pipeline-dropzone[aria-disabled="true"]) .upload-error { color:var(--live); }
+#audit-stage .pipeline-dropzone[aria-disabled="true"]::after {
+  content:"◐ 校验中";position:absolute;top:12px;right:14px;
+  font:500 11px/1 var(--font-ui);letter-spacing:.04em;color:var(--live);
+}
+#audit-stage .stage-slot:has(.upload-error:not(:empty)):not(:has(.pipeline-dropzone[aria-disabled="true"])) .pipeline-dropzone {
+  border-style:solid;border-color:var(--fail);background:rgba(255,138,138,.06);
+  box-shadow:inset 0 0 0 1px rgba(255,138,138,.14);
+}
+#audit-stage .stage-slot:has(.upload-error:not(:empty)):not(:has(.pipeline-dropzone[aria-disabled="true"])) .pipeline-dropzone::after {
+  content:"✕ 未通过校验";position:absolute;top:12px;right:14px;
+  font:500 11px/1 var(--font-ui);letter-spacing:.04em;color:var(--fail);
+}
+
+/* A-08 键盘可达性：统一焦点环；焦点不落在不可见元素上 */
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible,[tabindex]:focus-visible {
+  outline:2px solid var(--live);outline-offset:3px;border-radius:2px;
+}
+#page-pipeline .pipeline-dropzone:focus-visible { outline:2px solid var(--live);outline-offset:3px; }
+.pl-btn:focus-visible,.nav-item:focus-visible,.file-tree-item:focus-visible { outline:2px solid var(--live);outline-offset:-2px; }
