@@ -65,6 +65,8 @@ CHECKS = [
         'vehicle.ai.test_evidence_capability',
         'vehicle.bench.test_ablation', 'vehicle.bench.test_governance',
         'vehicle.bench.test_cross_model_review', 'vehicle.bench.test_claim_verdicts',
+        # 四种判定口径反例 + 命题↔求值器契约（2026-11-17 周二小 PR）
+        'vehicle.bench.test_claim_scope',
         'vehicle.bench.test_blind_evidence', 'vehicle.bench.test_samples', 'vehicle.bench.test_scheduler']),
     ('tagging-vehicle', 'vehicle/traffic', [sys.executable, '-m', 'unittest', 'test_tagging']),
     ('dashboard', 'vehicle/dashboard', [sys.executable, '-m', 'unittest', 'test_dashboard']),

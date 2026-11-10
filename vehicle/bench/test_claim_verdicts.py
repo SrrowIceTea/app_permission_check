@@ -81,7 +81,9 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(1, report['counts']['unscored'])
         self.assertEqual(0.5, report['asserted_ratio'])
         self.assertEqual(0.0, report['wrong_assertion_ratio'])
-        self.assertEqual(0.0, report['unobserved_ratio'])
+        # 评审 F1 后：case-b 只跑了任意求值器、0 命中，不再被记作「观测后的正确否定」，
+        # 归 correct_by_absence_of_observation（未观测），故 unobserved_ratio 由 0 升为 0.5。
+        self.assertEqual(0.5, report['unobserved_ratio'])
 
     def test_unobserved_correctness_is_visible_in_the_unobserved_ratio(self):
         with tempfile.TemporaryDirectory() as root:
