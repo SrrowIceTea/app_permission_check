@@ -1,0 +1,193 @@
+{
+  "generated_at": "2026-11-09T14:52:49.812715+00:00",
+  "scope": "AAOS35 user10; 2 native AAOS Apps + 6 sideload controls; owned loopback HTTP receiver via ADB reverse",
+  "static_completed": 8,
+  "installed": 8,
+  "startup_verified": 8,
+  "business_verified_apps": 1,
+  "successful_upload_sessions": 2,
+  "target_apps": 8,
+  "target_sessions": 16,
+  "accuracy": {
+    "status": "not_measured",
+    "precision": null,
+    "recall": null,
+    "n_reference_pairs": 0,
+    "ci95": null,
+    "reason": "No two independent human reviews and distinct human adjudication; no validated location read-flow pairing for new APKs"
+  },
+  "apps": [
+    {
+      "id": "immich",
+      "package": "app.alextran.immich",
+      "apk_sha256": "e58b54d433e5132266b83d06e91c9191b9165296911d857ab71079d180ab3a49",
+      "scope": "aaos_sideload_control",
+      "static_status": "completed",
+      "static_findings": 18,
+      "static_rules_version": "36",
+      "startup_status": "started",
+      "business_status": "backend_and_account_not_configured",
+      "independent_successful_upload_sessions": 0
+    },
+    {
+      "id": "davx5",
+      "package": "at.bitfire.davdroid",
+      "apk_sha256": "8a41ae9d76484b86ce326e2002bae5ad5609aa5c4ea2179037287af676fd1b41",
+      "scope": "aaos_sideload_control",
+      "static_status": "completed",
+      "static_findings": 10,
+      "static_rules_version": "36",
+      "startup_status": "started",
+      "business_status": "backend_and_account_not_configured",
+      "independent_successful_upload_sessions": 0
+    },
+    {
+      "id": "gpslogger",
+      "package": "com.mendhak.gpslogger",
+      "apk_sha256": "82b71ea0fceeabd6d3a81e752efb2a28b49fae4f569d59959a7334949d0db15e",
+      "scope": "aaos_sideload_control",
+      "static_status": "completed",
+      "static_findings": 12,
+      "static_rules_version": "36",
+      "startup_status": "started",
+      "business_status": "network_constraints_block_upload",
+      "independent_successful_upload_sessions": 0
+    },
+    {
+      "id": "nextcloud",
+      "package": "com.nextcloud.client",
+      "apk_sha256": "eef8552fb198851d12e357bf590644b45d2923f36c76fe760027a10d9956db7a",
+      "scope": "aaos_sideload_control",
+      "static_status": "completed",
+      "static_findings": 18,
+      "static_rules_version": "36",
+      "startup_status": "started",
+      "business_status": "backend_and_account_not_configured",
+      "independent_successful_upload_sessions": 0
+    },
+    {
+      "id": "element-x",
+      "package": "io.element.android.x",
+      "apk_sha256": "093d3394a9cea4636d5f55c288f7e0f7fac757bfb8933ed1634fd6f06498f16c",
+      "scope": "aaos_sideload_control",
+      "static_status": "completed",
+      "static_findings": 16,
+      "static_rules_version": "36",
+      "startup_status": "started",
+      "business_status": "backend_and_account_not_configured",
+      "independent_successful_upload_sessions": 0
+    },
+    {
+      "id": "owntracks",
+      "package": "org.owntracks.android",
+      "apk_sha256": "d9037fe161915b7741d91ad41ea3e64ddc5392cbbda578ce7ccf981b273ea678",
+      "scope": "aaos_sideload_control",
+      "static_status": "completed",
+      "static_findings": 12,
+      "static_rules_version": "36",
+      "startup_status": "started",
+      "business_status": "two_sessions_verified",
+      "independent_successful_upload_sessions": 2
+    },
+    {
+      "id": "yaabsa",
+      "package": "de.vito0912.yaabsa",
+      "apk_sha256": "5a00d0962d61f3aae2669e8802d23bf5ce819b7aa55f10204dad300d04f58873",
+      "scope": "native_aaos",
+      "static_status": "completed",
+      "static_findings": 0,
+      "static_rules_version": "15",
+      "startup_status": "started",
+      "business_status": "backend_and_account_not_configured",
+      "independent_successful_upload_sessions": 0
+    },
+    {
+      "id": "home-assistant",
+      "package": "io.homeassistant.companion.android.minimal",
+      "apk_sha256": "c819df2617f69db1fac17b5f1a0c4d595e4d5cc334e17c105da278b7684d46e6",
+      "scope": "native_aaos",
+      "static_status": "completed",
+      "static_findings": 2,
+      "static_rules_version": "15",
+      "startup_status": "started",
+      "business_status": "backend_and_account_not_configured",
+      "independent_successful_upload_sessions": 0
+    }
+  ],
+  "sessions": [
+    {
+      "name": "owntracks-s1",
+      "capture_healthy": true,
+      "business_upload": true,
+      "session_id": "capture-71de5f85f58b465e8d6f037bd7a1f47d",
+      "source_value_pairing": "not_measured",
+      "privacy_read_events": 0,
+      "read_breakdown": [],
+      "egress_events": 11,
+      "fresh_authenticated_location_receipts": 2,
+      "evidence_sha256": "43e160806b8a1a867659a7ec8aa7b7a1aac520580b2a1279aa7de81ff0c87db4"
+    },
+    {
+      "name": "owntracks-s2",
+      "capture_healthy": true,
+      "business_upload": true,
+      "session_id": "capture-38a474e82a8f47a7a002d418abbbb699",
+      "source_value_pairing": "not_measured",
+      "privacy_read_events": 0,
+      "read_breakdown": [],
+      "egress_events": 5,
+      "fresh_authenticated_location_receipts": 1,
+      "evidence_sha256": "9fbff3b9e3f2c8473d97179d7fcdabe1267b3ad3e4a8736e73978f513c3133f1"
+    },
+    {
+      "name": "gpslogger-s1-retry",
+      "capture_healthy": true,
+      "business_upload": false,
+      "session_id": "capture-10feabdfdcee42718d52c0fdb9156e2a",
+      "source_value_pairing": "not_measured",
+      "privacy_read_events": 120,
+      "read_breakdown": [
+        {
+          "data_types": "android_id",
+          "read_state": "obtained",
+          "events": 120
+        }
+      ],
+      "egress_events": 0,
+      "fresh_authenticated_location_receipts": 0,
+      "evidence_sha256": "4a75e2ef8c2e2f847f2275baac4c8aaa779e3ac070a0ceade4feb4b66993e4bd"
+    },
+    {
+      "name": "gpslogger-s2-retry",
+      "capture_healthy": true,
+      "business_upload": false,
+      "session_id": "capture-903725c681dc45dc80bbea678ba017a8",
+      "source_value_pairing": "not_measured",
+      "privacy_read_events": 12,
+      "read_breakdown": [
+        {
+          "data_types": "android_id",
+          "read_state": "obtained",
+          "events": 12
+        }
+      ],
+      "egress_events": 0,
+      "fresh_authenticated_location_receipts": 0,
+      "evidence_sha256": "deecd4684f892376a0d0792ce984b03809d08afca2c18869fc69241a182bea68"
+    }
+  ],
+  "failed_attempts_preserved": [
+    "smoke/yaabsa/verification.json",
+    "dynamic/gpslogger-s1/setup-failed.json",
+    "dynamic/gpslogger-s2/business-verification.json"
+  ],
+  "input_sha256": {
+    "output\\validation-apk-acquisition-20261109\\manifest.json": "ff9b8e8de73ae9b1ec2311bf7078b8b2ea7eed520144a93d38c8a11c96704e6b",
+    "output\\v8-20261109\\static-summary.json": "c2db15ecfeb6b80d92d4e96f0f9d9d50085e28e4919a5d558e805405027a435c",
+    "output\\v8-20261109\\smoke-summary.json": "75d1840dba1e4b8129198d9a6d81a603eeb703c7f7289d1b971e8eae3f85ada7",
+    "output\\v8-20261109\\smoke\\yaabsa-retry\\verification.json": "3f94732b5bee5698d40a932ebc02f33551b8c771c50b03e5c5693d005d4f60f4",
+    "output\\v8-20261109\\location-receipts.jsonl": "6080e0d79f8ab72efbef1b0a25588248f43c43a30f3e41dde34343d8fe5b03c2"
+  },
+  "export_scope": "descriptive_summary_with_synthetic_receipts_not_replay_bundle_or_human_labels",
+  "source_summary_sha256": "3faf3327c1b96d1bfa12410daf45379c513ee9bc72072f642dfdb2202b06d68e"
+}

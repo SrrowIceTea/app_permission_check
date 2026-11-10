@@ -1,0 +1,58 @@
+{
+  "scope": "synthetic_test_evidence_projection_not_complete_raw_capture",
+  "generated_at": "2026-11-09T14:52:49.812715+00:00",
+  "source_session_id": "capture-903725c681dc45dc80bbea678ba017a8",
+  "packages": [
+    "com.mendhak.gpslogger"
+  ],
+  "installed_apk_sha256": "82b71ea0fceeabd6d3a81e752efb2a28b49fae4f569d59959a7334949d0db15e",
+  "device_sdk": 35,
+  "user_id": 10,
+  "device_fingerprint": "google/sdk_gcar_x86_64/emulator_car64_x86_64:15/AAI5.260516.001.A1/15446886:userdebug/test-keys",
+  "capture_mode": "attach_preserve_proxy",
+  "rules_sha256": "4bf51ba0aadb0234aefb80dfc197429347d748c38fb36f567e90c2d928bff824",
+  "privacy_catalog_sha256": "2a6395f47eebc1336c4bf3ede84ad6cf5e435750b7ef51a3f25446ecfe5691dc",
+  "hook_bundles": {
+    "hook_vehicle_general.bundle.js": "7df49f66f1f5965107b4337dd14937d482b56f6462cb0ee3cfecede2421676d3"
+  },
+  "health_passed": true,
+  "health_checks": {
+    "hooks_ready": true,
+    "proxy_log_redaction_healthy": true,
+    "worker_cleanup_healthy": true,
+    "device_settings_restored": true,
+    "device_reverse_restored": true,
+    "original_process_alive": true,
+    "apk_unchanged": true,
+    "no_hook_errors": true,
+    "workers_stopped_cleanly": true,
+    "collector_callbacks_healthy": true
+  },
+  "business_upload": false,
+  "source_value_pairing": "not_measured",
+  "action": {
+    "host_start_ms": 1794235789595,
+    "latitude": 31.375,
+    "longitude": 121.375
+  },
+  "authenticated_synthetic_receipts": [],
+  "capture_input_sha256": {
+    "reads.jsonl": "40251ca8d79b14714be8387452d9b78803a9f9d0561add01a9053d74253016df",
+    "flows.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "egress.jsonl": "d0739afef96dea41dee5cce951cc69bcbf181083f4ae444dc165ec8ef2a82128",
+    "verification.json": "9b1c88bf0574808901dc912fbd11fdbad59db82e2d37d5d0fbdff60a8552c794",
+    "mitm.log": "8460b5b0fa576cd07cfc64f4c99f302b3fde1380e3347dca9e8ad3cb2a8ba3f3",
+    "requested-permissions.txt": "53341eb5c168ec66fd18f0bb0962af1462fbb15ad545f7dbf1eec8c04475e26a",
+    "collector-health.json": "3ee1b386adc48c5145b4a1bb4cd5f96301f89af0d67714001b293f04d0e7756f"
+  },
+  "local_source_sha256": {
+    "capture/session-manifest.json": "f97b3b5d0f18852e2a6d6f294cb99975e9e220309216ce0e22024112b353edb7",
+    "capture/verification.json": "9b1c88bf0574808901dc912fbd11fdbad59db82e2d37d5d0fbdff60a8552c794",
+    "business-verification.json": "deecd4684f892376a0d0792ce984b03809d08afca2c18869fc69241a182bea68",
+    "business-receipts.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "gaps": [
+    "仅覆盖 attach 后与所附加进程；多进程、忽略系统代理或未知协议可能漏采。",
+    "未修改设备代理。未经过本采集代理的业务正文不可见。"
+  ]
+}
