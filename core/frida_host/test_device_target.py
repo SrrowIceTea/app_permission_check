@@ -55,13 +55,17 @@ class ResolvePidsTests(unittest.TestCase):
     """Multi-process attach: a package may legitimately own several pids."""
 
     def test_all_processes_are_returned_main_first(self):
-        with patch.object(dt, 'adb', return_value='900 800 700'):
+        with patch.object(dt, '_running_pids', return_value=[900, 800, 700]), \
+             patch.object(dt, '_process_names', return_value=[]), \
+             patch.object(dt, 'process_uid', return_value=1010251):
             pids, skipped = dt.resolve_pids('com.test')
         self.assertEqual([700, 800, 900], pids)
         self.assertEqual([], skipped)
 
     def test_limit_splits_targets_from_skipped(self):
-        with patch.object(dt, 'adb', return_value='900 800 700 600 500'):
+        with patch.object(dt, '_running_pids', return_value=[900, 800, 700, 600, 500]), \
+             patch.object(dt, '_process_names', return_value=[]), \
+             patch.object(dt, 'process_uid', return_value=1010251):
             pids, skipped = dt.resolve_pids('com.test', limit=3)
         self.assertEqual([500, 600, 700], pids)
         self.assertEqual([800, 900], skipped)
@@ -77,6 +81,8 @@ class ResolvePidsTests(unittest.TestCase):
         def fake_adb(*args, **kwargs):
             if args[:2] == ('shell', 'pidof'):
                 return '900 800'
+            if args[:2] == ('shell', 'ps'):
+                return 'PID NAME'
             pid = args[2].split('/')[2]
             # 800 属于 user 10；900 属于 user 11，必须被过滤掉。
             return 'Uid:\t' + ('1010251' if pid == '800' else '1110252')
@@ -96,6 +102,49 @@ class ResolvePidsTests(unittest.TestCase):
     def test_invalid_limit_is_rejected(self):
         with self.assertRaises(ValueError):
             dt.resolve_pids('com.test', limit=0)
+
+    def test_colon_children_are_discovered_but_names_and_uid_stay_allowlisted(self):
+        table = ('PID NAME\n900 com.test\n700 com.test:remote\n'
+                 '600 com.test:webview\n500 com.test:foreign_uid\n'
+                 '400 com.test:other_user\n300 com.test.evil:remote\n200 com.tes:remote')
+        uids = {900: 1010251, 700: 1010251, 600: 1010251, 500: 1010252, 400: 1110251}
+
+        def fake_adb(*args, **kwargs):
+            if args[:2] == ('shell', 'pidof'):
+                return '900'
+            if args[:2] == ('shell', 'ps'):
+                return table
+            return 'Uid:\t' + str(uids[int(args[2].split('/')[2])])
+
+        with patch.object(dt, 'adb', side_effect=fake_adb):
+            self.assertEqual(([900, 600, 700], []), dt.resolve_pids('com.test', 10))
+            self.assertEqual(([900, 600], [700]), dt.resolve_pids('com.test', 10, limit=2))
+
+    def test_inventory_failure_is_not_silent_single_process_success(self):
+        with patch.object(dt, '_running_pids', return_value=[900]), \
+             patch.object(dt, 'process_uid', return_value=1010251), \
+             patch.object(dt, 'adb', return_value='unsupported -o'):
+            with self.assertRaisesRegex(RuntimeError, 'process_inventory_invalid'):
+                dt.resolve_pids('com.test', 10)
+
+    def test_invalid_inventory_rows_and_duplicate_pids_fail_closed(self):
+        for table in ('', 'NAME PID', 'PID NAME\nbad', 'PID NAME\n1 a\n1 b'):
+            with self.subTest(table=table), patch.object(dt, 'adb', return_value=table):
+                with self.assertRaisesRegex(RuntimeError, 'process_inventory_invalid'):
+                    dt._process_names()
+
+    def test_disappeared_child_uid_failure_propagates(self):
+        with patch.object(dt, '_running_pids', return_value=[900]), \
+             patch.object(dt, '_process_names', return_value=[(700, 'com.test:remote')]), \
+             patch.object(dt, 'process_uid', side_effect=[1010251, RuntimeError('PID gone')]):
+            with self.assertRaisesRegex(RuntimeError, 'PID gone'):
+                dt.resolve_pids('com.test', 10)
+
+    def test_invalid_limit_and_user_do_not_touch_device(self):
+        for kwargs in ({'limit': True}, {'limit': 2.5}, {'user_id': True}, {'user_id': -1}):
+            with patch.object(dt, 'adb') as call, self.assertRaises(ValueError):
+                dt.resolve_pids('com.test', **kwargs)
+            call.assert_not_called()
 
 
 class MultiAttachTests(unittest.TestCase):

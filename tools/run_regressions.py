@@ -32,6 +32,7 @@ CHECKS = [
         'vehicle.bench.test_overhead',
         'core.frida_host.test_message_stream', 'core.frida_host.test_shutdown',
         'core.frida_host.test_device_target',
+        'tools.test_capture_week1_baseline',
         'vehicle.bench.test_window_calibration',
         'core.collector.test_scope', 'core.collector.test_response_capture', 'core.collector.test_health',
         'core.collector.test_parse',
