@@ -2,14 +2,16 @@
 # -*- coding: utf-8 -*-
 """离线守卫：两侧同源钩子 JS 不许悄悄漂移（批次 4 · §5.4，仅限授权测试）。
 
-背景：`mobile/hooks/` 与 `vehicle/hooks/` 有 7 对同源文件（4 对同名 + 3 对改名）：
-ssl_pinning_tp↔ssl_pinning_bypass、tls_bypasses_tp↔pinning_bypasses、runtime↔vscan_runtime。
+背景：`mobile/hooks/` 与 `vehicle/hooks/` 有 11 对同源文件（8 对同名 + 3 对改名）：
+ssl_pinning_tp↔ssl_pinning_bypass、tls_bypasses_tp↔pinning_bypasses、tls_relax↔tls_relax、
+runtime↔vscan_runtime。
 车载侧修好的 bug 不会自动流入移动侧（D312 的 doFinal 重载语义就靠人记得才同步），
 这类漏同步「离线全绿、真跑才炸」（同类教训见 tools/test_hook_bundles.py 头部）。
 
-判据：两侧去注释、按逻辑行归并后逐对比对，差异必须全部落在
-hooks_parity_whitelist.json 的已知差异里（sub/block/exempt_functions/drop
-四种机制，每条带 reason+date）；条目匹配不上即报 stale，挡「白名单悄悄过期」。
+判据：两侧去注释、按逻辑行归并后逐对比对（引擎在 hooks_parity_engine.py），差异必须
+全部落在两份白名单的已知差异里——通用/运行时类 hooks_parity_whitelist.json、TLS 类
+hooks_parity_whitelist_tls.json（拆两份只为单文件 ≤300 行，守卫合并后当一张表用）。
+四种机制 sub/block/exempt_functions/drop，每条带 reason+date；条目匹配不上即报 stale。
 
 跑法：python mobile/tools/test_hooks_parity.py
 退出码：0=通过；1=未声明差异/白名单过期；2=守卫自检失败或配置不合法。
@@ -18,14 +20,19 @@ from __future__ import annotations
 
 import difflib
 import json
-import re
 import sys
 from pathlib import Path
+
+from hooks_parity_engine import (
+    find_block, function_extent, logical_lines, self_test,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 MOBILE_HOOKS = ROOT / "mobile" / "hooks"
 VEHICLE_HOOKS = ROOT / "vehicle" / "hooks"
-WHITELIST = Path(__file__).resolve().parent / "hooks_parity_whitelist.json"
+HERE = Path(__file__).resolve().parent
+WHITELISTS = [HERE / "hooks_parity_whitelist.json",
+              HERE / "hooks_parity_whitelist_tls.json"]
 
 # (配对 id, mobile 侧文件名, vehicle 侧文件名)；后三对是改名配对（语义对应、名字不同）。
 PAIRS = [
@@ -38,6 +45,7 @@ PAIRS = [
     ("scope", "scope.js", "scope.js"),
     ("ssl_pinning", "ssl_pinning_tp.js", "ssl_pinning_bypass.js"),
     ("tls_bypasses", "tls_bypasses_tp.js", "pinning_bypasses.js"),
+    ("tls_relax", "tls_relax.js", "tls_relax.js"),
     ("runtime", "runtime.js", "vscan_runtime.js"),
 ]
 
@@ -46,111 +54,19 @@ class GuardError(RuntimeError):
     """白名单过期 / 结构不符。守卫自身的问题必须响亮，不许静默放过。"""
 
 
-# ------------------------------------------------------- 引擎（纯函数，可离线自检）
-
-def strip_comments(text: str) -> str:
-    """字符串感知的注释剥离（// 与 /* */ 含跨行，引号/转义对保留；
-    本组文件的正则字面量已核查，不含会被误判的 // 或 /*）。"""
-    out, i, state, n = [], 0, None, len(text)
-    while i < n:
-        c = text[i]
-        nxt = text[i + 1] if i + 1 < n else ""
-        if state is None:
-            if c == "/" and nxt == "/":
-                i = text.find("\n", i)
-                if i < 0:
-                    break
-                continue
-            if c == "/" and nxt == "*":
-                i = text.find("*/", i + 2)
-                if i < 0:
-                    break
-                i += 2
-                continue
-            if c in ('"', "'", "`"):
-                state = c
-            out.append(c)
-            i += 1
-        elif c == "\\" and i + 1 < n:
-            out.append(text[i:i + 2])   # 转义对原样保留（含反斜杠本身）
-            i += 2
-        else:
-            out.append(c)
-            if c == state:
-                state = None
-            i += 1
-    return "".join(out)
-
-
-def bracket_delta(line: str) -> int:
-    """字符串感知的括号余额（(){}[] 求和；输入应为已去注释的行）。"""
-    d, state, i, n = 0, None, 0, len(line)
-    while i < n:
-        c = line[i]
-        if state is None:
-            if c == "\\" and i + 1 < n:
-                i += 2
-                continue
-            if c in ('"', "'", "`"):
-                state = c
-            elif c in "([{":
-                d += 1
-            elif c in ")]}":
-                d -= 1
-        elif c == "\\":
-            i += 2
-            continue
-        elif c == state:
-            state = None
-        i += 1
-    return d
-
-
-_CONT_END = re.compile(r"(\+|-|\*|/|%|,|\(|\[|=|&&|\|\||\?|:|\.|=>|<|>)\s*$")
-_BLOCK_OPEN = re.compile(r"(\{|\bdo)\s*$")
-
-
-def logical_lines(text: str) -> list[str]:
-    """去注释 → trim → 把「换行拆开的同一语句」并回一行（块起始行独立成行）。"""
-    raw = [ln.strip() for ln in strip_comments(text).splitlines() if ln.strip()]
-    out: list[str] = []
-    buf, depth = "", 0
-    for ln in raw:
-        buf = f"{buf} {ln}" if buf else ln
-        depth += bracket_delta(ln)
-        if _BLOCK_OPEN.search(buf) or (depth <= 0 and not _CONT_END.search(buf)):
-            out.append(re.sub(r"\s+", " ", buf).strip())
-            buf, depth = "", 0
-    if buf:
-        out.append(re.sub(r"\s+", " ", buf).strip())
-    return out
-
-
-def find_block(lines: list[str], block: list[str]) -> int:
-    """连续精确匹配。返回下标；未命中 -1；多处命中 -2（需人工重核）。"""
-    hits = [i for i in range(len(lines) - len(block) + 1)
-            if lines[i:i + len(block)] == block]
-    if not hits:
-        return -1
-    return hits[0] if len(hits) == 1 else -2
-
-
-def function_extent(lines: list[str], name: str) -> tuple[int, int] | None:
-    """函数（含 export）块区间 [start, end)。未命中返回 None。"""
-    pat = re.compile(rf"^(?:export\s+)?function\s+{re.escape(name)}\s*\(")
-    start = next((i for i, ln in enumerate(lines) if pat.match(ln)), None)
-    if start is None:
-        return None
-    depth, i = 0, start
-    while i < len(lines):
-        depth += bracket_delta(lines[i])
-        i += 1
-        if depth <= 0:
-            return start, i
-    return None
-
-
 # --------------------------------------------------------------- 白名单应用
+
+def load_whitelist() -> dict:
+    """按列表拼接两份白名单（通用/运行时 + TLS），拼完与拆前语义完全一致。"""
+    merged: dict[str, list] = {"rules": [], "exempt_functions": [], "drop": []}
+    for path in WHITELISTS:
+        if not path.exists():
+            raise GuardError(f"白名单不存在: {path}")
+        part = json.loads(path.read_text(encoding="utf-8"))
+        for key in merged:
+            merged[key].extend(part.get(key) or [])
+    return merged
+
 
 def apply_side(lines: list[str], side: str, pair_id: str, rules: list[dict],
                entries: dict, stats: dict) -> list[str]:
@@ -194,28 +110,6 @@ def apply_side(lines: list[str], side: str, pair_id: str, rules: list[dict],
     return lines
 
 
-# ------------------------------------------------------------------- 自检
-
-def self_test() -> None:
-    """守卫自身的下界测试：归一化不许过度（真差异必须暴露），也不许不足。"""
-    assert logical_lines("// c\nvar a = f(1,\n  2); // t\n") == ["var a = f(1, 2);"]
-    assert logical_lines("var a = f(1, 2);") != logical_lines("var a = f(1, 3);")
-    assert logical_lines("function f() {\n  return 1;\n}\n") == \
-        ["function f() {", "return 1;", "}"]
-    assert bracket_delta("var s = '( // )';") == 0
-    # 注释/转义处理的边界：字符串里的 // 与转义对必须原样保留
-    assert strip_comments("var s = '// x';") == "var s = '// x';"
-    assert strip_comments("var s = 'a\\'b';") == "var s = 'a\\'b';"
-    assert strip_comments("/* x\ny */\nvar a = 1;") == "\nvar a = 1;"
-    fl = ["a();", "x(1, 2);", "b();"]
-    assert find_block(fl, ["x(1, 2);"]) == 1 and find_block(fl, ["nope()"]) == -1
-    assert find_block(["a();", "c();", "a();"], ["a();"]) == -2
-    gl = logical_lines("function g() {\n  h();\n}\nvar z = 1;")
-    assert function_extent(gl, "g") == (0, 3) and function_extent(gl, "no_such") is None
-
-
-# ------------------------------------------------------------------ 主流程
-
 def residual_report(a: list[str], b: list[str]) -> list[str]:
     ops = [op for op in difflib.SequenceMatcher(a=a, b=b, autojunk=False).get_opcodes()
            if op[0] != "equal"]
@@ -229,19 +123,21 @@ def residual_report(a: list[str], b: list[str]) -> list[str]:
     return out
 
 
+# ------------------------------------------------------------------ 主流程
+
 def main() -> int:
     try:
         self_test()
     except AssertionError as exc:
         print(f"[fatal] 守卫自检失败（先修守卫本身）：{exc}")
         return 2
-    if not WHITELIST.exists():
-        print(f"[fatal] 白名单不存在: {WHITELIST}")
+    try:
+        data = load_whitelist()
+    except GuardError as exc:
+        print(f"[fatal] {exc}")
         return 2
-    data = json.loads(WHITELIST.read_text(encoding="utf-8"))
-    entries = {"exempt_functions": data.get("exempt_functions") or [],
-               "drop": data.get("drop") or []}
-    all_rules = data.get("rules") or []
+    entries = {"exempt_functions": data["exempt_functions"], "drop": data["drop"]}
+    all_rules = data["rules"]
     for rule in all_rules + entries["exempt_functions"] + entries["drop"]:
         if not all(rule.get(k) for k in ("id", "reason", "date")):
             print(f"[fatal] 白名单条目缺 id/reason/date: {rule}")
@@ -275,7 +171,7 @@ def main() -> int:
         print(f"[fail] {pair_id}: {m_name} ↔ {v_name} 有未声明差异")
         print("\n".join(residual_report(a, b)))
         print("       → 先判断这处差异是否**应该**同步到另一侧；确认是有意差异后，"
-              "在 hooks_parity_whitelist.json 增补条目（带 reason 与 date）。")
+              "在 hooks_parity_whitelist*.json 增补条目（带 reason 与 date）。")
 
     # sub 规则两侧都须命中过（block/drop/exempt 不命中已响亮失败）；报错配对跳过，
     # 免得一次真错带出一串二次噪音。
@@ -294,7 +190,8 @@ def main() -> int:
         "pairs": len(PAIRS), "failed": failed, "stale": stale,
         "whitelist": {"rules": len(all_rules),
                       "exempt_functions": len(entries["exempt_functions"]),
-                      "drop": len(entries["drop"])},
+                      "drop": len(entries["drop"]),
+                      "files": len(WHITELISTS)},
     }, ensure_ascii=False))
     return 0 if passed else 1
 

@@ -121,6 +121,21 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(compiler.calls, [])
         self.assert_clean()
 
+    def test_exported_main_is_invoked_once(self):
+        item = self.item(body="export function main() { probe(); }")
+        self.bridge(self.vehicle)
+        compiler = FakeCompiler()
+        build.build_one(item, compiler, self.root)
+        content = compiler.calls[0][1]
+        self.assertEqual(content.count("Java.perform(main);"), 1)
+
+    def test_top_level_script_gets_no_main_tail(self):
+        item = self.item(body="import {probe} from './runtime.js';\nprobe();")
+        self.bridge(self.vehicle)
+        compiler = FakeCompiler()
+        build.build_one(item, compiler, self.root)
+        self.assertNotIn("Java.perform(main);", compiler.calls[0][1])
+
     def test_owned_controller_existing_import_is_not_doubled(self):
         item = build.build_plan("vehicle", ["fixture_control.js"], self.root)[0]
         source = Path(item["source"])

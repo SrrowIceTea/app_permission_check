@@ -13,4 +13,6 @@
     <!-- 自绘加密密文走原始 Socket（非 HTTP）；端口可指向任意 TCP 桩。连接失败不影响
          验证点——hook_cipher 在 doFinal（connect 之前）就已截获加密前明文。 -->
     <string name="default_cipher_endpoint">10.0.2.2:9999</string>
+    <!-- 仅用于 hook_native_ssl 正控：进程内 127.0.0.1 TLS 握手 + 少量读写，不是业务场景。 -->
+    <string name="ssl_loopback">5. TLS 回环自检（仅 hook_native_ssl 正控）</string>
 </resources>

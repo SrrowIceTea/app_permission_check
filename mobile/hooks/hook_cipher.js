@@ -78,13 +78,20 @@ function buildExtra(cipher, buf, phase) {
   };
 }
 
-// 在 args 里找第一个 byte[]。注意：对 doFinal(byte[] output,int) 这类「纯输出」重载，
-// 第一个 byte[] 其实是 output 缓冲区而非明文——v1 不做区分，夹具用单参重载规避该歧义。
+// Frida 17 的 Java 数组包装器（PrimitiveArray）不再暴露 $className：实测 App 线程
+// 传入的 byte[] 上 $className=undefined、$s.typeName='byte'（元素类型）。两种形态都认。
+// 注意：对 doFinal(byte[] output,int) 这类「纯输出」重载，第一个 byte[] 其实是 output
+// 缓冲区而非明文——v1 不做区分，夹具用单参重载规避该歧义。
+function isByteArray(a) {
+  if (a === null || typeof a === 'undefined') return false;
+  try { if (a.$className === '[B') return true; } catch (e) {}
+  try { if (a.$s && (a.$s.typeName === 'byte' || a.$s.typeName === '[B')) return true; } catch (e) {}
+  return false;
+}
+
 function firstByteArray(args) {
   for (var i = 0; i < args.length; i++) {
-    var a = args[i];
-    if (a === null || typeof a === 'undefined') continue;
-    try { if (a.$className === '[B') return a; } catch (e) {}
+    if (isByteArray(args[i])) return args[i];
   }
   return null;
 }

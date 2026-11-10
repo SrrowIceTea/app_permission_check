@@ -25,11 +25,12 @@
 ## 怎么跑
 
 ```bash
-export PATH="D:/Anroid/SDK/platform-tools:$PATH"
+# 本机 SDK 在 %LOCALAPPDATA%\Android\Sdk（原开发机是 D:/Anroid/SDK）
+export PATH="$(cygpath -u "$LOCALAPPDATA")/Android/Sdk/platform-tools:$PATH"
 adb forward tcp:27043 tcp:27043              # 必需：端口不是默认的 27042
 adb shell am start -n com.vscanner.targetapp/.MainActivity
 
-PY313="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"   # 只有它装了 frida
+PY313="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 只有它装了 frida（原开发机是 C:/Users/毛宇淇/...）
 "$PY313" run.py --package com.vscanner.targetapp \
     --script dist/hook_vhal.bundle.js --seconds 45 --out logs/hook_vhal.jsonl
 

@@ -93,6 +93,17 @@ class MainActivity : Activity() {
             }
         }
 
+        findViewById<Button>(R.id.btnSslLoopback).setOnClickListener {
+            EventLog.log("用户按下 TLS 回环按钮（仅 hook_native_ssl 正控）")
+            thread {
+                try {
+                    EventLog.log(SslLoopbackProbe.run(applicationContext))
+                } catch (t: Throwable) {
+                    EventLog.log("TLS 回环失败: ${t.javaClass.simpleName}: ${t.message}")
+                }
+            }
+        }
+
         EventLog.log("Activity 启动: package=$packageName uid=${applicationInfo.uid}")
         EventLog.log("事件文件: ${filesDir}/${EventLog.FILE_NAME} 与 getExternalFilesDir 同名文件")
         refreshPanel()

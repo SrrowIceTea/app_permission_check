@@ -21,12 +21,12 @@ AAOS 模拟器上检测。**不做任何规避、混淆或反分析——一切�
 ```bash
 cd target-app
 # 版本矩阵：Gradle 8.13 / AGP 8.11.1 / Kotlin 2.2.0 / compileSdk 36 / minSdk 29 / targetSdk 35
-# JAVA_HOME=D:\Anroid\JDK；仓库阿里云优先（见 gradle 配置，与 vehicle/rules/android 同源）
+# JAVA_HOME=D:\Android\JDK（原开发机是 D:\Anroid\JDK）；仓库阿里云优先（见 gradle 配置，与 vehicle/rules/android 同源）
 ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 # 点按钮：用 trigger.py 而不是写死坐标——坐标在布局一变就会静默点到别处
-cd .. && PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
+cd .. && PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
 "$PY" trigger.py --package com.vscanner.targetapp --button btnRead
 "$PY" trigger.py --package com.vscanner.targetapp --button btnEgressHttp
 "$PY" trigger.py --package com.vscanner.targetapp --button btnEgressHttps

@@ -1,0 +1,222 @@
+{
+  "note": "钩子一致性守卫（mobile/tools/test_hooks_parity.py）的已知差异白名单 · TLS 篇：ssl_pinning / tls_bypasses / tls_relax 三对配对的差异。通用/运行时类在 hooks_parity_whitelist.json，守卫把两份按列表拼接后使用（拆两份只为单文件 ≤300 行，语义上仍是一张表）。每条必须有 reason 与 date；条目一旦匹配不上，守卫会报 stale。",
+  "rules": [
+    {
+      "id": "ssl-script-name",
+      "pair": "ssl_pinning",
+      "kind": "sub",
+      "mobile": "ssl_pinning_tp.js",
+      "vehicle": "ssl_pinning_bypass.js",
+      "reason": "同名文件在移动侧改名为 ssl_pinning_tp（第三方专用裁剪版）；脚本自报名字串随文件名",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "bypasses-import",
+      "pair": "ssl_pinning",
+      "kind": "sub",
+      "mobile": "./tls_bypasses_tp.js",
+      "vehicle": "./pinning_bypasses.js",
+      "reason": "依赖文件在移动侧改名为 tls_bypasses_tp.js（对应 vehicle 的 pinning_bypasses.js）",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "scope-note",
+      "pair": "ssl_pinning",
+      "kind": "sub",
+      "mobile": "'process-local only; relaxes TLS trust verification for audit traffic capture'",
+      "vehicle": "'process-local only; bypasses trust verification for audit traffic capture'",
+      "reason": "scope_note 历史措辞差异（relax vs bypass），语义相同",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "pinning-armed-scope",
+      "pair": "ssl_pinning",
+      "kind": "block",
+      "mobile_lines": [
+        "vlog('PINNING_ARMED', { hooks: bypasses.arm(), candidates: bypasses.candidates, covered: 'conscrypt TrustManagerImpl (incl. NSC pin-set path), SSLContext custom TMs, okhttp CertificatePinner', reduced: 'HttpsURLConnection default/instance HostnameVerifier was REMOVED for this sample: it aborted ART on the Glide source thread (see tls_bypasses_tp.js header) and buys nothing because this sample\\'s HTTP client ignores the system proxy', not_covered: 'native TLS (BoringSSL/libssl), hand-written fingerprint checks, WebView/Chromium-native checks, non-whitelisted processes' });"
+      ],
+      "vehicle_lines": [
+        "vlog('PINNING_ARMED', { hooks: bypasses.arm(), candidates: bypasses.candidates, covered: 'conscrypt TrustManagerImpl (incl. NSC pin-set path), SSLContext custom TMs, okhttp CertificatePinner, HttpsURLConnection HostnameVerifier', not_covered: 'native TLS (BoringSSL/libssl), hand-written fingerprint checks, WebView/Chromium-native checks, non-whitelisted processes' });"
+      ],
+      "reason": "移动侧按 ART abort 证据裁掉了 HttpsURLConnection 主机名钩子，covered/reduced 文本如实反映裁剪范围（见 mobile/hooks/tls_bypasses_tp.js 头部证据）",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "tls-tm-note",
+      "pair": "tls_bypasses",
+      "kind": "block",
+      "mobile_lines": [
+        "vlog('METHOD_NOT_EXPOSED', { where: 'conscrypt.' + mName, note: 'declared on the class but not exposed by the bridge' });"
+      ],
+      "vehicle_lines": [
+        "vlog('METHOD_NOT_EXPOSED', { where: 'conscrypt.' + mName, note: 'declared on the class but not exposed by the Frida bridge; not hooked' });"
+      ],
+      "reason": "日志措辞差异（车载侧写明 not hooked），语义相同、属历史措辞",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "tls-overload-note",
+      "pair": "tls_bypasses",
+      "kind": "block",
+      "mobile_lines": [
+        "vlog('METHOD_NOT_EXPOSED', { where: 'conscrypt.' + mName, note: 'exposed with no usable overloads', reflected_types: typesArr });"
+      ],
+      "vehicle_lines": [
+        "vlog('METHOD_NOT_EXPOSED', { where: 'conscrypt.' + mName, note: 'exposed with no usable overloads; not hooked', reflected_types: typesArr });"
+      ],
+      "reason": "同上：日志措辞差异",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "tls-boolean-semantics",
+      "pair": "tls_relax",
+      "kind": "block",
+      "mobile_lines": [
+        "if (retName === 'boolean') return true;"
+      ],
+      "vehicle_lines": [
+        "if (retName === 'boolean') return false;"
+      ],
+      "reason": "平台立场差异（恒久，不是待办）：check* 的布尔返回值，移动侧取 true＝放行（第三方样本要能走通，否则采不到密文流量）；车载侧取 false＝维持「校验失败即不受信」。车载侧翻成 true 会让原本失败的握手变成功，既有车载验收证据立刻不可比，交付前不做该行为翻转。两侧其余 defaultValueOf 逻辑（List 返回对端链、X509Certificate[] 返回、List 入参识别）已逐字一致",
+      "date": "2026-11-10"
+    },
+    {
+      "id": "tls-sslctx-tm-impl",
+      "pair": "tls_relax",
+      "kind": "block",
+      "mobile_lines": [
+        "if (o.__vscanTmHooked) return;",
+        "o.__vscanTmHooked = true;",
+        "var retName = String(o.returnType ? o.returnType.className : 'void');",
+        "o.implementation = function () {",
+        "var args = Array.prototype.slice.call(arguments);",
+        "try {",
+        "return o.apply(this, args);",
+        "} catch (e) {",
+        "if (!isBypassable(e)) throw e;",
+        "logCapped('sslctx:' + mn, {",
+        "target: 'SSLContext.init custom TrustManager', detail: mn + ' relaxed (return=' + retName + ', chain=' + (peerChainOf(args) !== null) + ')'",
+        "});",
+        "return defaultValueOf(retName, args);",
+        "}"
+      ],
+      "vehicle_lines": [
+        "if (o.__vscanNoop) return;",
+        "o.__vscanNoop = true;",
+        "o.implementation = function () {",
+        "logCapped('sslctx:' + mn, { target: 'SSLContext.init custom TrustManager', detail: String(o.returnType ? o.returnType.className : '?') + ' check relaxed' });",
+        "return undefined;"
+      ],
+      "reason": "平台立场差异（恒久，不是待办）：移动侧「先跑原校验、仅在证书类异常时按真实返回类型交回对端链」，因为第三方样本会出现 Android 15 List 返回 + OkHttp 6 NPE，且不能让非证书类异常继续冒泡到已被 hook 的路径；车载侧「check* 全部 no-op + return undefined」，因为车载夹具固定、恒需绕过，先跑原校验会让非证书类异常从静默放行变成重抛，属交付前不接受的真实行为变更。两侧其余语义（defaultValueOf / peerChainOf）已逐字一致",
+      "date": "2026-11-10"
+    },
+    {
+      "id": "ssl-tlsbypass-switch",
+      "pair": "ssl_pinning",
+      "kind": "block",
+      "mobile_lines": [
+        "logPath: '/data/local/tmp/vscan.log', whitelist: packages(), tlsBypass: String('__VSCAN_TLS_BYPASS__') === '1'"
+      ],
+      "vehicle_lines": [
+        "logPath: '/data/local/tmp/vscan.log', whitelist: packages()"
+      ],
+      "reason": "平台策略差异（非纯能力修复）：移动端被测对象是不可控第三方样本，TLS 校验收宽会改变其行为（2026-11-10 Organic Maps + OkHttp 6 实证崩溃），故由宿主 run.py --tls-bypass / VSCAN_TLS_BYPASS=1 逐样本 opt-in；车载端是自有夹具 + 固定流水线（vehicle/traffic/README 的 run.py 调用不带 --tls-bypass，另还有 frida -U -f -l 直接注入与 hook_vehicle_all.js 导入），同步此门卫会让 PINNING_ARMED 永不发生、交付物 3 静默失效",
+      "date": "2026-11-10"
+    },
+    {
+      "id": "tls-okhttp-note",
+      "pair": "tls_bypasses",
+      "kind": "block",
+      "mobile_lines": [
+        "vlog('NOT_PRESENT', { target: 'okhttp3.CertificatePinner', note: 'okhttp 不在本进程类路径' });"
+      ],
+      "vehicle_lines": [
+        "vlog('NOT_PRESENT', { target: 'okhttp3.CertificatePinner', note: 'okhttp 不在本进程类路径（本夹具不用 okhttp）' });"
+      ],
+      "reason": "注释性措辞差异（车载侧补充夹具说明）",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "tls-okhttp-refactor",
+      "pair": "tls_bypasses",
+      "kind": "block",
+      "mobile_lines": [
+        "var target = typesArr.join(',');",
+        "var ov = cls[mName].overloads.find( function (o) { return o.argumentTypes.map(function (t) { return t.className; }).join(',') === target; });"
+      ],
+      "vehicle_lines": [
+        "var ov = cls[mName].overloads.find(o => o.argumentTypes.map(t => t.className).join(\",\") === typesArr.join(\",\"));"
+      ],
+      "reason": "等价重构：车载侧用箭头函数并内联 typesArr.join，语义相同（已人工核对比较式两侧逐项一致）",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "tls-okhttp-push",
+      "pair": "tls_bypasses",
+      "kind": "block",
+      "mobile_lines": [
+        "hooked.push('okhttp3.CertificatePinner.' + mName + '(' + target + ')');"
+      ],
+      "vehicle_lines": [
+        "hooked.push('okhttp3.CertificatePinner.' + mName + '(' + typesArr.join(',') + ')');"
+      ],
+      "reason": "同上重构的伴随行：等价写法（target 即 typesArr.join(',')）",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "ssl-main-export",
+      "pair": "ssl_pinning",
+      "kind": "sub",
+      "mobile": "export function main() {",
+      "vehicle": "function main() {",
+      "reason": "A1 修复（2026-10-16）：移动侧改为「导出 main + 构建薄入口」——hook_all（单 agent 合并入口）需要 import 各模块的 main；vehicle 侧维持顶层自执行（见 mobile/hooks/build.mjs 注释）",
+      "date": "2026-10-16"
+    }
+  ],
+  "exempt_functions": [
+    {
+      "id": "hv-exempt",
+      "pair": "tls_bypasses",
+      "side": "vehicle",
+      "name": "hookHostnameVerifier",
+      "reason": "移动侧按 ART abort 证据裁掉了 HttpsURLConnection 主机名钩子（mobile/hooks/tls_bypasses_tp.js 头部有现场证据）；车载侧保留。若移动侧未来重新引入同名函数，守卫会以差异形式暴露，需重新评估",
+      "date": "2026-10-14"
+    }
+  ],
+  "drop": [
+    {
+      "id": "hv-callsite",
+      "pair": "tls_bypasses",
+      "side": "vehicle",
+      "lines": [
+        "hooked = hooked.concat(hookHostnameVerifier());"
+      ],
+      "reason": "同上：被豁免函数在 arm() 里的调用点",
+      "date": "2026-10-14"
+    },
+    {
+      "id": "ssl-standalone-entry",
+      "pair": "ssl_pinning",
+      "side": "vehicle",
+      "lines": ["Java.perform(main);"],
+      "reason": "A1 修复（2026-10-16）：移动侧的顶层自执行已摘除（入口由 build.mjs 的薄入口提供，见 ssl-main-export）；vehicle 侧保留独立入口",
+      "date": "2026-10-16"
+    },
+    {
+      "id": "ssl-tlsbypass-guard",
+      "pair": "ssl_pinning",
+      "side": "mobile",
+      "lines": [
+        "if (!CFG.tlsBypass) {",
+        "vlog('TLS_BYPASS_DISABLED', {",
+        "pkg: STATE.pkg, note: '显式开关未开启：本轮不做 TLS 校验收宽（未传 --tls-bypass / VSCAN_TLS_BYPASS=1）；' + '隐私/流量采集不受影响'",
+        "});",
+        "console.log('ssl_pinning_tp.js TLS_BYPASS_DISABLED in ' + STATE.pkg + ' — pass --tls-bypass to enable.');",
+        "return;",
+        "}"
+      ],
+      "reason": "与 block «ssl-tlsbypass-switch» 配套：移动侧独占的「未开开关 → 记 TLS_BYPASS_DISABLED 并直接返回、不挂任何绕过手法」门卫。车载侧无此门卫（固定夹具恒需绕过），故按单侧差异登记",
+      "date": "2026-11-10"
+    }
+  ]
+}

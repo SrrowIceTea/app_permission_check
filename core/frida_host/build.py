@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 import uuid
@@ -33,6 +34,9 @@ VEHICLE_SCRIPTS = (
     "hook_vehicle_owntracks.js",
 )
 SHARED_SCRIPTS = ("ssl_pinning_bypass.js", "hook_egress.js")
+# 导出 main 的钩子是"不自执行"的模块（见各文件头注释）：入口必须显式调用 main()，
+# 否则 bundle 只建钩子不装钩子，设备上表现为零事件（M 系列内存 Hook 的静默失败）。
+MAIN_EXPORT = re.compile(r"(?m)^export\s+function\s+main\s*\(")
 SCRIPT_GROUPS = {"mobile": MOBILE_SCRIPTS, "shared": SHARED_SCRIPTS,
                  "vehicle": VEHICLE_SCRIPTS}
 
@@ -115,6 +119,8 @@ def build_one(item: dict, compiler, root: Path = ROOT) -> dict:
         contents = body.replace(native_import, bridge_prelude(bridge, source.parent), 1)
     else:
         raise BuildError(f"{source.name} already imports the bridge; refusing double injection")
+    if MAIN_EXPORT.search(body):
+        contents += "\nJava.perform(main);\n"
     # D310: relative source imports require the temporary entry beside the source.
     # A unique, exclusively created entry never overwrites another build's input.
     entry = source.parent / f".entry.{source.stem}.{uuid.uuid4().hex}.js"

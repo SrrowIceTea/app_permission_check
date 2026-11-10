@@ -93,6 +93,9 @@ def main() -> int:
     parser.add_argument("--deoptimize", type=int, default=None, choices=[0, 1, 2],
                         help="A1 排查开关（已证伪，默认关）：替换 ArtMethod 前把已编译方法退回解释器；"
                              "实测无法消除 JIT 竞态，仅保留作 A/B 对照（1=everything、2=boot image、0=关）")
+    parser.add_argument("--tls-bypass", action="store_true",
+                        help="显式开启 ssl_pinning_tp.js 的 TLS 校验收宽（默认关；同 VSCAN_TLS_BYPASS=1）。"
+                             "只放宽 Java/TLS 层，逐样本确认适用性，见 mobile/hooks/ssl_pinning_tp.js 文件头")
     parser.add_argument("--stop-file", type=Path, default=None,
                         help="优雅停止哨兵：该文件一出现就结束采集、走正常 detach 退出。"
                              "调用方应以此替代 taskkill /F——强杀会让 agent 在未清理状态下"
@@ -112,6 +115,7 @@ def main() -> int:
         parser.error("--watch-limit 不能为负（0=全不挂）")
     no_stack = args.no_stack or os.environ.get("VSCAN_NO_STACK", "").strip() == "1"
     args_only = args.args_only or os.environ.get("VSCAN_ARGS_ONLY", "").strip() == "1"
+    tls_bypass = args.tls_bypass or os.environ.get("VSCAN_TLS_BYPASS", "").strip() == "1"
     if args.deoptimize is None:
         env_deopt = os.environ.get("VSCAN_DEOPTIMIZE", "").strip()
         if env_deopt:
@@ -187,11 +191,13 @@ def main() -> int:
         session.on('detached', detached)
         script = owned.script = session.create_script(
             configure(body, allowed, watch_limit=args.watch_limit, no_stack=no_stack,
-                      args_only=args_only, deoptimize=args.deoptimize))
+                      args_only=args_only, deoptimize=args.deoptimize,
+                      tls_bypass=tls_bypass))
         if (args.watch_limit is not None or no_stack or args_only
-                or args.deoptimize is not None):
+                or args.deoptimize is not None or tls_bypass):
             print(f"分档模式：watch_limit={args.watch_limit} no_stack={no_stack} "
-                  f"args_only={args_only} deoptimize={args.deoptimize}", flush=True)
+                  f"args_only={args_only} deoptimize={args.deoptimize} "
+                  f"tls_bypass={tls_bypass}", flush=True)
 
         message_callback = owned.callback = stream.on_message
         script.on("message", message_callback)

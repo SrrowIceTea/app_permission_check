@@ -96,6 +96,13 @@
         android:layout_height="wrap_content"
         android:text="4. 自绘加密外泄（AES/GCM 密文）" />
 
+    <!-- 独立入口，专用于 hook_native_ssl 正控，不是业务场景。 -->
+    <Button
+        android:id="@+id/btnSslLoopback"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/ssl_loopback" />
+
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

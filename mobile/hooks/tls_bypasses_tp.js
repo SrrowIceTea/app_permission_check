@@ -31,55 +31,13 @@
 // ============================================================================
 
 import { tryUse } from './runtime.js';
+import { loadExcTypes, isBypassable, defaultValueOf, hookSslContextInit } from './tls_relax.js';
 
 // 每类吞掉的校验最多记录多少条，防日志风暴。
 var MAX_LOGS_PER_KIND = 50;
 
-// 校验失败实际抛的是 CertPathValidatorException（"Trust anchor for certification path
-// not found"），它与 CertificateException **是兄弟**（同继承 GeneralSecurityException，
-// 互不为 isInstance）。只匹配 CertificateException 会让 swallow 分支一次都进不去——
-// 这是 vehicle/hooks 最初的根因（那边有完整记录）。
-var EXC_CACHE = { cert: null, peer: null, genSec: null, certPath: null };
-
-function loadExcTypes() {
-  try { EXC_CACHE.cert = Java.use('java.security.cert.CertificateException').class; } catch (e) {}
-  try { EXC_CACHE.peer = Java.use('javax.net.ssl.SSLPeerUnverifiedException').class; } catch (e) {}
-  try { EXC_CACHE.genSec = Java.use('java.security.GeneralSecurityException').class; } catch (e) {}
-  try { EXC_CACHE.certPath = Java.use('java.security.cert.CertPathValidatorException').class; } catch (e) {}
-}
-
-function isBypassable(e) {
-  try {
-    if (EXC_CACHE.cert !== null && EXC_CACHE.cert.isInstance(e)) return true;
-    if (EXC_CACHE.peer !== null && EXC_CACHE.peer.isInstance(e)) return true;
-    if (EXC_CACHE.certPath !== null && EXC_CACHE.certPath.isInstance(e)) return true;
-    if (EXC_CACHE.genSec !== null && EXC_CACHE.genSec.isInstance(e)) return true;
-    var n = String(e && e.$className ? e.$className : e);
-    return /Cert|SSL|Trust|Handshake|PathValidator/i.test(n);
-  } catch (x) { return false; }
-}
-
-function defaultValueOf(retName, args) {
-  if (retName === 'java.util.List') {
-    // checkTrusted* 返回的是**已验证的链**。返回空表会让 TLS 栈拿不到对端链而再次
-    // 失败——吞了异常却仍然握手失败，等于没绕过。把对端自己的证书当作已验证链返回。
-    try {
-      var X509ARR = '[Ljava.security.cert.X509Certificate;';
-      for (var i = 0; i < (args || []).length; i++) {
-        var candidate = args[i];
-        if (!candidate || candidate.$className !== X509ARR) continue;
-        var arr = Java.cast(candidate, Java.use(X509ARR));
-        var list = Java.use('java.util.ArrayList').$new();
-        for (var j = 0; j < arr.length; j++) list.add(arr[j]);
-        if (list.size() > 0) return list;
-      }
-    } catch (e) { /* 落到下面的空表 */ }
-    try { return Java.use('java.util.ArrayList').$new(); } catch (e) { return null; }
-  }
-  if (retName === 'boolean') return false;
-  if (retName === 'void') return undefined;
-  return null;
-}
+// 异常分类、按声明返回类型交回对端链、SSLContext 自定义 TM 放行，已拆到
+// tls_relax.js（2026-11-10：本文件一度 309 行，越过"单文件 ≤300 行"）。
 
 // 两个类名都要钩，不能 `a || b`：Java.use 只要能解析类引用就返回非空，与类是否真的
 // 被使用无关，而 `||` 会短路。实测设备上真正在用的是 com.android.org.conscrypt.*。
@@ -169,47 +127,9 @@ export function makeBypasses(vlog) {
     return all;
   }
 
-  // ---- 2) SSLContext.init 注入的自定义 TrustManager：按类放行其 check* 全部重载 ----
-  function hookSslContextInit() {
-    var hooked = [];
-    try {
-      var SC = Java.use('javax.net.ssl.SSLContext');
-      var ov = SC.init.overload('[Ljavax.net.ssl.KeyManager;',
-                                '[Ljavax.net.ssl.TrustManager;',
-                                'java.security.SecureRandom');
-      ov.implementation = function (kms, tms, sr) {
-        var n = tms === null ? 0 : tms.length;
-        for (var i = 0; i < n; i++) {
-          var tm = tms[i];
-          if (tm === null) continue;
-          var cls = null;
-          try { cls = tryUse(String(tm.$className)); } catch (e) {}
-          if (cls === null) continue;
-          ['checkServerTrusted', 'checkClientTrusted'].forEach(function (mn) {
-            try {
-              var ovs = cls[mn].overloads;
-              for (var k = 0; k < ovs.length; k++) {
-                (function (o) {
-                  if (o.__vscanNoop) return;
-                  o.__vscanNoop = true;
-                  o.implementation = function () {
-                    logCapped('sslctx:' + mn, { target: 'SSLContext.init custom TrustManager',
-                                                detail: mn + ' relaxed' });
-                    return undefined;
-                  };
-                })(ovs[k]);
-              }
-            } catch (e) {}
-          });
-        }
-        logCapped('sslctx:init', { target: 'SSLContext.init',
-                                   detail: 'TrustManager checks relaxed for ' + n + ' TM(s)' });
-        return ov.apply(this, arguments); // 原 init 照常执行
-      };
-      hooked.push('SSLContext.init(KM[],TM[],SecureRandom)');
-    } catch (e) { vlog('ERROR', { where: 'hook SSLContext.init', msg: String(e) }); }
-    return hooked;
-  }
+  // ---- 2) SSLContext.init 注入的自定义 TrustManager：实现见 tls_relax.js ----
+  // 为什么不在这里：返回类型语义（Android 15 的 List 返回 + OkHttp 6 NPE 实证）与
+  // 车载侧同源，放在 tls_relax.js 里由 parity 的 tls_relax 配对逐字看守。
 
   // ---- 3) okhttp3.CertificatePinner：置为 no-op（类存在才钩） ----
   function hookOkhttpPinner() {
@@ -249,7 +169,7 @@ export function makeBypasses(vlog) {
       loadExcTypes();
       var hooked = [];
       hooked = hooked.concat(hookTrustManagerImpl());
-      hooked = hooked.concat(hookSslContextInit());
+      hooked = hooked.concat(hookSslContextInit(logCapped, vlog));
       hooked = hooked.concat(hookOkhttpPinner());
       return hooked;
     },
