@@ -63,13 +63,16 @@ class PipelineJob:
     """一个流水线任务的运行时状态。server 持有 registry，runner 在后台线程推进。"""
 
     def __init__(self, apk: Path, out: Path, name: str = "", seconds: int = 150,
-                 category: str = "utility"):
+                 category: str = "utility", tls_bypass: bool = False):
         self.id = uuid.uuid4().hex[:12]
         self.apk = apk
         self.out = out
         self.name = name or apk.name
         self.seconds = seconds
         self.category = category
+        # 逐样本的 TLS 校验收宽开关（默认关）。打开时命令行原样带 --tls-bypass，
+        # device_run_thirdparty 会打印 "TLS_BYPASS=1" 到阶段日志，事后可 grep 回溯。
+        self.tls_bypass = tls_bypass
         self.events = out / "events.jsonl"
         self.state = "queued"          # queued | running | done | failed | static_only
         self.error: str | None = None
@@ -173,6 +176,8 @@ def run_pipeline(job: PipelineJob) -> None:
                "--app-category", job.category, "--seconds", str(job.seconds),
                "--static-dir", str(static_dir), "--build-tools", BUILD_TOOLS,
                "--events", str(events)]
+        if job.tls_bypass:
+            cmd.append("--tls-bypass")
         # 前置代理在跑 → 让 device_run 复用它（它自己会探端口；死了回退自起）。
         # 只有"我们起的"才传：残留代理的 flow 产物可能落在旧目录，宁可在
         # device_run 里显式报"端口被占用"（mitm_ready 检查红），不要静默错目录。

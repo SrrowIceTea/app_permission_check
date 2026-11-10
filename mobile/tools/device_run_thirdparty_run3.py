@@ -128,7 +128,8 @@ def _stage_explore(ctx) -> None:
                                # 本来就已经盖过窗口末尾；再加 15 秒只是让钩子白活 15 秒。
                                # 真需要余量的是**回退 attach** 那一处（见 launch 阶段）。
                                int(remaining),
-                               args.package, spawn=False),
+                               args.package, spawn=False,
+                               tls_bypass=getattr(args, "tls_bypass", False)),
             ]
             time.sleep(9)   # 等钩子挂妥（同首段）
             pid = new_pid

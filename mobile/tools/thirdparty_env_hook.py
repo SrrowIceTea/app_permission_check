@@ -149,7 +149,15 @@ def frida_python() -> str:
 
 
 def start_hook(script: Path, session: Path, out_name: str, log: Path,
-               seconds: int, package: str, spawn: bool = False) -> subprocess.Popen:
+               seconds: int, package: str, spawn: bool = False,
+               tls_bypass: bool = False) -> subprocess.Popen:
+    """启动 run.py 钩子会话。
+
+    tls_bypass（2026-11-10 补缺口）：显式把 `--tls-bypass` 传进 run.py 命令行，而不是
+    依赖环境变量。理由：命令行在 hook 日志/pipeline 输出里**看得见**，事后能直接判断
+    "这一轮到底有没有开绕过"；环境变量无法从产物里回溯（VSCAN_TLS_BYPASS 原先全仓没有
+    任何写点，默认跑批恒为关闭）。默认 False = 行为不变。
+    """
     env = dict(os.environ)
     env["VSCAN_SESSION"] = session.name
     env["PYTHONUNBUFFERED"] = "1"   # 见 start_mitm 的注释：杀掉子进程时缓冲内容会丢
@@ -169,7 +177,8 @@ def start_hook(script: Path, session: Path, out_name: str, log: Path,
          "--script", str(script), "--seconds", str(seconds),
          "--allow-package", package, "--session", session.name,
          "--out", str(session / out_name), "--stop-file", str(stop_file)]
-        + (["--spawn"] if spawn else []),
+        + (["--spawn"] if spawn else [])
+        + (["--tls-bypass"] if tls_bypass else []),
         stdin=subprocess.DEVNULL, stdout=open(log, "w", encoding="utf-8"),
         stderr=subprocess.STDOUT, env=env)
     proc.stop_file = stop_file  # type: ignore[attr-defined]

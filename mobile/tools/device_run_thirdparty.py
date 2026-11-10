@@ -130,7 +130,17 @@ def main() -> int:
                          "attach 模式的应用启动那一刻的联网（egress 事件）全在钩子装上之前，"
                          "导致 egress 0 事件、flows 归因 unresolved（2026-10-19 实测定性）。"
                          "spawn 模式下跳过 am start，由 run.py --spawn 启动应用并挂钩后 resume。")
+    ap.add_argument("--tls-bypass", action="store_true",
+                    help="对本次样本开启 TLS 校验收宽（透传 run.py --tls-bypass → 脚本里的 "
+                         "TLS_BYPASS 显式开关）。默认关闭：不开时 ssl_pinning 只记一条 "
+                         "TLS_BYPASS_DISABLED 事件、不挂任何绕过手法。"
+                         "只有被授权的第三方样本才可以打开。")
     args = ap.parse_args()
+
+    # 逐样本的开关留痕（可 grep "TLS_BYPASS="）：产物里能直接回溯这一轮开没开。
+    # 为什么不用环境变量：VSCAN_TLS_BYPASS 从产物里看不出来，事后无法复核。
+    print(f"TLS_BYPASS={'1' if args.tls_bypass else '0'} pkg={args.package} "
+          f"({'开启 TLS 校验收宽' if args.tls_bypass else '默认关闭，仅记 TLS_BYPASS_DISABLED'})")
 
     ctx = RunCtx()
     ctx.args = args

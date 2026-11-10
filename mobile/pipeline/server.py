@@ -48,11 +48,12 @@ class Registry:
         self._jobs: dict[str, PipelineJob] = {}
         self._lock = threading.Lock()
 
-    def submit(self, apk: Path, name: str, seconds: int, category: str) -> PipelineJob:
+    def submit(self, apk: Path, name: str, seconds: int, category: str,
+               tls_bypass: bool = False) -> PipelineJob:
         if self.runtime and any(j.state in ("queued", "running") for j in self._jobs.values()):
             raise ValueError("已有检测任务运行中，请等待当前任务完成")
         job = PipelineJob(apk, self.workdir / "job", name=name, seconds=seconds,
-                          category=category)
+                          category=category, tls_bypass=tls_bypass)
         # 目录名用 job.id，短且无包名（规避 Windows 260 路径）。
         job.out = self.workdir / job.id
         job.formal_runtime = self.runtime
@@ -174,7 +175,8 @@ class Handler(BaseHTTPRequestHandler):
             shutil.rmtree(staging, ignore_errors=True)
             return self._json({"error": f"上传不完整，还差 {remaining} 字节"}, 400)
 
-        job = self.registry.submit(target, name, seconds, category)
+        job = self.registry.submit(target, name, seconds, category,
+                                   tls_bypass=bool(defaults.get("tls_bypass", False)))
         shutil.rmtree(staging, ignore_errors=True)
         return self._json({"id": job.id, "name": job.name,
                            "note": "流水线已在后台启动；订阅 /api/pipeline/<id>/events 看进度。"})

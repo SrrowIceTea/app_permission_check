@@ -27,6 +27,7 @@
     python batch_thirdparty.py --static-only         # 只做静态（不需要设备）
     python batch_thirdparty.py --static-workers 1    # 静态退回串行（内存吃紧时）
     python batch_thirdparty.py --skip-ai             # 不跑 AI 阶段
+    python batch_thirdparty.py --tls-bypass          # 按样本开启 TLS 校验收宽（仅授权样本）
 
 出批前会先跑一次夹具阳性对照自检（fixture_selftest.py，A3）：自检失败 =
 采集链路故障，**拒绝出批**。A1 未修期间可 `--skip-fixture-selftest` 显式跳过，
@@ -100,6 +101,10 @@ def main() -> int:
     ap.add_argument("--spawn-hook", action="store_true",
                     help="动态阶段用 Frida spawn 注入（钩子先于应用第一条指令）。"
                          "attach 太晚导致应用启动瞬间的联网全漏采、flows 归因 unresolved。")
+    ap.add_argument("--tls-bypass", action="store_true",
+                    help="动态阶段给每个样本开 TLS 校验收宽（默认关）。逐样本透传 "
+                         "device_run_thirdparty --tls-bypass → run.py；控制台逐样本打印 "
+                         "TLS_BYPASS=1/0。不传 = 行为与以前逐字一致。仅授权样本可用。")
     args = ap.parse_args()
 
     cat_map = {}
@@ -125,6 +130,10 @@ def main() -> int:
     if not apks:
         sys.exit(f"[fatal] {apk_dir} 下没有 .apk。把下载到的样本放进去再跑。"
                  f"（下载说明见 mobile/README.md 的「拿样本」一节）")
+
+    # 开关留痕（可 grep "TLS_BYPASS="）：整批一个值，逐样本另有一行（见 batch_dynamic）。
+    print(f"TLS_BYPASS={'1' if args.tls_bypass else '0'} 样本={len(apks)} "
+          f"（{'开启 TLS 校验收宽' if args.tls_bypass else '默认关闭，仅记 TLS_BYPASS_DISABLED'}）")
 
     # **批次根目录刻意放在短路径下**：本工程根路径就有 67 字符（用户名非 ASCII +
     # 多层目录），而 jadx 解出的 Kotlin 源码里**单个文件名**最长见过 105 字符

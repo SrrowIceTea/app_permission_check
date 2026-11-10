@@ -83,6 +83,10 @@ def dynamic_step(item: dict, args, cat_map: dict, apk_dir: Path) -> dict:
            "--out", str(apk_dir), "--app-category", category,
            "--seconds", str(args.seconds),
            "--static-dir", str(item["static_dir"]), "--build-tools", args.build_tools]
+    # TLS 校验收宽按样本传（默认关）：命令行比环境变量可回溯，逐样本打印一行便于事后
+    # grep "TLS_BYPASS=" 判断这一批里哪个包开了、哪个没开（device_run 的那行落在 run.log）。
+    tls_bypass = bool(getattr(args, "tls_bypass", False))
+    print(f"  [TLS_BYPASS={'1' if tls_bypass else '0'}] {pkg}")
     if proxy is not None:
         cmd.append("--reuse-mitm")
     if getattr(args, "spawn_hook", False):
@@ -98,6 +102,8 @@ def dynamic_step(item: dict, args, cat_map: dict, apk_dir: Path) -> dict:
         cmd.append("--no-system-ca")
     if args.skip_ai:
         cmd += ["--skip-ai"]
+    if tls_bypass:
+        cmd.append("--tls-bypass")   # 放最末：命令行尾巴上有没有它，一眼可判
     try:
         rc = run(cmd, apk_dir / "run.log", timeout=3600)
     finally:

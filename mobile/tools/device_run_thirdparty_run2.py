@@ -92,7 +92,9 @@ def _stage_launch(ctx) -> int:
             env.start_hook(MOBILE / "hooks" / "dist" / "hook_all.bundle.js", session,
                            "reads.jsonl", out / "hook-all.log",
                            args.seconds + hook_extra_s, args.package,
-                           spawn=args.spawn_hook),
+                           spawn=args.spawn_hook,
+                           # 逐样本的 TLS 校验收宽开关（默认关，见 --tls-bypass）
+                           tls_bypass=getattr(args, "tls_bypass", False)),
         ]
         if args.spawn_hook:
             # spawn 模式下应用由 run.py 的 device.spawn + resume 启动。等待应用 pid

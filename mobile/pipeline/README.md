@@ -34,7 +34,7 @@ frontend/
 ## 启动方式
 
 ```bash
-PY="C:/Users/毛宇淇/AppData/Local/Programs/Python/Python313/python.exe"
+PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
 
 # 后端（只绑 127.0.0.1）
 "$PY" mobile/pipeline/server.py --port 8771 --workdir D:/vscanner-tp/pipeline
