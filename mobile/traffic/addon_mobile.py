@@ -49,3 +49,5 @@ done = addon.done
 server_connect = addon.server_connect
 server_connected = addon.server_connected
 server_connect_error = addon.server_connect_error
+# WebSocket 逐帧钩子同样必须再导出，否则移动侧 WS 帧会静默不落盘。
+websocket_message = addon.websocket_message

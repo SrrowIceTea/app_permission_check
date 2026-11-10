@@ -19,8 +19,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.collector.parse import parse_body, parse_summary  # noqa: E402
+from core.collector.origin import classify_origin  # noqa: E402
 from core.collector.payloads import capture  # noqa: E402
 from core.collector.redaction import redact_path  # noqa: E402
+from core.collector.response_observation import observe_response  # noqa: E402
 from core.collector.upstream_failures import classify_upstream_failure  # noqa: E402
 
 
@@ -88,6 +90,7 @@ def _common(flow, found, ts_ms: int, session: str) -> dict:
     """
     req = flow.request
     request_payload = capture(req)
+    origin = classify_origin(getattr(req, "headers", None), found.package)
     return {
         "v": "1",
         "src": "proxy",
@@ -115,6 +118,9 @@ def _common(flow, found, ts_ms: int, session: str) -> dict:
         "server_ip": (flow.server_conn.peername or (None,))[0],
         "path": redact_path(req.path),
         "intercepted_tls": client_tls(flow),
+        # 来源类别只到 webview/native/unknown 这一层，不假装能归因到具体 JS。
+        "request_origin": origin["origin"],
+        "request_origin_signals": origin["signals"],
         "request_payload": request_payload,
         "request_preview": request_payload["text"][:400],
     }
@@ -134,16 +140,18 @@ def client_tls(flow) -> bool:
     return False
 
 
-def parse_side(message) -> dict:
-    return {**parse_summary(parse_body(message)), "scan_basis": "not_scanned"}
+def parse_side(message, direction: str = "outbound") -> dict:
+    """请求与响应各记一次，`direction` 明示这是出站还是入站正文。"""
+    return {**parse_summary(parse_body(message)), "scan_basis": "not_scanned",
+            "direction": direction}
 
 
 def parsing(flow, parses: dict | None = None) -> dict:
     """两个构造器共用：请求/响应都带 parser + parse_status，缺一不可。"""
     if parses is not None:
         return {key: parses[key] for key in ("request_parse", "response_parse")}
-    return {"request_parse": parse_side(flow.request),
-            "response_parse": parse_side(getattr(flow, "response", None))}
+    return {"request_parse": parse_side(flow.request, "outbound"),
+            "response_parse": parse_side(getattr(flow, "response", None), "inbound")}
 
 
 def answered(flow, found, ts_ms: int, session: str, tags: dict, scans: dict,
@@ -170,6 +178,10 @@ def answered(flow, found, ts_ms: int, session: str, tags: dict, scans: dict,
         # 不能只留下空标签让人误读成"没有敏感字段"。
         **parsing(flow, parses),
     })
+    # 入站响应命中隐私值只作事实记录：不参与外发判定、不升级结论、不输出 policy_violation。
+    entry["response_observation"] = observe_response(
+        entry["response_parse"], entry["response_tags"], entry["response_tokens"],
+        response_payload)
     return entry
 
 
@@ -206,4 +218,6 @@ def unanswered(flow, found, ts_ms: int, session: str, failure: str,
         # 失败流同样要能回答"请求体是什么格式、解析出来没有"。
         **parsing(flow, parses),
     })
+    entry["response_observation"] = observe_response(
+        entry["response_parse"], [], [], None)
     return entry

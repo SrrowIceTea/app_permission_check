@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from core.collector.attribution import ATTRIB_SOURCES, Attribution, TimeAttribution  # noqa: E402
 from core.collector.inspection import inspect_body  # noqa: E402
-from core.collector import flow_entry, scope, health  # noqa: E402
+from core.collector import flow_entry, scope, health, websocket_frames  # noqa: E402
 from core.collector.native_write import NativeWrites
 from core.collector.tagging_loader import load_tagging
 from core.event_store import EventStore  # noqa: E402
@@ -34,6 +34,7 @@ CONNECT_ERROR_LOG = Path(os.environ.get("VSCAN_CONNECT_ERROR_LOG")
 # 代理看见了、但**归因不到被测应用**的流（2026-10-19）。旧行为是直接丢弃：
 UNATTRIBUTED_LOG = Path(os.environ.get("VSCAN_UNATTRIBUTED_LOG")
                         or FLOW_LOG.with_name(FLOW_LOG.stem + "-unattributed.jsonl"))
+WS_LOG = Path(os.environ.get("VSCAN_WS_LOG") or FLOW_LOG.with_name(FLOW_LOG.stem + "-websocket.jsonl"))
 
 WHITELIST = {p.strip() for p in os.environ.get("VSCAN_PACKAGES", "").split(",") if p.strip()}
 if not WHITELIST:
@@ -76,7 +77,9 @@ def _emit(entry: dict) -> None:
         return
     FLOW_SEQ += 1
     entry["evt_id"] = FLOW_SEQ
-    if entry.get("terminal") == "error":
+    if entry.get("kind") == "websocket_frame":
+        path = WS_LOG
+    elif entry.get("terminal") == "error":
         path = UNANSWERED_LOG
     elif entry.get("unattributed"):
         path = UNATTRIBUTED_LOG
@@ -153,8 +156,14 @@ def _ticker() -> None:
         except Exception as exc:  # noqa: BLE001
             ctx.log.warn(f"[vscan] 定时冲刷出错：{exc}")
 
-def _inspect(message):
-    return inspect_body(message, tag_sensitive, tag_fields)
+def _inspect(message, direction):
+    return inspect_body(message, tag_sensitive, tag_fields, direction=direction)
+
+# 逐帧建模：长连接同样逐条归因，不允许"因为是 WS 就整条跳过"。
+websocket_message = websocket_frames.hook(
+    flush=lambda: _flush(), resolve=lambda ts, target: ATTRIB.resolve(ts, target),
+    emit=lambda entry: _emit(entry),
+    session=SESSION, whitelist=WHITELIST, tag_sensitive=tag_sensitive, tag_fields=tag_fields)
 
 def request(flow: http.HTTPFlow) -> None:
     _flush()
@@ -164,7 +173,7 @@ def request(flow: http.HTTPFlow) -> None:
     flow.metadata["vscan_found"] = found
     if found.package not in WHITELIST:
         return
-    scan, summary, labels, tokens = _inspect(flow.request)
+    scan, summary, labels, tokens = _inspect(flow.request, "outbound")
     flow.metadata["vscan_request_tags"] = labels
     flow.metadata["vscan_request_tokens"] = tokens
     flow.metadata["vscan_request_scan"] = scan
@@ -183,12 +192,12 @@ def response(flow: http.HTTPFlow) -> None:
     request_scan = flow.metadata.get("vscan_request_scan")
     request_parse = flow.metadata.get("vscan_request_parse")
     if request_tags is None:   # 未经 request()（例如白名单外或直接复用）时补扫一次
-        request_scan, request_parse, request_tags, request_tokens = _inspect(req)
+        request_scan, request_parse, request_tags, request_tokens = _inspect(req, "outbound")
     if resp:
-        response_scan, response_parse, response_tags, response_tokens = _inspect(resp)
+        response_scan, response_parse, response_tags, response_tokens = _inspect(resp, "inbound")
     else:
         response_tags, response_tokens, response_scan = [], [], None
-        response_parse = flow_entry.parse_side(None)
+        response_parse = flow_entry.parse_side(None, "inbound")
     all_tags = set(request_tags) | set(response_tags)
     if (not found.resolved and len(WHITELIST) == 1
             and os.environ.get('VSCAN_STRICT_PACKAGE_SCOPE') != '1'):
@@ -239,10 +248,10 @@ def error(flow: http.HTTPFlow) -> None:
 
     request_parse = flow.metadata.get("vscan_request_parse")
     if request_parse is None:
-        _, request_parse, _, _ = _inspect(flow.request)
+        _, request_parse, _, _ = _inspect(flow.request, "outbound")
     entry = flow_entry.unanswered(
         flow, found, ts_ms, SESSION, failure=msg, parses=dict(
-            request_parse=request_parse, response_parse=flow_entry.parse_side(None)), **upstream)
+            request_parse=request_parse, response_parse=flow_entry.parse_side(None, "inbound")), **upstream)
     with _LOCK:
         PENDING.append(entry)
 

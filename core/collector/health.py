@@ -42,5 +42,7 @@ def install(namespace, flow_log, session):
         return observed
 
     for name in ('load', 'request', 'response', 'error', 'done', '_flush',
-                 'server_connect', 'server_connected', 'server_connect_error'):
-        namespace[name] = wrap(namespace[name], name)
+                 'server_connect', 'server_connected', 'server_connect_error',
+                 'websocket_message'):
+        if name in namespace:   # 可选钩子：没有 WS 能力的 addon 不该被这里装挂
+            namespace[name] = wrap(namespace[name], name)

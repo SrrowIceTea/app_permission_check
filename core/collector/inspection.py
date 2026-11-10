@@ -34,12 +34,16 @@ def _tag_text(payload, raw_text):
     return raw_text[:MAX_BODY_SCAN], 'unavailable'
 
 
-def inspect_body(message, tag_sensitive, tag_fields=None):
+def inspect_body(message, tag_sensitive, tag_fields=None, direction=None, frame_type=None):
     raw_text, scan = scan_body(message)
     payload = capture(message)
     parsed = parse_body(message, content_type=payload['content_type'],
-                        content_encoding=payload['content_encoding'])
+                        content_encoding=payload['content_encoding'],
+                        frame_type=frame_type)
     summary = parse_summary(parsed)
+    # 方向必须留在摘要里：请求体与响应体走同一套解析层，不能靠调用方记忆区分。
+    if direction:
+        summary['direction'] = direction
     # Tagging a credential before redaction could duplicate it into a token;
     # 可用时一律用脱敏后的正文，见 _tag_text。
     text, basis = _tag_text(payload, raw_text)

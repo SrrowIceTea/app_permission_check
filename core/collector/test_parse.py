@@ -157,10 +157,14 @@ class ParseTests(unittest.TestCase):
                 'Content-Type': 'application/websocket', 'X-Vscan-Frame': 'text'})
             self.assertEqual('unparsed_unknown_content_type', parse_body(message)['parse_status'])
             parsed = parse_body(message, frame_type='text')
-            self.assertEqual('parsed_websocket_text', parsed['parse_status'])
             self.assertNotIn('fields', parse_summary(parsed))
             self.assertEqual('websocket_binary_frame',
                              parse_body(message, frame_type='binary')['unparsed_reason'])
+            if content == b'{"speed":2}':
+                self.assertEqual('parsed_websocket_text', parsed['parse_status'])
+            else:
+                self.assertEqual('unparsed_websocket_text', parsed['parse_status'])
+                self.assertEqual('websocket_text_no_structure', parsed['unparsed_reason'])
 
     def test_heuristics_and_unrelated_vin_never_create_value_match(self):
         for index in range(10):
