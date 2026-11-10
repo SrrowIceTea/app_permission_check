@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PY = sys.executable
 sys.path.insert(0, str(ROOT))
+from core.env_guard import MOBILE_DEPS, enforce_dependencies
 from core.regression_output import create_output, publish_latest
 CHECKS = [
     ("upstream_mobile", ".", [PY, "mobile/tools/run_mobile_checks.py"]),
@@ -42,6 +43,8 @@ def main() -> int:
                         help="Also run all vehicle/shared checks, including required generated bundles")
     parser.add_argument("--out", type=Path, help="本轮独占的新输出目录")
     args = parser.parse_args()
+    # 缺库时以退出码 3 结束；否则 5 个组会各自抛 ModuleNotFoundError，看着像代码坏了。
+    enforce_dependencies("tools/check_mobile_branch.py", MOBILE_DEPS)
     out = create_output(ROOT, "mobile-branch", args.out)
     groups = list(CHECKS)
     name, cwd, command = groups[0]

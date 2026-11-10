@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from core.env_guard import BASE_DEPS, MOBILE_DEPS, enforce_dependencies
 from core.regression_output import create_output, publish_latest
 CHECKS = [
     ('completion', '.', [sys.executable, '-m', 'unittest', 'test_completion']),
@@ -50,13 +51,16 @@ CHECKS = [
                                      'test_attribution', 'test_unanswered',
                                      'test_redaction',
                                      'test_system_probe',
+                                     'test_websocket_frames', 'test_origin',
+                                     'test_binary_probe', 'test_response_observation',
                                      'test_experiment', 'test_montecarlo',
                                      'test_uid_sampler', 'test_targets', 'test_native_write']),
     ('tagging-vehicle', 'vehicle/traffic', [sys.executable, '-m', 'unittest', 'test_tagging']),
     ('dashboard', 'vehicle/dashboard', [sys.executable, '-m', 'unittest', 'test_dashboard']),
     ('vehicle-webapp', '.', [sys.executable, '-m', 'unittest',
                             'vehicle.webapp.test_server', 'vehicle.webapp.test_workflow',
-                            'vehicle.webapp.test_review_round']),
+                            'vehicle.webapp.test_review_round', 'vehicle.webapp.test_presentation',
+                            'vehicle.webapp.test_finding_reviews']),
     ('vehicle-expanded-review', '.', [sys.executable, '-m', 'unittest',
                                      'vehicle.bench.test_expanded_round']),
     ('runtime', 'vehicle/hooks', ['node', 'test_runtime.mjs']),
@@ -77,7 +81,7 @@ CHECKS = [
      [sys.executable, '-m', 'unittest', 'test_bundle_config']),
 ]
 
-# 工程-7（2026-10-16 定语义）：`--mobile` 时在 16 组之后追加移动侧 29 项检查。
+# 工程-7（2026-10-16 定语义）：`--mobile` 时在 18 组之后追加移动侧 31 项检查。
 # 语义定为：**移动侧失败 = 根回归失败（非零退出）**——"根回归绿了但移动端已经烂了"
 # 的静默状态正是文档状态列不可信教训的来源；不想让移动侧影响结论时，
 # 直接跑本入口（不带 --mobile）或单独跑 mobile/tools/run_mobile_checks.py 即可。
@@ -102,11 +106,15 @@ def run_check(out, name, cwd, command, timeout):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--mobile', action='store_true',
-                    help='追加跑移动侧 29 项检查（mobile/tools/run_mobile_checks.py），'
+                    help='追加跑移动侧 31 项检查（mobile/tools/run_mobile_checks.py），'
                          '失败计入根回归失败（语义见 MOBILE_GROUP 注释）')
     ap.add_argument('--prepare', action='store_true', help='先按锁文件准备 Hook 产物，用于干净检出')
     ap.add_argument('--out', type=Path, help='本次回归日志目录，必须是新目录')
     args = ap.parse_args()
+    # 缺库时立刻以退出码 3 结束（不是 1）：否则每组测试各自抛 ModuleNotFoundError，
+    # 真失败会被一堆假红盖住。检查不通过时不建输出目录，避免留下"空跑"产物。
+    enforce_dependencies('tools/run_regressions.py',
+                         MOBILE_DEPS if args.mobile else BASE_DEPS)
     out = create_output(ROOT, 'regression', args.out)
     publish_latest(ROOT / 'output/latest-regression.txt', out)
     name, cwd, command = MOBILE_GROUP
