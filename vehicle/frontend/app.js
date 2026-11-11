@@ -198,6 +198,9 @@
   function choose(job) {
     U.current = job.id;
     $('code-view').replaceChildren(U.node('p', 'notice notice--empty', '选择文件查看源码。'));
+    /* 切换任务时清空 PDF 查看区，避免残留上一任务的报告画面（链接本身仍按 job.id 独立） */
+    const viewer = $('pdf-viewer-container');
+    if (viewer) viewer.replaceChildren();
     subscribe(job); renderJob(job); view();
   }
   function auditContext(file) {
