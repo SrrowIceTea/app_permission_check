@@ -16,6 +16,7 @@ from core.collector.identity import uid_of
 from core.io_utils import load_jsonl
 from vehicle.lab.ui import UI
 from vehicle.lab.browser_control import send_control
+from vehicle.lab.business_receipts import seal_browser
 from vehicle.pipeline.contracts import ROOT, digest, write_json, read_json
 from vehicle.privacy import mg4_contract as mg4
 
@@ -170,6 +171,7 @@ def run(out, webview_probe=False, native_control=False):
         snap('09-background')
         ui.device.call('shell', 'am', 'start', '--user', 10, '-W', '-n', PKG + '/.BrowserActivity')
         snap('10-resume', 'VScanner owned AAOS page')
+        seal_browser(capture, actions, receipts, out / 'ui', PKG, marker)
         (capture / '.finish-request').touch()
         proc.wait(timeout=120)
         if proc.returncode:

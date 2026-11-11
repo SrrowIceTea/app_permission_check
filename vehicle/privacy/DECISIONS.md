@@ -44,6 +44,15 @@ egress/privacy/VHAL/样本就绪；专用样本 bundle 不含 TLS 脚本，该�
 恒带 `device_acceptance=pending`。`passed`（preflight）只表示证据满足审计前门禁，
 不等于设备已验收。合成交接夹具补 `TLS_SWITCH` 以符合新就绪契约。
 
+## L006 新设备采集的构建证明与业务回执（2026-11-11）
+
+AAOS35 新会话暴露 capture 只复制 bundle.js、未复制相邻构建清单，最终驱动以
+freshness=no_manifest 拒绝。现在归档脚本和清单并重过闸，要求摘要等于首次预检身份，
+防止预检与归档之间换脚本。失败会话保留，不放宽驱动闸。
+MG4 正常 UI/提交脚本在请求结束前复制同轮 UI 与服务端完整正文回执，写入业务动作文件；
+capture 最终生成绑定时可重新核验，不把后补的自述当成设备通过。
+正文归因与设备业务验收仍由独立检查判断；binding_consistent 永远不等于合规或违规结论。
+
 ## L003 批次否决与落盘一致（2026-11-11）
 
 重复session或交接计划变更导致批次否决后，逐案acceptance.json同步保存最终blocked状态。

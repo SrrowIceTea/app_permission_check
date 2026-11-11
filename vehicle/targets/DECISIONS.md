@@ -103,3 +103,11 @@ debug APK 新增自有 AuditConsentActivity 和用户私有 SharedPreferences �
 Android 用户切换不冒充真实驾驶员识别。后续本轮扩展使用镜像 help 已确认的 emulate-driving-state，
 实测模拟停车/行驶/停车时服务状态变化；仍不声称真实驾驶或休眠覆盖。
 断网测试需真实关闭 Wi-Fi/链路并直连模拟器宿主回环（NO_PROXY），否则 ADB 代理回环会使假断网仍返回 200。
+
+## D211 定位内容候选的独立设备正反对照（2026-11-11）
+
+仅 debug 的 AuditLocationReceiver 从实际 LocationManager 返回值构造完整坐标对、
+不同坐标对、单坐标三种自有 Actor 载荷。端点固定本机回环，不修改任何观察 Hook 返回值。
+测试脚本仅允许自有 AAOS35 模拟器与 targetapp，各组建立新会话、核对完整正文接收摘要，
+负控要求存在同身份同时间窗可比组合；清理时恢复定位开关与原始权限。
+这只是模拟 GPS 下的实验候选验证，不启用定位外发规则、不代表第三方或商业 APK 检出率。

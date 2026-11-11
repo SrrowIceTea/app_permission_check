@@ -33,6 +33,25 @@ def gated_hook_bundle(scope='all', sample_mode=None):
     return bundle, freshness.identity(bundle)
 
 
+def archive_hook_bundle(bundle, output, identity):
+    """Archive the exact verified script AND its build proof before launching it."""
+    archived = Path(output) / 'hook-bundles' / bundle.name
+    archived.parent.mkdir()
+    shutil.copyfile(bundle, archived)
+    proof = bundle.with_name(bundle.name + freshness.SUFFIX)
+    if not proof.is_file():
+        raise AuditError('hook_archive_invalid', 'Hook 构建清单在归档前丢失。', '重建并使用新会话重试。')
+    archived_proof = archived.with_name(archived.name + freshness.SUFFIX)
+    shutil.copyfile(proof, archived_proof)
+    gate = freshness.verify(archived)
+    used = digest(archived)
+    if gate['tier'] == 'refuse' or used != identity.get('sha256'):
+        raise AuditError('hook_archive_invalid', '归档 Hook 与预检身份不一致。',
+                         '保留失败目录；重建后使用新会话重试。', freshness_code=gate['code'])
+    identity['archived_manifest_sha256'] = digest(archived_proof)
+    return archived, used
+
+
 def prepare(output=None, install_deps=False):
     output = Path(output or new_output('vehicle-prepare'))
     output.mkdir(parents=True, exist_ok=False)

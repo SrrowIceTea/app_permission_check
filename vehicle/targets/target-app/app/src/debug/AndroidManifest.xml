@@ -8,6 +8,7 @@
     <application>
         <receiver android:name=".AuditScenarioReceiver" android:exported="true" />
         <receiver android:name=".AuditPrivacyReceiver" android:exported="true" />
+        <receiver android:name=".AuditLocationReceiver" android:exported="true" />
         <activity android:name=".AuditConsentActivity" android:exported="true" />
     </application>
 </manifest>

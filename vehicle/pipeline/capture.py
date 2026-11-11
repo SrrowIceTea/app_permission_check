@@ -7,7 +7,6 @@ import argparse
 import json
 import os
 import re
-import shutil
 import socket
 import subprocess
 import sys
@@ -23,7 +22,7 @@ from vehicle.pipeline.capture_lifecycle import observe_until, observe_with_lifec
 from vehicle.pipeline.capture_proxy import proxy_state, restore_proxy, verify_reversible
 from vehicle.pipeline.proxy_log import ProxyLog
 from vehicle.pipeline.contracts import ROOT, AuditError, digest, write_json
-from vehicle.pipeline.prepare import gated_hook_bundle, new_output
+from vehicle.pipeline.prepare import archive_hook_bundle, gated_hook_bundle, new_output
 from vehicle.privacy import ha_contract as ha
 from vehicle.privacy import ha_socket_evidence as ha_socket
 from vehicle.privacy import mg4_contract as mg4
@@ -92,11 +91,7 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
         device.requested_permissions(package, output)
         if not bundle.is_file():
             raise AuditError('hook_not_built', '车载 Hook 未构建。', '先运行 vehicle.ps1 prepare --install-deps。')
-        archived = output / 'hook-bundles' / bundle_name
-        archived.parent.mkdir()
-        shutil.copyfile(bundle, archived)
-        used = digest(archived)
-        hook_bundle['sha256'] = used
+        archived, used = archive_hook_bundle(bundle, output, hook_bundle)
         with socket.socket() as probe:
             probe.bind(('127.0.0.1', 8888))
         if any('tcp:8888' in line for line in device.call('reverse', '--list').splitlines()):

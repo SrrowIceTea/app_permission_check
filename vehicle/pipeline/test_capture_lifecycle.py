@@ -48,6 +48,7 @@ class CaptureLifecycleTests(unittest.TestCase):
                     patch.object(capture.freshness, 'identity', return_value={'bundle': 'test'}), \
                     patch.object(capture.socket, 'socket'), \
                     patch.object(capture.subprocess, 'Popen', side_effect=[proxy, reads]), \
+                    patch.object(capture, 'archive_hook_bundle', return_value=(root / 'test.js', 'a' * 64)), \
                     patch.object(capture, 'restore_proxy', return_value=True) as restore, \
                     patch('vehicle.pipeline.proxy_log.redact_text', side_effect=ValueError('do-not-save')):
                 result = capture.capture_app('test.app', 'owned', 10, 1, root / 'out', scope='general')
