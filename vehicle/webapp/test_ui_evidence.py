@@ -1,7 +1,9 @@
 """C 周 D2 补充断言：隐私观测四态的最强原因码、registration 透传、失败态 field_gaps 契约。
 
-只补 test_presentation.py 未覆盖的缺口，不重复相同实现。合成数据只验证投影行为，
-不代表任何设备证据。authorized testing only.
+以 test_presentation.py 未覆盖的缺口为主；个别用例与其有实现路径交叠
+（四档 null、registration 不升级、annotation 基线），但每例另含增量断言
+（field_gaps 键存在性、registrations_by_kind 透传、correlated 行）。
+合成数据只验证投影行为，不代表任何设备证据。authorized testing only.
 """
 import unittest
 
@@ -36,9 +38,11 @@ class ReadNotObtainedReasonCodeTest(unittest.TestCase):
         item = self._state({'error': 1, 'unavailable': 3})
         self.assertEqual('unavailable', item['reason_code'])
 
-    def test_unknown_is_weakest_among_read_states(self):
-        item = self._state({'unknown': 4})
-        self.assertEqual('read_not_obtained', item['state'])
+    def test_unknown_ranks_below_empty_and_above_call_only(self):
+        # READ_REASON_ORDER 尾部序：empty 强于 unknown，unknown 强于 call_only
+        item = self._state({'empty': 2, 'unknown': 4})
+        self.assertEqual('empty', item['reason_code'])
+        item = self._state({'unknown': 4, 'call_only': 10})
         self.assertEqual('unknown', item['reason_code'])
 
 
