@@ -58,10 +58,21 @@ class ServerTest(unittest.TestCase):
 
     def test_shell_and_all_local_assets(self):
         for path in ('/', '/frontend/app.css', '/frontend/workspace.css',
-                     '/frontend/highlight.js', '/app.js', '/results.js', '/source.js', '/vehicle.css'):
+                     '/frontend/highlight.js', '/app.js', '/results.js', '/source.js', '/vehicle.css',
+                     '/ledger.js', '/ledger.css'):
             status, body = self.request('GET', path)
             self.assertEqual(200, status, path)
             self.assertTrue(body)
+
+    def test_diagnostic_ledger_is_wired_into_workbench(self):
+        """诊断面板的 JS/CSS 必须既被服务放行，也被 app.html 真正引用。"""
+        status, shell = self.request('GET', '/')
+        self.assertEqual(200, status)
+        self.assertIn(b'ledger.js', shell)
+        self.assertIn(b'ledger.css', shell)
+        status, body = self.request('GET', '/ledger.js')
+        self.assertEqual(200, status)
+        self.assertIn(b'U.ledgerPanel', body)
 
     def test_only_vehicle_contract(self):
         status, raw = self.request('GET', '/api/config')

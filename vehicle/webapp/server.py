@@ -82,8 +82,8 @@ class Handler(Responses, BaseHTTPRequestHandler):
                 if relative in SHARED or relative == 'assets/hero-bg.jpg':
                     return self.file(target, mimetypes.guess_type(target)[0] or 'application/octet-stream')
             if path in ('/app.js', '/results.js', '/components.js', '/upload.js', '/source.js', '/review.js',
-                        '/observation.js', '/review.css', '/vehicle.css', '/components.css', '/fonts.css',
-                        '/typography.css'):
+                        '/observation.js', '/ledger.js', '/review.css', '/vehicle.css', '/components.css',
+                        '/ledger.css', '/fonts.css', '/typography.css'):
                 target = WEB / path[1:]
                 return self.file(target, mimetypes.guess_type(target)[0] or 'text/plain')
             if path == '/assets/vehicle-studio.png':
