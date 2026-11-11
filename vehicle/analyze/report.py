@@ -59,6 +59,21 @@ SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4, "u
 LOC_ROLE = {"read": "读取处", "egress": "外发处"}
 
 
+def _sdk_line(s: dict) -> str:
+    """把一个 `sdk_attribution` 摘要渲染成一行（车载 PDF 用）。"""
+    chain_sdks = s.get("sdk_in_chain") or []
+    third_party = s.get("third_party_frames") or 0
+    parts: list[str] = []
+    if chain_sdks:
+        kind = "含采集/归因类 SDK" if s.get("has_collection_sdk") else "通用库"
+        parts.append(f"调用链出现 SDK：{'、'.join(chain_sdks)}（{kind}）")
+    if third_party:
+        parts.append(f"另有 {third_party} 帧属打包内第三方代码（认不出是哪家 SDK）")
+    if not parts:
+        parts.append("调用链均为宿主自身代码（未发现 SDK 帧）")
+    return escape("；".join(parts))
+
+
 def register_font() -> str:
     for name, path in FONT_CANDIDATES:
         if Path(path).exists():
@@ -166,6 +181,13 @@ def build_story(findings: list[dict], summary: dict, rules_meta: dict, font: str
                 f"<b>{escape(loc['file'])}:{loc['line']}</b> "
                 f"{escape(loc['class'].split('.')[-1])}.{escape(loc['method'])}"
                 for loc in locs)])
+        # SDK 归属：区分「宿主自己 / 某 SDK 候选 / 认不出的第三方」，且只陈述
+        # 「SDK 出现在调用链」这一可验证事实，不宣称「SDK 在采集」（见 D712）。
+        sdk_summaries = [loc.get("sdk_attribution") for loc in (finding.get("code_locs") or [])
+                         if loc.get("sdk_attribution")]
+        if sdk_summaries:
+            detail.append(["SDK 归属", "<br/>".join(
+                _sdk_line(s) for s in sdk_summaries)])
         # 定位缺口要单列：只定位到一半的结论，`code_locs` 非空，看上去一切正常。
         if finding.get("code_loc_gaps"):
             detail.append(["定位缺口", escape("；".join(

@@ -17,7 +17,7 @@ CHECKS = [
     # 拆到被测模块旁边，并单独成组，改 core 的人跑得到。
     ('event-store', 'core', [sys.executable, '-m', 'unittest', 'test_event_store']),
     ('codeloc', 'core/evidence', [sys.executable, '-m', 'unittest', 'test_codeloc',
-                           'test_event_lookup']),
+                           'test_event_lookup', 'test_sdk_attribution']),
     ('correlate', 'vehicle/analyze', [sys.executable, '-m', 'unittest', 'test_experiment']),
     ('vehicle-evidence', '.', [sys.executable, '-m', 'unittest',
                               'vehicle.analyze.test_vehicle_evidence', 'vehicle.analyze.test_context',
@@ -81,7 +81,7 @@ CHECKS = [
     ('vehicle-webapp', '.', [sys.executable, '-m', 'unittest',
                             'vehicle.webapp.test_server', 'vehicle.webapp.test_workflow',
                             'vehicle.webapp.test_review_round', 'vehicle.webapp.test_presentation',
-                            'vehicle.webapp.test_finding_reviews']),
+                            'vehicle.webapp.test_finding_reviews', 'vehicle.webapp.test_ui_evidence']),
     ('vehicle-expanded-review', '.', [sys.executable, '-m', 'unittest',
                                      'vehicle.bench.test_expanded_round']),
     ('runtime', 'vehicle/hooks', ['node', 'test_runtime.mjs']),

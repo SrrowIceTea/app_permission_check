@@ -136,6 +136,9 @@ def environment_isolation(out):
         if not path.is_file():
             continue
         text = path.read_text(encoding='utf-8', errors='replace')
+        # 评审 F2：`'FAILED (' in text` 会误命中 unittest 的汇总行
+        # `FAILED (errors=2)`，把「全 ERROR 无断言失败」写成自相矛盾的 true。
+        # 只认逐用例的 FAIL:/AssertionError 行，ERROR: 单独计数。
         evidence[name] = {'bulk_delete_guard_stack': '_check_bulk_delete_guard' in text,
                           'assertion_failure_present': bool(re.search(
                               r'(?m)^FAIL:|FAILED \([^)]*failures=[1-9]', text))}

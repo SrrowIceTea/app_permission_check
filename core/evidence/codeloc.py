@@ -41,6 +41,9 @@ from core.evidence.app_classes import is_app_class  # noqa: E402
 from core.evidence.event_lookup import (  # noqa: E402
     MATCH_TOLERANCE_MS, index_events, nearest_egress, resolve_event, resolve_ref,
 )
+from core.evidence.sdk_attribution import (  # noqa: E402
+    attribute_chain, chain_sdk_summary,
+)
 
 # `com.vscanner.targetapp.VhalReader.readOne(VhalReader.kt:128)`
 # 类名里的 `$` 是内部类分隔符（Kotlin lambda 会生成 `MainActivity$leakVhal$1`）。
@@ -130,6 +133,9 @@ def locate(record: dict, package: str, role: str, event_id, app_classes=None) ->
     # `frame` 只挑**有真实行号**的那一帧；全是合成帧时 frame 为 None，
     # 但 chain 仍然保留（能看出调用经过哪里，只是没行号可指）。
     primary = next((f for f in chain if f["line"] and not f["synthetic"]), None)
+    # SDK 归属：把"属于 APK"进一步拆成"宿主自己 / 某 SDK 候选 / 认不出的第三方"。
+    # 只做逐帧分类，不宣称"SDK 采集了数据"——那要结合数据流向，不在本层下结论。
+    attributed = attribute_chain(chain, package, app_classes)
     return {
         "role": role,
         "event_id": event_id,
@@ -143,6 +149,9 @@ def locate(record: dict, package: str, role: str, event_id, app_classes=None) ->
         # 所以给人看的应该是链，而不是单帧。
         "chain": [f["frame"] for f in chain],
         "chain_with_lines": [f["frame"] for f in chain if f["line"]],
+        # 逐帧 SDK 归属 + 链级摘要。见 sdk_attribution.py 的契约：含 SDK ≠ 本轮采集。
+        "sdk_attribution": chain_sdk_summary(attributed),
+        "sdk_frames": attributed,
         "note": None if primary else
                 "应用侧帧为native/编译器合成帧或缺少行号，只能定位到调用链，定位不到源码行。",
     }

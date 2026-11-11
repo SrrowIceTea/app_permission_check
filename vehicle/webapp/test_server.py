@@ -132,6 +132,19 @@ class ServerTest(unittest.TestCase):
         self.assertTrue((job.out / 'failure.log').exists())
         self.assertTrue((job.out / 'uploaded.apk').exists())
 
+    def test_failed_task_does_not_publish_summary_findings_or_report(self):
+        """失败路径验收：failed 任务的 /summary、/findings、/report 都 404 audit_not_completed，
+        不开放半成品冒充成功（契约第 2 节，对应真实失败任务 v-c723）。"""
+        def fail(job, _):
+            job.event('capture', 'running', 'test')
+            raise AuditError('not_aaos', '测试设备不是车机。', '选择 AAOS。')
+        self.registry.worker = fail
+        identity = self.submit()
+        for action in ('summary', 'findings', 'report'):
+            status, body = self.request('GET', '/api/pipeline/' + identity + '/' + action)
+            self.assertEqual(404, status, action)
+            self.assertIn(b'audit_not_completed', body, action)
+
     def test_service_root_excludes_another_process_owner(self):
         with self.assertRaises(AuditError):
             Registry(self.registry.root, self.catalog)

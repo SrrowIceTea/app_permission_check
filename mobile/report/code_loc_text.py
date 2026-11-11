@@ -32,3 +32,52 @@ def code_loc_text(finding: dict) -> str:
     chain = [_short(c) for c in (loc.get("chain_with_lines") or [])[1:3]]
     role = _ROLE_ZH.get(loc.get("role"), "")
     return head + (f" ← {' ← '.join(chain)}" if chain else "") + (f"（{role}）" if role else "")
+
+
+def sdk_attribution_text(finding: dict) -> str:
+    """SDK 归属一栏：把「含 SDK」（静态）与「SDK 在链上」（运行时）分开呈现。
+
+    核心契约（见 core/evidence/sdk_attribution.py 与 DECISIONS D712）：
+    「APK 打包了某 SDK」≠「SDK 出现在本次调用链」≠「SDK 采集了数据」。
+    这里只陈述前两个可验证事实，绝不把"在链上"渲染成"在采集"。
+
+    取不到任何归属信息时返回空串（卡片层据此决定是否显示这一行）。
+    """
+    locs = finding.get("code_locs") or []
+    sdk_summaries = []
+    for loc in locs:
+        attr = loc.get("sdk_attribution")
+        if not attr:
+            continue
+        sdk_summaries.append(attr)
+
+    # 没有任何 loc 带归属 → 无信息可展示
+    if not sdk_summaries:
+        return ""
+
+    # 链上出现过的 SDK（去重、保序），只统计非通用库的采集类 SDK
+    chain_sdks: list[str] = []
+    has_collection = False
+    third_party_frames = 0
+    for s in sdk_summaries:
+        for name in s.get("sdk_in_chain") or []:
+            if name not in chain_sdks:
+                chain_sdks.append(name)
+        if s.get("has_collection_sdk"):
+            has_collection = True
+        third_party_frames += s.get("third_party_frames") or 0
+
+    parts: list[str] = []
+    if chain_sdks:
+        parts.append("本次调用链出现 SDK：" + "、".join(chain_sdks)
+                     + ("（含采集/归因类 SDK，需复核其是否在采集本项数据）" if has_collection
+                        else "（通用库，非采集类 SDK）"))
+    elif has_collection:
+        parts.append("调用链出现采集类 SDK 帧")
+    if third_party_frames:
+        parts.append(f"另有 {third_party_frames} 帧属打包内的第三方代码（认不出是哪家 SDK）")
+    if not parts:
+        # 链上全是宿主代码
+        parts.append("调用链均为宿主自身代码（未发现 SDK 帧）")
+
+    return "；".join(parts)
