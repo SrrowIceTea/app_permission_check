@@ -1,29 +1,26 @@
 {
   "schema": 1,
-  "platform": "vehicle",
+  "platform": "shared",
   "bundle": "ssl_pinning_bypass.bundle.js",
-  "bundle_sha256": "37726f10bbfa5e38cc226550cea486382c05237cb56805b7eda0664b9a78f44f",
-  "bundle_bytes": 749578,
+  "bundle_sha256": "e6c26e906912aff4c13f0459c9adf86be799328c461958703dd630dd0430d009",
+  "bundle_bytes": 745978,
   "entry": "vehicle/hooks/ssl_pinning_bypass.js",
-  "built_at": "2026-11-10T16:33:40+08:00",
+  "built_at": "2026-11-11T15:15:36+08:00",
   "builder": {
     "path": "core/frida_host/build.py",
-    "sha256": "b9821b3601bbf8d69b0a04de50e368ea5ff5208de9372cc75568d23df7c6beff"
+    "sha256": "e4c88dff962d39f717e422f332e9cb6d8727f4235232d0d8dd0e4ec830669ae7"
   },
-  "source_fingerprint": "d3c035fb5b67ee0d795f4c4a0a81e793c1ab2b072b269a41fa07814c8d249886",
+  "source_fingerprint": "17e1a7e386d484b69aa4fa1c59f0dabd95aca763b5bb07dbf1611c40b031e4ca",
   "sources": {
     "vehicle/hooks/pinning_bypasses.js": "36e3ef6d88384ae8e724849a8aeebda359955591f98aa53efbc9036bd622bacb",
     "vehicle/hooks/scope.js": "e0feaa386042b532eb569215ec600e9c591e270c1e693fc2555b6f33bf8eb2cb",
     "vehicle/hooks/ssl_pinning_bypass.js": "2c566a8f62533f2a6360283ddefbf3c775a3c8d4d3afcf2d6266af206a3e6d1b",
-    "vehicle/hooks/tls_relax.js": "4a9fdd251da180e866946da622a0da2008c0627df1dae6a1a67401843fc9e94f",
+    "vehicle/hooks/tls_relax.js": "33fc00dd5590e29dbad23de8cf201b71ef28bb880d6affcf1734e43792df7d36",
     "vehicle/hooks/vscan_runtime.js": "8906b4c5061ed9a57bd44e6e2ff9c55336df5c9068281ae2141a093cdfe1a132"
   },
   "dirty_at_build": {
     "available": true,
-    "dirty": true,
-    "files": [
-      "vehicle/hooks/pinning_bypasses.js",
-      "vehicle/hooks/ssl_pinning_bypass.js"
-    ]
+    "dirty": false,
+    "files": []
   }
 }
