@@ -87,7 +87,7 @@ def main() -> int:
           "test_policy_sources"]),
         ("report", MOBILE / "report",
          [PY, "-m", "unittest", "test_report", "test_report_gates",
-          "test_export_sarif"]),
+          "test_export_sarif", "test_code_loc_text"]),
         ("apk_packer", MOBILE / "tools", [PY, "-m", "unittest", "test_apk_packer"]),
         ("app_death", MOBILE / "tools", [PY, "-m", "unittest", "test_app_death"]),
         # 分段采集的覆盖率账本（A4，2026-10-19）：把"窗口被死亡截断"换算成

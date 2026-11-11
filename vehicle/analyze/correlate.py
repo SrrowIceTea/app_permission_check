@@ -46,6 +46,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.evidence import codeloc  # noqa: E402  # 违规代码行号：从运行时栈取应用自己的帧（见 codeloc.py）
+from core.evidence.app_classes import load_app_classes  # noqa: E402  # 认 R8 混淆后的类名（与移动侧同一套）
 from core.collector.parse_stats import body_parse_totals  # noqa: E402
 from core.io_utils import load_jsonl  # noqa: E402  # JSONL 唯一实现（§8.2 B-2）
 from vehicle.pipeline.contracts import digest, read_json, write_json
@@ -117,6 +118,9 @@ def main() -> int:
                         help="产物身份 JSON（bundle sha256 / 构建时间 / dirty 标记）。"
                              "由 pipeline/audit.py 从 session-manifest 的 hook_bundle 传进来，"
                              "让每条 finding 都自带代码基线（2026-11-10）。")
+    parser.add_argument("--static-dir", type=Path, default=None,
+                        help="静态扫描产物目录（含 dexfacts.json）。提供时用它认 R8 混淆后的"
+                             "应用类名，并使 SDK 归属能区分宿主/第三方；不提供则退回包名前缀。")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--summary", type=Path, required=True)
     args = parser.parse_args()
@@ -200,7 +204,10 @@ def main() -> int:
     findings += evaluate_sensitive_read(rules, reads)
     findings += evaluate_data_egress(rules, reads, flows, args.clock_offset_ms,
                                      args.window_override_ms)
-    findings = codeloc.attach(findings, reads, flows, egress, args.package)
+    # 认 R8 混淆类名 + SDK 归属：有 static-dir 且 dexfacts.json 可用时传类表，
+    # 否则退回包名前缀（与移动侧 correlate_mobile 同一套判定）。
+    app_classes = load_app_classes(args.static_dir)
+    findings = codeloc.attach(findings, reads, flows, egress, args.package, app_classes)
     completeness = input_manifest(paths)
     verify_refs(snapshot['inputs'])
 

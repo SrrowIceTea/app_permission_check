@@ -14,7 +14,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import PageBreak, Spacer
 
 from report_common import Paragraph, SEVERITY_COLORS, esc, grid_table, kv_table
-from code_loc_text import code_loc_text
+from code_loc_text import code_loc_text, sdk_attribution_text
 
 LEVEL_ZH = {"candidate": "候选（待复核）", "observed": "已观测",
             "correlated": "已关联", "policy_violation": "政策违规（本工具不产出）"}
@@ -62,6 +62,7 @@ def _finding_block(f: dict, st: dict, font: str) -> list:
         st["h2"])
 
     rem_text, rem_is_gap = _remediation_of(f)
+    _sdk = _sdk_attribution_of(f)
     rows = [
         ("结论等级", esc(LEVEL_ZH.get(f.get("conclusion_level"),
                                      f.get("conclusion_level")))),
@@ -71,6 +72,11 @@ def _finding_block(f: dict, st: dict, font: str) -> list:
         ("事实与说明", esc(f.get("note") or "—")),
         ("证据", esc(_evidence_of(f))),
         ("代码位置", esc(_code_loc_of(f))),
+    ]
+    # SDK 归属只在有信息时才显示：没数据的一行不该凭空占位成"—"。
+    if _sdk:
+        rows.append(("SDK 归属", esc(_sdk)))
+    rows += [
         ("依据条款", esc("、".join(f"{b.get('doc')}:{b.get('clause')}"
                                   for b in (f.get("basis_refs") or [])
                                   if isinstance(b, dict)) or "—")),
@@ -109,6 +115,11 @@ def finding_missing_elements(f: dict) -> list[str]:
 def _code_loc_of(f: dict) -> str:
     """代码位置一栏：实现在 code_loc_text（report_sections 已超 300 行，不再往里塞）。"""
     return code_loc_text(f)
+
+
+def _sdk_attribution_of(f: dict) -> str:
+    """SDK 归属一栏：空串表示无信息（卡片层据此决定不显示这一行）。"""
+    return sdk_attribution_text(f)
 
 
 def _evidence_of(f: dict) -> str:
