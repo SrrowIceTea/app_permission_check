@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""运行时栈帧 → SDK 调用链归属：区分「宿主自己 / 某个 SDK 候选 / 其它第三方」。
+"""运行时栈帧 → SDK 调用链归属：区分「宿主自己 / 某个 SDK 候选 / 混淆不可归属 / 其它第三方」。
 
 仅用于授权测试（自有设备与自有 APK）/ For authorized testing on owned devices and APKs only.
 
@@ -21,14 +21,17 @@
 
 1. 系统/框架前缀（`app_classes.SYSTEM_PREFIXES`）→ `system`（一票否决，沿用既有口径）；
 2. 已知 SDK 前缀（`sdk_registry.SDK_PACKAGES`）→ `sdk`，并带候选名与来源；
-3. 命中宿主包名/类表但**非** SDK → `host`；
-4. 属于 APK 类表、但既不是宿主包也不是已知 SDK 前缀 → `third_party_unknown`
-   （打包进来了、不是宿主、认不出是哪家 SDK——这是**诚实保留的 unknown**，
-   而不是硬猜一个 SDK 名）；
-5. 全都不命中 → `unknown`（可能是系统层采样、栈截断、或 R8 把包名也压没了）。
+3. 命中宿主包名 → `host`；
+4. 属于 APK 类表、但既不是宿主包也不是已知 SDK 前缀：
+   - 类名**无包结构**（R8 全量混淆的短名 `v81`/`i`/`p40`）→ `obfuscated`
+     ——宿主自己的类也会被压成这样，宿主/第三方**不可区分**，标签谁也不暗示
+     （openmensa 实测教训：整条宿主调用链曾被误标成"第三方"）；
+   - 类名**有包结构**（`com.random.tracker.Sdk` 这种）→ `third_party_unknown`
+     （可能是小众第三方库，认不出是哪家——诚实保留 unknown，不硬猜）；
+5. 全都不命中 → `unknown`（可能是系统层采样、栈截断、或类表缺失）。
 
-第 4 类是新增价值最大的地方：它把"看起来像应用代码、其实是第三方"的帧单列出来，
-即使认不出是哪家 SDK，也让读者知道"这一帧不是宿主开发者写的"，避免误归到宿主。
+第 4 类是新增价值最大的地方：它把"属于 APK 但归属不明"的帧诚实单列，
+让读者知道"这一帧不是系统代码，也无法证明是宿主还是第三方"，避免两头误读。
 """
 from __future__ import annotations
 
@@ -39,6 +42,7 @@ from core.evidence.sdk_registry import sdk_of
 HOST = "host"
 SDK = "sdk"
 THIRD_PARTY_UNKNOWN = "third_party_unknown"
+OBFUSCATED = "obfuscated"
 SYSTEM = "system"
 UNKNOWN = "unknown"
 
@@ -93,8 +97,15 @@ def classify_frame(cls: str, package: str | None, app_classes: frozenset[str] | 
         return {"category": HOST, "sdk": None, "sdk_source": None,
                 "is_generic": False, "host_pkg": package}
 
-    # 4) 属于 APK 类表、但不是宿主包、也不是已知 SDK → 打包进来的第三方，认不出是哪家。
+    # 4) 属于 APK 类表、但不是宿主包、也不是已知 SDK → 打包进来的第三方。
     if app_classes is not None and cls in app_classes:
+        if "." not in cls:
+            # 无包结构的短类名（v81、i、p40……）：R8 全量混淆把宿主自己的类也压成这样。
+            # 把它们标成"第三方"是**假话**——openmensa 实测整条调用链都是宿主代码被混淆。
+            # 诚实的标签是"混淆且无法归属"：宿主/第三方不可区分，谁也不暗示。
+            return {"category": OBFUSCATED, "sdk": None, "sdk_source": None,
+                    "is_generic": False, "host_pkg": None}
+        # 有完整包结构、又不在 SDK 清单里：可能是小众第三方库，保留 unknown 语义。
         return {"category": THIRD_PARTY_UNKNOWN, "sdk": None, "sdk_source": None,
                 "is_generic": False, "host_pkg": None}
 
@@ -143,6 +154,7 @@ def chain_sdk_summary(attributed: list[dict]) -> dict:
       * has_sdk_frame     —— 是否至少有一帧是 SDK；
       * has_collection_sdk—— 是否有**非通用库**的 SDK 帧（采集/归因/推送等）；
       * third_party_frames—— 链上 third_party_unknown 的帧数（认不出的第三方）；
+      * obfuscated_frames —— 链上 obfuscated 的帧数（R8 全量混淆，宿主/第三方不可区分）；
       * host_frames       —— 宿主帧数。
 
     注意：`sdk_in_chain` 只说明"SDK 出现在本次调用链"，**不等于**"该 SDK 采集了数据"。
@@ -150,6 +162,7 @@ def chain_sdk_summary(attributed: list[dict]) -> dict:
     sdk_names: list[str] = []
     collection_sdk = False
     third_party_frames = 0
+    obfuscated_frames = 0
     host_frames = 0
     has_sdk_frame = False
     for info in attributed:
@@ -161,6 +174,8 @@ def chain_sdk_summary(attributed: list[dict]) -> dict:
                 collection_sdk = True
         elif info["category"] == THIRD_PARTY_UNKNOWN:
             third_party_frames += 1
+        elif info["category"] == OBFUSCATED:
+            obfuscated_frames += 1
         elif info["category"] == HOST:
             host_frames += 1
     return {
@@ -168,6 +183,7 @@ def chain_sdk_summary(attributed: list[dict]) -> dict:
         "has_sdk_frame": has_sdk_frame,
         "has_collection_sdk": collection_sdk,
         "third_party_frames": third_party_frames,
+        "obfuscated_frames": obfuscated_frames,
         "host_frames": host_frames,
         "note": "SDK 出现在调用链 ≠ 该 SDK 采集数据；「包含 SDK」是静态事实，"
                 "「SDK 在链上」是运行时事实，两者分开表达，不互相推出。",

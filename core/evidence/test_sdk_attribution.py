@@ -23,7 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.evidence.sdk_attribution import (  # noqa: E402
-    HOST, SDK, SYSTEM, THIRD_PARTY_UNKNOWN, UNKNOWN,
+    HOST, OBFUSCATED, SDK, SYSTEM, THIRD_PARTY_UNKNOWN, UNKNOWN,
     attribute_chain, chain_sdk_summary, classify_frame, sdk_classes_in_apk,
 )
 
@@ -63,6 +63,24 @@ class ClassifyFrameTest(unittest.TestCase):
         info = classify_frame("com.random.tracker.Sdk", A, app_classes)
         self.assertEqual(info["category"], THIRD_PARTY_UNKNOWN)
         self.assertIsNone(info["sdk"])
+
+    def test_obfuscated_short_name_is_not_third_party(self) -> None:
+        # R8 全量混淆的短类名（无包结构）：宿主自己的代码也长这样，
+        # 标成"第三方"是假话（openmensa 实测教训）。必须单列 obfuscated。
+        app_classes = frozenset({"v81", "i", "p40"})
+        for cls in ("v81", "i", "p40"):
+            info = classify_frame(cls, A, app_classes)
+            self.assertEqual(info["category"], OBFUSCATED, cls)
+
+    def test_obfuscated_count_in_summary(self) -> None:
+        frames = [
+            {"frame": "v81.g(x:26)", "class": "v81"},
+            {"frame": "u81.onLocationChanged(x:6)", "class": "u81"},
+        ]
+        app_classes = frozenset({"v81", "u81"})
+        summary = chain_sdk_summary(attribute_chain(frames, A, app_classes))
+        self.assertEqual(summary["obfuscated_frames"], 2)
+        self.assertEqual(summary["third_party_frames"], 0)
 
     def test_sdk_beats_host_even_when_in_app_classes(self) -> None:
         # SDK 类也在 dexfacts 类表里；若先判宿主会把 SDK 帧误吞进 host

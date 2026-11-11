@@ -63,10 +63,13 @@ def _sdk_line(s: dict) -> str:
     """把一个 `sdk_attribution` 摘要渲染成一行（车载 PDF 用）。"""
     chain_sdks = s.get("sdk_in_chain") or []
     third_party = s.get("third_party_frames") or 0
+    obfuscated = s.get("obfuscated_frames") or 0
     parts: list[str] = []
     if chain_sdks:
         kind = "含采集/归因类 SDK" if s.get("has_collection_sdk") else "通用库"
         parts.append(f"调用链出现 SDK：{'、'.join(chain_sdks)}（{kind}）")
+    if obfuscated:
+        parts.append(f"另有 {obfuscated} 帧为应用内混淆代码（R8 混淆后宿主/第三方无法区分，不据此归责）")
     if third_party:
         parts.append(f"另有 {third_party} 帧属打包内第三方代码（认不出是哪家 SDK）")
     if not parts:
