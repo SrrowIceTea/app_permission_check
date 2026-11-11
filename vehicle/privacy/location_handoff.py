@@ -3,6 +3,7 @@ import json
 import re
 import shutil
 from pathlib import Path
+from vehicle.pipeline.binding_artifacts import capture_dependencies
 
 from core.io_utils import load_jsonl
 from vehicle.pipeline.contracts import digest
@@ -81,6 +82,9 @@ def snapshot(entry, base, output):
         if not isinstance(name, str) or Path(name).name != name:
             raise ValueError('invalid_archived_hook_name')
         _copy(source / 'hook-bundles' / name, capture / 'hook-bundles' / name)
+    for name, expected in capture_dependencies(source, manifest).items():
+        if _copy(source / name, capture / name) != expected:
+            raise ValueError('handoff_dependency_hash_mismatch')
     refs = {'capture_manifest_sha256': manifest_sha}
     for key in ('apk', 'rules', 'catalog_snapshot'):
         if key not in entry and key == 'catalog_snapshot':

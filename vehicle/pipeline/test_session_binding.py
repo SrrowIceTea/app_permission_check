@@ -43,6 +43,14 @@ def build(root, *, actions=True, healthy=True, receipt_ok=True, session='s1'):
 
 
 class BindingBuildTests(unittest.TestCase):
+    def test_declared_binding_deleted_is_failure_not_legacy(self):
+        with tempfile.TemporaryDirectory() as root:
+            capture, _ = build(root)
+            (capture / sb.BINDING_FILE).unlink()
+            result = sb.verify_binding(capture)
+            self.assertEqual('failed', result['status'])
+            self.assertIn({'code': 'declared_binding_missing'}, result['failures'])
+
     def test_missing_actions_is_a_named_gap_not_a_failure(self):
         with tempfile.TemporaryDirectory() as root:
             capture, binding = build(root, actions=False)

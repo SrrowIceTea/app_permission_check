@@ -189,6 +189,9 @@ def validate_capture(capture, package, version, rules, apk=None, *, catalog_snap
         reject('session_binding_invalid',
                '会话绑定与当前证据不一致；不能复用其他会话或旧构建的签核。',
                failures=binding['failures'])
+    from vehicle.pipeline.binding_artifacts import capture_dependencies
+    for name, expected in capture_dependencies(capture, manifest).items():
+        evidence['capture/' + name] = artifact_ref(capture / name, sha256=expected)
     from vehicle.pipeline.process_lifecycle import SUMMARY_FILE as LIFECYCLE_SUMMARY
     if manifest.get('process_lifecycle') is not None and not (capture / LIFECYCLE_SUMMARY).is_file():
         reject('lifecycle_summary_missing', '清单声明了进程生命周期覆盖但摘要文件缺失；不能宣称已记录覆盖缺口。')

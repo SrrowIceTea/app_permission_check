@@ -46,6 +46,7 @@ CHECKS = [
         'vehicle.privacy.test_versions',
         'vehicle.pipeline.test_capture_lifecycle',
         'vehicle.pipeline.test_hook_archive',
+        'vehicle.pipeline.test_binding_export',
         'vehicle.pipeline.test_capture_proxy',
         'vehicle.privacy.test_observation', 'vehicle.privacy.test_ha_evaluation',
         'vehicle.lab.test_evidence_repairs', 'vehicle.lab.test_owntracks_run',

@@ -1,4 +1,4 @@
-"""Actual owned AAOS location pair / different pair / single coordinate controls.
+"""Actual owned AAOS location pair / different pair / single / repeated read controls.
 
 仅用于授权测试。Only com.vscanner.targetapp debug Actor, synthetic GPS input and
 loopback receiver. Each case has a fresh session. Observer APIs are never changed.
@@ -93,7 +93,8 @@ def run_case(folder, mode, device, user, receipts, serial):
                  and f.get('status_code') == 200]
     checks = {'capture_healthy': True, 'whole_body_received': len(same_body) == 1,
         'real_comparable_pair': result['inputs']['compatible_comparisons'] > 0,
-        'expected_candidates': result['pair_count'] > 0 if mode == 'pair' else result['pair_count'] == 0,
+        'expected_candidates': result['pair_count'] > 0 if mode in ('pair', 'repeat') else result['pair_count'] == 0,
+        'repeated_reads_ambiguous': mode != 'repeat' or result['ambiguous_flows'] > 0,
         'binding_consistent': binding['status'] == 'binding_consistent',
         'tls_off_observed': health['tls_bypass'] is False}
     result.update(checks=checks, passed=all(checks.values()), control=mode,
@@ -103,7 +104,7 @@ def run_case(folder, mode, device, user, receipts, serial):
     return result
 
 
-def run(out, serial):
+def run(out, serial, modes=('pair', 'mismatch', 'single', 'repeat')):
     out.mkdir(parents=True, exist_ok=False)
     device, user, original_location, grants = Device(serial), None, None, {}
     result = {'passed': False, 'cases': [], 'cleanup_errors': []}
@@ -143,7 +144,7 @@ def run(out, serial):
         for permission in PERMISSIONS:
             device.call('shell', 'pm', 'grant', '--user', user, PACKAGE, 'android.permission.' + permission)
         device.call('shell', 'am', 'start', '--user', user, '-W', '-n', PACKAGE + '/.MainActivity')
-        for mode in ('pair', 'mismatch', 'single'):
+        for mode in modes:
             case = run_case(out / mode, mode, device, user, receipts, serial)
             result['cases'].append({'control': mode, 'passed': case['passed'], 'pairs': case['pair_count'],
                 'comparisons': case['inputs']['compatible_comparisons'], 'session': case['session_id']})
@@ -164,7 +165,7 @@ def run(out, serial):
             except Exception as error:
                 result['cleanup_errors'].append(str(error))
         server.shutdown(); server.server_close(); thread.join(timeout=5)
-        result['passed'] = (len(result['cases']) == 3 and all(c['passed'] for c in result['cases'])
+        result['passed'] = (len(result['cases']) == len(modes) and all(c['passed'] for c in result['cases'])
                             and 'error' not in result and not result['cleanup_errors'])
         write_json(out / 'verification.json', result)
     return result
@@ -174,7 +175,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--serial', default='emulator-5554')
+    parser.add_argument('--case', action='append', choices=('pair', 'mismatch', 'single', 'repeat'))
     args = parser.parse_args()
-    result = run(args.out, args.serial)
+    result = run(args.out, args.serial, tuple(dict.fromkeys(args.case)) if args.case else ('pair', 'mismatch', 'single', 'repeat'))
     print(json.dumps(result, ensure_ascii=False))
     raise SystemExit(0 if result['passed'] else 1)

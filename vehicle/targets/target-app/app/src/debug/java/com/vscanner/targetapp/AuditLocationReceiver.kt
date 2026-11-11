@@ -22,7 +22,7 @@ class AuditLocationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val mode = intent.getStringExtra("mode") ?: return
         val token = intent.getStringExtra("token") ?: return
-        if (mode !in setOf("pair", "mismatch", "single")) return
+        if (mode !in setOf("pair", "mismatch", "single", "repeat")) return
         if (!token.matches(Regex("[a-zA-Z0-9_-]{1,80}"))) return
         val pending = goAsync()
         thread(name = "vsc-location-control") {
@@ -36,10 +36,16 @@ class AuditLocationReceiver : BroadcastReceiver() {
                 if (!ready.await(8, TimeUnit.SECONDS)) error("synthetic GPS update not received")
                 val fix = manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
                     ?: error("no actual Location returned")
+                if (mode == "repeat") {
+                    val again = manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                        ?: error("second actual Location missing")
+                    if (again.latitude != fix.latitude || again.longitude != fix.longitude)
+                        error("GPS changed between repeated reads")
+                }
                 val latitude = fix.latitude
                 val longitude = fix.longitude
                 val value = when (mode) {
-                    "pair" -> String.format(Locale.US, "%.6f,%.6f", latitude, longitude)
+                    "pair", "repeat" -> String.format(Locale.US, "%.6f,%.6f", latitude, longitude)
                     "mismatch" -> String.format(Locale.US, "%.6f,%.6f", latitude + 1, longitude + 1)
                     else -> String.format(Locale.US, "%.6f", latitude)
                 }

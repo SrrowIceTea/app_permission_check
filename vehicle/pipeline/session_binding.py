@@ -133,10 +133,15 @@ def verify_binding(capture, manifest=None, verification=None, *, package=None):
     """Fail-closed cross-check; re-reads action rows and every receipt file."""
     capture = Path(capture)
     path = capture / BINDING_FILE
-    if not path.is_file():
+    if not path.is_file() and manifest is None and not (capture / 'session-manifest.json').is_file():
         return _result('not_declared', {}, [], [NO_BINDING_GAP, *PENDING_STEPS])
     try:
         manifest = manifest if manifest is not None else read_json(capture / 'session-manifest.json')
+        if not path.is_file():
+            if isinstance(manifest, dict) and 'session_binding_sha256' in manifest:
+                return _result('failed', {'binding_exists': False},
+                               [{'code': 'declared_binding_missing'}], [NO_BINDING_GAP])
+            return _result('not_declared', {}, [], [NO_BINDING_GAP, *PENDING_STEPS])
         verification = verification if verification is not None else read_json(capture / 'verification.json')
         binding = read_json(path)
     except Exception as error:  # noqa: BLE001 - 证据不可读必须成为明确的失败
