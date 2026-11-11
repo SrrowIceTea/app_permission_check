@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.collector.attribution import ATTRIB_LOOSE_MS, is_loose  # noqa: E402
 from core.collector.identity import compatible, identity_scope, uid_of, user_of
 from vehicle.analyze.value_match import match_content
+from vehicle.analyze.event_ref import audit_refs, pair_refs
 from vehicle.analyze.pair_ambiguity import annotate_candidates
 from vehicle.analyze.batch_pairing import PAIRING_MODES, batch_index, claim_match, select_pairs
 from vehicle.analyze.finding_class import classify
@@ -45,6 +46,9 @@ def evaluate_sensitive_read(rules, reads):
             findings.append(evidence(rule, 'read_event', [h['evt_id'] for h in hits], {
                 'package': package, 'property': hits[0].get('prop_name'),
                 'uid': uid, 'user_id': user_of(hits[0]), 'session_id': session,
+                'event_refs': [{'src': h.get('src') or 'vhal', 'evt_id': h['evt_id'],
+                                'pid': h.get('pid'), 'session_id': h.get('session_id')} for h in hits],
+                'reference_audit': audit_refs(hits, src='vhal'),
                 'read_count': len(hits), 'note': '成功读取；订阅注册本身不算读取。'}))
     return findings
 
@@ -111,11 +115,10 @@ def evaluate_data_egress(rules, reads, flows, clock_offset_ms=None, window_overr
                     continue
                 names[read['pkg']] = read.get('prop_name')
                 pair = {
-                    'read_event_id': read['evt_id'], 'flow_event_id': flow['evt_id'],
-                    'read_src': read.get('src') or 'vhal', 'flow_src': flow.get('src') or 'proxy',
+                    **pair_refs(read, flow, read_src=read.get('src') or 'vhal',
+                                flow_src=flow.get('src') or 'proxy'),
                     'delta_ms': delta, 'clock_basis': basis, 'content_match': True,
                     'identity_scope': identity_scope(read, flow),
-                    'uid': uid_of(read), 'user_id': user_of(read),
                     'flow_method': flow.get('method'), 'flow_host': flow.get('host'),
                     'flow_path': flow.get('path'), 'client_tls': flow.get('intercepted_tls'),
                     # 归因置信信息（D414）：让"这条配对建立在多紧的归因上"可见。
@@ -133,6 +136,11 @@ def evaluate_data_egress(rules, reads, flows, clock_offset_ms=None, window_overr
                 'package': package, 'property': names[package], 'window_ms': window,
                 'window_declared_ms': declared, 'window_overridden': window != declared,
                 'pair_count': len(pairs), 'pairs': pairs, 'content_match': True,
+                'event_refs': [p['read_ref'] for p in pairs],
+                'pair_reference_audit': {
+                    'pairs': len(pairs),
+                    'incomplete_read_refs': sum(1 for p in pairs if p['reference_incomplete']),
+                    'unique_sources_claimed': sum(1 for p in pairs if p['source_read_unique'])},
                 'value_match': any(p.get('value_match') for p in pairs),
                 'source_ambiguous_flows': ambiguous_sources,
                 'correlation_scope': 'matching_content_candidates_origin_unproven',

@@ -254,3 +254,25 @@ summary.json 在全部请求阶段成功后提交；健康无 VHAL 读取是有�
 审计清单同时绑定采集验收、采集器健康、采集清单封存的附加输入、实际校验的 Hook 文件，以及导出的隐私目录与来源文件。
 报告生成和后续校验使用同一份摘要清单。文件缺失或内容变化时按 artifact 键定位，并拒绝生成报告。
 旧报告按各自的清单核验；重跑审计才会补齐新增摘要。
+
+## D518 进程内事件引用与诊断账本（2026-11-11）
+
+evt_id 是进程内序号。通用/VHAL/HA/OwnTracks/定位所有求值器的 pairs 统一经
+`vehicle/analyze/event_ref.py` 构造引用，携带 src/evt_id/pid/uid/user/session/设备序列号；
+`pair_ambiguity` 的分组键带 pid+session，缺 PID 或会话的旧证据标 `reference_incomplete`，
+绝不宣称 `source_read_unique`。按裸 evt_id 选取命中事件的路径一律改为按完整引用选取，
+否则两进程同号事件会被拉进同一条 finding。引用缺口计入 finding 与 stats 的 `reference_audit`。
+
+`observation_ledger.py` 只做诊断：漏斗各层独立计数、归因质量（unresolved/歧义/
+single_package_fallback/unknown_uid/短连接）与未支持的自然定位格式显式列出，
+挂到审计 summary，不新增 finding、不产出违规结论、不相加为总检测率。
+合成控制与固定预算比较不等于真实设备业务探索效果。
+
+## D519 子代理 review 后收紧引用与账本（2026-11-11）
+
+四个只读子代理交叉审查发现：同一 flow 写成两个 flow_pid 会把多来源拆成各自「唯一」，
+而账本直接采信 `session-binding.json` 自述的回执数。现 `pair_ambiguity` 增加不含 flow_pid
+的粗分组并取细/粗候选数最大值；结构化引用独立核验 read/flow 会话；`select_by_refs`
+用 `.get()` 且空命中早退。`observation_ledger` 的 `business_touch` 只消费
+`verify_binding` 判定为 `binding_consistent` 的结果，`complete_body` 与 `verified_body` 分列，
+弱归因不计入已核验正文。PID 重用仍是已声明边界：引用层无法区分 epoch，只由生命周期观测标记嫌疑。

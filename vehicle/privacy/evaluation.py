@@ -9,6 +9,7 @@ from core.collector.identity import compatible, identity_scope, uid_of, user_of
 from core.collector.attribution import is_loose
 from core.privacy.semantics import read_state
 from vehicle.privacy.catalog import AAID, TYPES, catalog_hash
+from vehicle.analyze.event_ref import audit_refs, pair_refs, select_by_refs
 from vehicle.analyze.pair_ambiguity import annotate_candidates
 
 RULE_DB = Path(__file__).resolve().parents[1] / 'rules/rules_library/rules.db'
@@ -79,7 +80,8 @@ CORRELATED_CRITERION = (
 
 def observed_rows(hits, limit=20):
     """把升级依据逐条摊开，第三方只看 findings.jsonl 就能复核，不必回读 reads.jsonl。"""
-    return [{'evt_id': r.get('evt_id'), 'src': r.get('src'), 'api': r.get('api'),
+    return [{'evt_id': r.get('evt_id'), 'pid': r.get('pid'), 'src': r.get('src'),
+             'session_id': r.get('session_id'), 'api': r.get('api'),
              'collection_state': read_state(r), 'outcome': r.get('outcome'),
              'value_hash': r.get('value_hash'), 'value_len': r.get('value_len'),
              'count': r.get('count'), 'host_received_ts': r.get('host_received_ts')}
@@ -106,7 +108,9 @@ def evidence(dtype, hits, egress, rule, platform=None, catalog_revision=2):
         'package': hits[0]['pkg'], 'uid': uid_of(hits[0]), 'user_id': user_of(hits[0]),
         'session_id': hits[0]['session_id'], 'read_count': len(hits),
         'event_ids': [r['evt_id'] for r in hits],
-        'event_refs': [{'src': r['src'], 'evt_id': r['evt_id']} for r in hits],
+        'event_refs': [{'src': r.get('src'), 'evt_id': r['evt_id'], 'pid': r.get('pid'),
+                        'session_id': r.get('session_id')} for r in hits],
+        'reference_audit': audit_refs(hits),
         'observed_basis': {
             'criterion': (CORRELATED_CRITERION if egress else OBSERVED_CRITERION),
             'collection_state': 'obtained',
@@ -168,8 +172,9 @@ def evaluate(reads, flows, package, session, version='15', rules=None, *, catalo
                     delta = flow.get('ts', -1) - stamp
                     if (not compatible(read, flow) or not 0 <= delta <= window or value not in hashes):
                         continue
-                    pairs.append({'read_event_id': read['evt_id'], 'read_src': read['src'],
-                        'flow_event_id': flow['evt_id'], 'flow_src': flow.get('src', 'proxy'),
+                    # evt_id 是进程内序号：引用必须带 pid/session，否则两个进程
+                    # 的同号读取会被折叠成一个"唯一来源"（2026-11-11 P0 反例）。
+                    pairs.append({**pair_refs(read, flow),
                         'delta_ms': delta, 'clock_basis': 'host_received_ts',
                         'content_match': True, 'value_match': True,
                         'content_match_basis': 'complete_request_json_string_value_hash',
@@ -178,9 +183,15 @@ def evaluate(reads, flows, package, session, version='15', rules=None, *, catalo
                         'attribution_loose': is_loose(flow)})
         if pairs:
             ambiguous_sources = annotate_candidates(pairs)
-            paired_ids = {p['read_event_id'] for p in pairs}
-            finding = evidence(dtype, [r for r in hits if r['evt_id'] in paired_ids], True, egress_rule,
+            paired_hits = select_by_refs(hits, [p['read_ref'] for p in pairs])
+            if not paired_hits:
+                continue  # 引用不匹配时不得用别的进程/会话事件凑出 egress 结论
+            finding = evidence(dtype, paired_hits, True, egress_rule,
                                version, catalog_revision)
+            finding['pair_reference_audit'] = {
+                'pairs': len(pairs),
+                'incomplete_read_refs': sum(1 for p in pairs if p['reference_incomplete']),
+                'unique_sources_claimed': sum(1 for p in pairs if p['source_read_unique'])}
             finding.update(pairs=pairs, pair_count=len(pairs), value_match=True, content_match=True,
                 source_ambiguous_flows=ambiguous_sources,
                 correlation_scope='matching_content_candidates_origin_unproven',
@@ -199,6 +210,7 @@ def evaluate(reads, flows, package, session, version='15', rules=None, *, catalo
             reg_by_type[dtype][row.get('registration_kind') or 'unknown'] += 1
     observed_types = {dtype for (dtype, _uid) in grouped}
     return findings, {'events': len(events), 'states': dict(Counter(read_state(r) for r in events)),
+        'reference_audit': audit_refs(events),
         'by_data_type': {dtype: dict(Counter(read_state(r) for r in events
             if dtype in r.get('data_types', []))) for dtype in types},
         # 注册/异步调用的可见性：只回答"调用过没有"，不参与任何结论分级。

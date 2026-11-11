@@ -32,6 +32,8 @@ def fixture(root, kind='controlled_positive', session='s1'):
                 'repeated_origin': 3, 'third_party': 0}[kind]
     sample = cases()[scenario]
     reads = [json.loads(s) for s in (capture / 'reads.jsonl').read_text().splitlines()]
+    # 新采集契约要求 TLS_SWITCH 启动行：本夹具声明 tls_bypass=True，必须留下同值事件。
+    reads += [{'src': 'tls', 'ev': 'TLS_SWITCH', 'tls_bypass': True}]
     reads += [{'src': 'privacy', 'ev': 'ARMED', 'pkg': 'test.app',
                'sdk': 35, 'privacy_catalog_sha256': catalog.catalog_hash()}]
     reads += sample['reads'] if kind != 'third_party' else []

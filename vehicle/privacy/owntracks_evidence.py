@@ -7,6 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from core.collector.attribution import ATTRIB_LOOSE_MS
 from core.collector.identity import uid_of, user_of
+from vehicle.analyze.event_ref import pair_refs, select_by_refs
 from vehicle.analyze.pair_ambiguity import annotate_candidates
 from vehicle.privacy.owntracks_contract import PACKAGE
 
@@ -102,7 +103,8 @@ def _finding(reads, rule_id):
             'package': PACKAGE, 'session_id': first['session_id'], 'uid': first['uid'], 'user_id': first['user_id'],
             'property': 'location', 'data_type': 'location', 'data_type_name': '位置（OwnTracks 侧载对照）',
             'read_count': len(reads), 'event_ids': [r['evt_id'] for r in reads],
-            'event_refs': [{'src': r['src'], 'evt_id': r['evt_id']} for r in reads],
+            'event_refs': [{'src': r['src'], 'evt_id': r['evt_id'], 'pid': r.get('pid'),
+                            'session_id': r.get('session_id')} for r in reads],
             'basis_refs': SOURCES, 'source_refs': SOURCES}
 
 
@@ -128,9 +130,9 @@ def evaluate(reads, flows, session, user, endpoint_host='198.18.0.1'):
             if matches(read, flow, body):
                 matched_requests.add(flow['evt_id'])
                 pairs_by_uid[flow['uid']].append({
-                    'read_src': read['src'], 'read_event_id': read['evt_id'],
-                    'flow_src': 'proxy', 'flow_event_id': flow['evt_id'], 'uid': flow['uid'],
-                    'delta_ms': flow['ts'] - read['host_received_ts'], 'clock_basis': 'host_received_ts',
+                    **pair_refs(read, flow, flow_src='proxy'),
+                    'delta_ms': flow['ts'] - read['host_received_ts'],
+                    'clock_basis': 'host_received_ts',
                     'content_match': True, 'value_match': True, 'identity_scope': 'uid_verified', 'client_tls': False,
                     'content_match_basis': 'owntracks_coordinate_digest_and_location_timestamp',
                 })
@@ -138,8 +140,10 @@ def evaluate(reads, flows, session, user, endpoint_host='198.18.0.1'):
     for uid, hits in grouped.items():
         findings.append(_finding(hits, READ_RULE))
         if pairs := pairs_by_uid[uid]:
-            matched_ids = {p['read_event_id'] for p in pairs}
-            findings.append(dict(_finding([r for r in hits if r['evt_id'] in matched_ids], BODY_RULE),
+            paired_hits = select_by_refs(hits, [p['read_ref'] for p in pairs])
+            if not paired_hits:
+                continue  # 引用不匹配时只保留读取事实，不外推到 HTTP 正文
+            findings.append(dict(_finding(paired_hits, BODY_RULE),
                 pairs=pairs, pair_count=len(pairs), window_ms=WINDOW_MS, window_declared_ms=WINDOW_MS,
                 window_overridden=False, content_match=True, value_match=True,
                 source_ambiguous_flows=annotate_candidates(pairs),

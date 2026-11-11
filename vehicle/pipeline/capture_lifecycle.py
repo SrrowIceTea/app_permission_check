@@ -1,6 +1,8 @@
 """Observe and stop capture workers with bounded waits. 仅用于授权测试。"""
 import subprocess
 import time
+from pathlib import Path
+from core.io_utils import load_jsonl
 from vehicle.pipeline.contracts import AuditError
 
 
@@ -50,3 +52,28 @@ def stop_workers(processes, handles, stop_file, log):
         except OSError:
             failures.append('worker_log_close_failed')
     return workers, failures, log.finish() if log else {'status': 'not_started'}
+
+
+def observe_with_lifecycle(workers, seconds, finish_request, *, output, session,
+                           package, device, observe_until_fn=None):
+    """Wrap the existing wait with a passive process-lifecycle observer.
+
+    The attached pid set and the first ARMED timestamp come from THIS session's
+    reads.jsonl, so the "before attach" interval is measured, not guessed. A
+    worker failure still produces a lifecycle summary via ``finally``.
+    """
+    from vehicle.pipeline.process_lifecycle import ProcessWatcher
+    output = Path(output)
+    path = output / 'reads.jsonl'
+    rows = load_jsonl(path) if path.is_file() else []
+    attached = sorted({r['pid'] for r in rows if type(r.get('pid')) is int
+                       and r['pid'] > 0 and r.get('ev') == 'ARMED'})
+    ready = min((r['host_received_ts'] for r in rows if r.get('ev') == 'ARMED'
+                 and type(r.get('host_received_ts')) is int), default=None)
+    watcher = ProcessWatcher(device, package, session, output, attached_pids=attached)
+    watcher.start()
+    try:
+        stop = (observe_until_fn or observe_until)(workers, seconds, finish_request)
+    finally:
+        summary = watcher.stop(attach_ready_ms=ready)
+    return stop, summary

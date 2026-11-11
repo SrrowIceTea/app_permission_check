@@ -17,8 +17,9 @@ from contextlib import nullcontext
 from pathlib import Path
 from core.frida_host import freshness  # noqa: F401  闸的补丁锚点（测试会 patch 它）
 from core.io_utils import load_jsonl
+from vehicle.pipeline import readiness
 from vehicle.pipeline.capture_device import Device, wait_until, write_manifest
-from vehicle.pipeline.capture_lifecycle import observe_until, stop_workers
+from vehicle.pipeline.capture_lifecycle import observe_until, observe_with_lifecycle, stop_workers
 from vehicle.pipeline.capture_proxy import proxy_state, restore_proxy, verify_reversible
 from vehicle.pipeline.proxy_log import ProxyLog
 from vehicle.pipeline.contracts import ROOT, AuditError, digest, write_json
@@ -156,20 +157,13 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
         def hooks_ready():
             if driver.poll() is not None:
                 raise AuditError('driver_exited', 'Hook 驱动提前退出。', '查看 reads.log。')
-            armed = {(r.get('src'), r.get('ev')) for r in load_jsonl(output / 'reads.jsonl')}
             from vehicle.privacy.catalog import catalog_hash
-            required = {('privacy', 'ARMED')}
-            # 关掉收宽时没有 PINNING_ARMED，改用 TLS_BYPASS_DISABLED 作为「开关确实生效且未武装」标记。
-            tls_mark = ('tls', 'PINNING_ARMED') if tls_bypass else ('tls', 'TLS_BYPASS_DISABLED')
-            required.update(sample_mode.REQUIRED if sample_mode else {('egress', 'ARMED'), tls_mark})
-            if mg4_webview:
-                required.add(('http_write', 'ARMED'))
-            if scope == 'all':
-                required.add(('vhal', 'ARMED'))
-            matching_catalog = any(r.get('src') == 'privacy' and r.get('ev') == 'ARMED'
-                and r.get('privacy_catalog_sha256') == catalog_hash()
-                for r in load_jsonl(output / 'reads.jsonl'))
-            return required <= armed and matching_catalog
+            # 就绪集合只由 readiness.required_events 定义：preflight 用同一份，
+            # 关闭 TLS 不再被审计入口误判为 Hook 未武装。
+            return readiness.ready(load_jsonl(output / 'reads.jsonl'),
+                tls_bypass=tls_bypass, scope=scope, sample_mode=sample_mode,
+                catalog_hash_value=catalog_hash(),
+                extra=(('http_write', 'ARMED'),) if mg4_webview else ())
         wait_until(hooks_ready, 30, 'Hook 就绪')
         text = (output / 'reads.log').read_text(encoding='utf-8')
         match = re.search(r'attached pid (\d+)', text)
@@ -177,8 +171,10 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
         from vehicle.lab.abs_capture import capture_syncs
         with (capture_syncs(device) if abs_send else nullcontext()) as wire:
             print(json.dumps({'status': 'capturing', 'session': session, 'seconds': seconds}), flush=True)
-            verification['observation_stop'] = observe_until(
-                [('mitm', proxy), ('reads', driver)], seconds, output / '.finish-request')
+            verification['observation_stop'], verification['process_lifecycle'] = observe_with_lifecycle(
+                [('mitm', proxy), ('reads', driver)], seconds, output / '.finish-request',
+                output=output, session=session, package=package, device=device,
+                observe_until_fn=observe_until)
         if wire is not None:
             abs_rows = wire.result()
         verification['checks']['hooks_ready'] = True
@@ -253,7 +249,10 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
                             'requested-permissions.txt', 'collector-health.json', 'scope-discarded.json',
                             *((abs_scope.INPUT,) if abs_send else ())), bundle_name,
                            preserve_system_proxy=preserve_system_proxy,
-                           hook_bundle=hook_bundle)
+                           hook_bundle=hook_bundle,
+                           capture_switches={'tls_bypass': bool(tls_bypass),
+                                             'multi_process': bool(multi_process),
+                                             'scope': scope})
     return verification
 
 

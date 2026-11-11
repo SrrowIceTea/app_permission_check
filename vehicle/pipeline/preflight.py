@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from core.io_utils import load_jsonl
 from vehicle.compatibility import profile
+from vehicle.pipeline import readiness
 from vehicle.pipeline.contracts import AuditError, ROOT, digest, read_json
 from vehicle.pipeline.evidence_manifest import INPUT_NAMES, artifact_ref
 from vehicle.privacy import ha_contract as ha
@@ -130,13 +131,18 @@ def validate_capture(capture, package, version, rules, apk=None, *, catalog_snap
     sample_mode = abs_scope if abs_enabled else mg4 if mg4_enabled else ha_mode
     if owntracks_enabled:
         sample_mode = owntracks
-    required = set(sample_mode.REQUIRED) if sample_mode else {('egress', 'ARMED'), ('tls', 'PINNING_ARMED')}
-    if scope == 'all':
-        required.add(('vhal', 'ARMED'))
+    # 单一就绪契约（2026-11-11 P0）：capture 与 preflight 共用同一集合，
+    # --no-tls-bypass 的合法对照不再被要求 PINNING_ARMED，但也不免除其他钩子。
+    tls_bypass, switch_source = readiness.resolve_switch(verification, manifest)
+    if tls_bypass is None:
+        reject('tls_switch_mismatch', 'TLS 开关在验收记录与会话清单之间不一致。')
+    privacy_required = (manifest.get('privacy_catalog_sha256') is not None
+                        or scope == 'general' or catalog_snapshot is not None)
+    required = readiness.required_events(tls_bypass=tls_bypass, scope=scope,
+        sample_mode=sample_mode, privacy_required=privacy_required)
     catalog = manifest.get('privacy_catalog_sha256')
-    if catalog is not None or scope == 'general' or catalog_snapshot is not None:
+    if privacy_required:
         from vehicle.privacy.catalog import catalog_hash, matches_catalog_snapshot
-        required.add(('privacy', 'ARMED'))
         catalog_valid = (matches_catalog_snapshot(read_json(catalog_snapshot), catalog) if catalog_snapshot
                          else catalog in (catalog_hash(1), catalog_hash()))
         if not catalog_valid or not any(r.get('src') == 'privacy' and r.get('ev') == 'ARMED'
@@ -144,7 +150,17 @@ def validate_capture(capture, package, version, rules, apk=None, *, catalog_snap
                 and r.get('sdk') == selected['api_level'] for r in rows['reads.jsonl']):
             reject('privacy_catalog_mismatch', '通用隐私规则/Hook 契约与采集时不同或缺少对应就绪记录。')
     if not required <= armed:
-        reject('hook_not_armed', '本轮指定的采集钩子未全部就绪。')
+        reject('hook_not_armed', '本轮指定的采集钩子未全部就绪。',
+               missing=sorted([list(r) for r in required - armed]))
+    switch_error, tls_diagnostics = readiness.check_switch(rows['reads.jsonl'],
+        tls_bypass=tls_bypass, session=session, sample_mode=sample_mode,
+        require_switch=(switch_source == 'declared'))
+    if switch_error:
+        reject(switch_error, 'TLS 开关声明与就绪事件不一致；不能按旧口径判定就绪。',
+               **tls_diagnostics)
+    tls_diagnostics['switch_source'] = switch_source
+    if switch_source == 'legacy_default':
+        tls_diagnostics['gaps'].append('旧会话未显式记录 tls_bypass，按默认开启处理；不视为已验证。')
     hashes = manifest.get('input_sha256')
     if sample_mode and not hashes:
         reject('incomplete_input_hashes', '样本扩展必须绑定本轮输入摘要。')
@@ -162,6 +178,20 @@ def validate_capture(capture, package, version, rules, apk=None, *, catalog_snap
                 ref = evidence.setdefault(key, artifact_ref(path, sha256=expected))
                 if ref['sha256'] != expected:
                     reject('input_mismatch', f'采集输入摘要不一致：{name}')
+    # 当前构建身份（2026-11-11 P0-3）：验收记录里的 bundle 必须与本轮清单一致，
+    # 旧 sign-off / 旧 dist 产物不能借新会话通过。
+    recorded_hook = verification.get('hook_bundle') or {}
+    if recorded_hook.get('sha256') not in (None, manifest.get('current_hook_sha256')):
+        reject('hook_bundle_mismatch', '验收记录与会话清单登记的当前 bundle 不一致；不能继承旧产物签核。')
+    from vehicle.pipeline import session_binding
+    binding = session_binding.verify_binding(capture, manifest, verification, package=package)
+    if binding['status'] == 'failed':
+        reject('session_binding_invalid',
+               '会话绑定与当前证据不一致；不能复用其他会话或旧构建的签核。',
+               failures=binding['failures'])
+    from vehicle.pipeline.process_lifecycle import SUMMARY_FILE as LIFECYCLE_SUMMARY
+    if manifest.get('process_lifecycle') is not None and not (capture / LIFECYCLE_SUMMARY).is_file():
+        reject('lifecycle_summary_missing', '清单声明了进程生命周期覆盖但摘要文件缺失；不能宣称已记录覆盖缺口。')
     installed = manifest.get('installed_apk_sha256')
     if not isinstance(installed, str) or not re.fullmatch('[0-9a-f]{64}', installed):
         reject('missing_apk_identity', '缺少采集时装机 APK 的完整摘要。')
@@ -169,6 +199,8 @@ def validate_capture(capture, package, version, rules, apk=None, *, catalog_snap
         reject('apk_mismatch', '提供的 APK 与采集时装机 APK 不同。')
     target = [r for r in rows['reads.jsonl'] if r.get('ev') == 'VHAL_READ' and r.get('pkg') == package]
     gaps = ['仅覆盖 attach 后行为；短时无观测不证明未采集。']
+    gaps.extend(tls_diagnostics['gaps'])
+    gaps.extend(binding['gaps'])
     gaps.extend(manifest.get('gaps', []))
     if scope == 'general':
         if any(r.get('ev') == 'VHAL_READ' for r in rows['reads.jsonl']):
@@ -186,6 +218,14 @@ def validate_capture(capture, package, version, rules, apk=None, *, catalog_snap
         gaps.append('旧会话没有输入文件摘要，输入完整性未绑定；建议重新采集。')
     if not target:
         gaps.append('健康采集期间未观测到覆盖范围内的车辆属性读取；不代表 App 无其他隐私行为。')
+    # preflight 的 passed 只表示「本轮证据满足审计前门禁」，不等于设备已验收。
+    if binding['status'] != 'binding_consistent':
+        gaps.append('本轮未取得完整且一致的当前 bundle 会话绑定；不得计入新版本设备验收。')
     return {'status': 'passed', 'session_id': session, 'manifest': manifest,
-            'profile': selected, 'data_scope': scope, 'target_read_events': len(target), 'gaps': gaps,
+            'profile': selected, 'data_scope': scope, 'target_read_events': len(target),
+            'tls_readiness': tls_diagnostics, 'gaps': gaps,
+            'device_acceptance': binding['device_acceptance'],
+            'session_binding': {k: binding.get(k) for k in
+                ('status', 'session_id', 'bundle_sha256', 'actions', 'observed_receipts',
+                 'device_acceptance')},
             'evidence_artifacts': evidence}

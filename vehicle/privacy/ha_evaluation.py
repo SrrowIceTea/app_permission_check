@@ -3,6 +3,7 @@ from collections import Counter, defaultdict
 
 from core.collector.identity import uid_of, user_of
 from core.evidence import codeloc
+from vehicle.analyze.event_ref import pair_refs
 from vehicle.analyze.pair_ambiguity import annotate_candidates
 from vehicle.privacy import ha_contract as ha
 
@@ -66,9 +67,9 @@ def evaluate(events, session, user):
                 continue
             matched[identity(read), read['evt_id']] = (read, scale)
             pairs_by_identity[identity(body)].append({
-                'read_event_id': read['evt_id'], 'read_src': 'lab_power',
-                'scale_event_id': scale['evt_id'], 'flow_event_id': body['evt_id'],
-                'flow_src': 'ha_transport', 'delta_ms': delta, 'clock_basis': 'same_process_device_ts',
+                **pair_refs(read, body, read_src='lab_power', flow_src='ha_transport'),
+                'scale_event_id': scale['evt_id'],
+                'delta_ms': delta, 'clock_basis': 'same_process_device_ts',
                 'identity_scope': 'uid_verified', 'uid': body['uid'], 'client_tls': False,
                 'content_match': True, 'value_match': True, 'battery_percent': body['state'],
                 'http_status': body['status'], 'content_match_basis': 'complete_ha_webhook_battery_field',
@@ -114,7 +115,8 @@ def evaluate(events, session, user):
 
 
 def _finding(rows, session, user, uid):
-    refs = [{'src': 'lab_power', 'evt_id': row['evt_id']} for pair in rows for row in pair]
+    refs = [{'src': 'lab_power', 'evt_id': row['evt_id'], 'pid': row.get('pid'),
+             'session_id': row.get('session_id')} for pair in rows for row in pair]
     return {'rule_id': ha.READ_RULE, 'rule_revision': 1, 'rule_enabled': True, 'rule_android_version': '15',
             'rule_registry': 'ha_lab_contract', 'rule_type': 'sensitive_read', 'severity': 'info',
             'conclusion_level': 'observed', 'evidence_kind': 'read_event',

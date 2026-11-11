@@ -76,6 +76,14 @@ CHECKS = [
         'vehicle.bench.test_claim_scope',
         'vehicle.bench.test_duo_projection',
         'vehicle.bench.test_blind_evidence', 'vehicle.bench.test_samples', 'vehicle.bench.test_scheduler']),
+    # 2026-11-11 仅车载优化：通用关联 PID 引用 / TLS 就绪契约 / 当前 bundle 会话绑定 /
+    # 晚启动-重启进程观测 / 诊断账本。全部离线合成，不依赖设备或移动端。
+    ('vehicle-optimizations', '.', [sys.executable, '-m', 'unittest',
+        'vehicle.privacy.test_general_pid_reference',
+        'vehicle.pipeline.test_readiness',
+        'vehicle.pipeline.test_session_binding',
+        'vehicle.pipeline.test_process_lifecycle',
+        'vehicle.analyze.test_observation_ledger']),
     ('tagging-vehicle', 'vehicle/traffic', [sys.executable, '-m', 'unittest', 'test_tagging']),
     ('dashboard', 'vehicle/dashboard', [sys.executable, '-m', 'unittest', 'test_dashboard']),
     ('vehicle-webapp', '.', [sys.executable, '-m', 'unittest',

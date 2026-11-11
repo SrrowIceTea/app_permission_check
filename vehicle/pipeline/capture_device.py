@@ -4,7 +4,8 @@ import re
 import subprocess
 import time
 from core import sdk_paths
-from vehicle.pipeline.contracts import AuditError, ROOT, digest, write_json
+from vehicle.pipeline.contracts import AuditError, ROOT, digest, read_json, write_json
+from vehicle.pipeline.process_lifecycle import SAMPLES_FILE, SUMMARY_FILE
 
 
 class Device:
@@ -73,27 +74,41 @@ def wait_until(predicate, seconds, operation):
 
 def write_manifest(output, session, package, identity, used, input_names,
                    bundle_name='hook_vehicle_all.bundle.js', preserve_system_proxy=False,
-                   hook_bundle=None):
+                   hook_bundle=None, capture_switches=None):
     from vehicle.privacy.catalog import catalog_hash
     from vehicle.privacy import ha_contract as ha
     from vehicle.privacy import ha_socket_evidence as ha_socket
     from vehicle.privacy import mg4_contract as mg4
     from vehicle.privacy import abs_contract as abs_scope
     from vehicle.privacy import owntracks_contract as owntracks
+    live_inputs = [name for name in (SAMPLES_FILE, SUMMARY_FILE)
+                   if (output / name).is_file()]
     manifest = {**identity, 'session': session, 'packages': [package],
         'rules_sha256': digest(ROOT / 'vehicle/rules/rules_library/rules.db'),
         'used_hook_bundles': [bundle_name],
         'hook_bundles': {bundle_name: used}, 'privacy_catalog_sha256': catalog_hash(),
         'current_hook_sha256': used,
         'hook_archive': 'hook-bundles',
-        'input_sha256': {name: digest(output / name) for name in input_names if (output / name).is_file()},
+        'input_sha256': {name: digest(output / name)
+                         for name in (*input_names, *live_inputs) if (output / name).is_file()},
         'capture_mode': 'attach_preserve_proxy' if preserve_system_proxy else 'attach_system_proxy',
         'gaps': ['仅覆盖 attach 后与所附加进程；多进程、忽略系统代理或未知协议可能漏采。']}
     if hook_bundle:
         # 产物身份（2026-11-10）：bundle sha256 + 构建时间 + 源码指纹 + 构建时 dirty 标记。
         manifest['hook_bundle'] = hook_bundle
+    if capture_switches:
+        # 开关同时写进 verification 与清单，preflight 才能核对两侧声明一致。
+        manifest['capture_switches'] = dict(capture_switches)
     if preserve_system_proxy:
         manifest['gaps'].append('未修改设备代理。未经过本采集代理的业务正文不可见。')
+    if (output / SUMMARY_FILE).is_file():
+        try:
+            summary = read_json(output / SUMMARY_FILE)
+            manifest['gaps'].extend(summary.get('gaps') or [])
+            manifest['process_lifecycle'] = {k: summary.get(k) for k in
+                ('late_process_unattached', 'restart_events', 'pid_reuse_suspects', 'poll_failures')}
+        except (OSError, ValueError, AttributeError) as error:
+            manifest['gaps'].append('进程生命周期摘要不可读：' + type(error).__name__)
     if bundle_name == ha.BUNDLE:
         manifest['ha_webhook_contract_sha256'] = ha.contract_hash()
     if bundle_name == ha_socket.BUNDLE:
@@ -104,4 +119,15 @@ def write_manifest(output, session, package, identity, used, input_names,
         manifest[abs_scope.MANIFEST_KEY] = abs_scope.contract_hash()
     if bundle_name == owntracks.BUNDLE:
         manifest[owntracks.MANIFEST_KEY] = owntracks.contract_hash()
+    try:
+        # 新会话绑定（2026-11-11）：当前 bundle 身份、开关、健康与业务回执
+        # 一起封存；失败只记缺口，不覆盖采集本身的失败原因。
+        from vehicle.pipeline.session_binding import BINDING_FILE, build_binding
+        build_binding(output, session=session, package=package, bundle_name=bundle_name,
+                      bundle_sha256=used, identity_block=hook_bundle,
+                      switches=capture_switches)
+        manifest['session_binding_sha256'] = digest(output / BINDING_FILE)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        manifest['session_binding_error'] = type(error).__name__
+        manifest['gaps'].append('会话绑定生成失败：本轮不能计入新 bundle 验收。')
     write_json(output / 'session-manifest.json', manifest)

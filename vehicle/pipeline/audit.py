@@ -132,6 +132,12 @@ def _audit(execution, capture, output, package, version, scenarios, ai_config, p
     # 单看 findings_total 会把 5 个有检出的真实案例报成 0，合并成一个"检测率"则同时高估和低估。
     from vehicle.analyze.detection_summary import summarize as summarize_detection
     document['detection_summary'] = summarize_detection(records, document)
+    # 观测账本（2026-11-11）：漏斗、归因质量与未支持格式只作诊断，不产结论。
+    from vehicle.analyze.observation_ledger import build_ledger
+    document['observation_ledger'] = build_ledger(
+        session=session, package=package, reads=reads, flows=flows, findings=records,
+        health_passed=validated['status'] == 'passed', validation=validated,
+        capture=capture, scenarios=journal or [])
     document['policy_assessment'] = stage('policy', lambda: assess_policy(policy, package,
         validated['manifest']['installed_apk_sha256'], records, output / 'policy'))
     completeness = input_manifest(capture_paths(capture))

@@ -16,7 +16,8 @@ from vehicle.pipeline.contracts import AuditError, digest
 
 
 def read(evt_id=1, ts=1000):
-    return {'ev': 'VHAL_READ', 'pkg': 'com.test', 'uid': 1010123,
+    # pid 是事件引用的一部分：合成事件也必须带，否则新契约下不会宣称唯一来源。
+    return {'ev': 'VHAL_READ', 'pkg': 'com.test', 'uid': 1010123, 'pid': 100,
             'session_id': 's1', 'outcome': 'ok', 'prop_id': 291504647,
             'prop_name': 'PERF_VEHICLE_SPEED', 'value': 42.5, 'ts': ts,
             'host_received_ts': ts + 1, 'src': 'vhal', 'evt_id': evt_id,
@@ -25,7 +26,7 @@ def read(evt_id=1, ts=1000):
 
 def flow(evt_id=2, ts=1010):
     return {'package': 'com.test', 'session_id': 's1', 'ts': ts, 'evt_id': evt_id,
-            'src': 'proxy', 'uid': 1010123, 'attribution': 'egress_hook',
+            'src': 'proxy', 'pid': 200, 'uid': 1010123, 'attribution': 'egress_hook',
             'request_payload': {'text': '{"property":"PERF_VEHICLE_SPEED","value":42.5}'},
             'request_parse': {'parse_status': 'parsed_json'},
             'method': 'POST', 'status_code': 200}

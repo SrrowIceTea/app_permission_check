@@ -6,6 +6,7 @@ from collections import Counter, defaultdict
 from core.collector.attribution import is_loose
 from core.collector.identity import compatible, identity_scope, uid_of, user_of
 from core.privacy.semantics import read_state
+from vehicle.analyze.event_ref import pair_refs
 from vehicle.analyze.pair_ambiguity import annotate_candidates
 from vehicle.privacy.location_payload import request_values
 
@@ -142,10 +143,8 @@ def evaluate(reads, flows, package, session, *, window_ms=30000):
             matched = [name for name, value in forms.items() if value in values]
             if not matched:
                 continue
-            pairs.append({'read_src': read['src'], 'read_event_id': read['evt_id'],
-                'read_pid': read['pid'], 'flow_pid': flow.get('pid'),
-                'flow_src': flow['src'], 'flow_event_id': flow['evt_id'],
-                'uid': read['uid'], 'user_id': read['user_id'], 'delta_ms': delta,
+            pairs.append({**pair_refs(read, flow),
+                'delta_ms': delta,
                 'clock_basis': 'host_received_ts', 'identity_scope': identity_scope(read, flow),
                 'evidence_level': 'content_match_candidate', 'content_match': True,
                 'content_match_basis': 'complete_outgoing_json_whole_coordinate_pair_string',

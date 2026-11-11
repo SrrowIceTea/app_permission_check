@@ -72,8 +72,14 @@ class WindowCalibrationTests(unittest.TestCase):
             calibrate(self.capture, self.label_path)
 
     def test_repeated_values_are_candidates_not_unique_origin(self):
-        pairs = [{'read_event_id': r, 'flow_event_id': 9, 'uid': 1012345} for r in (1, 2)]
-        pairs.append({'read_event_id': 3, 'flow_event_id': 9, 'uid': 1112345})
+        # evt_id 是进程内序号：合成 pairs 也必须带 pid/session，否则引用不完整
+        # 时按契约一律不得宣称唯一来源。
+        def ref(read_id, uid):
+            return {'read_src': 'vhal', 'read_event_id': read_id, 'read_pid': 100,
+                    'flow_src': 'proxy', 'flow_event_id': 9, 'uid': uid,
+                    'session_id': 's1'}
+        pairs = [ref(r, 1012345) for r in (1, 2)]
+        pairs.append(ref(3, 1112345))
         self.assertEqual(1, annotate_candidates(pairs))
         self.assertEqual([2, 2, 1], [p['matching_read_candidates_for_flow'] for p in pairs])
         self.assertEqual([False, False, True], [p['source_read_unique'] for p in pairs])
