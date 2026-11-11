@@ -59,6 +59,7 @@ def sdk_attribution_text(finding: dict) -> str:
     chain_sdks: list[str] = []
     has_collection = False
     third_party_frames = 0
+    obfuscated_frames = 0
     for s in sdk_summaries:
         for name in s.get("sdk_in_chain") or []:
             if name not in chain_sdks:
@@ -66,6 +67,7 @@ def sdk_attribution_text(finding: dict) -> str:
         if s.get("has_collection_sdk"):
             has_collection = True
         third_party_frames += s.get("third_party_frames") or 0
+        obfuscated_frames += s.get("obfuscated_frames") or 0
 
     parts: list[str] = []
     if chain_sdks:
@@ -74,6 +76,9 @@ def sdk_attribution_text(finding: dict) -> str:
                         else "（通用库，非采集类 SDK）"))
     elif has_collection:
         parts.append("调用链出现采集类 SDK 帧")
+    if obfuscated_frames:
+        parts.append(f"另有 {obfuscated_frames} 帧为应用内混淆代码"
+                     "（R8 混淆后宿主/第三方无法区分，不据此归责）")
     if third_party_frames:
         parts.append(f"另有 {third_party_frames} 帧属打包内的第三方代码（认不出是哪家 SDK）")
     if not parts:
