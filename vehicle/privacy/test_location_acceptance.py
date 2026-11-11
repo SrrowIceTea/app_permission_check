@@ -215,6 +215,23 @@ class LocationAcceptanceTests(unittest.TestCase):
         result = json.loads((out / 'failure.json').read_text(encoding='utf-8'))
         self.assertEqual('invalid_handoff_plan', result['reason'])
 
+    def test_duplicate_session_verdict_is_consistent_in_saved_case_files(self):
+        entries = [fixture(self.root / name) for name in ('first', 'second')]
+        plan = self.root / 'plan.json'
+        write_json(plan, {'schema_version': 1, 'input_kind': 'synthetic', 'cases': entries})
+        out = self.root / 'out'
+        result = acceptance.run(plan, out)
+        for row in result['cases']:
+            saved = json.loads((out / row['id'] / 'acceptance.json').read_text(encoding='utf-8'))
+            self.assertEqual('blocked', row['status'])
+            self.assertEqual(row, saved)
+
+    def test_blocked_third_party_candidates_are_not_published_as_valid_matches(self):
+        row = {'id': 'bad', 'kind': 'third_party', 'status': 'blocked',
+               'condition_met': False, 'pair_count': 3}
+        result = acceptance.summarize({'input_kind': 'device'}, [row])
+        self.assertIsNone(result['third_party_supported_matches'])
+
 
 if __name__ == '__main__':
     unittest.main()

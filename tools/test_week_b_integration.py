@@ -98,6 +98,21 @@ class WeekBIntegrationTests(unittest.TestCase):
         self.assertFalse(result['device_acceptance_passed'])
         self.assertNotEqual('达成', result['achievements'][3]['status'])
 
+    def test_missing_staging_metadata_does_not_prove_readonly(self):
+        write_json(self.out / 'replay-index.json', {'captures': [
+            {'id': 'one', 'result_path': 'declared', 'cli_returncode': 0}]})
+        self.assertEqual('fail', self.boundaries()[0]['B05'])
+
+    def test_unrelated_assertion_failure_is_not_labelled_as_environment_guard(self):
+        write_json(self.out / 'verify-branch-default/verification.json',
+                   {'checks': [{'name': 'example', 'exit_code': 1}]})
+        (self.out / 'verify-branch-default/example.log').write_text(
+            'FAIL: test_regression\nAssertionError: actual bug\nFAILED (failures=1)')
+        result = acceptance.environment_isolation(self.out)
+        self.assertNotIn('与本次改动无关', result['diagnosis'])
+        self.assertEqual('not_recorded', result['isolation'])
+        self.assertTrue(result['per_group_evidence']['example']['assertion_failure_present'])
+
 
 if __name__ == '__main__':
     unittest.main()

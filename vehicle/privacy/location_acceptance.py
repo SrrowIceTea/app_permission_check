@@ -35,7 +35,7 @@ def summarize(plan, rows):
         'device_controls_verified': bool(controls and not synthetic),
         'third_party_attempt_recorded': bool(attempted and not synthetic),
         'third_party_supported_matches': sum(r.get('pair_count', 0) for r in kinds['third_party'])
-                                         if not synthetic else None,
+                                         if not synthetic and attempted else None,
         'missing_case_kinds': [k for k in handoff.KINDS if not kinds[k]], 'cases': rows,
         'counts_by_status': dict(Counter(r['status'] for r in rows)),
         'checklist': CHECKLIST,
@@ -79,7 +79,12 @@ def run(plan_path, output):
     result = summarize(plan, rows)
     if digest(Path(plan_path)) != plan_sha:
         result.update(status='handoff_changed', device_controls_verified=False,
-                      third_party_attempt_recorded=False)
+                      third_party_attempt_recorded=False, third_party_supported_matches=None)
+        for row in rows:
+            row.update(status='blocked', condition_met=False, reason_code='handoff_changed')
+        result['counts_by_status'] = dict(Counter(r['status'] for r in rows))
+    for row in rows:
+        write_json(output / row['id'] / 'acceptance.json', row)
     result['handoff_sha256'] = plan_sha
     result['declared_baseline'] = plan.get('baseline_commit')
     git = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True, text=True)

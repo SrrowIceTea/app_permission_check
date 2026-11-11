@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -136,18 +137,18 @@ def environment_isolation(out):
             continue
         text = path.read_text(encoding='utf-8', errors='replace')
         evidence[name] = {'bulk_delete_guard_stack': '_check_bulk_delete_guard' in text,
-                          'assertion_failure_present': 'FAILED (' in text}
+                          'assertion_failure_present': bool(re.search(
+                              r'(?m)^FAIL:|FAILED \([^)]*failures=[1-9]', text))}
     return {
-        'status': 'observed_environment_failure' if failed else 'no_failure',
+        'status': 'failure_observed' if failed else 'no_failure',
         'default_env_dir': 'verify-branch-default/',
         'default_env_failed_groups': failed,
         'per_group_evidence': evidence,
-        'diagnosis': ('三组均为 ERROR 而非断言 FAIL，堆栈指向 WorkBuddy '
-                      'sitecustomize.py::_check_bulk_delete_guard -> SystemExit(1)，'
-                      '发生在 unittest tearDown 临时目录清理。与本次改动无关。'),
+        'diagnosis': ('失败原因待逐组核验；日志中的守卫堆栈和断言失败标记见per_group_evidence。'
+                      '不能仅凭非零退出码排除代码回归。') if failed else '本轮无失败。',
         'isolated_rerun_dir': 'verify-branch/',
-        'isolation': 'CODEBUDDY_SAFE_DELETE_ENABLED=0 仅用于本次子进程',
-        'project_guard_disabled': False,
+        'isolation': 'not_recorded',
+        'project_guard_disabled': None,
         'note': '代码侧结论必须同时引用两个目录；不能只报隔离后的全绿。',
     }
 

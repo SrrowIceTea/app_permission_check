@@ -103,9 +103,9 @@ def boundary_checks(out):
                         'pass' if completed and experiment_ok else ('fail' if records else 'not_run'),
                         {'records': len(records),
                          'attempts': [(r['id'], r.get('attempt_status')) for r in records]}))
-    readonly = completed and all((r.get('staging') or {}).get('source_readonly_verified')
-                   and (r.get('staging') or {}).get('staged_unchanged_after_replay')
-                   for r in records if r.get('staging'))
+    readonly = completed and all((r.get('staging') or {}).get('source_readonly_verified') is True
+                   and (r.get('staging') or {}).get('staged_unchanged_after_replay') is True
+                   for r in records)
     checks.append(check('B05', '只读副本：原目录与 staging 的 sha256 前后一致',
                         'pass' if records and readonly else ('fail' if records else 'not_run'),
                         {'readonly_verified': readonly, 'captures': len(records)}))

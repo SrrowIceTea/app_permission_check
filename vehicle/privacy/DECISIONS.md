@@ -21,3 +21,8 @@ legacy 转换文本无独立摘要时记录 legacy_text_requires_capture_input_b
 动作、设备来源及capture_commit均为交接声明，不作独立专家金标准；人工检查表不自动签核。
 缺A本轮输入时总验收保持incomplete；不复用历史签核、不启用VSC-GE-location。
 接口、失败处理及已发现的TLS开关/就绪接口风险见[交接说明](../../docs/DUO_LOCATION_HANDOFF.md)。
+
+## L003 批次否决与落盘一致（2026-11-11）
+
+重复session或交接计划变更导致批次否决后，逐案acceptance.json同步保存最终blocked状态。
+第三方尝试未通过门禁时supported_matches为null，不发布失败行的候选总和；原始计数仍留诊断。
