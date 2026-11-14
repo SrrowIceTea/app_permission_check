@@ -1,16 +1,30 @@
 ﻿# 当前主机入口；仅用于授权测试。Dot-source: . .\environment.ps1
 #
-# 2026-09-28 从旧开发机迁到本机后校正。旧机是 OneKyubey 用户 + E:\Android\android-sdk
-# + 工程内 .tools\jdk21；本机是 D:\Anroid\SDK + D:\Anroid\JDK，没有 .tools。
-# 换机器时只改下面三个 $VScan* 默认值即可，或先设好同名环境变量覆盖。
+# 覆盖值优先；默认值按当前确实存在的工具解析，不把另一台开发机路径当成本机事实。
 
 function Get-VScanSetting([string]$Name, [string]$Default) {
     if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($Name))) { $Default }
     else { [Environment]::GetEnvironmentVariable($Name) }
 }
 
-$VScanSdk = Get-VScanSetting 'VSCAN_SDK' "$env:LOCALAPPDATA\Android\Sdk"
-$VScanJdk = Get-VScanSetting 'VSCAN_JDK' 'D:\Android\JDK'
+function Find-VScanSdk {
+    foreach ($candidate in @("$env:LOCALAPPDATA\Android\Sdk", $env:ANDROID_SDK_ROOT, $env:ANDROID_HOME,
+                             'E:\Android\android-sdk', 'D:\Android\SDK', 'D:\Anroid\SDK')) {
+        if ($candidate -and (Test-Path -LiteralPath (Join-Path $candidate 'platform-tools/adb.exe'))) { return $candidate }
+    }
+    return "$env:LOCALAPPDATA\Android\Sdk"
+}
+function Find-VScanJdk {
+    foreach ($candidate in @($env:JAVA_HOME, 'D:\Android\JDK', 'D:\Anroid\JDK', 'E:\Android\openjdk\jdk-17.0.12')) {
+        if (-not $candidate -or -not (Test-Path -LiteralPath (Join-Path $candidate 'bin/java.exe'))) { continue }
+        $release = Join-Path $candidate 'release'
+        if ((Test-Path -LiteralPath $release) -and
+            ((Get-Content -LiteralPath $release) -match '^JAVA_VERSION="(17|21)(\.|\")')) { return $candidate }
+    }
+    return 'D:\Android\JDK'
+}
+$VScanSdk = Get-VScanSetting 'VSCAN_SDK' (Find-VScanSdk)
+$VScanJdk = Get-VScanSetting 'VSCAN_JDK' (Find-VScanJdk)
 # 显式覆盖 > 项目虚拟环境 > 已有实际解释器，禁止回退 WindowsApps 别名。
 $VScanDefaultPython = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe'
 if (Test-Path -LiteralPath (Join-Path $PSScriptRoot '.venv/Scripts/python.exe')) {
@@ -28,11 +42,11 @@ $env:ANDROID_HOME = $VScanSdk
 $env:ANDROID_SDK_ROOT = $VScanSdk
 if (Test-Path -LiteralPath $VScanJdk) { $env:JAVA_HOME = $VScanJdk }
 
-# JDK 的本地套接字临时目录必须在纯 ASCII 路径下：工程路径含非 ASCII 会让 NIO 直接失败。
-# 目录不存在时 JDK 不报错、只在连本地套接字时炸，所以这里显式建出来。
-$VScanTemp = Get-VScanSetting 'VSCAN_TEMP' (Join-Path $PSScriptRoot 'output/java-temp')
-New-Item -ItemType Directory -Force -Path $VScanTemp | Out-Null
-$env:JAVA_TOOL_OPTIONS = "-Djdk.net.unixdomain.tmpdir=$VScanTemp"
+# 本机 JDK17 的 AF_UNIX connect 失败；不存在的 socket 目录使 JDK 按自身逻辑回退 TCP。
+# 默认放在系统临时目录，不创建此叶目录。显式 VSCAN_TEMP 保持用户指定的原意。
+$VScanTemp = Get-VScanSetting 'VSCAN_TEMP' (Join-Path ([IO.Path]::GetTempPath()) 'vscanner-nio-tcp-fallback/unavailable')
+$VScanJavaOptions = $env:JAVA_TOOL_OPTIONS -replace '(?:^|\s)-Djdk\.net\.unixdomain\.tmpdir=(?:"[^"]*"|\S+)', ''
+$env:JAVA_TOOL_OPTIONS = ($VScanJavaOptions + ' -Djdk.net.unixdomain.tmpdir="' + $VScanTemp + '"').Trim()
 
 $env:PYTHONUTF8 = '1'
 $VScanPythonDir = Split-Path -Parent $VScanPython

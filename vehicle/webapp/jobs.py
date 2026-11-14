@@ -26,6 +26,15 @@ def options(query, catalog):
         raise AuditError('authorization_required', '请确认当前 APK 和设备的测试授权。',
                          '勾选授权声明后再上传。')
     result = {'mode': mode, 'version': '15'}
+    result['version'] = value('version', '15')
+    if result['version'] not in ('13', '14', '15', '16'):
+        raise AuditError('invalid_version', '不支持的 Android 规则版本。', '选择 13–16 的对应规则版本。')
+    if value('attachment_id'):
+        result['attachment_id'] = value('attachment_id')
+    if 'ai_review' in query:
+        if value('ai_review') not in ('true', 'false'):
+            raise AuditError('invalid_switch', 'AI 开关必须是 true/false。', '重新选择辅助复核设置。')
+        result['ai_review'] = value('ai_review') == 'true'
     if mode == 'replay':
         result['capture'] = str(catalog.resolve(value('capture')))
     if mode == 'live':
@@ -40,6 +49,14 @@ def options(query, catalog):
         if user < 0 or not 5 <= seconds <= 300:
             raise AuditError('invalid_duration', '采集时长须为 5–300 秒，用户编号须非负。', '修改采集参数。')
         result.update(serial=serial, user=user, seconds=seconds)
+        scope = value('scope', 'all')
+        if scope not in ('all', 'general') or (scope == 'all' and result['version'] != '15'):
+            raise AuditError('invalid_scope', '完整车辆范围只验证了 Android 15；其他版本请选择通用来源。', '调整采集范围。')
+        result['scope'] = scope
+        for key, default in (('tls_bypass', 'false'), ('multi_process', 'true')):
+            if value(key, default) not in ('true', 'false'):
+                raise AuditError('invalid_switch', '采集开关必须是 true/false。', '重新选择采集设置。')
+            result[key] = value(key, default) == 'true'
     return result
 
 
@@ -87,16 +104,26 @@ class Registry:
                     'next_action': '保留本轮证据；检查设备与代理状态后新建审计。'}})
             self.jobs[data['id']] = job
 
-    def submit(self, uploaded, name, settings):
+    def submit(self, uploaded, name, settings, retry_of=None):
         with self.lock:
+            if settings.get('ai_review') and not self.ai_config:
+                raise AuditError('ai_not_configured', '服务尚未配置 AI，不能执行辅助复核。', '先关闭辅助复核，或由服务启动配置模型。')
             if not self.accepting or any(j.data['state'] not in TERMINAL for j in self.jobs.values()):
                 raise AuditError('service_busy', '当前审计仍在运行。', '等待本轮结束后再新建。')
             identity = 'v-' + uuid.uuid4().hex
             out = self.root / identity
             out.mkdir()
+            settings = dict(settings)
+            if retry_of is not None and (retry_of.out / 'inputs').is_dir():
+                shutil.copytree(retry_of.out / 'inputs', out / 'inputs')
+            elif settings.get('attachment_id'):
+                from vehicle.webapp.attachments import copy_into
+                settings.update(copy_into(self.root, settings['attachment_id'], out))
             shutil.move(str(uploaded), str(out / 'uploaded.apk'))
             job = Job(out, {'id': identity, 'name': name, 'state': 'queued',
                            'created': time.time(), 'options': settings, 'result': {}})
+            if retry_of is not None:
+                job.data['retry_of'] = retry_of.data['id']
             job.save()
             self.jobs[identity] = job
             thread = threading.Thread(target=self._execute, args=(job,), name=identity)

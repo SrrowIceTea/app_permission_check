@@ -90,14 +90,14 @@ CHECKS = [
     ('tagging-vehicle', 'vehicle/traffic', [sys.executable, '-m', 'unittest', 'test_tagging']),
     ('dashboard', 'vehicle/dashboard', [sys.executable, '-m', 'unittest', 'test_dashboard']),
     ('vehicle-webapp', '.', [sys.executable, '-m', 'unittest',
-                            'vehicle.webapp.test_server', 'vehicle.webapp.test_workflow',
+                            'vehicle.webapp.test_server', 'vehicle.webapp.test_workflow', 'vehicle.webapp.test_integration',
                             'vehicle.webapp.test_review_round', 'vehicle.webapp.test_presentation',
                             'vehicle.webapp.test_finding_reviews', 'vehicle.webapp.test_ui_evidence']),
     ('vehicle-expanded-review', '.', [sys.executable, '-m', 'unittest',
                                      'vehicle.bench.test_expanded_round']),
     # 车载前端诊断账本纯离线契约：缺字段不补 0 / 漏斗不相加 / pending 不写成通过 /
     # 后端文本不注入 HTML。用 vm + DOM 桩跑真实 ledger.js，不需要浏览器或设备。
-    ('vehicle-ledger-ui', 'vehicle/frontend', ['node', 'test_ledger_panel.mjs']),
+    ('vehicle-ledger-ui', 'vehicle/frontend', ['node', '--test', 'test_ledger_panel.mjs', 'test_connection.mjs']),
     ('runtime', 'vehicle/hooks', ['node', 'test_runtime.mjs']),
     ('privacy-runtime', 'vehicle/hooks', ['node', 'test_privacy.mjs']),
     ('parity', 'vehicle/rules', [sys.executable, 'android/tools/verify_schema_parity.py']),

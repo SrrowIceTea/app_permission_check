@@ -104,14 +104,26 @@
         </header>
 <form id="audit-options" class="vehicle-options" aria-label="审计设置">
 <label>审计方式<select id="audit-mode"><option value="static">仅静态分析</option><option value="replay">重放已有采集</option><option value="live">新建 AAOS 采集</option></select></label>
+<label>Android 规则版本<select id="audit-version"><option>15</option><option>13</option><option>14</option><option>16</option></select></label>
+<label><input id="ai-enabled" type="checkbox" disabled>执行辅助复核（需服务已配置模型）</label>
 <label id="capture-option" hidden>采集会话<select id="capture-choice"><option value="">选择已有会话</option></select></label>
 <div id="device-options" hidden>
 <label>设备序列号<input id="device-serial" value="emulator-5554" autocomplete="off"></label>
 <label>用户编号<input id="device-user" type="number" min="0" value="10"></label>
 <label>采集秒数<input id="capture-seconds" type="number" min="5" max="300" value="30"></label>
+<label>采集范围<select id="capture-scope"><option value="all">车辆与通用来源（Android 15）</option><option value="general">仅通用隐私来源</option></select></label>
+<label><input id="multi-process" type="checkbox" checked>附加当前可核验的同包子进程</label>
+<label><input id="tls-bypass" type="checkbox">对白名单应用启用 TLS 校验收宽（仅授权捕获）</label>
 <p class="hint">使用 API 35 的自有 AAOS 与已启动的 Frida；目标 App 须已安装并打开，且与上传 APK 一致。采集期间请操作目标 App。</p>
 </div>
 <label class="authorization"><input type="checkbox" id="authorized">我有权测试当前 APK 及所选设备。仅用于授权测试。</label>
+<details><summary>政策与场景证据（可选）</summary>
+<p class="hint">同时选择入口 JSON 和它引用的正文/回执，最多 64 个文件、合计 4 MiB。政策与场景仅用于动态审计；静态模式只保留附件。保留原包名、APK 摘要、会话和文件摘要。</p>
+<input id="evidence-files" type="file" multiple aria-label="选择政策或场景证据文件">
+<label>或选择证据文件夹（保留相对路径）<input id="evidence-folder" type="file" webkitdirectory multiple aria-label="选择政策或场景证据文件夹"></label>
+<label>政策清单<select id="policy-file"><option value="">未提供</option></select></label>
+<label>场景清单<select id="scenarios-file"><option value="">未提供</option></select></label>
+</details>
 </form>
         <div class="stage-slot">
           <div class="pipeline-dropzone" id="pipeline-dropzone" role="button" tabindex="0"
@@ -246,6 +258,10 @@
 </main>
 <script src="../../frontend/highlight.js"></script>
 <script src="results.js"></script>
+<script src="finding_review_ui.js"></script>
+<script src="job_ui.js"></script>
+<script src="integration.js"></script>
+<script src="connection.js"></script>
 <script src="components.js"></script>
 <script src="observation.js"></script>
 <script src="ledger.js"></script>

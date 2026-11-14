@@ -60,6 +60,9 @@ class Handler(Responses, BaseHTTPRequestHandler):
         try:
             parts = urlsplit(self.path)
             path, query = parts.path, parse_qs(parts.query)
+            from vehicle.webapp.extra_routes import dispatch
+            if dispatch(self, path, query, post):
+                return
             if post:
                 if path == '/api/pipeline':
                     settings = options(query, self.registry.catalog)
@@ -83,7 +86,8 @@ class Handler(Responses, BaseHTTPRequestHandler):
                     return self.file(target, mimetypes.guess_type(target)[0] or 'application/octet-stream')
             if path in ('/app.js', '/results.js', '/components.js', '/upload.js', '/source.js', '/review.js',
                         '/observation.js', '/ledger.js', '/review.css', '/vehicle.css', '/components.css',
-                        '/ledger.css', '/fonts.css', '/typography.css'):
+                        '/ledger.css', '/fonts.css', '/typography.css', '/integration.js', '/job_ui.js',
+                        '/connection.js', '/finding_review_ui.js'):
                 target = WEB / path[1:]
                 return self.file(target, mimetypes.guess_type(target)[0] or 'text/plain')
             if path == '/assets/vehicle-studio.png':
@@ -99,6 +103,8 @@ class Handler(Responses, BaseHTTPRequestHandler):
             if path == '/api/config':
                 return self.json({'platform': 'vehicle', 'version': '15', 'api': 35,
                     'ai_configured': bool(self.registry.ai_config), 'stages': STAGES,
+                    'versions': ['13', '14', '15', '16'],
+                    'capabilities': {'retry': True, 'logs': True, 'attachments': True, 'evidence_zip': True},
                     'captures': self.registry.catalog.rows()})
             if path == '/api/pipeline':
                 return self.json(self.registry.rows())
@@ -161,7 +167,10 @@ class Handler(Responses, BaseHTTPRequestHandler):
 
     def sse(self, job):
         self.headers_out(200, 'text/event-stream')
-        offset = 0
+        try:
+            offset = max(0, int(self.headers.get('Last-Event-ID', '0')))
+        except ValueError:
+            offset = 0
         try:
             while True:
                 # Read the terminal state before events: finish() follows the final event.
@@ -169,8 +178,8 @@ class Handler(Responses, BaseHTTPRequestHandler):
                 path = job.out / 'events.jsonl'
                 with job.lock:
                     rows = path.read_text(encoding='utf-8').splitlines() if path.exists() else []
-                for row in rows[offset:]:
-                    self.wfile.write(('data: ' + row + '\n\n').encode('utf-8'))
+                for index, row in enumerate(rows[offset:], offset + 1):
+                    self.wfile.write((f'id: {index}\ndata: ' + row + '\n\n').encode('utf-8'))
                 offset = len(rows)
                 if snapshot['state'] in TERMINAL:
                     self.wfile.write(('event: end\ndata: ' + json.dumps(snapshot,

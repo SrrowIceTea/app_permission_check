@@ -65,7 +65,7 @@ class WorkflowTest(unittest.TestCase):
         self.job.data['options'] = {'serial': 'emulator-5554', 'user': 10, 'seconds': 5}
         with patch('vehicle.pipeline.capture_device.Device') as device, \
              patch('vehicle.pipeline.capture.capture_app') as collect:
-            device.return_value.ordinary_identity.return_value = {'installed_apk_sha256': 'f' * 64}
+            device.return_value.ordinary_identity.return_value = {'installed_apk_sha256': 'f' * 64, 'device_sdk': 35}
             with self.assertRaises(AuditError) as caught:
                 capture(self.job, PACKAGE)
             self.assertEqual('installed_apk_mismatch', caught.exception.code)
@@ -86,7 +86,7 @@ class WorkflowTest(unittest.TestCase):
         with patch('vehicle.pipeline.capture_device.Device') as device, \
              patch('vehicle.pipeline.capture.capture_app') as collect:
             device.return_value.ordinary_identity.return_value = {
-                'installed_apk_sha256': digest(self.out / 'uploaded.apk')}
+                'installed_apk_sha256': digest(self.out / 'uploaded.apk'), 'device_sdk': 35}
             device.return_value.call.side_effect = AuditError('device_command_failed', 'test', 'test', exit_code=1)
             with self.assertRaises(AuditError) as caught:
                 capture(self.job, PACKAGE)

@@ -21,8 +21,12 @@ def capture(job, package):
     if not re.fullmatch(r'[A-Za-z]\w*(?:\.\w+)+', package):
         raise AuditError('invalid_capture_target', 'APK 包名格式无效。', '选择有效的授权 APK。')
     settings = job.data['options']
+    scope = settings.get('scope', 'all')
     device = Device(settings['serial'])
-    identity = device.ordinary_identity(package, settings['user'])
+    identity = device.ordinary_identity(package, settings['user'], scope)
+    from vehicle.compatibility import os_version
+    if os_version(identity['device_sdk']) != settings.get('version', '15'):
+        raise AuditError('device_version_mismatch', '所选规则版本与实际设备不符。', '选择设备对应版本。')
     if identity['installed_apk_sha256'] != digest(job.out / 'uploaded.apk'):
         raise AuditError('installed_apk_mismatch', '上传的 APK 与设备装机版本不一致。',
                          '在指定用户下安装同一授权 APK 后重新创建审计。')
@@ -36,7 +40,9 @@ def capture(job, package):
         raise
     output = job.out / 'capture'
     result = capture_app(package, settings['serial'], settings['user'],
-                         settings['seconds'], output)
+                         settings['seconds'], output, scope=scope,
+                         tls_bypass=settings.get('tls_bypass', False),
+                         multi_process=settings.get('multi_process', True))
     if result.get('passed') is not True:
         cause = result.get('error') or {}
         raise AuditError('capture_unhealthy', '采集健康校验未通过。' + cause.get('message', ''),
@@ -52,7 +58,9 @@ def run(job, ai_config=None):
 
     apk, output = job.out / 'uploaded.apk', job.out / 'static'
     output.mkdir()
-    static = step(job, 'static', lambda: scan_static(apk, RULES, '15', output))
+    settings = job.data['options']
+    version = settings.get('version', '15')
+    static = step(job, 'static', lambda: scan_static(apk, RULES, version, output))
     def source():
         result = decompile(apk, output, threads=2) or {}
         if result.get('returncode') not in (None, 0) and not result.get('classes_written'):
@@ -81,10 +89,16 @@ def run(job, ai_config=None):
         captured = Path(settings['capture'])
         job.event('capture', 'skipped', '重放已有采集；未发起新设备操作')
     manifest = read_json(captured / 'session-manifest.json')
-    version = manifest.get('device_sdk', '35')
+    from vehicle.compatibility import os_version
+    actual_version = os_version(manifest.get('device_sdk', '35'))
+    if version != actual_version:
+        raise AuditError('replay_version_mismatch', '所选静态规则版本与采集会话不同。', '选择会话对应版本后新建审计。')
+    def auxiliary(key):
+        return job.out / settings[key] if settings.get(key) else None
     # All package, APK, rule, hook and session bindings are checked by run_audit.
     summary = step(job, 'audit', lambda: run_audit(captured, job.out / 'audit', package,
-                   str(version), ai_config=ai_config, apk=apk))
+                   version, ai_config=ai_config if settings.get('ai_review', True) else None, apk=apk,
+                   policy=auxiliary('policy'), scenarios=auxiliary('scenarios')))
     def dashboard():
         args = SimpleNamespace(findings=job.out / 'audit/findings.jsonl',
             summary=job.out / 'audit/summary.json', verify=None, rules=RULES)

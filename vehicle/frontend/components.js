@@ -227,6 +227,9 @@
       if (!job) return {id: stage.id, label: stage.label, status: 'pending', message: '等待执行'};
       if (!events) return {id: stage.id, label: stage.label, status: 'unknown', message: STATUS_TEXT.unknown};
       const event = events.filter(e => e.stage === stage.id).pop();
+      const timing = job.stage_timings?.find(row => row.stage === stage.id);
+      if (timing && ['done', 'failed', 'skipped'].includes(timing.status))
+        return {id: stage.id, label: stage.label, status: timing.status, message: event?.message || STATUS_TEXT[timing.status]};
       return {id: stage.id, label: stage.label, status: event ? event.status : 'pending',
         message: event ? event.message : '等待执行'};
     });
@@ -254,15 +257,6 @@
     box.append(list);
     return box;
   }
-  function action(name, why) {
-    const box = U.node('div', 'state-action');
-    const button = U.node('button', 'pl-btn', name);
-    button.type = 'button';
-    button.disabled = true;
-    button.title = why;
-    box.append(button, U.node('span', '', why));
-    return box;
-  }
   U.failureSpec = function (job) {
     const progress = U.progressOf(job);
     const suffix = {pending: '（等待执行）', skipped: '（已跳过）', unknown: '（阶段记录尚未载入）'};
@@ -287,13 +281,7 @@
     box.append(section('已完成', spec.done, '本轮没有已完成的阶段记录。'),
       section('未执行', spec.pending, '没有未执行的阶段。'));
     if (spec.next_action) box.append(U.node('p', 'state-panel__next', '建议：' + spec.next_action));
-    const actions = U.node('div', 'state-panel__actions');
-    actions.append(
-      action('重试', '后端未提供按任务重新执行的接口：POST /api/pipeline 只接受新上传，不能复用原任务编号。'),
-      action('打开日志', '后端未提供日志读取接口；失败堆栈只保留在服务端 output/vehicle-web/' +
-        (spec.jobId || '<任务编号>') + '/failure.log。'));
-    box.append(actions, U.node('p', 'state-panel__gap',
-      '缺口：以上两个动作依赖后端接口。本轮按约束不改后端，因此按钮置灰并写明原因。'));
+    if (U.failureActions) box.append(U.failureActions(spec));
     if (spec.summary instanceof Node) host.replaceChildren(spec.summary, box);
     else host.replaceChildren(box);
   };

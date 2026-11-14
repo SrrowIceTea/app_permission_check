@@ -20,6 +20,9 @@
         ctx.capture ? '已选择会话：' + ctx.capture : '未选择；服务端会以 unknown_capture 拒绝。'));
     }
     if (ctx.mode === 'live') {
+      const scopeOk = ctx.scope === 'general' || (ctx.scope === 'all' && ctx.version === '15');
+      rows.push(row('设备范围', scopeOk ? 'pass' : 'fail', scopeOk
+        ? 'Android ' + ctx.version + ' · ' + ctx.scope : '完整车辆范围只验证 Android 15，其他版本须选择通用来源。'));
       const serialOk = /^[A-Za-z0-9_.:-]{1,100}$/.test(String(ctx.serial || ''));
       rows.push(row('设备序列号', serialOk ? 'pass' : 'fail',
         serialOk ? String(ctx.serial) : '须为 1–100 位字母、数字或 _ . : -；与后端正则一致。'));

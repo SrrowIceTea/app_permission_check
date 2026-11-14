@@ -90,6 +90,8 @@ def serve(handler, job, action, query):
         if summary.is_file():
             version = document(summary).get('android_version') or version
         return handler.json(findings(rows_of(out), out, version))
+    if action == 'coverage':
+        return handler.json(document(out / 'audit/coverage/coverage.json'))
     if action == 'report':
         return handler.file(out / 'audit/vehicle-audit.pdf', 'application/pdf')
     if action == 'dashboard':
@@ -97,4 +99,12 @@ def serve(handler, job, action, query):
     if action == 'bundle':
         # The relocatable evidence manifest names and hashes the retained bundle files.
         return handler.json(document(out / 'audit/summary.json'))
+    if action == 'evidence.zip':
+        from vehicle.webapp.downloads import send
+        return send(handler, out / 'audit')
+    if action == 'ai':
+        summary = document(out / 'audit/summary.json')
+        state = summary.get('ai_review') or {'status': 'skipped', 'reason': '未配置 AI。'}
+        result = out / 'audit/ai/review.json'
+        return handler.json({'status': state, 'result': document(result) if result.is_file() else None})
     raise AuditError('unknown_artifact', '未知的产物类型。', '从工作台结果页重新打开。')

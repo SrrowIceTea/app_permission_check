@@ -7,11 +7,17 @@
     const request = ++treeRequest;
     ++sourceRequest;
     const tree = document.getElementById('file-tree');
-    const data = await U.get('/api/pipeline/' + job.id + '/tree');
+    const prefix = '/api/pipeline/' + job.id;
+    const [data, meta] = await Promise.all([U.get(prefix + '/tree'),
+      U.get(prefix + '/decompile').catch(error => ({status: 'unavailable', reason: error.message}))]);
     if (U.current !== job.id || request !== treeRequest) return;
     const filter = document.getElementById('source-filter').value.toLowerCase();
     const files = data.filter(row => row.path.toLowerCase().includes(filter));
     tree.replaceChildren();
+    const diagnostics = U.node('details', 'evidence-details');
+    diagnostics.append(U.node('summary', '', '反编译状态与覆盖缺口'),
+      U.node('pre', 'evidence-json', JSON.stringify(meta, null, 2)));
+    tree.append(diagnostics);
     for (const file of files.slice(0, 2000)) {
       const button = U.node('button', 'file-tree-item', file.path);
       button.onclick = async function () {
@@ -33,7 +39,7 @@
       };
       tree.append(button);
     }
-    if (!files.length) U.empty(tree, data.length ? '没有符合筛选的文件。' : '源码尚未就绪；请查看反编译阶段及覆盖缺口。');
+    if (!files.length) tree.append(U.node('p', 'hint', data.length ? '没有符合筛选的文件。' : '源码尚未就绪；请展开反编译状态与覆盖缺口。'));
     if (files.length > 2000) tree.prepend(U.node('p', 'hint', '当前显示前 2000 项，请输入路径缩小范围。'));
   };
 }());
