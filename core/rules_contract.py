@@ -88,6 +88,27 @@ def detect_platform(conn: sqlite3.Connection) -> str | None:
     return None
 
 
+def load_rule_rows(db: Path, android_version: str) -> list[dict]:
+    """按版本读 `risk_rules` 原始行——两条产品线关联引擎的唯一读库入口。
+
+    与 `load_rules` 分工：后者还按平台读扩展表、返回聚合 dict 给静态/展示层；
+    这里只服务"逐条规则求值"，返回全字段 `list[dict]`，不裁剪字段、不解析 JSON。
+    空结果由调用方决定是抛错还是退出，内核不替业务定调。
+
+    2026-11-11 收敛：`vehicle/analyze/correlate.py` 与
+    `mobile/analyze/correlate_mobile.py` 曾各写一份 sqlite 查询绕过本契约层，
+    两份 SQL 的 URI 处理、排序、字段形状都已分叉；现统一转发到这里。
+    """
+    conn = _readonly(db)
+    conn.row_factory = sqlite3.Row
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM risk_rules WHERE android_version = ? ORDER BY rule_id",
+            (android_version,))]
+    finally:
+        conn.close()
+
+
 def load_rules(db: Path, android_version: str) -> dict:
     """读公共表 + 按平台读扩展表，形状与 vehicle/workbench/static_rules.load_rules 一致：
 

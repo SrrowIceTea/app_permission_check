@@ -30,10 +30,15 @@ from core.collector.attribution import CONNECT_AGE_MS  # noqa: E402  连接→�
 from core.evidence import codeloc  # noqa: E402  复用（车载/移动共用一套行号提取）
 from core.evidence.app_classes import load_app_classes  # noqa: E402  R8 混淆类的权威判据
 from core.io_utils import load_jsonl_counting  # noqa: E402  JSONL 唯一实现（§8.2 B-2）
+from core.rules_contract import load_rule_rows  # noqa: E402  规则行唯一读库入口
 import evaluation_mobile as ev  # noqa: E402
-from read_semantics import read_state, read_gaps
+from read_semantics import read_gaps
 # 同意链四态观测判定拆自本文件（correlate_mobile 曾超 300 行硬线）。
 import correlate_consent  # noqa: E402
+# 归因分布段同样拆出（2026-11-15，P1-04）：兜底归因也有 package，
+import flow_attribution  # noqa: E402
+import summary_sections  # noqa: E402
+from line_egress_evidence import NAME as LINE_EGRESS, admitted_flows
 
 def read_jsonl(path: Path | None, gaps: list[str] | None = None) -> list[dict]:
     """统一走 core/io_utils（§8.2 B-2）。
@@ -58,10 +63,8 @@ def sha16(path: Path | None) -> str | None:
 
 
 def load_rules(db: Path, version: str) -> list[dict]:
-    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute("SELECT * FROM risk_rules WHERE android_version=? ORDER BY rule_id",
-                        (version,)).fetchall()
+    """转发 core 契约层（原自写 SQL 的 URI 未 quote）；本线只留 14 字段投影与空规则退出。"""
+    rows = load_rule_rows(db, version)
     if not rows:
         sys.exit(f"[fatal] 规则库里没有 android_version={version} 的规则")
     out = []
@@ -76,7 +79,6 @@ def load_rules(db: Path, version: str) -> list[dict]:
             "source_refs": json.loads(r["source_refs_json"]),
             "android_version": r["android_version"],
         })
-    conn.close()
     return out
 
 
@@ -119,7 +121,11 @@ def load_category(db: Path, version: str, key: str | None) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--rules", default=str(ROOT / "mobile" / "rules" / "rules_mobile.db"))
-    ap.add_argument("--version", default="36")
+    ap.add_argument("--version", default="36",
+                    help="规则库的 android_version（不是设备 API）。设备版本用 --device-api 单独传")
+    ap.add_argument("--device-api", default=None,
+                    help="设备实际 API（如 35）。summary.device_api 据此单列——"
+                         "2026-11-15 试点发现把规则库版本当成设备版本会被误读（P2-02）")
     ap.add_argument("--session", required=True, help="会话目录（reads/consent/flows.jsonl）")
     ap.add_argument("--reads", default=None)
     ap.add_argument("--consent", default=None)
@@ -152,10 +158,10 @@ def main() -> int:
     rules = load_rules(Path(args.rules), args.version)
     dt_zh, dt_hints, _ = load_data_types(Path(args.rules), args.version)
     gaps: list[str] = []
-    reads, flows, egress = (read_jsonl(reads_p, gaps), read_jsonl(flows_p, gaps),
-                            read_jsonl(egress_p, gaps))
+    reads, flows, egress = (read_jsonl(reads_p, gaps), read_jsonl(flows_p, gaps), read_jsonl(egress_p, gaps))
     consent_raw = read_jsonl(consent_p, gaps)
-    gaps.extend(read_gaps(reads))
+    eg = summary_sections.egress_channels(out, flows, egress)
+    gaps.extend(read_gaps(reads) + eg.pop("gaps"))
     gaps.append("政策接受缺少直接信号：policy_consent_state=unknown；POLICY_VIEW/PERM_RESULT 不证明接受政策。")
     if not reads:
         gaps.append("reads.jsonl 缺失或为空：无读取证据（不等于没有读取，可能钩子未挂上）")
@@ -166,12 +172,20 @@ def main() -> int:
     else:
         fallback_n = sum(1 for f in flows
                          if f.get("attribution") == "single_package_fallback")
-        if fallback_n == len(flows):
+        if fallback_n:
             # 排除法归因没有时间对齐，比"时间距离大"更松。必须写进结论，
             # 否则报告里会和精确时间归因长得一样（2026-10-19 审计发现）。
-            gaps.append(f"本轮 {len(flows)} 条网络流全部为单包排除法归因"
-                        "（single_package_fallback）：只证明「非系统探测的流量来自唯一被测包」，"
-                        "不是时间对齐；引用时不得写成「按时间归因」，相关结论封顶 candidate")
+            # 2026-11-15 修正：原来只在**全部**流都是兜底时才写；混合场景
+            # （1 条实测 + 3 条兜底）一条缺口都不记，看报告的人无从分辨（P1-04）。
+            if fallback_n == len(flows):
+                head = f"本轮 {len(flows)} 条网络流全部为单包排除法归因"
+            else:
+                head = f"本轮 {len(flows)} 条网络流中有 {fallback_n} 条为单包排除法归因"
+            gaps.append(head + "（single_package_fallback）：仅有白名单候选，实际发送包无法确认；"
+                        "相关结论封顶 candidate")
+    rules_api_match = (args.device_api == args.version) if (args.device_api or "").isdigit() else None
+    if rules_api_match is False:
+        gaps.append(f"设备 API {args.device_api} 使用规则库版本 {args.version}；跨版本适用性未经验证。")
 
     permissions = []
     if args.permissions and Path(args.permissions).exists():
@@ -194,6 +208,7 @@ def main() -> int:
         gaps.append("未取得匹配且校验通过的本地应用政策：policy_mismatch 类结论不可判定")
 
     ctx = {"package": args.package, "reads": reads, "consent": consent, "flows": flows,
+           "pcap_line_flows": admitted_flows(read_jsonl(session / LINE_EGRESS), session=session.name, package=args.package),
            "permissions": permissions, "category": load_category(Path(args.rules),
                                                                  args.version, args.app_category),
            "policy": policy, "dt_zh": dt_zh, "dt_hints": dt_hints,
@@ -223,58 +238,25 @@ def main() -> int:
         for f in findings:
             fh.write(json.dumps(f, ensure_ascii=False, sort_keys=True) + "\n")
 
-    by_level, by_type, by_predicate = {}, {}, {}
-    rules_with_finding = set()
-    observed_data_types = set()
-    for f in findings:
-        by_level[f["conclusion_level"]] = by_level.get(f["conclusion_level"], 0) + 1
-        by_type[f["rule_type"]] = by_type.get(f["rule_type"], 0) + 1
-        by_predicate[f["predicate"]] = by_predicate.get(f["predicate"], 0) + 1
-        rules_with_finding.add(f["rule_id"])
-        dt = (f.get("data_type") or "")
-        if dt:
-            observed_data_types.add(dt)
-    for r in reads:
-        if r.get("ev") == "PRIVACY_READ" and read_state(r) == "obtained":
-            for dt in (r.get("data_types") or []):
-                observed_data_types.add(dt)
+    by_level, by_type, by_predicate, rules_with_finding = \
+        summary_sections.conclusion_counts(findings)
+    observed_data_types = summary_sections.collect_observed_data_types(findings, reads)
+    coverage = summary_sections.coverage_section(
+        observed_data_types=observed_data_types, dt_total=len(dt_zh), rules=rules,
+        rules_with_finding=rules_with_finding, by_predicate=by_predicate,
+        reads=reads, consent=consent, permissions=permissions, policy=policy, flows=flows)
 
-    all_predicates = {
-        "manifest_permission_requires_necessity_review", "successful_sensitive_api_read",
-        "read_before_consent_or_permission_grant", "read_before_egress_within_window",
-        "data_type_not_in_necessary_scope", "sensitive_data_in_plaintext_flow",
-        "sensitive_data_to_third_party_domain", "data_type_absent_from_policy_disclosure",
-    }
-    rules_by_type = {}
-    for r in rules:
-        rt = r["rule_type"]
-        rules_by_type[rt] = rules_by_type.get(rt, 0) + 1
-
-    coverage = {
-        "data_types_observed": sorted(observed_data_types),
-        "data_types_total": len(dt_zh),
-        "data_types_coverage_pct": round(len(observed_data_types) / max(len(dt_zh), 1) * 100, 1),
-        "rules_with_finding": len(rules_with_finding),
-        "rules_total": len(rules),
-        "rules_firing_pct": round(len(rules_with_finding) / max(len(rules), 1) * 100, 1),
-        "predicates_fired": sorted(by_predicate.keys()),
-        "predicates_silent": sorted(all_predicates - set(by_predicate.keys())),
-        "predicates_count": dict(sorted(by_predicate.items())),
-        "inputs_present": {
-            "reads": len(reads) > 0, "consent": consent is not None,
-            "flows": len(flows) > 0, "permissions": len(permissions) > 0,
-            "policy": policy.get("available", False),
-        },
-        "rules_by_type_total": dict(sorted(rules_by_type.items())),
-        "rules_by_type_firing": dict(sorted(
-            {rt: sum(1 for rid in rules_with_finding
-                     if next((r["rule_type"] for r in rules if r["rule_id"] == rid), None) == rt)
-             for rt in rules_by_type}.items())),
-    }
+    by_attr, identity_verified = flow_attribution.attribution_breakdown(flows)
 
     summary = {
         "status": "correlated",
         "android_version": args.version, "package": args.package,
+        "device_api": args.device_api,
+        "apk_sha256": args.apk_sha256, "version_code": args.version_code,
+        "rules_device_api_match": rules_api_match,
+        "android_version_source": "rules_db",
+        "flows_by_attribution": dict(sorted(by_attr.items())),
+        "flows_identity_verified": identity_verified,
         "inputs": {"reads": len(reads), "flows": len(flows),
                    "egress_connections": sum(1 for e in egress
                                              if e.get("ev") == "EGRESS_CONNECT"),
@@ -292,7 +274,7 @@ def main() -> int:
         "app_category": ctx["category"].get("key"),
         "policy": {k: v for k, v in policy.items() if k not in ("text", "disclosure_scan")},
         "window_override_ms": args.window_override_ms,
-        "gaps": gaps, "policy_consent_state": "unknown",
+        "gaps": gaps, "egress_channels": eg, "policy_consent_state": "unknown",
         "consent_observation": consent_observation,
         "rules_sha256": hashlib.sha256(Path(args.rules).read_bytes()).hexdigest(),
         "caveat": "本工具不产出 policy_violation：是否违规是政策判定，需人工/AI 复核。"

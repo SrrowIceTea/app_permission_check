@@ -48,6 +48,7 @@ PY = sys.executable
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT))
 from core import sdk_paths  # noqa: E402   SDK 路径统一解析（§8.2 B-4）
+from core.env_guard import diagnose_apk_dir  # noqa: E402   区分路径错/空目录/--only 全过滤
 
 import batch_plan as bp  # noqa: E402
 import batch_static as bs  # noqa: E402
@@ -122,14 +123,16 @@ def main() -> int:
         sys.exit("[fatal] " + guard)
 
     apk_dir = Path(args.apk_dir)
-    if not apk_dir.is_dir():
-        sys.exit(f"[fatal] APK 目录不存在: {apk_dir}")
+    # 三种「0 个样本」必须分开报：路径不存在（本机可能根本没这个数据集）、
+    # 目录在但没 APK、--only 把样本全过滤掉。混成一句会让人去下载本来就在的样本。
+    status, note = diagnose_apk_dir(apk_dir, args.only)
+    if status != "ok":
+        sys.exit(f"[fatal] {note}")
     apks = sorted(p for p in apk_dir.glob("*.apk"))
     if args.only:
         apks = [p for p in apks if p.stem in set(args.only)]
     if not apks:
-        sys.exit(f"[fatal] {apk_dir} 下没有 .apk。把下载到的样本放进去再跑。"
-                 f"（下载说明见 mobile/README.md 的「拿样本」一节）")
+        sys.exit(f"[fatal] 样本清单为空，但诊断已通过（{note}）——属于内部不一致，请检查 --only")
 
     # 开关留痕（可 grep "TLS_BYPASS="）：整批一个值，逐样本另有一行（见 batch_dynamic）。
     print(f"TLS_BYPASS={'1' if args.tls_bypass else '0'} 样本={len(apks)} "

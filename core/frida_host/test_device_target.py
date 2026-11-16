@@ -12,6 +12,25 @@ from unittest.mock import patch
 from core.frida_host import device_target as dt
 
 
+class SpawnPackageTests(unittest.TestCase):
+    def test_android_spawn_uses_user_id_instead_of_omitting_it(self):
+        for explicit, foreground, expected in ((None, '10', 10), (0, '10', 0)):
+            with self.subTest(explicit=explicit), patch.object(dt, 'adb', return_value=foreground) as adb:
+                device = unittest.mock.Mock()
+                device.spawn.return_value = 54
+                self.assertEqual((54, expected), dt.spawn_package(device, 'com.test', explicit))
+                device.spawn.assert_called_once_with('com.test', uid=expected)
+                if explicit is not None:
+                    adb.assert_not_called()
+
+    def test_unknown_user_never_starts_the_package(self):
+        with patch.object(dt, 'adb', return_value='not available'):
+            device = unittest.mock.Mock()
+            with self.assertRaisesRegex(RuntimeError, 'current Android user'):
+                dt.spawn_package(device, 'com.test')
+            device.spawn.assert_not_called()
+
+
 class ResolvePidDiagnosticsTests(unittest.TestCase):
     def test_multiple_devices_is_ambiguity_not_a_missing_process(self):
         error = subprocess.CalledProcessError(

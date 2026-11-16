@@ -28,7 +28,7 @@ from thirdparty_env_adb import (  # noqa: E402,F401
     ROOT, MOBILE, PY, ADB, FRIDA_PORT, MITM_PORT, GUEST_HOST,
     adb, device_guard, run, wait_boot, wait_for_app, ensure_frida_server,
     PROBE_TARGETS, ensure_wifi, get_proxy, set_proxy, QUIC_RULE, block_quic,
-    unblock_quic,
+    unblock_quic, current_user_id, app_uid,
 )
 from thirdparty_env_process import (  # noqa: E402,F401
     kill_tree, kill_pid_tree, _representative_death, orchestrator_notes,
@@ -36,7 +36,7 @@ from thirdparty_env_process import (  # noqa: E402,F401
     reclaim_port,
 )
 from thirdparty_env_hook import (  # noqa: E402,F401
-    start_mitm, _FRIDA_PY_CACHE, frida_python, start_hook, stop_hook, app_uid,
+    start_mitm, _FRIDA_PY_CACHE, frida_python, start_hook, stop_hook,
     start_conn_probe,
 )
 from thirdparty_env_parse import (  # noqa: E402,F401

@@ -44,7 +44,7 @@ class AuditPipelineTests(unittest.TestCase):
 
     def test_explicit_rule_snapshot_is_bound_to_capture_and_coverage(self):
         capture, hooks = make_capture(self.root, with_read=False)
-        rules = self.root / 'sealed-rules.db'
+        rules = self.root / 'sealed #rules.db'
         shutil.copyfile(ROOT / 'vehicle/rules/rules_library/rules.db', rules)
         with closing(sqlite3.connect(rules)) as connection:
             connection.execute('PRAGMA user_version = 801')

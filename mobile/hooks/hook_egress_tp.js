@@ -237,7 +237,7 @@ function hookUriInit() {
 // ============================================================================
 function ipv4ToStr(p) {
   try {
-    return [p.readU8(), p.readU8(), p.readU8(), p.readU8()].join('.');
+    return [p.readU8(), p.add(1).readU8(), p.add(2).readU8(), p.add(3).readU8()].join('.');
   } catch (e) { return null; }
 }
 
@@ -263,7 +263,7 @@ function ipv6ToStr(bytes) {
 }
 
 // 解析 sockaddr：返回 { ip, port }，无法解析返回 null。
-function parseSockaddr(sa) {
+export function parseSockaddr(sa) {
   if (sa === null || sa === undefined) return null;
   try {
     var fam = sa.readU16();

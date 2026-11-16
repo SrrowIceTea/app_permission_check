@@ -1,5 +1,7 @@
 # 项目真实状态（2026-11-10 只读核对）
 
+> **历史快照（2026-11-11 归档，不作当前清单）**：现在什么状态、本周做什么见 [CURRENT_STATUS.md](CURRENT_STATUS.md)。
+
 > 本文只陈述核对得到的事实与出处。核对方式：`git status/diff/log`、直接读代码、`sqlite3` 查规则库、
 > 读 `output/` 现有产物。**未改代码、未改规则库、未跑设备、未提交、未暂存**；
 > `vehicle/frontend/`、`vehicle/hooks/`、`vehicle/targets/` 下的文件只读不改。

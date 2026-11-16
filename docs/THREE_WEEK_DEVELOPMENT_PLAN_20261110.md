@@ -1,5 +1,7 @@
 # 原三周方案已由一周版替代
 
+> **历史快照（2026-11-11 归档，不作当前清单）**：现在什么状态、本周做什么见 [CURRENT_STATUS.md](CURRENT_STATUS.md)。
+
 此文件保留旧链接入口，原三周排期不再执行。
 
 当前以[一周开发方案](ONE_WEEK_DEVELOPMENT_PLAN_20261110.md)及[实名每日任务表](ONE_WEEK_DAILY_ASSIGNMENTS_20261110.md)为准。

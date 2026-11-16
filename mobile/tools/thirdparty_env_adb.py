@@ -80,6 +80,46 @@ def wait_boot(timeout_s: int = 300) -> bool:
     return False
 
 
+def current_user_id() -> int | None:
+    try:
+        result = adb("shell", "am", "get-current-user", timeout=30)
+        value = result.stdout.strip()
+        return int(value) if result.returncode == 0 and value.isascii() and value.isdigit() else None
+    except (OSError, subprocess.TimeoutExpired):
+        print("[adb] 无法查询当前 Android 用户，跳过按包 UID 的采集。", file=sys.stderr)
+        return None
+
+
+def app_uid(package: str) -> int | None:
+    """Resolve an exact package and foreground-user kernel UID."""
+    user = current_user_id()
+    if user is None:
+        return None
+    try:
+        result = adb("shell", "pm", "list", "packages", "--user", str(user), "-U", timeout=45)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"[adb] 无法查询 {package} 的 UID：{exc}", file=sys.stderr)
+        return None
+    if result.returncode:
+        return None
+    packages_by_uid: dict[int, set[str]] = {}
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) != 2 or not fields[0].startswith("package:") or not fields[1].startswith("uid:"):
+            continue
+        raw = fields[1][4:]
+        if raw.isascii() and raw.isdigit() and int(raw) > 0:
+            uid = int(raw)
+            if uid < 100000:
+                uid += user * 100000
+            if uid // 100000 == user:
+                packages_by_uid.setdefault(uid, set()).add(fields[0][8:])
+    for uid, names in packages_by_uid.items():
+        if names == {package}:
+            return uid
+    return None
+
+
 def wait_for_app(package: str, timeout_s: int = 60) -> str | None:
     """冷启动竞争：am start 投出 intent 就返回，进程几秒后才出现；
     立刻 pidof 的退出码 1 与"应用起不来"无法区分。钩子是 attach 模式，必须先等到 pid。"""

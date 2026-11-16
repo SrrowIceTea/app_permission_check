@@ -18,7 +18,7 @@ import thirdparty_ui_flow as flow  # noqa: E402  UI 探索（dump 驱动，不�
 import coverage_window as cov      # noqa: E402  分段采集的覆盖率账本（A4，2026-10-19）
 sys.path.insert(0, str(ROOT))
 
-from device_run_thirdparty_helpers import _count_jsonl  # noqa: E402
+from device_run_thirdparty_helpers import _count_jsonl, load_action_log  # noqa: E402
 MOBILE = ROOT / "mobile"
 
 
@@ -41,6 +41,19 @@ def _stage_explore(ctx) -> None:
     # ① 立刻取证（墓碑 4 分钟就会被 UWB 崩溃循环挤掉）② 重启应用、重新挂钩，
     # 用剩余时间继续采。段账目进 coverage_window，报告据此限定阴性结论的范围。
     window_t0 = time.time()
+    # 给外部一个"现在开始计时"的显式信号：以前只能盯 reads.jsonl 出现，
+    # 而它出现到 window_t0 之间还有一段准备时间，动作会落在窗口前（见 load_action_log）。
+    # `emit` 只在编排层传了 --events 时才落盘，CLI 直跑会丢；所以另写一个文件，
+    # 任何跑法都能被 `ls out/window-open.json` 看到。
+    emit("window", "running", f"观测窗口开启：预算 {args.seconds}s，外部动作从现在开始计时")
+    try:
+        (out / "window-open.json").write_text(json.dumps(
+            {"t0_ms": int(window_t0 * 1000), "budget_s": float(args.seconds),
+             "note": "窗口起点；外部动作请在此之后登记（早于 t0 的按 --action-grace-ms 容差处理）"},
+            ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        check("window_marker_written", 1, optional=True, note=f"窗口起点文件写入失败：{exc}")
+        print(f"[warn] {out / 'window-open.json'} 写入失败：{exc}", file=sys.stderr)
     budget = float(args.seconds)
     segments: list[dict] = []
     all_actions: list[dict] = []
@@ -178,7 +191,42 @@ def _stage_explore(ctx) -> None:
         {"actions": all_actions, "note": "每次点击的点击前/后 XML 见 ui/ 目录（多段时为 ui/segN/），可回溯"},
         ensure_ascii=False, indent=2), encoding="utf-8")
     taps = [a for a in all_actions if a["action"] == "tap"]
-    check("ui_taps_made", 0 if taps else 1, note=f"完成 {len(taps)} 次点击，{len(segments)} 段")
+    # 受控窗口（`--max-rounds 0`）：动作由外部（adb / 人工）注入，自动点击必然为 0。
+    # 旧实现只有 `ui_taps_made` 一条通道，于是这种跑法**每次**都判失败（P1-01，2026-11-15）。
+    # 现在：给了 `--action-log` 就以"窗口内登记了几条动作"为准，自动点击降级为 optional。
+    action_log = getattr(args, "action_log", None)
+    grace = int(getattr(args, "action_grace_ms", 0) or 0)
+    external: list[dict] = []
+    if action_log:
+        external = load_action_log(action_log, int(window_t0 * 1000),
+                                   int(time.time() * 1000), grace_ms=grace)
+        in_win = [e for e in external if e.get("in_window", True)]
+        before = [e for e in external if not e.get("in_window", True)]
+        (out / "business-actions.json").write_text(json.dumps(
+            {"source": str(action_log), "window_t0_ms": int(window_t0 * 1000),
+             "grace_ms": grace, "in_window": in_win, "before_window_within_grace": before,
+             "note": "外部注入的业务动作登记；窗口前 grace_ms 内的动作单列，不混进窗口内计数"},
+            ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if in_win:
+            note = (f"窗口内 {len(in_win)} 条动作：" +
+                    "; ".join(str(e.get("action")) for e in in_win[:3]))
+            if before:
+                note += f"（另有 {len(before)} 条落在窗口前 {grace}ms 容差内）"
+            check("business_action_made", 0, note=note)
+        elif before:
+            # 动作确实做了，只是早于窗口开启。判过但把时间差写清楚，
+            # 别让报告读者以为它落在观测窗口内（Roam 那轮差 1.3s）。
+            delay = min(int(e.get("ts_ms") or 0) - int(window_t0 * 1000) for e in before)
+            check("business_action_made", 0,
+                  note=f"{len(before)} 条动作落在窗口开启前 {abs(delay)}ms（容差 {grace}ms 内），"
+                       "窗口内 0 条：业务做了，但与运行时证据的时间对齐需按此修正")
+        else:
+            check("business_action_made", 1,
+                  note="给了 --action-log，但窗口内（含容差）没有登记动作：业务动作没做或没记时间戳")
+        check("ui_taps_made", 0, optional=True,
+              note="受控窗口：自动点击已关闭，动作以 --action-log 为准")
+    else:
+        check("ui_taps_made", 0 if taps else 1, note=f"完成 {len(taps)} 次点击，{len(segments)} 段")
     coverage = cov.summarize(segments, budget, window_t0)
     (out / "coverage.json").write_text(
         json.dumps(coverage, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

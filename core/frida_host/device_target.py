@@ -26,6 +26,19 @@ def process_uid(pid):
     return int(match[1])
 
 
+def spawn_package(device, package, user_id=None):
+    """Select the Android user before initiating the authorized package spawn."""
+    if user_id is None:
+        current = adb('shell', 'am', 'get-current-user')
+        if not current.isdecimal():
+            raise RuntimeError(f'cannot establish current Android user: {current!r}')
+        user_id = int(current)
+    if user_id < 0:
+        raise ValueError('user ID must be nonnegative')
+    # Frida's Android spawn "uid" option takes the user ID, e.g. 10.
+    return device.spawn(package, uid=user_id), user_id
+
+
 def _running_pids(package):
     """Every running pid for the package, as adb reports them."""
     if not re.fullmatch(r'[A-Za-z][\w]*(\.[\w]+)+', package or ''):

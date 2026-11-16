@@ -106,3 +106,22 @@ python python/build_multiversion_rules.py \
 2026-11-02 修正：本目录 device-facts 只用于原 VHAL 校准。通用隐私 VSC-G* 来源独立取自
 `vehicle/privacy/device-observation.json`，通过 `python/privacy_observation.py` 从真实通过且
 输入摘要匹配的采集冻结，指纹和状态逐类型记录，不能沿用本目录旧镜像的信息。
+
+## 数值级别核对（AAOS 35，2026-11-14）
+
+在 AAI5.260516.001.A6 / user 10 上，150 条 Android 15 库内权限均与 PackageManager 的原始级别文本一致，且其定义包 APK 的已编译 `AndroidManifest.xml` 均含明确整数值。样本分布为 `android` 4 条、`com.android.car` 4 条、`com.android.car.updatable` 142 条。设备证据在 `output/vehicle-permission-calibration-20261114-221434/protection-level-review.json`，含设备指纹、库摘要、原始清单与定义包 APK 摘要。
+
+在仓库根目录运行下列命令。将本轮保存的 `pm list permissions -f -g`、设备身份 JSON 和实际定义包 APK 作为同一次采集的输入。设备侧路径以 `pm path android`、`pm path com.android.car` 和 `pm path com.android.car.updatable` 为准。
+
+```powershell
+$evidence = 'output/vehicle-permission-calibration-20261114-221434'
+$aapt2 = "$env:LOCALAPPDATA/Android/Sdk/build-tools/36.0.0/aapt2.exe"
+.\tools\python313.ps1 -m vehicle.rules.python.calibrate_permissions `
+  --db vehicle/rules/rules_library/rules.db --android-version 15 `
+  --pm-output "$evidence/permissions-pm.txt" --device-facts "$evidence/device-facts.json" `
+  --aapt2 $aapt2 --compiled-apk "$evidence/framework-res.apk" `
+  --compiled-apk "$evidence/CarService.apk" --compiled-apk "$evidence/CarServiceUpdatable.apk" `
+  --out "$evidence/protection-level-recheck.json"
+```
+
+仅写新报告。原始级别、定义包或显式整数证据有缺口时，报告逐条列入 `unresolved`。本次证据对应 A6 的编译声明。库内历史 Android 15 设备来源为 A1，仍需决定如何登记独立的 A6 证据，再重建规则库及 Room 资产。Android 13/14/16 的 30 条权限分别取证。

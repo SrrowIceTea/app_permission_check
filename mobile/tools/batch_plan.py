@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from apk_meta import badging, short_slug
@@ -35,9 +36,10 @@ def _finished(app_dir: Path) -> bool:
     if not (verification.is_file() and report.is_file()):
         return False
     try:
-        return json.loads(verification.read_text(encoding="utf-8")).get("passed") is True
+        review = json.loads(verification.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
+    return isinstance(review, dict) and review.get("passed") is True
 
 
 def _fill_findings(rec: dict, app_dir: Path) -> None:
@@ -52,16 +54,33 @@ def _fill_findings(rec: dict, app_dir: Path) -> None:
     rec["findings_by_type"] = data.get("findings_by_rule_type")
 
 
+def completed_attempt(app_dir: Path) -> Path | None:
+    attempts = (app_dir, *app_dir.glob("try-*"))
+    return max((path for path in attempts if _finished(path)),
+               key=lambda path: (path / "verification.json").stat().st_mtime_ns,
+               default=None)
+
+
 def _write_header(item: dict) -> None:
-    """样本级 run.log 的表头。静态阶段的日志另存一份，这里只留指针。"""
+    """样本级 run.log 的表头：**追加**，不截断。
+
+    为什么不是 `write_text`（2026-11-11 修正）：`--resume` 重跑同一批时，失败样本会再次
+    进 collect；截断会把上一轮 attempt 的现场（device_run 的全部输出）抹掉，而
+    `AGENTS.md` 要求"失败运行同样保留可读产物"。追加后每轮留一个带时间的分隔行，
+    无限增长由 `core.log_rotation.open_capped` 的 20 MB 分卷兜住（同目录 `run.log.<ts>`）。
+    """
     ident = item["ident"]
-    (item["app_dir"] / "run.log").write_text(
-        f"样本: {item['apk']}\n包名: {item['pkg']}\n"
-        f"标签: {ident.get('app_label')}\n"
-        f"版本: {ident.get('version_name')} ({ident.get('version_code')})\n"
-        f"目录名是包名的短写（Windows 260 字符路径上限），"
-        f"对应完整包名见本行上面的「包名」。\n",
-        encoding="utf-8")
+    log = item["app_dir"] / "run.log"
+    header = (f"样本: {item['apk']}\n包名: {item['pkg']}\n"
+              f"标签: {ident.get('app_label')}\n"
+              f"版本: {ident.get('version_name')} ({ident.get('version_code')})\n"
+              f"目录名是包名的短写（Windows 260 字符路径上限），"
+              f"对应完整包名见本行上面的「包名」。\n")
+    with log.open("a", encoding="utf-8") as handle:
+        if log.stat().st_size:
+            handle.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} 重新排入本样本"
+                         f"（上一轮未完成，现场保留在上方）=====\n")
+        handle.write(header)
 
 
 def collect(apks: list[Path], batch: Path, *, build_tools: str,
@@ -89,10 +108,12 @@ def collect(apks: list[Path], batch: Path, *, build_tools: str,
         item["app_dir"] = app_dir
         rec["dir"] = str(app_dir)
 
-        if resume and _finished(app_dir):
+        finished = completed_attempt(app_dir) if resume else None
+        if finished:
             rec["status"] = "resumed"
-            rec["report"] = str(app_dir / "out" / "mobile-report.pdf")
-            _fill_findings(rec, app_dir)
+            rec["dir"] = str(finished)
+            rec["report"] = str(finished / "out" / "mobile-report.pdf")
+            _fill_findings(rec, finished)
             plan.append(item)
             continue
 

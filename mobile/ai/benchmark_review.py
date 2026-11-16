@@ -4,24 +4,30 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
-import llm_client
-from benchmark_review_data import build_input, load_runtime_config, map_output
-from benchmark_review_validation import SYSTEM, parse_output, validate_output
-
 ROOT = Path(__file__).resolve().parents[2]
+# ai_gates 组的 cwd 是 mobile/ai，仓库根默认不在 sys.path；显式挂上才能 import core。
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import llm_client  # noqa: E402
+from benchmark_review_data import build_input, load_runtime_config, map_output  # noqa: E402
+from benchmark_review_validation import SYSTEM, parse_output, validate_output  # noqa: E402
+from core.regression_output import atomic_write_text  # noqa: E402
 
 
 def save(path: Path, value) -> None:
-    """New run directory only; atomic replacement avoids partially written JSON."""
-    temp = path.with_name(path.name + ".tmp")
-    temp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    os.replace(temp, path)
+    """原子写 JSON；Windows 短暂占用走 core 的有界重试，不再裸 os.replace。
+
+    2026-11-11 实测：裸替换在 ai_gates 组偶发 PermissionError [WinError 5]，
+    让 127 项测试里唯一一项变成环境假红。
+    """
+    atomic_write_text(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
 
 
 def safe_error(exc: Exception, cfg: dict | None) -> dict:

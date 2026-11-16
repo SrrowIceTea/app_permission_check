@@ -31,6 +31,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(TOOLS))
 sys.path.insert(0, str(MOBILE / "traffic"))
 
+from apk_meta import badging, launchable_activity  # noqa: E402
 from core import sdk_paths  # noqa: E402
 from mobile.pipeline import stages  # noqa: E402
 from mobile.pipeline import device_boot as dboot  # noqa: E402  设备就绪块（冷启动/代理前置）
@@ -127,7 +128,6 @@ def run_pipeline(job: PipelineJob) -> None:
             return
 
         # 摘静态摘要 + 包名（供前端与降级路径展示）
-        from apk_meta import badging
         ident = badging(job.apk, BUILD_TOOLS)
         static_summary: dict = {"package": ident.get("package"),
                                 "app_label": ident.get("app_label")}
@@ -174,7 +174,6 @@ def run_pipeline(job: PipelineJob) -> None:
         if not pkg:
             finalize(job, "failed", ident.get("error") or "aapt2 未解出包名")
             return
-        from apk_meta import launchable_activity
         activity, _how = launchable_activity(job.apk, BUILD_TOOLS)
         if not activity:
             finalize(job, "failed", "样本没有可启动的 Activity（插件包/资源包），静态结论仍有效")

@@ -18,8 +18,11 @@ import { makeLogger, procName, threadName, stackStr, armRuntimeCache,
 import { WATCH, DATA_TYPES, META } from './targets.generated.js';
 import { describe, armValueCache, argsOnly } from './values.js';
 import { matchBySpec, describeException, discriminator, unmappedKey, preview } from './dispatch.js';
+import { locationReads } from './location_repeats.js';
 
 var vlog = makeLogger('privacy', '/data/local/tmp/vscan-mobile.log');
+const sampledReads = locationReads(vlog);
+export function flushLocationReads() { sampledReads.flush(); }
 var CFG = { whitelist: packages() };
 // 分档定位（批次 4 · A1 假设 H2，见 DEV_FIX_REPORT §5.1）：宿主在注入前把字面量替换为
 // 档位数字（`VSCAN_WATCH_LIMIT=8` → run.py → bundle_config.configure）。未替换时
@@ -164,7 +167,7 @@ function armOne(entry) {
       try {
         var extra = buildExtra(entry, dts, args, ret, outcome, errInfo);
         extra.hook_class = hookClass;
-        vlog('PRIVACY_READ', extra);
+        sampledReads.emit(entry, extra);
       }
       catch (e2) {}
       if (err) throw err;
@@ -234,7 +237,7 @@ function startJavaRescan(limit) {
   }, RESCAN.intervalMs);
 }
 
-export function main() {
+export function main(phase) {
   try {
     STATE.pkg = procName();
     STATE.uid = Java.use('android.os.Process').myUid();
@@ -261,15 +264,18 @@ export function main() {
     }
     var absent = 0;
     for (var i = 0; i < limit; i++) {
+      // Leave migrated APIs for the native module once the application is warm.
+      if (phase === 'startup' && NATIVE_KEY_BY_API[WATCH[i].cls + '.' + WATCH[i].method]) continue;
       var how = armOne(WATCH[i]);
       if (how === 'absent' || how === 'failed') absent++;
     }
-    vlog('ARMED', { hooks: ARMED.length, failed: STATE.failed.length,
+    vlog('ARMED', { phase: phase || 'full', hooks: ARMED.length, failed: STATE.failed.length,
                     watch_limit: limit, pending: absent,
                     failed_apis: STATE.failed, apis: ARMED });
     console.log('[privacy] armed ' + ARMED.length + '/' + limit +
                 ' apis; failed=' + STATE.failed.length + '; pending=' + absent);
     // 有未挂上的才启动轮询——全部一次挂上时不起定时器，零额外开销。
+    if (phase === 'startup') return;
     if (absent > 0) startJavaRescan(limit);
     else stopRescan('all_armed_at_arm_time', 0, limit);
   } catch (e) {

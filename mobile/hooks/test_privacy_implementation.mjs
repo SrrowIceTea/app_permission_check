@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { WATCH, DATA_TYPES, META } from './targets.generated.js';
+import { locationReads } from './location_repeats.js';
 
 const targets = WATCH.filter(e => e.cls === 'android.content.pm.PackageManager');
 assert.ok(targets.length > 0);
@@ -53,6 +54,7 @@ function makeHarness({ loadAfterTicks = 0, neverLoad = false, pkg = 'com.example
 
   const context = {
     packages: () => ['com.example.audit'],
+    locationReads,
     makeLogger: () => (ev, extra) => events.push({ ev, ...extra }),
     procName: () => pkg, threadName: () => 'unit-thread', stackStr: () => '',
     armRuntimeCache: () => true, armValueCache: () => true, argsOnly: () => false,

@@ -126,3 +126,33 @@ def enforce_dependencies(entry, modules, argv=None):
         return
     _report(entry, modules, missing, argv)
     raise SystemExit(EXIT_ENV_MISSING)
+
+
+def diagnose_apk_dir(path, only=None):
+    """把跑批前的「0 个样本」拆成三种互斥原因，返回 (status, message)。
+
+    status ∈ ok / missing / empty / filtered。只做只读判断：不建目录、不下载样本、
+    不改 PATH，也不要求用户做环境探测（AGENTS.md 约束 7）。
+
+    背景：`D:/数据集/数据集/F-Droid-60` 在部分主机上不存在，旧入口只报
+    「目录不存在」或「没有 .apk」，`--only` 写错时同样报「没有 .apk」，
+    三者混在一起会让人以为是数据集空了。
+    """
+    path = Path(path)
+    if not path.is_dir():
+        return 'missing', (f'APK 目录不存在：{path}'
+                           f'（本机可能没有该数据集；先确认路径，别当成「0 个样本」）。'
+                           f'样本获取见 apk/README.md')
+    apks = sorted(p for p in path.glob('*.apk'))
+    if not apks:
+        return 'empty', f'APK 目录存在但没有 .apk：{path}（样本获取见 apk/README.md）'
+    if only:
+        # 公共 API 也可能被直接传字符串；不归一化会把包名拆成字符集合（set('abc')）。
+        if isinstance(only, str):
+            only = [only]
+        selected = [p for p in apks if p.stem in set(only)]
+        if not selected:
+            return 'filtered', (f'--only={list(only)!r} 把 {len(apks)} 个 APK 全部过滤掉了；'
+                                f'--only 匹配的是文件名 stem（不含 .apk）')
+        return 'ok', f'选中 {len(selected)}/{len(apks)} 个 APK'
+    return 'ok', f'{len(apks)} 个 APK'

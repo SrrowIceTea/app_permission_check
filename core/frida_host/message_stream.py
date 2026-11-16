@@ -29,8 +29,10 @@ class MessageStream:
         self.failed.append(event)
         try:
             self._append([row])
-        except OSError:
-            pass
+        except OSError as exc:  # noqa: BLE001  落盘失败不能盖掉脚本错误事件本身
+            # 单独打一行：row 的 JSON 会被 [:600] 截断，长错误事件里挂在末尾的字段看不见。
+            print(f'[frida_host] 失败事件落盘失败：{type(exc).__name__}: {exc}',
+                  file=sys.stderr, flush=True)
         print(json.dumps(row, ensure_ascii=False)[:600], file=sys.stderr, flush=True)
 
     def _persist(self, message, received):

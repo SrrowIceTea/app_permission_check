@@ -1,4 +1,5 @@
 # Windows 离线回归与 Gitee 接入
+<!-- regression-manifest: root=22 root-mobile=23 root-prepare-mobile=24 mobile-checks=63 branch=26 -->
 
 仅用于授权测试。回归执行使用 Python 3.13、Node.js 24 与 npm。它需要本机回环 HTTP，首次安装依赖需要访问 PyPI 和 npm。
 
@@ -11,7 +12,12 @@
 
 `--prepare` 调用现有的车载准备入口，安装锁文件对应的 Hook 依赖并构建车载与共享 bundle。
 准备失败时停止本轮测试，保存 `prepare.log`、准备阶段的独立日志和 `verification.json`。
-准备成功后运行 18 组根回归及 1 组移动侧检查。每次运行使用新目录。GitHub Actions 和 Jenkins 共用此入口。
+准备成功后运行 22 组根回归，`--mobile` 追加 1 组移动侧检查，`--prepare` 再加 1 组准备
+（即 24 组）；CI 另跑 `tools/check_mobile_branch.py`（26 组）与 `tools/engineering_guards.py`。
+每次运行使用新目录。GitHub Actions 和 Jenkins 共用此入口。
+**组数以代码为唯一来源**：`tools/run_regressions.py::CHECKS`、
+`tools/check_mobile_branch.py::CHECKS`、`mobile/tools/run_mobile_checks.py::EXPECTED_CHECKS`；
+`tools/test_regression_manifest.py` 会把本页顶部的机器标记与 CI 配置对拍到代码，不要手工维护数字。
 
 ## 解释器与缺库
 
@@ -35,6 +41,23 @@
 
 换机或建 venv 后，用 `.\tools\python313.ps1 -c "import frida, mitmproxy, cryptography"` 自检一次。
 
+### Windows 环境注入假红（2026-11-11 实测）
+
+除「解释器缺库」外，还有两类与被测代码无关的红，判红前必须先排除：
+
+- **bulk-delete guard**：托管环境注入的 `sitecustomize.py::_check_bulk_delete_guard_control`
+  会让 `mobile_workbench` / `ai_gates` / `mobile_lab` 三组以 `SystemExit(1)` 结束。
+  入口进程设 `CODEBUDDY_SAFE_DELETE_ENABLED=0` 即可隔离；两条 CI 已固定该变量，
+  `tools/test_regression_manifest.py` 会断言它还在。
+- **原子替换占用**：`ai_gates` 曾偶发 `PermissionError [WinError 5]`（`os.replace` 的目标文件
+  被短暂占用）。现由 `core/regression_output.py::replace_with_retry` 统一处理，
+  `publish_latest` 与 `mobile/ai/benchmark_review*.py` 共用同一份有界重试，
+  反例见 `core/test_regression_output.py`。
+
+判红顺序：退出码 3（缺库）→ 检查上面两类环境注入 → 才是代码失败（退出码 1）。
+`tools/engineering_guards.py` 负责第三类门禁：单文件行数、抓包授权声明、静默吞异常，
+存量违规登记在 `tools/engineering_guard_baseline.json`，只允许改善、不允许恶化。
+
 隐私目录中按字节计算摘要的来源文件由 `.gitattributes` 固定换行格式。
 第一版目录使用封存的 `POLICY_20261102.md`，审计导出采用同一份政策，便于干净检出时复核旧观测摘要。
 
@@ -49,6 +72,40 @@ Jenkins 的 Push 和 PR 任务使用各自的工作区；`disableConcurrentBuild
 输出目录隔离支持共享源码目录上的并行离线回归。依赖安装、Hook 构建和设备采集仍各有可变状态，
 构建任务应使用独立检出目录，单设备动态采集继续串行。
 
+## output/ 盘点与新增日志上限（只读）
+
+`output/` 是**只读盘点对象**，不是清理对象：`AGENTS.md`「待办」段 明确禁止按历史条目删除现存内容。
+体积与链接状态用一条命令看：
+
+```powershell
+.\tools\python313.ps1 tools/inspect_output.py --top 20
+```
+
+- 输出 `output/output-inventory-<时间戳>.json`（同名自动加 `-2`，原子写，不覆盖历史报告），
+  表格只打印前 N 项；
+- 逐顶层目录给出体积、文件数、最新 mtime、`rebuildable`（yes/no/unknown）与依据；
+  `yes` 只表示「离线回归重跑即得」，**不表示可以删**；
+- junction 与符号链接**不遍历**、体积不计入合计，但会在报告里逐个列出 `target`。
+  本机 10 个链接实测**全部指向仓内** `output/_TRASH_20261110/<同名目录>`（不是外部路径）；
+  真正的风险是删掉 `_TRASH_20261110` 会让它们悬空——删除前必须先 mv 回原位或保留副本
+  （`.workbuddy/memory/2026-11-10.md`「归档与 junction」段）；
+- 读不到的目录/条目会记进 `entries[].errors` 与 `totals.unreadable` 并置 `partial=true`，
+  不与"空目录"同形；
+- 默认 50 秒上限，超时标 `partial=true` 并保留已扫到的部分（2026-11-11 23:36 首跑：
+  6.9 秒 / 37.7 GB / 263,305 文件；数字随产物增长，判据看 `verification`/报告字段）。
+
+新增日志有上限（`core/log_rotation.py`）：`batch_dynamic.py` 的样本级 `run.log`、
+`supervise_batch.py` 的 `supervise.log`/`batch.log`/`emulator.log` 打开前检查大小，
+**达到** 20 MB（`DEFAULT_MAX_BYTES`）就先改名成 `<文件名>.<YYYYmmdd-HHMMSS>`，再从空文件
+继续追加，并在新文件首行写 `# 续卷自 <卷名>`；
+旧卷只读、永不覆盖（卷名用 `O_EXCL` 先占位再改名，同秒多次分卷加 `-2`/`-3`），
+改名失败（文件被别的进程持有）则撤销占位、继续写原文件并在 stdout 留一行。
+子进程 stdout 直落的句柄在子进程存活期间无法改名，所以分卷只发生在「下一次打开时」——
+它挡住的是跨样本、跨轮次、跨模拟器重启的无限追加，不截断单轮现场。
+
+**`events.jsonl` 禁止接这一层**：`mobile/pipeline/stages.py:read_events` 的 offset 是「已读行数」，
+分卷后新文件行数变小会让 SSE 恒返回空（`offset >= len(lines)`），前端时间线永久停住。
+
 ## Gitee 与 Jenkins
 
 Gitee Go 官方云端 Python 插件文档列出 Linux 镜像和最高 Python 3.9。仓库的完整回归基线包含 Windows 路径测试，因此此处采用 Gitee Webhook 触发 Jenkins 的 Windows 执行节点。 [Gitee Go 构建插件](https://help.gitee.com/gitee-go/plugin/ci-build) · [Gitee Jenkins 插件](https://plugins.jenkins.io/gitee/)
@@ -56,15 +113,16 @@ Gitee Go 官方云端 Python 插件文档列出 Linux 镜像和最高 Python 3.9
 1. 准备专用 Jenkins Windows 节点，标签设为 `windows`。在节点执行账号的 PATH 配置 Python 3.13、Node.js 24、npm 和 Git。使用专用检出目录，并在 Git 配置启用 **Clean before checkout**，使每轮从源码和锁文件准备依赖。
 2. 安装 Gitee 插件。分别创建 **Push** 与 **PR** 两个 Pipeline 任务，Definition 选择 **Pipeline script from SCM**，指向同一 Gitee 仓库的 `Jenkinsfile`。Git 读取凭据与 Webhook 密码在各自的服务配置中填写。
 3. Push 任务拉取 `+refs/heads/*:refs/remotes/origin/*`，分支填写 `origin/${giteeSourceBranch}`。PR 任务拉取 `+refs/pull/*/MERGE:refs/pull/*/MERGE`，分支填写 `pull/${giteePullRequestIid}/MERGE`。分别启用 Push 与 PR 新建、源分支更新事件。对两个任务分别在 Gitee 填写 Jenkins 提供的回调地址和密码。 [插件触发及检出配置](https://plugins.jenkins.io/gitee/)
-4. 用一次测试分支推送和一次测试 PR 检查触发与检出。验收时将构建日志中的提交与 Gitee 对应分支或 PR 合并引用核对，并检查 `verification.json`。通过需包含准备步骤与 19 组回归（18 组根回归 + 移动侧 1 组）全部退出为 0，失败构建仍可下载已写出的日志。
+4. 用一次测试分支推送和一次测试 PR 检查触发与检出。验收时将构建日志中的提交与 Gitee 对应分支或 PR 合并引用核对，并检查 `verification.json`。通过需包含准备步骤，且 `tools/run_regressions.py` 与 `tools/check_mobile_branch.py` 各自的 `verification.json` 全部退出为 0（组数按代码清单判定，不写死）；失败构建仍可下载已写出的日志。
 
 仓库中的配置负责执行和归档。Gitee 与 Jenkins 的首次远端触发需要在有权限的部署环境验证。
 
 ## 本机部署验收（2026-11-05）
 
 > 本节至「主线接管」各段的组数是 2026-11-05 的当时口径：16 组根回归 + 移动侧 1 组 = 17 组，
-> 移动侧 29 项。现行口径为 18 组根回归（带 `--mobile` 为 19 组）、移动侧 63 项，
-> 见上文「统一回归入口」。下文数字按当时构建如实保留，不按现行口径改写。
+> 移动侧 29 项。现行口径为 22 组根回归（带 `--mobile` 为 23 组、`--prepare --mobile` 为 24 组）、
+> 移动侧 63 项、分支 26 组；见上文「统一回归入口」与页首机器标记。下文数字按当时构建如实保留，
+> 不按现行口径改写。
 
 本机 Jenkins 2.580.2 位于 `output/jenkins/`，使用 JDK 21，入口为
 [本机 Jenkins](http://127.0.0.1:8080/)。账号为 `vscanner-admin`，密码保存在

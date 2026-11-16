@@ -28,7 +28,6 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import threading
 import uuid
 import json
 import subprocess
@@ -41,8 +40,8 @@ sys.path.insert(0, str(HERE.parent.parent))
 from core.event_store import EventStore
 from core.frida_host import freshness
 from core.frida_host.bundle_config import configure
-from core.frida_host.shutdown import OwnedResources
-from core.frida_host.device_target import adb, resolve_pid
+from core.frida_host.shutdown import OwnedResources, flush_capture
+from core.frida_host.device_target import adb, process_uid, resolve_pid, spawn_package
 from core.frida_host.multi_attach import attach_children
 from core.frida_host.message_stream import MessageStream, TRANSPORT
 # frida-server on this device is started with `-l 127.0.0.1:27043`, not the default
@@ -69,7 +68,7 @@ def main() -> int:
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--pid", type=int)
     target.add_argument("--package")
-    parser.add_argument('--user', type=int, help='AAOS user ID; reject cross-user attach')
+    parser.add_argument('--user', type=int, help='Android user ID for package targeting; spawn defaults to foreground user')
     parser.add_argument("--multi-process", action="store_true",
                         help="同时 attach 该包的其他进程（:remote / :webview 等）。"
                              "默认只 attach 主进程；子进程的读取在单进程模式下完全不可见。"
@@ -80,7 +79,7 @@ def main() -> int:
     parser.add_argument("--out", type=Path, required=True, help="JSONL written on this PC")
     parser.add_argument("--gadget", action="store_true")
     parser.add_argument("--spawn", action="store_true",
-                        help="spawn 注入（钩子在应用第一条指令前就位）。"
+                        help="spawn 注入（先装载脚本，再恢复应用进程）。"
                              "用于必须抓启动瞬间流量的场景；默认 attach。")
     parser.add_argument("--port", type=int)
     parser.add_argument("--allow-package", action="append")
@@ -145,6 +144,8 @@ def main() -> int:
         parser.error("目标未在白名单；授权包需显式 --allow-package")
     if args.gadget and not args.package:
         parser.error("Gadget 模式必须使用 --package")
+    if args.spawn and not args.package:
+        parser.error("--spawn 需要 --package")
     session_id = args.session or uuid.uuid4().hex
     try:
         import frida  # noqa: PLC0415
@@ -189,16 +190,11 @@ def main() -> int:
         if args.gadget:
             pid = device.spawn(["re.frida.Gadget"])
         elif args.spawn:
-            if args.user is not None:
-                raise ValueError('--user requires attach mode; start the app for that user first')
-            # spawn 注入（2026-10-18 新增）：attach 模式下应用**启动那一刻**的握手/外发
-            # 全在钩子装上之前，实测 F-Droid 首轮 SSL 明文一条没捕到、keylog 也装不上
-            # （App 的 SSL_CTX 在我们 attach 前就建好了）。spawn 时钩子在应用跑第一条
-            # 指令前就已就位，这两处缺口同时消失。
-            if not args.package:
-                print("--spawn 需要 --package", file=sys.stderr)
-                return 2
-            pid = device.spawn([args.package])
+            pid, user_id = spawn_package(device, args.package, args.user)
+            uid = process_uid(pid)
+            if uid // 100000 != user_id:
+                raise RuntimeError(f'spawn PID {pid} is not owned by Android user {user_id} (UID {uid})')
+            owned.pending_spawn = lambda: device.kill(pid)
         else:
             pid = args.pid or resolve_pid(args.package, args.user)
         session = owned.session = device.attach(pid)
@@ -216,7 +212,8 @@ def main() -> int:
             return target_session.create_script(
                 configure(body, allowed, watch_limit=args.watch_limit, no_stack=no_stack,
                           args_only=args_only, deoptimize=args.deoptimize,
-                          tls_bypass=tls_bypass))
+                          tls_bypass=tls_bypass,
+                          spawn_warmup_ms=4000 if args.spawn and args.script.resolve().parent == mobile_dist else None))
 
         script = owned.script = make_script(session)
         if (args.watch_limit is not None or no_stack or args_only
@@ -230,6 +227,9 @@ def main() -> int:
         script.load()
         if args.gadget or args.spawn:
             device.resume(pid)
+        if args.spawn and not args.gadget:
+            owned.pending_spawn = None
+            print(f"FRIDA_SPAWN_READY {pid} {user_id} {uid}", flush=True)
         print(f"attached pid {pid}; collecting for {args.seconds:.0f}s -> {args.out}", flush=True)
 
         # 多进程（2026-11-10）：子进程的读取在单进程模式下完全不可见，
@@ -270,21 +270,11 @@ def main() -> int:
                           f"!! 这**不是**「应用没有动作」：两者都表现为记录为空。"
                           f"请确认 pid 是否变了（adb shell pidof {args.package or ''}）。", flush=True)
         except KeyboardInterrupt:
-            print("interrupted", flush=True)
+            # 正常停机不是异常吞噬：finally 仍会 flush，但中断前的窗口不算有效观测。
+            print("interrupted：用户中断，finally 会 flush 已收事件；中断前的窗口不是有效观测", flush=True)
         finally:
-            if TRANSPORT in body and 'vscanFlush' in body and not stream.failed and died_at is None:
-                try:
-                    with frida.Cancellable() as cancellation:
-                        timer = threading.Timer(5, cancellation.cancel)
-                        timer.start()
-                        try:
-                            stats = script.exports_sync.vscan_flush()
-                        finally:
-                            timer.cancel()
-                    if stream.acknowledge(stats):
-                        print("VSCAN_TRANSPORT " + json.dumps(stats), flush=True)
-                except Exception as error:
-                    stream.flush_failed(error)
+            if not stream.failed and died_at is None:
+                flush_capture(frida, script, stream, body, transport=TRANSPORT)
             shutting_down = True
             owned.close()
 

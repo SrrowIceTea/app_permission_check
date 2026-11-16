@@ -28,6 +28,11 @@ sys.path.insert(0, str(ROOT))
 from core.env_guard import MOBILE_DEPS, enforce_dependencies
 from core.regression_output import create_output, publish_latest
 
+# 注册项总数（27 unit + 20 lab_root + 4 lab_local + 1 inventory + 7 e2e + 4 assertions）。
+# tools/test_regression_manifest.py 用 AST 读这个常量与文档标记对拍：组数漂移必须显式更新，
+# 不能让"文档写 31 项、实际 63 项"这种口径分叉再出现。
+EXPECTED_CHECKS = 63
+
 
 def run(cmd: list[str], cwd: Path, log: Path, timeout: int = 600) -> int:
     proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
@@ -81,7 +86,8 @@ def main() -> int:
         ("analyze", MOBILE / "analyze",
          [PY, "-m", "unittest", "test_analyze", "test_analyze_egress",
           "test_coverage_gap", "test_consent_observation",
-          "test_risk_score", "test_risk_band"]),
+          "test_risk_score", "test_risk_band", "test_http_attribution",
+          "test_egress_channels"]),
         ("ai", MOBILE / "ai",
          [PY, "-m", "unittest", "test_ai", "test_ai_gates", "test_formal_contract",
           "test_policy_sources"]),
@@ -109,8 +115,12 @@ def main() -> int:
         # 的 U+0085/U+2028 处切断记录，把"采到了"读成"没采到"。
         ("jsonl_tool_readers", MOBILE / "tools",
          [PY, "-m", "unittest", "test_jsonl_tool_readers"]),
-        ("launcher_activity", MOBILE / "tools",
-         [PY, "-m", "unittest", "test_launcher_activity"]),
+        # 设备侧小工具的纯函数守卫（2026-11-15 试点）：显示 token / 动作登记的窗口过滤 /
+        # 观测事件 vs 装载事件 / Activity 命名空间。这四处判错都是静默的——截图看着正常、
+        # 判据看着全绿，只有结论悄悄变成相反的意思。
+        ("device_tools", MOBILE / "tools",
+         [PY, "-m", "unittest", "test_device_tools", "test_launcher_activity",
+          "test_pcap_lines"]),
         # 批处理的静态并行（2026-10-19）：目录/键唯一性、完成标记语义、失败隔离，
         # 以及"多个 worker 真的同时在跑"。这三类错误都是静默的（复用永不命中 /
         # 半成品被当已完成 / 60 个样本只有一个真跑），只能靠离线断言钉住。
@@ -223,9 +233,15 @@ def main() -> int:
         checks.append({"name": name, "exit_code": 0 if ok else 1})
 
     failed = [c["name"] for c in checks if c.get("exit_code") not in (0,)]
+    count_mismatch = None
+    if len(checks) != EXPECTED_CHECKS:
+        # 诊断放独立字段，别把 "check_count_mismatch:63!=64" 混进失败检查项名单。
+        count_mismatch = {"expected": EXPECTED_CHECKS, "actual": len(checks)}
+        failed.append("check_count_mismatch")
     passed = not failed
     (out / "verification.json").write_text(json.dumps(
-        {"passed": passed, "checks": checks, "failed": failed}, ensure_ascii=False, indent=2),
+        {"passed": passed, "checks": checks, "failed": failed,
+         "count_mismatch": count_mismatch}, ensure_ascii=False, indent=2),
         encoding="utf-8")
     publish_latest(ROOT / "output" / "latest-mobile.txt", out)
     print(json.dumps({"status": "passed" if passed else "failed", "out": str(out),

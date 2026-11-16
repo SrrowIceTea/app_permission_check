@@ -36,10 +36,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
-import re
-import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -47,74 +43,13 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 sys.path.insert(0, str(ROOT))
-# JSONL 分行只认 LF（理由见 core/io_utils.split_jsonl_lines）：tls_meta 事件里
-# 可能夹着 base64/正文片段，splitlines() 会在 U+0085 处切断，keylog 行随之丢光。
-from core.io_utils import split_jsonl_lines  # noqa: E402
-
-_CANDIDATES = [
-    r"C:\Program Files\Wireshark\tshark.exe",
-    r"C:\Program Files (x86)\Wireshark\tshark.exe",
-]
-
-
-def find_tshark() -> str | None:
-    """按 VSCAN_TSHARK → PATH → 常见安装目录 找 tshark。找不到返回 None。
-
-    不猜版本、不自动下载：抓不到就如实报缺口，由安装步骤解决。
-    """
-    p = os.environ.get("VSCAN_TSHARK")
-    if p and Path(p).exists():
-        return p
-    which = shutil.which("tshark")
-    if which:
-        return which
-    for c in _CANDIDATES:
-        if Path(c).exists():
-            return c
-    return None
-
-
-def keylog_from_events(session: Path, out: Path) -> tuple[int, str]:
-    """从会话事件里抽取 NSS keylog 行，写成 tshark 认的文本。
-
-    来源优先级：`tls_meta.jsonl`（分流后）→ `reads.jsonl`（合并模式未分流）。
-    两者都可能存在，按行去重——同一连接重复握手会重复打点。
-    """
-    lines: list[str] = []
-    seen: set[str] = set()
-    for name in ("tls_meta.jsonl", "reads.jsonl"):
-        f = session / name
-        if not f.exists():
-            continue
-        for raw in split_jsonl_lines(f.read_text(encoding="utf-8", errors="replace")):
-            if not raw:
-                continue
-            try:
-                ev = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
-            if ev.get("ev") != "TLS_KEYLOG":
-                continue
-            line = str(ev.get("line") or "").strip()
-            # 收的是 NSS keylog 行：`<LABEL> <client_random> <secret>`。
-            # 只按结构校验（3 段、前两段是 hex）——**不要**用正则去枚举标签，
-            # TLS 1.3 的 `CLIENT_HANDSHAKE_TRAFFIC_SECRET` 之类会漏，而且写错一个
-            # 字符就会静默返回 0 行（本文件第一版就是这么挂的）。
-            parts = line.split()
-            if len(parts) != 3 or line in seen:
-                continue
-            if not all(re.fullmatch(r"[0-9a-fA-F]+", p) for p in parts[1:]):
-                continue
-            seen.add(line)
-            lines.append(line)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-    labels = sorted({ln.split(" ")[0] for ln in lines})
-    return len(lines), ",".join(labels)
-
+sys.path.insert(0, str(HERE))
+from pcap_tshark import FRIDA_LOOPBACK, find_tshark, keylog_from_events, _as_text, _parse_hex, _run_tshark  # noqa: E402
+from pcap_http2 import decode_h2  # noqa: E402
 
 _FIELDS = [
-    "frame.number", "frame.time_epoch", "ip.src", "ip.dst", "tcp.srcport", "tcp.dstport",
+    "frame.number", "frame.time_epoch", "ip.src", "ip.dst", "ipv6.src", "ipv6.dst",
+    "tcp.srcport", "tcp.dstport", "tcp.stream",
     "http.request.method", "http.host", "http.request.uri", "http.request.full_uri",
     "http.response.code", "http.response.phrase", "http.content_type",
     "http.content_encoding", "http.content_length", "http.file_data",
@@ -122,259 +57,9 @@ _FIELDS = [
 ]
 
 
-def _run_tshark(tshark: str, pcap: Path, keylog: Path | None,
-                extra: list[str], timeout: int = 600) -> tuple[int, str, str]:
-    cmd = [tshark, "-r", str(pcap), "-n",
-           "-o", "http.decompress_body:TRUE",
-           "-o", "http.desegment_body:TRUE",
-           "-o", "tcp.desegment_tcp_streams:TRUE"]
-    if keylog and keylog.exists() and keylog.stat().st_size:
-        cmd += ["-o", f"tls.keylog_file:{keylog}"]
-    cmd += extra
-    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                       errors="replace", timeout=timeout)
-    return r.returncode, r.stdout or "", r.stderr or ""
-
-
-def _as_text(v) -> str:
-    if v is None:
-        return ""
-    if isinstance(v, list):
-        return ",".join(_as_text(x) for x in v)
-    return str(v)
-
-
-def _parse_hex(v: str) -> bytes | None:
-    """`http.file_data` 在 `-T json` 里是 hex 串（无分隔）。非 hex 返回 None。"""
-    s = re.sub(r"[^0-9a-fA-F]", "", v)
-    if not s or len(s) % 2:
-        return None
-    try:
-        return bytes.fromhex(s)
-    except ValueError:
-        return None
-
-
-_H2_FIELDS = [
-    "frame.number", "frame.time_epoch", "ip.src", "ip.dst", "tcp.srcport", "tcp.dstport",
-    "tcp.stream", "http2.type", "http2.streamid", "http2.header.count",
-    "http2.header.name", "http2.header.value",
-    "http2.body.reassembled.data", "http2.data.data", "tls.handshake.extensions_alpn_str",
-]
-
-
-def _as_list(v) -> list[str]:
-    if v is None:
-        return []
-    if isinstance(v, list):
-        return [_as_text(x) for x in v]
-    return [_as_text(v)]
-
-
-def _inflate_gzip(data: bytes) -> tuple[bytes, str]:
-    """gzip 解压，**容忍截断**——抓包常在流中途结束。
-
-    返回 (明文, 状态)，状态是 ok / truncated / failed。
-
-    为什么要自己调 zlib 而不是 `gzip.decompress`：后者遇到不完整的流直接抛
-    `EOFError`（实测真包里就有，`Compressed file ended before the end-of-stream
-    marker was reached`），一条消息当场就没了；而截断前解出来的明文往往已经够用
-    （JSON 前缀、密钥、URL 都在前面）。解出来的东西配上 `gzip_truncated` 标注，
-    比"什么都没有"诚实得多。
-    """
-    import zlib
-    d = zlib.decompressobj(16 + zlib.MAX_WBITS)
-    try:
-        out = d.decompress(data) + d.flush()
-    except zlib.error:
-        return b"", "failed"
-    return out, ("ok" if d.eof else "truncated")
-
-
-def _inflate_deflate(data: bytes) -> tuple[bytes, str]:
-    import zlib
-    for wbits in (zlib.MAX_WBITS, -zlib.MAX_WBITS):   # 有的服务端给裸 deflate
-        d = zlib.decompressobj(wbits)
-        try:
-            out = d.decompress(data) + d.flush()
-        except zlib.error:
-            continue
-        return out, ("ok" if d.eof else "truncated")
-    return b"", "failed"
-
-
-def decode_h2(tshark: str, pcap: Path, keylog: Path | None,
-              out: list[dict], bodies_dir: Path, counter: list[int],
-              max_body: int = 4 * 1024 * 1024) -> dict:
-    """第二趟：HTTP/2。
-
-    为什么要单独一趟：Wireshark 的 h2 解析器把头部放在 `http2.header.name/value`，
-    不像 h1 那样有 `http.request.*` 字段——只按 `http.request or http.response` 过滤会
-    **一条 h2 都看不见**，而实测 F-Droid 一轮 12 条连接里 11 条 ALPN 协商成了 `h2`。
-
-    三个必须踩过才知道的坑（都实测过）：
-
-    1. **分组键要带方向**：h2 的请求和响应共用同一个 (连接, streamid)。只按
-       (tcp.stream, streamid) 分组会把两边塞进一组，`:method` 先到就顶掉 `:status`，
-       结果"有请求没响应"。→ 键是 (tcp.stream, streamid, 源 ip:port)。
-    2. **`-e` 提取是"包级"的**：一个 TCP 段里常塞着 SETTINGS+HEADERS+DATA 三个 h2 帧，
-       `http2.streamid` 会给成 `["0","1","1"]`。`-T json` 的完整树又会把同名节点覆盖掉
-       （只剩最后一帧）。→ 用 `http2.type` 与 `http2.streamid` **逐帧同序成数组**这一点
-       做下标对齐，头个数由 `http2.header.count` 给。
-    3. **h2 没有 `decompress_body`**：h1 那条配置管不到这里。body 取
-       `http2.body.reassembled.data`（原始字节），gzip 自己解——这样解没解压是可验证的；
-       `http2.data.data` 是 Wireshark 已经解压过的，只作兜底。
-    """
-    info = {"h2_streams": 0, "h2_messages": 0, "h2_orphans": 0, "h2_ambiguous": 0, "error": None}
-    extra = ["-Y", "http2", "-T", "json"]
-    for f in _H2_FIELDS:
-        extra += ["-e", f]
-    rc, text, err = _run_tshark(tshark, pcap, keylog, extra)
-    if rc != 0 and not text.strip():
-        info["error"] = f"tshark(h2) rc={rc}: {err.strip()[:200]}"
-        return info
-    try:
-        packets = json.loads(text) if text.strip() else []
-    except json.JSONDecodeError as exc:
-        info["error"] = f"tshark(h2) JSON 解析失败：{exc}"
-        return info
-
-    groups: dict[tuple, dict] = {}
-    for pkt in packets:
-        L = (pkt.get("_source") or {}).get("layers") or {}
-        stream = _as_text(L.get("tcp.stream"))
-        if not stream:
-            continue
-        src = f"{_as_text(L.get('ip.src'))}:{_as_text(L.get('tcp.srcport'))}"
-        dst = f"{_as_text(L.get('ip.dst'))}:{_as_text(L.get('tcp.dstport'))}"
-        types = _as_list(L.get("http2.type"))
-        sids = _as_list(L.get("http2.streamid"))
-        counts = _as_list(L.get("http2.header.count"))
-        names = _as_list(L.get("http2.header.name"))
-        vals = _as_list(L.get("http2.header.value"))
-        ts = float(_as_text(L.get("frame.time_epoch")) or 0)
-        frame = _as_text(L.get("frame.number"))
-        alpn = _as_text(L.get("tls.handshake.extensions_alpn_str"))
-        raw_body = _as_text(L.get("http2.body.reassembled.data"))
-        ws_body = _as_text(L.get("http2.data.data"))
-
-        aligned = len(types) == len(sids)
-        if not aligned:
-            info["h2_ambiguous"] += 1
-        hdr_n = val_n = cnt_n = 0
-        for i, ftype in enumerate(types):
-            sid = sids[i] if i < len(sids) else (sids[0] if len(sids) == 1 else "")
-            if not sid or sid == "0":
-                continue                      # 连接级帧（SETTINGS/PING/GOAWAY）
-            key = (stream, sid, src)
-            g = groups.setdefault(key, {"hdr": {}, "body": None, "body_from": "",
-                                        "ts": 0.0, "src": src, "dst": dst,
-                                        "alpn": "", "frame": ""})
-            g["ts"] = g["ts"] or ts
-            g["frame"] = g["frame"] or frame
-            g["alpn"] = g["alpn"] or alpn
-            if ftype == "1":                  # HEADERS
-                n = int(counts[cnt_n] or 0) if cnt_n < len(counts) else 0
-                for k in range(n):
-                    if hdr_n + k < len(names):
-                        g["hdr"].setdefault(names[hdr_n + k].lower(),
-                                            vals[val_n + k] if val_n + k < len(vals) else "")
-                hdr_n += n
-                val_n += n
-                cnt_n += 1
-            elif ftype == "0":                # DATA
-                if raw_body and len(raw_body) >= len(g["body"] or ""):
-                    g["body"], g["body_from"] = raw_body, "raw"
-                elif ws_body and not g["body"]:
-                    g["body"], g["body_from"] = ws_body, "ws"
-
-    info["h2_streams"] = len({(s, i) for s, i, _ in groups})
-    for (stream, sid, _src), g in groups.items():
-        h = g["hdr"]
-        if ":method" in h:
-            kind, method, status = "request", h[":method"], None
-        elif ":status" in h:
-            kind, method, status = "response", None, int(h[":status"] or 0)
-        else:
-            # 抓包起点落在流中间：只看见 DATA、看不见头。计数但不编造。
-            info["h2_orphans"] += 1
-            continue
-        counter[0] += 1
-        rec = {"ts": g["ts"], "frame": g["frame"], "kind": kind, "proto": "h2",
-               "stream": f"{stream}/{sid}", "src": g["src"], "dst": g["dst"],
-               "alpn": g["alpn"] or "h2", "gaps": []}
-        if kind == "request":
-            rec.update({"method": method, "host": h.get(":authority", ""),
-                        "uri": h.get(":path", ""),
-                        "url": f"{h.get(':scheme', 'https')}://{h.get(':authority', '')}{h.get(':path', '')}"})
-        else:
-            rec.update({"status": status})
-        if h.get("content-type"):
-            rec["content_type"] = h["content-type"]
-        if h.get("content-encoding"):
-            rec["content_encoding"] = h["content-encoding"]
-
-        data = _parse_hex(g["body"]) if g["body"] else None
-        if data:
-            enc = (h.get("content-encoding") or "").lower()
-            if g["body_from"] == "ws":
-                # 实测：Wireshark 对 h2 的 DATA **自己按 content-encoding 解压**
-                # （`Content-encoded entity body (gzip): 52 bytes -> 375 bytes`），
-                # `-o http.decompress_body` 管不到这儿，也不需要。不能再解一次。
-                rec["body_from"] = "wireshark"
-                # 但得防"某个版本没解"：留 gzip 魔数就是没解，别把压缩字节当明文。
-                if data[:2] == b"\x1f\x8b":
-                    plain, how = _inflate_gzip(data)
-                    if how == "failed":
-                        rec["gaps"].append("body_still_compressed")
-                    else:
-                        data = plain
-                        rec["decompressed"] = f"gzip:{how}"
-                        if how == "truncated":
-                            rec["gaps"].append("gzip_truncated")
-            elif "gzip" in enc:
-                plain, how = _inflate_gzip(data)
-                if how == "failed":
-                    rec["gaps"].append("gzip_decompress_failed")
-                else:
-                    data = plain
-                    rec["decompressed"] = f"gzip:{how}"
-                    if how == "truncated":
-                        rec["gaps"].append("gzip_truncated")
-            elif "deflate" in enc:
-                plain, how = _inflate_deflate(data)
-                if how == "failed":
-                    rec["gaps"].append("deflate_decompress_failed")
-                else:
-                    data = plain
-                    rec["decompressed"] = f"deflate:{how}"
-                    if how == "truncated":
-                        rec["gaps"].append("deflate_truncated")
-            elif enc:
-                # br/zstd 之类本机没现成解码器：如实标注，别把压缩字节当明文
-                rec["gaps"].append(f"undecoded_content_encoding:{enc}")
-            if len(data) > max_body:
-                rec["gaps"].append(f"body_truncated_at_{max_body}")
-                data = data[:max_body]
-            hh = hashlib.sha256(data).hexdigest()
-            name = f"{counter[0]:05d}_{hh[:12]}.bin"
-            (bodies_dir / name).write_bytes(data)
-            rec["body"] = {"file": name, "len": len(data), "sha256": hh}
-            try:
-                rec["body"]["text_head"] = data.decode("utf-8")[:400]
-                rec["body"]["is_text"] = True
-            except UnicodeDecodeError:
-                rec["body"]["is_text"] = False
-        elif kind == "response" and status not in (204, 304):
-            rec["gaps"].append("no_body_bytes")
-        out.append(rec)
-        info["h2_messages"] += 1
-    return info
-
-
 def decode(pcap: Path, out_jsonl: Path, bodies_dir: Path,
            keylog: Path | None = None, tshark: str | None = None,
-           max_body: int = 4 * 1024 * 1024) -> dict:
+           max_body: int = 4 * 1024 * 1024, *, http_port: int | None = None) -> dict:
     """跑 tshark 并把结果落成 JSONL。返回统计（**含失败原因**）。"""
     stats: dict = {"tshark": tshark or find_tshark(), "ok": False, "messages": 0,
                    "requests": 0, "responses": 0, "bodies": 0, "bytes": 0,
@@ -389,7 +74,11 @@ def decode(pcap: Path, out_jsonl: Path, bodies_dir: Path,
         stats["keylog_lines"] = sum(1 for ln in keylog.read_text(
             encoding="utf-8", errors="replace").splitlines() if ln.strip())
 
-    extra = ["-Y", "http.request or http.response", "-T", "json"]
+    if http_port is not None and (type(http_port) is not int or not 1 <= http_port <= 65535):
+        raise ValueError("Invalid HTTP fixture port")
+    stats["http_decode_as_port"] = http_port
+    extra = (["-d", f"tcp.port=={http_port},http"] if http_port is not None else [])
+    extra += ["-Y", f"(http.request or http.response) and not ({FRIDA_LOOPBACK})", "-T", "json"]
     for f in _FIELDS:
         extra += ["-e", f]
     rc, out, err = _run_tshark(stats["tshark"], pcap, keylog, extra)
@@ -421,8 +110,9 @@ def decode(pcap: Path, out_jsonl: Path, bodies_dir: Path,
             "frame": row["frame.number"],
             "kind": "request" if is_req else "response",
             "proto": "h1",
-            "src": f"{row['ip.src']}:{row['tcp.srcport']}",
-            "dst": f"{row['ip.dst']}:{row['tcp.dstport']}",
+            "src": f"{row['ip.src'] or row['ipv6.src']}:{row['tcp.srcport']}",
+            "dst": f"{row['ip.dst'] or row['ipv6.dst']}:{row['tcp.dstport']}",
+            "tcp_stream": row["tcp.stream"],
             "alpn": row["tls.handshake.extensions_alpn_str"],
             "gaps": [],
         }
@@ -490,9 +180,7 @@ def decode(pcap: Path, out_jsonl: Path, bodies_dir: Path,
 
     stats["ok"] = n > 0
     if n == 0:
-        stats["error"] = ("tshark 解出 0 条 HTTP 消息（keylog 已装但可能不匹配该连接）"
-                          if stats["keylog_lines"] else
-                          "tshark 解出 0 条 HTTP 消息，且没有 keylog：TLS 载荷未解密")
+        stats["error"] = "tshark 未识别到业务 HTTP 报文"
 
     # 没有 keylog 时必须回答一个问题：是"真没流量"，还是"有 TLS 但解不开"？
     # 这两者在 messages 计数上长得一模一样（都只剩明文那几条），而后者会让报告
@@ -519,6 +207,8 @@ def main() -> int:
     ap.add_argument("--keylog", default=None, help="NSS keylog 文本")
     ap.add_argument("--session", default=None, help="会话目录：从中自动抽取 keylog")
     ap.add_argument("--stats", default=None, help="统计写这里（JSON）")
+    ap.add_argument("--http-port", type=int, choices=range(1, 65536), metavar="PORT",
+                    help="指定自有明文 HTTP 夹具端口")
     args = ap.parse_args()
 
     out = Path(args.out).resolve()
@@ -530,7 +220,7 @@ def main() -> int:
         n, labels = keylog_from_events(Path(args.session), keylog)
         stats_extra = {"keylog_from_session": n, "keylog_labels": labels}
 
-    stats = decode(Path(args.pcap).resolve(), out, bodies, keylog)
+    stats = decode(Path(args.pcap).resolve(), out, bodies, keylog, http_port=args.http_port)
     stats.update(stats_extra)
     text = json.dumps(stats, ensure_ascii=False, indent=2)
     if args.stats:

@@ -36,14 +36,17 @@ def receiver(endpoint, receipts, response_status=lambda: 200):
                 self.send_error(413)
                 return
             raw = self.rfile.read(int(length))
+            if len(raw) != int(length):
+                return
             status = response_status()
             entry = {'ts': int(time.time() * 1000), 'path': self.path, 'status': status,
                      'body_sha256': hashlib.sha256(raw).hexdigest(), **summarize_body(raw)}
+            # Commit the server receipt before the client can observe the response status.
+            receipts.append(entry)
             self.send_response(status)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', '2')
             self.end_headers()
-            receipts.append(entry)
             self.wfile.write(b'[]')
 
         def log_message(self, *_):

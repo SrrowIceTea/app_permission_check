@@ -183,8 +183,8 @@ def main() -> int:
             time.sleep(0.5)
         try:
             proc.terminate()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001  看门狗只收尾，失败必须可见
+            print(f"[uid_sampler] terminate failed: {type(exc).__name__}: {exc}", flush=True)
 
     threading.Thread(target=watchdog, daemon=True).start()
     print(f"[uid_sampler] device recorder streaming; sampling every {args.interval*1000:.0f}ms "
@@ -236,7 +236,7 @@ def main() -> int:
             print(f"[uid_sampler] uid={uid} pkg={package} port={local_port} ts={ts_ms}",
                   flush=True)
     except KeyboardInterrupt:
-        pass
+        print("[uid_sampler] interrupted; draining recorder in finally", flush=True)
     finally:
         proc.terminate()
         try:

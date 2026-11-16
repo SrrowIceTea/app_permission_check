@@ -40,6 +40,7 @@ from evaluation_mobile_parts import (_finding, _flow_types,  # noqa: E402
 
 # 对外保留：`correlate_mobile.py` 用 `ev.CONSENT_SIGNALS` 过滤同意事件。
 from consent_semantics import permission_timing
+from line_egress_evidence import SOURCE as LINE_SOURCE, COORDINATE_GETTERS
 CONSENT_SIGNALS = ("PERM_REQ", "PERM_RESULT", "PERM_CHECK", "POLICY_VIEW")
 
 
@@ -102,13 +103,18 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
         if not window:
             return None
         pairs = []
+        flows = list(ctx.get("flows") or [])
+        if dt == "precise_location":
+            flows.extend(ctx.get("pcap_line_flows") or [])
         for r in hits:
-            rt = _ts(r)
-            if rt is None:
-                continue
-            for f in (ctx.get("flows") or []):
+            for f in flows:
+                pcap = f.get("src") == LINE_SOURCE
+                if pcap and (r.get("api") not in COORDINATE_GETTERS or r.get("evt_id") is None
+                             or (r.get("session_id") and r["session_id"] != f.get("session_id"))):
+                    continue
+                rt = r.get("ts") if pcap else _ts(r)
                 ft = _ts(f)
-                if ft is None or _flow_unusable(f):
+                if rt is None or ft is None or _flow_unusable(f):
                     continue
                 if not (0 <= ft - rt <= window):
                     continue
@@ -121,7 +127,8 @@ def evaluate(rule: dict, ctx: dict) -> dict | None:
                     # 编号在两个 src 之间会重复（privacy 与 native_ssl 各从 1 数），
                     # 带上 src 才能让 codeloc 唯一定位；见 evaluation_mobile_parts.refs_of。
                     "read_src": r.get("src"), "flow_src": f.get("src"),
-                    "delta_ms": ft - rt, "clock_basis": "host_received_ts",
+                    "delta_ms": ft - rt, "clock_basis": "device_epoch_ms" if pcap else "host_received_ts",
+                    **({"capture_ref": f["capture_ref"], "uid": f["uid"]} if pcap else {}),
                     "content_match": True,
                     "content_match_basis": "value_hash_in_payload" if token else "shape_tag",
                     "matched_token": token,

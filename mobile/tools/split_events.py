@@ -32,6 +32,7 @@ from pathlib import Path
 SRC_TO_FILE = {
     "consent": "consent.jsonl",
     "egress": "egress.jsonl",
+    "socket_meta": "socket-meta.jsonl",
     "tls": "tls.jsonl",
     # 内存 Hook 的明文/元数据体量大且与「隐私读取」语义无关，分流到独立文件，
     # 避免 reads.jsonl 被 EVP/SNI 事件淹没（2026-10-18）。下游目前不读这两个文件，

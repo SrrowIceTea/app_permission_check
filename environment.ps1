@@ -1,4 +1,4 @@
-﻿# 当前主机入口；仅用于授权测试。Dot-source: . .\environment.ps1
+﻿﻿# 当前主机入口；仅用于授权测试。Dot-source: . .\environment.ps1
 #
 # 覆盖值优先；默认值按当前确实存在的工具解析，不把另一台开发机路径当成本机事实。
 
@@ -58,3 +58,9 @@ $VScanGradle = (Get-ChildItem -Path (Join-Path $env:USERPROFILE '.gradle\wrapper
         -Recurse -Filter 'gradle.bat' -ErrorAction SilentlyContinue |
     Select-Object -First 1 -ExpandProperty FullName)
 if (-not $VScanGradle) { Write-Warning 'Gradle 8.13 未在 wrapper 缓存中找到；各工程仍可用 gradlew 包装器构建。' }
+
+# 设备 pcap 的可选解码器。已安装版本可放在 PATH，或把组织提供的便携版本放到项目 output。
+if (-not $env:VSCAN_TSHARK -and -not (Get-Command tshark -CommandType Application -ErrorAction SilentlyContinue)) {
+    $VScanTshark = Join-Path $PSScriptRoot 'output\_tools\wireshark\tshark.exe'
+    if (Test-Path -LiteralPath $VScanTshark -PathType Leaf) { $env:VSCAN_TSHARK = $VScanTshark }
+}

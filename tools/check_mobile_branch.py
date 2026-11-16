@@ -18,6 +18,9 @@ CHECKS = [
     ("upstream_mobile", ".", [PY, "mobile/tools/run_mobile_checks.py"]),
     ("mobile_workbench", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/workbench", "-p", "test_*.py"]),
     ("fixture_pipeline", "mobile/tools", [PY, "-m", "unittest", "test_device_pipeline", "test_device_trigger", "test_device_runtime", "test_device_permissions", "test_device_cleanup"]),
+    # 断点续跑的完成判据（verification.json.passed + 报告在），反例是"目录齐全但判据未通过"。
+    # 与 supervise_batch.batch_progress 同口径，改任一处都该有这条红。
+    ("batch_plan", "mobile/tools", [PY, "-m", "unittest", "test_batch_plan_resume"]),
     ("fixture_packaging", "mobile/fixture-app", [PY, "-m", "unittest", "test_gadget_prepare"]),
     ("hook_compiler", ".", [PY, "-m", "unittest", "core.frida_host.test_build"]),
     ("read_semantics", "mobile/analyze", [PY, "-m", "unittest", "test_observation_semantics", "test_client_tls", "test_consent_observation"]),
@@ -26,6 +29,8 @@ CHECKS = [
     ("policy_library", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/policy", "-p", "test_policy*.py"]),
     ("pipeline_api", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/pipeline", "-p", "test_*.py"]),
     ("new_frontend_models", "frontend", ["node", "test_audit_results.mjs"]),
+    # 时间线必须由 /api/stages 生成（17 阶段唯一来源），服务不可用不许画假进度。
+    ("pipeline_frontend_contract", "frontend", ["node", "test_pipeline_contract.mjs"]),
     ("mobile_lab", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/lab", "-p", "test_*.py"]),
     ("mobile_repack", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/repack", "-p", "test_*.py"]),
     ("mobile_audit", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/audit", "-p", "test_*.py"]),

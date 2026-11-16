@@ -4,7 +4,30 @@ import threading
 import time
 
 
-def cleanup(frida, session, script, callback, detached, stream, store, *, timeout=4, extra=None):
+def flush_capture(frida, script, stream, body, *, transport):
+    buffered = transport in body and 'vscanFlush' in body
+    location_repeats = 'vscanFlushLocationReads' in body
+    if not buffered and not location_repeats:
+        return
+    try:
+        with frida.Cancellable() as cancellation:
+            timer = threading.Timer(5, cancellation.cancel)
+            timer.start()
+            try:
+                if location_repeats:
+                    script.exports_sync.vscan_flush_location_reads()
+                if buffered:
+                    stats = script.exports_sync.vscan_flush()
+                    if stream.acknowledge(stats):
+                        print("VSCAN_TRANSPORT " + json.dumps(stats), flush=True)
+            finally:
+                timer.cancel()
+    except Exception as error:
+        print(f"FRIDA_FLUSH_FAILED {type(error).__name__}", flush=True)
+        stream.flush_failed(error)
+
+
+def cleanup(frida, session, script, callback, detached, stream, store, *, timeout=4, extra=None, pending_spawn=None):
     """Every release is attempted; any failure keeps the capture unhealthy.
 
     ``extra`` holds additional (session, script, callback, detached) resources
@@ -64,6 +87,8 @@ def cleanup(frida, session, script, callback, detached, stream, store, *, timeou
 
     if store is not None:
         release('event_store_close', close_store)
+    if pending_spawn is not None:
+        release('pending_spawn_kill', pending_spawn, True)
     # Frida's own tools explicitly call shutdown() before sys.exit(). Leaving its
     # native event machinery alive into Python finalization can hang or crash.
     release('device_manager_shutdown', frida.shutdown, True)
@@ -76,6 +101,7 @@ class OwnedResources:
         self.frida = frida
         self.session = self.script = self.callback = self.detached = self.stream = self.store = None
         self.extra = []
+        self.pending_spawn = None
         self.closed = False
 
     def __enter__(self):
@@ -85,7 +111,8 @@ class OwnedResources:
         if not self.closed:
             self.closed = True
             return cleanup(self.frida, self.session, self.script, self.callback,
-                           self.detached, self.stream, self.store, extra=self.extra)
+                           self.detached, self.stream, self.store, extra=self.extra,
+                           pending_spawn=self.pending_spawn)
 
     def __exit__(self, *error):
         self.close()

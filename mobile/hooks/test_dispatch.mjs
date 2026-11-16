@@ -6,6 +6,8 @@
 // 为什么值得单独测：这些判断错了不会报错，只会让**某类数据从来没被判出来**，
 // 或者反过来把不相干的调用记成敏感读取。两种都是静默失败。
 import assert from 'node:assert/strict';
+import { locationReads } from './location_repeats.js';
+import { parseSockaddr } from './hook_egress_tp.js';
 import { matchBySpec, isDeniedClassName, describeException, looksLikePolicy, discriminator, unmappedKey,
          toJsArray, shortName, splitGrantResults, preview } from './dispatch.js';
 
@@ -214,6 +216,34 @@ t('非 0/-1 的结果单独归类，不当作同意也不当作拒绝', () => {
 // --- preview ---
 t('preview 短串原样返回', () => { assert.equal(preview('46000', 6), '46000'); });
 t('preview 长串截断加省略号', () => { assert.equal(preview('460001234567890', 6), '460001…'); });
+
+t('定位同栈同值保留首条，并在关闭时留下重复次数', () => {
+  let now = 10;
+  const events = [];
+  const capture = locationReads((ev, data) => events.push([ev, data]), () => now);
+  const entry = { cls: 'android.location.Location', method: 'getSpeed', desc: '()F' };
+  const extra = { api: 'getSpeed', stack: 'at a', value_hash: 'a', outcome: 'ok' };
+  capture.emit(entry, extra);
+  for (now of [11, 12, 13]) capture.emit(entry, extra);
+  capture.emit(entry, { ...extra, outcome: 'denied' });
+  capture.emit(entry, { ...extra, stack: 'at b' });
+  capture.emit(entry, { ...extra, value_hash: 'b' });
+  capture.flush();
+  assert.equal(events.filter(([event]) => event === 'PRIVACY_READ').length, 4);
+  assert.deepEqual(events.pop(), ['PRIVACY_READ_REPEATS', {
+    api: 'getSpeed', value_hash: 'a', repeat_count: 3, first_repeat_ts: 11, last_repeat_ts: 13
+  }]);
+});
+
+t('AF_INET sockaddr 按字节解析 IP 与网络序端口', () => {
+  const view = new DataView(Uint8Array.from([2, 0, 1, 187, 192, 0, 2, 20]).buffer);
+  const at = offset => ({
+    add: delta => at(offset + delta),
+    readU8: () => view.getUint8(offset),
+    readU16: () => view.getUint16(offset, true)
+  });
+  assert.deepEqual(parseSockaddr(at(0)), { ip: '192.0.2.20', port: 443 });
+});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

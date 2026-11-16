@@ -1,0 +1,4 @@
+# 工程守卫工具（仅 CI / pre-commit 需要；运行时依赖见 requirements.txt）。
+# 固定版本：lint 结果不应随工具升级漂移；与 .pre-commit-config.yaml 的
+# ruff-pre-commit rev v0.8.4 对齐。
+ruff==0.8.4

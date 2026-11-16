@@ -139,3 +139,8 @@ profile `node_modules` 里，宿主启动判定不兼容后**禁用了核心行 
 
 > 2026-11-10 已按本机实测改写 `AGENTS.md`/`CLAUDE.md`/`README.md` 的环境表（SDK 路径、平台列表、
 > 镜像位置、Python 解释器）。本表保留为"原开发机记录 → 本机实测"的漂移索引，别再照抄左列。
+>
+> 2026-11-11 复核：`environment.ps1` 头注释、`AGENTS.md` 环境表与 `docs/REGRESSION_CI.md`
+> 已统一到同一组值；`D:\Anroid\*` 明确标为原开发机拼写。"依赖是否齐全"一律以
+> `core/env_guard.py` 的退出码为准（0 可用 / 3 缺库），不再引用某一时点的
+> "缺 jsonschema" / "依赖已齐"结论；两条 CI 也固定了 `CODEBUDDY_SAFE_DELETE_ENABLED=0`。

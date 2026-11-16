@@ -3,19 +3,24 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 import shutil
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from benchmark_review_data import build_input, map_output
-from benchmark_review_validation import validate_output
+ROOT = Path(__file__).resolve().parents[2]
+# 与 benchmark_review.save 用同一个原子写实现；cwd 为 mobile/ai 时也拿得到 core。
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from benchmark_review_data import build_input, map_output  # noqa: E402
+from benchmark_review_validation import validate_output  # noqa: E402
+from core.regression_output import atomic_write_text  # noqa: E402
 
 
 def save(path: Path, value) -> None:
-    temp = path.with_name(path.name + ".tmp")
-    temp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    os.replace(temp, path)
+    """原子写 JSON；复用 core 的 Windows 有界重试（见 benchmark_review.save）。"""
+    atomic_write_text(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
 
 
 def attach(batch_path: Path, ai_dir: Path) -> dict:

@@ -85,6 +85,7 @@ function fixture() {
 
 check('无账本时明确报缺口，不伪造任何漏斗计数', () => {
   const r = render({});
+  assert.match(r.text, /后端未提供账本/);
   assert.match(r.text, /后端未返回 observation_ledger/);
   assert.match(r.text, /不能据此认为采集完整或无风险/);
   assert.equal(r.created.filter(n => n.className === 'ledger-stat').length, 7,

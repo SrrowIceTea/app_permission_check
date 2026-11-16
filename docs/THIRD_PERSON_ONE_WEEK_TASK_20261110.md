@@ -1,5 +1,7 @@
 # 第三位开发者一周任务：车载证据展示与端到端验收
 
+> **历史快照（2026-11-11 归档，不作当前清单）**：现在什么状态、本周做什么见 [CURRENT_STATUS.md](CURRENT_STATUS.md)。
+
 日期：2026-11-11。仅用于授权测试。
 关联计划：[A/B双人一周计划](TWO_PERSON_ONE_WEEK_PLAN_CURRENT_20261110.md)。
 人员暂称C，按具备基础Python/JavaScript调试能力安排，5个工作日，周末不安排任务。

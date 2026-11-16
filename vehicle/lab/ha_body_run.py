@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 from core.io_utils import load_jsonl
+from vehicle.lab.business_receipts import seal_ha_states
 from vehicle.lab.ha_api import onboard, request
 from vehicle.lab.power_run import ACTIVITY, ENTITY
 from vehicle.pipeline.capture_device import Device, wait_until
@@ -34,7 +35,8 @@ def exercise(device, capture, worker, token, result):
                 raise RuntimeError('normal capture stopped during business observation')
             server = request(ENTITY, token=token)
             if server['state'] == str(level) and server['last_changed'] != prior_change:
-                receipt.update(state=server['state'], last_changed=server['last_changed'])
+                receipt.update(state=server['state'], last_changed=server['last_changed'],
+                               observed_ms=int(time.time() * 1000))
                 return True
             return False
 
@@ -66,7 +68,7 @@ def run(out, runtime, apk, serial, user, port):
             worker = subprocess.Popen([sys.executable, '-m', 'vehicle.pipeline.capture', '--package', PACKAGE,
                 '--serial', serial, '--user', str(user), '--frida-port', str(port), '--activity', ACTIVITY,
                 '--seconds', '150', '--out', str(capture), '--scope', 'general',
-                '--preserve-system-proxy', '--ha-webhook'], cwd=ROOT, stdout=log, stderr=log,
+                '--preserve-system-proxy', '--ha-webhook', '--no-tls-bypass'], cwd=ROOT, stdout=log, stderr=log,
                 env=dict(os.environ, PYTHONUTF8='1'))
             try:
                 def ready():
@@ -76,6 +78,7 @@ def run(out, runtime, apk, serial, user, port):
                 wait_until(ready, 45, '常规 HA 采集就绪')
                 try:
                     exercise(device, capture, worker, token, result)
+                    seal_ha_states(capture, result['steps'], package=PACKAGE, user=user, entity=ENTITY.removeprefix('/api/states/'))
                 finally:
                     device.call('shell', 'dumpsys', 'battery', 'reset')
                     result['battery_reset'] = 'UPDATES STOPPED' not in device.call('shell', 'dumpsys', 'battery')

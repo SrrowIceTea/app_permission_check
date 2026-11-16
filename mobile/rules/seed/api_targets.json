@@ -35,6 +35,23 @@
                      "unmapped": "ignore"},
      "note": "订阅本身不等于拿到定位；如实记录为 observe，结论沿用 observed 上限。"},
 
+    {"class_name": "android.location.Location", "method_name": "getLatitude", "select": "zero_arg",
+     "data_type_key": "precise_location", "api_role": "read",
+     "observation": {"kind": "direct", "capture": "return_or_exception"},
+     "note": "定位**取值点**。requestLocationUpdates 只证明订阅；应用真正使用坐标时必经 getLatitude/getLongitude，在此记 obtained。"},
+    {"class_name": "android.location.Location", "method_name": "getLongitude", "select": "zero_arg",
+     "data_type_key": "precise_location", "api_role": "read",
+     "observation": {"kind": "direct", "capture": "return_or_exception"},
+     "note": "与 getLatitude 成对；任一被调用即说明应用读到了定位值。"},
+    {"class_name": "android.location.Location", "method_name": "getSpeed", "select": "zero_arg",
+     "data_type_key": "precise_location", "api_role": "read",
+     "observation": {"kind": "direct", "capture": "return_or_exception"},
+     "note": "速度计/导航类应用的典型取值点（2026-11-15 实测：Roam 只调 updateLocation，UI 用 getSpeed 渲染）。"},
+    {"class_name": "android.location.Location", "method_name": "getAccuracy", "select": "zero_arg",
+     "data_type_key": "precise_location", "api_role": "read",
+     "observation": {"kind": "direct", "capture": "return_or_exception"},
+     "note": "精度也是定位信息的一部分（Blue Square 界面直接展示 accuracy）。"},
+
     {"class_name": "android.net.wifi.WifiInfo", "method_name": "getMacAddress", "select": "zero_arg",
      "data_type_key": "mac_address", "api_role": "read",
      "observation": {"kind": "direct", "capture": "return_or_exception"},
@@ -186,6 +203,18 @@
     {"class_name": "android.hardware.fingerprint.FingerprintManager", "method_name": "authenticate", "select": "all",
      "data_type_key": "biometric_data", "api_role": "observe",
      "observation": {"kind": "direct", "capture": "args_only"},
-     "note": "API 28 前的指纹认证入口，已废弃但存量 App 大量使用。"}
+     "note": "API 28 前的指纹认证入口，已废弃但存量 App 大量使用。"},
+    {"class_name": "android.bluetooth.le.BluetoothLeScanner", "method_name": "startScan", "select": "all",
+     "data_type_key": "bluetooth_info", "api_role": "observe",
+     "observation": {"kind": "direct", "capture": "args_only"},
+     "note": "BLE 扫描订阅（2026-11-15 补：胎压/车载配件类应用只用这一条路径）。结果经 ScanCallback 回调投递，本条目只记「发起了扫描」与过滤条件，不采设备列表。"},
+    {"class_name": "android.bluetooth.le.BluetoothLeScanner", "method_name": "stopScan", "select": "all",
+     "data_type_key": "bluetooth_info", "api_role": "observe",
+     "observation": {"kind": "direct", "capture": "args_only"},
+     "note": "停止 BLE 扫描。与 startScan 成对，用来判断扫描持续了多久。"},
+    {"class_name": "android.bluetooth.BluetoothAdapter", "method_name": "startDiscovery", "select": "zero_arg",
+     "data_type_key": "bluetooth_info", "api_role": "observe",
+     "observation": {"kind": "direct", "capture": "args_only"},
+     "note": "经典蓝牙发现（API 28 前的做法）。结果经 BroadcastReceiver 投递，同 startScan 只记发起。"}
   ]
 }

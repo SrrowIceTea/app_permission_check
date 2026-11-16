@@ -92,14 +92,16 @@ def device_ip() -> str:
     return "?"
 
 
+SOCKET_TABLES = ("tcp", "tcp6", "udp", "udp6")
+
+
 def source_paths(pid: int | None) -> list[str]:
     """读哪份 proc：有 pid 就走目标进程的命名空间（Android 把应用的 netns 隔离了，
     读 /proc/net/tcp 看不到它）。两个文件都要：本设备上应用外发基本都在 tcp6。
     --package 模式下路径在**设备端**按当轮 pid 拼，这里只是非 package 模式的兜底。
     """
-    if pid is not None:
-        return [f"/proc/{pid}/net/tcp", f"/proc/{pid}/net/tcp6"]
-    return ["/proc/net/tcp", "/proc/net/tcp6"]
+    root = f"/proc/{pid}/net" if pid is not None else "/proc/net"
+    return [f"{root}/{table}" for table in SOCKET_TABLES]
 
 
 def build_recorder(package: str | None, uid: int | None, pid: int | None,
@@ -142,7 +144,7 @@ def build_recorder(package: str | None, uid: int | None, pid: int | None,
             "  if [ -n \"$PID\" ]; then\n"
             "    SEEN=1\n"
             + "".join(f"    while read -r L; do echo \"$T /proc/$PID/net/{k} $L\"; done "
-                      f"< /proc/$PID/net/{k} 2>/dev/null\n" for k in ("tcp", "tcp6"))
+                      f"< /proc/$PID/net/{k} 2>/dev/null\n" for k in SOCKET_TABLES)
             + "  else\n"
             f"    if [ $((N % {PID_MISS_EVERY})) -eq 0 ]; then\n"
             # 两种缺失含义完全不同：采样在 `am start` **之前**就起，所以开头几轮

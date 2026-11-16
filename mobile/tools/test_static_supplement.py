@@ -157,7 +157,13 @@ class SupplementTest(unittest.TestCase):
         self.assertEqual(out["downgraded_findings"], [])
         egress = {c["rule_id"]: c for c in out["rules_considered"]
                   if c["rule_type"] == "data_egress"}
-        self.assertEqual(egress["MOB-E006"]["apis_in_library"], 0)
+        # 2026-11-15：规则库新增 4 个 Location 取值 API（getLatitude/getLongitude/
+        # getSpeed/getAccuracy），它们是 direct 映射，属于"能读到 precise_location 的
+        # 来源 API"，所以 apis_in_library 不再是 0。这条断言要守的仍然是**映射**：
+        # provider/URI 这类解析不出来的 spec 必须被排除，且合成 facts 没引用 getter 时
+        # 一条外发结论都不能产出。
+        self.assertGreater(egress["MOB-E006"]["apis_in_library"], 0)
+        self.assertEqual(egress["MOB-E006"]["apis_referenced"], 0)
         self.assertGreater(egress["MOB-E006"]["spec_mapping_excluded"], 0)
         # 敏感读取仍然覆盖定位/通讯录（这正是本次要补的漏采）
         read = {f["rule_id"] for f in out["findings"] if f["rule_type"] == "sensitive_read"}

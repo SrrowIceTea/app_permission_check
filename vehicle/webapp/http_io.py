@@ -67,8 +67,9 @@ class Responses:
                 if not block:
                     return
                 remaining -= len(block)
-        except OSError:
-            pass
+        except OSError as drain_error:
+            print(f'[http_io] 读取请求体时连接断开，按残缺请求处理: '
+                  f'{type(drain_error).__name__}: {drain_error}', flush=True)
 
     def json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False).encode('utf-8')

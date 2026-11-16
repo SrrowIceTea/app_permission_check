@@ -44,7 +44,7 @@ def _csum(data: bytes) -> int:
 
 
 def _tcp_frame(src_port: int, dst_port: int, seq: int, flags: int,
-               payload: bytes, ack: int = 0, srv: bool = False) -> bytes:
+               payload: bytes, ack: int = 0, srv: bool = False, loopback: bool = False) -> bytes:
     """拼一个最小可解析的 Ethernet/IPv4/TCP 帧（校验和算对，免得 tshark 报 bad checksum）。
 
     `srv=True` 表示这是**服务端发出**的帧，IP/MAC 要翻转。不翻会踩一个很隐蔽的坑：
@@ -54,6 +54,8 @@ def _tcp_frame(src_port: int, dst_port: int, seq: int, flags: int,
     """
     sip, dip = (bytes([10, 0, 0, 1]), bytes([10, 0, 0, 15])) if srv else \
                (bytes([10, 0, 0, 15]), bytes([10, 0, 0, 1]))
+    if loopback:
+        sip = dip = b"\x7f\x00\x00\x01"
     tcp_len = 20 + len(payload)
     tcp = struct.pack("!HHIIBBHHH", src_port, dst_port, seq & 0xFFFFFFFF,
                       ack & 0xFFFFFFFF, 5 << 4, flags, 8192, 0, 0) + payload
@@ -260,11 +262,26 @@ def test_errors(tmp: Path) -> None:
     check("recorder: 未 start 就 stop 返回 None", got is None, str(got))
 
 
+def test_loopback_http(tmp: Path) -> None:
+    tshark = pcap_http.find_tshark()
+    if not tshark:
+        return
+    capture = tmp / "loopback.pcap"
+    request = b"GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+    _write(capture, [_tcp_frame(40000, 27043, 1001, 0x18, request, loopback=True),
+                     _tcp_frame(40001, 18932, 2001, 0x18, request, loopback=True)])
+    output = tmp / "loopback.jsonl"
+    stats = pcap_http.decode(capture, output, tmp / "loopback-bodies", tshark=tshark, http_port=18932)
+    check("loopback: 排除 Frida 握手但保留应用同名路由",
+          stats["requests"] == 1 and json.loads(output.read_text(encoding="utf-8"))["dst"] == "127.0.0.1:18932")
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="vscan-pcap-"))
     try:
         test_keylog(tmp)
         test_decode(tmp)
+        test_loopback_http(tmp)
         test_gzip(tmp)
         test_h2(tmp)
         test_errors(tmp)

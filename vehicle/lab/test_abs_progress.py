@@ -5,8 +5,9 @@ import re
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
-from vehicle.lab.abs_progress_run import link_positions, within_period
-from vehicle.privacy.abs_contract import PACKAGE
+from vehicle.lab.abs_progress_run import link_positions, run, within_period
+from vehicle.lab.yaabsa_v117_run import pause_evidence
+from vehicle.privacy.abs_contract import APK_SHA256, PACKAGE
 from vehicle.privacy.catalog import catalog_hash
 from vehicle.pipeline.contracts import ROOT
 from vehicle.lab.abs_backend import stage
@@ -63,8 +64,39 @@ class PositionEvidenceTests(unittest.TestCase):
         meta=json.loads(re.search(r'export const META = (.*);',text)[1])
         self.assertEqual(meta['sha256'],catalog_hash())
 
+    def test_v117_pause_requires_playback_and_rest_position_evidence(self):
+        step = {'pause_requested_ms': 1000, 'media_paused': {'position_ms': 12000},
+                'after': {'progress': 19}}
+        playback = {'session_id': 's', 'device_ts_ms': 1001, 'body': {'timeListened': 3, 'currentTime': 12}}
+        rest = {'session_id': 's', 'device_ts_ms': 1100, 'body': {'timeListened': 0, 'currentTime': 19}}
+        self.assertEqual({'playback_position_request': True, 'server_progress_request': True},
+                         pause_evidence(step, [playback, rest], 's'))
+        self.assertFalse(pause_evidence(step, [rest], 's')['playback_position_request'])
+        self.assertFalse(pause_evidence(step, [playback, {**rest, 'device_ts_ms': 999}], 's')['server_progress_request'])
+        self.assertFalse(pause_evidence(step, [playback, {**rest, 'session_id': 'other'}], 's')['server_progress_request'])
+
 
 class HandoffGuards(unittest.TestCase):
+    def test_playback_checks_owned_emulator_and_wifi_before_backend(self):
+        for emulator in ('0', '1'):
+            with self.subTest(emulator=emulator), tempfile.TemporaryDirectory() as folder, \
+                    patch('vehicle.lab.abs_progress_run.UI') as ui, \
+                    patch('vehicle.lab.abs_progress_run.digest', return_value=APK_SHA256), \
+                    patch('vehicle.lab.abs_progress_run.ensure_wifi', side_effect=RuntimeError('wifi unavailable')) as wifi, \
+                    patch('vehicle.lab.abs_progress_run.request') as request:
+                runtime = Path(folder)
+                device = ui.return_value.device
+                device.ordinary_identity.return_value = {'installed_apk_sha256': APK_SHA256}
+                device.call.return_value = emulator
+                self.assertFalse(run(runtime / 'case', runtime, runtime / 'test.apk', 'emulator-5554'))
+                if emulator == '1':
+                    wifi.assert_called_once_with(device.call)
+                else:
+                    wifi.assert_not_called()
+                request.assert_not_called()
+                result = json.loads((runtime / 'case/verification.json').read_text(encoding='utf-8'))
+                self.assertIn('wifi unavailable' if emulator == '1' else 'owned AAOS', result['error']['message'])
+
     def test_untrusted_backend_manifest_stops_before_staging(self):
         with tempfile.TemporaryDirectory() as tmp, patch('vehicle.lab.abs_backend.Device') as mocked:
             folder=Path(tmp)

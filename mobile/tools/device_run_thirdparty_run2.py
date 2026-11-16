@@ -6,6 +6,7 @@ spawn / attach 启动与挂钩，含 spawn 失败回退 attach 与早退判据�
 from __future__ import annotations
 
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -21,6 +22,20 @@ HOOK_MARGIN_SPAWN_S = 55
 HOOK_MARGIN_ATTACH_S = 15
 
 
+def _wait_for_spawn(proc, log: Path, timeout_s: float = 40) -> tuple[str | None, str]:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        status = proc.poll()
+        if status is not None:
+            return None, f"Frida 启动进程已退出（退出码 {status}，见 {log.name}）"
+        ready = re.search(r"^FRIDA_SPAWN_READY (\d+) (\d+) (\d+)$",
+                          log.read_text(encoding="utf-8", errors="replace"), re.MULTILINE)
+        if ready:
+            return ready[1], f"user={ready[2]} uid={ready[3]}"
+        time.sleep(0.25)
+    return None, f"未在 {timeout_s:g}s 内确认 Frida 已恢复目标 PID（见 {log.name}）"
+
+
 def _stage_launch(ctx) -> int:
     """launch：spawn/attach 启动应用并挂 Frida 钩子（单 agent 合并 bundle），
     spawn 失败回退 attach。早退（应用起不来）时返回 1，整个运行短路。
@@ -33,6 +48,7 @@ def _stage_launch(ctx) -> int:
     check = ctx.check
     main_activity = ctx.main_activity
     resolved_activity = ctx.resolved_activity
+    ctx.startup_mode = "attach"
 
     # 冷启动竞争：attach 模式先 am start、等到 pid 再挂钩子；
     # spawn 模式反过来——钩子进程 spawn 应用（在第一条指令前挂上），应用由 resume 启动。
@@ -53,7 +69,6 @@ def _stage_launch(ctx) -> int:
         emit("launch", "done" if pid else "failed", f"pid={pid}" if pid else "应用未启动")
         if not pid:
             env.kill_tree(ctx.collector, out / "kill-conn.log")   # 早退也不能留孤儿
-            env.unblock_quic(out / "quic-unblock.log")        # 同理：不能把 DROP 规则留在设备上
             if ctx.pcap_rec is not None:                      # 抓包进程同样不能留在设备上
                 ctx.pcap_rec.stop(out / "capture.pcap", out / "pcap-stop.log")
             (out / "verification.json").write_text(json.dumps(
@@ -100,7 +115,7 @@ def _stage_launch(ctx) -> int:
             # spawn 模式下应用由 run.py 的 device.spawn + resume 启动。等待应用 pid
             # 出现（spawn 是异步的，run.py 里 spawn→attach→load→resume 需要几秒），
             # 并确认进程没在窗口内崩溃重启——否则 UI 驱动对着一个已死的进程空点。
-            spawn_pid = env.wait_for_app(args.package, timeout_s=40)
+            spawn_pid, spawn_note = _wait_for_spawn(hooks[0], out / "hook-all.log")
             # spawn 注入对部分应用会导致 SIGSEGV（实测 openmensa：RenderThread
             # 在 spawn 后 3s 崩溃，frida 早期注入 + 部分 native 渲染线程初始化冲突）。
             # 检测到 spawn 的 pid 很快消失时，回退到 attach：停掉 spawn 钩子，用
@@ -113,7 +128,7 @@ def _stage_launch(ctx) -> int:
                 alive = env.adb("shell",
                                 f"if test -d /proc/{spawn_pid}; then echo y; else echo n; fi",
                                 timeout=30).stdout.strip() == "y"
-                spawn_died = not alive
+                spawn_died = not alive or hooks[0].poll() is not None
             # **两种 spawn 失败都要回退 attach**（2026-10-20 修）：
             #   ① 起来了又崩（上面这 6 秒观察窗能抓到）；
             #   ② 压根没起来 —— `device.spawn` 超时/报错时 run.py 直接退出，
@@ -122,11 +137,16 @@ def _stage_launch(ctx) -> int:
             # 原实现只处理 ①：②会走 `check(app_started)=1` 然后直接早退，
             # 每遇到一次就白扔一个样本（40s 等待 + 早退），而 attach 本来能跑。
             if spawn_died or not spawn_pid:
-                why = (f"spawn pid={spawn_pid} 已消失（spawn 注入崩溃）" if spawn_pid
-                       else "spawn 未拉起应用进程（device.spawn 超时/失败）")
+                ctx.startup_mode = "attach_fallback"
+                why = f"spawn pid={spawn_pid} 或钩子进程已退出" if spawn_pid else spawn_note
                 emit("launch", "running", f"{why}，回退 attach 启动")
                 for h in hooks:
                     env.stop_hook(h, out / "hook-all.log")
+                for path in session.glob("reads.*"):
+                    # The driver owns these until stop_hook returns. Preserve a failed
+                    # spawn's events separately before the attach attempt opens its stream.
+                    path.rename(out / f"spawn-attempt-{path.name}")
+                env.adb("shell", "am", "force-stop", "--user", "current", args.package, timeout=30)
                 env.adb("shell", "am", "start", "-W", "-n",
                         f"{args.package}/{main_activity}", timeout=150)
                 attach_pid = env.wait_for_app(args.package, timeout_s=40)
@@ -135,6 +155,7 @@ def _stage_launch(ctx) -> int:
                             f"spawn 失败且回退 attach 也未启动（原因：{why}）")
                            + f"；activity={main_activity}")
                 if attach_pid:
+                    pid = attach_pid
                     # 日志换个文件名：`start_hook` 以 "w" 打开日志，用同一个
                     # hook-all.log 会把**spawn 会话的失败原因**（超时/崩溃栈）整段截掉，
                     # 而那正是"为什么会回退"的唯一书面证据。
@@ -146,14 +167,17 @@ def _stage_launch(ctx) -> int:
                                        # wait_for_app + sleep(9) 才开观测窗口，
                                        # 原来传 args.seconds 等于末尾 9s 以上无钩子。
                                        args.seconds + HOOK_MARGIN_ATTACH_S,
-                                       args.package, spawn=False),
+                                       args.package, spawn=False,
+                                       tls_bypass=getattr(args, "tls_bypass", False)),
                     ]
                     emit("launch", "done", f"回退 attach pid={attach_pid}")
                 else:
                     emit("launch", "failed", "spawn 失败且回退 attach 失败")
             else:
-                check("app_started", 0 if spawn_pid else 1,
-                      note=f"spawn pid={spawn_pid}；activity={main_activity}")
+                pid = spawn_pid
+                ctx.startup_mode = "spawn"
+                check("app_started", 0,
+                      note=f"spawn pid={spawn_pid} {spawn_note}；activity={main_activity}")
                 emit("launch", "done", f"spawn pid={spawn_pid}")
             # 早退判据改成「窗口内到底有没有活着的被测进程」（2026-10-20 修）：
             # 原判据 `not spawn_pid and not spawn_died` 漏掉了
@@ -165,7 +189,6 @@ def _stage_launch(ctx) -> int:
                 for h in hooks:
                     env.stop_hook(h, out / "hook-all.log")
                 env.kill_tree(ctx.collector, out / "kill-conn.log")
-                env.unblock_quic(out / "quic-unblock.log")
                 if ctx.pcap_rec is not None:
                     ctx.pcap_rec.stop(out / "capture.pcap", out / "pcap-stop.log")
                 (out / "verification.json").write_text(json.dumps(
@@ -178,11 +201,6 @@ def _stage_launch(ctx) -> int:
                 return 1
         time.sleep(9)   # 等钩子挂上：钩子掉线与"应用没动作"长得一样（D309）
         emit("hooks", "done", "钩子已发起挂载（单 agent 合并 bundle）")
-    if pid is None:
-        # spawn 模式下 pid 由 Frida 启动的进程决定（上面只做了占位）。分段采集靠
-        # /proc/<pid> 判活，没有 pid 就等于整段失明——这里补一次解析，拿不到就
-        # 让 coverage 记成"无法判定"（alive=None），绝不写"存活"。
-        pid = env.wait_for_app(args.package, timeout_s=20)
     ctx.pid = pid
     ctx.hooks = hooks
     return 0

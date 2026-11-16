@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import subprocess
 import time
 from pathlib import Path
@@ -69,3 +70,102 @@ def _emit_events(events: Path | None, stage: str, status: str, message: str = ""
             fh.flush()
     except OSError:
         pass
+
+
+# 钩子的**生命周期/拓扑**事件：证明"钩子挂上了、哪些类被迁移/跳过"，
+# 不证明"应用做过什么"。2026-11-15 试点实测：一个零读取的浏览器样本有
+# 21 条这类事件，旧口径把它们算成"真实事件"从而判通过（P1-02）。
+# 用黑名单而不是白名单：新加的**观测**事件不该因为忘了登记就判失败；
+# 反过来，新加的装载类事件若漏登记，最多是把判据放宽，且 note 里能看出条数。
+LIFECYCLE_EVENTS = frozenset({
+    "START", "ARMED", "SKIPPED_JAVA", "NATIVE_MIGRATED",
+    "RESCAN_STOPPED", "RESCAN_HOOKED", "PINNING_ARMED",
+    "SUBSCRIPTION_CALLBACK_ARMED", "TM_CLASS_HOOKED", "TM_CLASS_ABSENT",
+    "SCRIPT_ERROR", "ERROR", "NOT_PRESENT", "DROPPED",
+    "PRIVACY_READ_REPEATS",
+})
+
+
+def observation_events(events: list[dict]) -> list[dict]:
+    """只留"应用做了什么"的事件（读取/外发/同意/绕过…），剔除装载与拓扑事件。"""
+    return [e for e in events if e.get("ev") not in LIFECYCLE_EVENTS]
+
+
+def load_action_log(path, t0_ms: int | None = None, t1_ms: int | None = None,
+                    grace_ms: int = 0) -> list[dict]:
+    """读业务动作登记（JSONL），保留落在 [t0_ms - grace_ms, t1_ms] 内的条目。
+
+    受控窗口（`--max-rounds 0`）下动作是外部注入的，自动点击必然为 0；
+    旧判据 `ui_taps_made` 因此恒判失败（P1-01）。动作登记是它缺失的那条通道。
+
+    grace_ms 的来由（2026-11-15 实测）：应用启动后到 `window_t0` 之间还有一段
+    准备时间，外部测试者看到进程起来就动手，动作可能早于窗口开启一两秒。
+    Roam 那轮就是这样：动作 13:36:50.286，窗口 13:36:51.611，差 1.3s，
+    动作被整条丢弃、`business_action_made` 判红，而业务其实做了。
+    这里给一个明确的向前容差，并把落在窗口前的条目标成 `in_window=False`，
+    让报告能区分"确实做了、只是早了一点"和"根本没做"。
+
+    文件不存在/坏行一律跳过并保留已读到的条目——证据不完整不该让整轮崩掉。
+    """
+    if not path:
+        return []
+    rows: list[dict] = []
+    try:
+        with Path(path).open("r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    print("[warn] 业务动作日志有无法解析的 JSONL 行", file=sys.stderr)
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                ts = row.get("ts_ms")
+                floor_ms = None if t0_ms is None else t0_ms - max(0, int(grace_ms or 0))
+                if floor_ms is not None and (not isinstance(ts, int) or ts < floor_ms):
+                    continue
+                if t1_ms is not None and (not isinstance(ts, int) or ts > t1_ms):
+                    continue
+                row["in_window"] = True if t0_ms is None else bool(ts >= t0_ms)
+                rows.append(row)
+    except OSError:
+        return []
+    return rows
+
+
+def activity_namespace_matches(package: str, activity: str) -> bool:
+    """解析出的 Activity 是否与被测包同族（不再用"全包名前缀"硬比）。
+
+    2026-11-15 实测：`com.stoutner.privacybrowser.standard` 的入口类在
+    `com.stoutner.privacybrowser.activities.*`，旧逻辑按完整包名比前缀 →
+    误报 `cross_package=true`（P2-03）。应用 ID 带变体后缀（.standard/.fdroid/.lite）
+    是常态，命名空间只到厂商/产品层。
+    """
+    if not activity:
+        return True
+    if activity.startswith("."):
+        return True
+    cls = activity.split("/")[-1]
+    if cls.startswith(package + "."):
+        return True
+    pkg_parts, cls_parts = package.split("."), cls.split(".")
+    n = min(3, len(pkg_parts), len(cls_parts))
+    return pkg_parts[:n] == cls_parts[:n]
+
+
+def device_api(env) -> str:
+    """设备实际 API（`ro.build.version.sdk`），取不到返回 `"unknown"`。
+
+    2026-11-15 试点：报告里的 `android_version` 是**规则库**的 36，设备是 35，
+    两个数字长得很像，看报告的人会当成设备版本（P2-02）。这里单独取设备值，
+    由 correlate 写进 `device_api`，两个字段各归各。
+    返回字符串而不是 None：它直接进 argv，None 会让 subprocess 抛 TypeError。
+    """
+    try:
+        out = env.adb("shell", "getprop", "ro.build.version.sdk", timeout=30).stdout
+    except (OSError, AttributeError):
+        return "unknown"
+    return (out or "").strip() or "unknown"

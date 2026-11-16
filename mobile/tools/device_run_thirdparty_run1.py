@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""device_run_thirdparty 阶段①：prepare→mitm 头段（从 device_run_thirdparty.py 拆出，
-零行为改动）。装样本 / frida-server / wifi / QUIC 压制 / 代理 / CA / conn_probe / pcap。
-"""
+"""device_run_thirdparty 阶段①：装样本、准备设备、代理与采集器。"""
 from __future__ import annotations
 
 import json
 import shutil
 import sys
+import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -15,7 +14,9 @@ ROOT = HERE.parent.parent
 sys.path.insert(0, str(HERE))
 import thirdparty_env as env      # noqa: E402
 import pcap_capture               # noqa: E402
+from pcap_tshark import tshark_preflight  # noqa: E402
 sys.path.insert(0, str(ROOT))
+from device_run_thirdparty_helpers import activity_namespace_matches  # noqa: E402
 
 
 def _stage_head(ctx) -> None:
@@ -42,6 +43,9 @@ def _stage_head(ctx) -> None:
     if not apk.exists():
         emit("prepare", "failed", f"样本不存在：{apk}")
         sys.exit(f"[fatal] 样本不存在：{apk}")
+    if not args.no_pcap:
+        decoder_code, decoder_note = tshark_preflight()
+        check("tshark_available", decoder_code, optional=True, note=decoder_note)
     emit("prepare", "running", f"目标 {args.package}，会话 {args.seconds}s")
     # 溯源与静态产物按**样本同一性**（APK sha256）绑定，与动态运行无关；拷进交付目录使交付自洽，
     # 原文不在此重算，避免"看起来是这轮做的"。
@@ -71,34 +75,43 @@ def _stage_head(ctx) -> None:
                "default 在 per-network 表里，`ip route` 看不到")
     emit("network", "done" if net_ok else "failed", "外网连通" if net_ok else "外网不通")
 
-    # QUIC 压制（2026-10-18 起）：代理只接管 TCP，客户端一旦协商到 HTTP/3 就整条
-    # 绕过 mitmproxy。在设备内核层丢弃 UDP/443，逼它按规范回退 TCP/443。
-    # **必须在 am start 之前**：外发就发生在启动那一刻（见 conn_probe 注释）。
-    # 失败不阻断：只记成缺口——"没拦住"不能写成"没流量"。
-    emit("quic", "running", "压制 QUIC（设备侧 DROP UDP/443，逼 HTTP/3 回退 TCP）")
-    quic_blocked = env.block_quic(out / "quic-block.log")
-    check("quic_blocked", 0 if quic_blocked else 1, optional=True,
-          note=("设备 OUTPUT 链首条为 `-p udp --dport 443 -j DROP`，QUIC 将回退 TCP"
-                if quic_blocked else
-                "未能插入规则（无 root / 内核缺 netfilter）——QUIC 流量仍绕过代理，"
-                "报告须按「QUIC 不在覆盖内」标注"))
-    emit("quic", "done" if quic_blocked else "failed",
-         "UDP/443 已丢弃" if quic_blocked else "QUIC 压制失败，回落为声明边界")
+    emit("quic", "skipped", "保持设备原有 QUIC 行为；TCP 代理不覆盖 QUIC")
 
     prev_proxy = env.get_proxy()
-    setattr(sys.modules["device_run_thirdparty"].main, "_prev_proxy", prev_proxy)
+    # 原值只经 ctx 传递给 teardown（run4 读 ctx.prev_proxy）。此处曾另写一份到
+    # `sys.modules["device_run_thirdparty"]`，但脚本直接执行时该键不存在（模块名是
+    # __main__），入口在 install 之前就 KeyError 退出；且该副本从未被读取。
     ctx.prev_proxy = prev_proxy
 
     # 先卸载再装：`install -r` 保留应用数据，应用带着旧缓存/旧定位进场，首次取数会被
     # 自己的限流吃掉（实测：不干净装时窗口内零外发，干净装则启动即连 open-meteo:443）。
     # 隐私扫描要的本来就是**首次运行**状态。
-    emit("install", "running", f"安装样本 {args.package}")
-    env.adb("uninstall", args.package, timeout=120)
-    install = env.adb("install", "-r", "-g", str(apk), timeout=300)
-    (out / "install.log").write_text(install.stdout + install.stderr, encoding="utf-8")
-    check("install", 0 if "Success" in install.stdout else 1)
-    emit("install", "done" if "Success" in install.stdout else "failed",
-         "安装成功" if "Success" in install.stdout else "安装失败，见 install.log")
+    # 例外（2026-11-15）：有些样本的业务**前提就是设备上的既有配置** ——
+    # gpsdRelay 要先在界面里加一条 "TCP 服务器 + 端口"，TpmsMonitor 要先配对传感器。
+    # 默认的 uninstall/install 会把这份夹具连同 DataStore 一起清掉，窗口内再手配
+    # 一次既耗预算又引入"配置是否生效"的不确定性。`--skip-install` 保留现场，
+    # 但必须显式给，且判据写清 "pre-installed"，不能让它看起来像刚装的干净样本。
+    if getattr(args, "skip_install", False):
+        emit("install", "running", f"跳过安装：沿用设备上已配置的 {args.package}")
+        listed = env.adb("shell", "pm", "list", "packages", args.package, timeout=45).stdout
+        installed = f"package:{args.package}" in listed
+        (out / "install.log").write_text(
+            f"skip-install=true\npm list packages -> {listed.strip()}\n", encoding="utf-8")
+        check("install", 0 if installed else 1,
+              note=("pre-installed：沿用设备上的既有安装与配置（含服务器地址等测试夹具），"
+                    "未做 uninstall；本条不证明样本来自本次 APK 安装"
+                    if installed else
+                    f"给了 --skip-install 但设备上没有 {args.package}"))
+        emit("install", "done" if installed else "failed",
+             "沿用既有安装" if installed else "未安装且要求跳过安装")
+    else:
+        emit("install", "running", f"安装样本 {args.package}")
+        env.adb("uninstall", args.package, timeout=120)
+        install = env.adb("install", "-r", "-g", str(apk), timeout=300)
+        (out / "install.log").write_text(install.stdout + install.stderr, encoding="utf-8")
+        check("install", 0 if "Success" in install.stdout else 1)
+        emit("install", "done" if "Success" in install.stdout else "failed",
+             "安装成功" if "Success" in install.stdout else "安装失败，见 install.log")
 
     # 坐标注入（仅模拟器有 `emu`）。实测该 AVD 无 Google 连通性，应用的 GMS 定位路径会报
     # "Something went wrong"；注入坐标后系统 LocationManager 才给得出位置，应用才走得到网络请求。
@@ -122,8 +135,9 @@ def _stage_head(ctx) -> None:
     # 派生应用共用上游代码库时这**是合法的**（Pulse 基于 Gadgetbridge），所以
     # 不判失败、也不擅自换启动方式（当前行为实测能起来且产生了业务流）；
     # 但必须写清楚，否则审计者看到"使用了别的包的 Activity"只能靠猜。
-    cross_pkg = bool(main_activity and not main_activity.startswith(".")
-                     and not main_activity.startswith(args.package))
+    # 判据按**命名空间**而不是完整包名：应用 ID 带变体后缀（.standard/.fdroid/.lite）
+    # 是常态，2026-11-15 实测 Privacy Browser 因此被误报 cross_package（P2-03）。
+    cross_pkg = bool(main_activity and not activity_namespace_matches(args.package, main_activity))
     if cross_pkg:
         print(f"[main-activity] 注意：解析到的 Activity 不属于被测包 "
               f"{args.package}（{main_activity}）。若被测应用并非派生自该代码库，"
@@ -144,17 +158,16 @@ def _stage_head(ctx) -> None:
     # **必须在 `am start` 之前就开**：应用的外发就发生在启动那一刻（实测 logcat 里
     # 启动当秒就有 uid=10236 的 NetworkRequest，而晚 8s 才起的采样一条都没采到）。
     # 按**包名**采（不是按 uid 读 /proc/net/tcp）：Android 隔离了应用网络命名空间；
-    # 且应用会在窗口内崩溃重启（实测 pid 10658→14037），只有让设备端每轮重解 pid，
-    # 才不会在那之后整段失明。也不过滤 uid——过滤等于静默丢数据，丢了补不回来。
+    # 应用重启后会换 PID，设备端重新定位网络命名空间，宿主仅保留目标 UID 的记录。
     uid = env.app_uid(args.package)
     ctx.uid = uid
     emit("conn_probe", "running", f"开启设备侧连接采样（package={args.package}）")
-    collector = env.start_conn_probe(session, out / "conn-probe.log",
-                                     args.package, args.seconds, uid=uid)
+    collector = (env.start_conn_probe(session, out / "conn-probe.log",
+                                      args.package, args.seconds + 120, uid=uid) if uid is not None else None)
     ctx.collector = collector
-    check("conn_probe_started", 0, optional=True,
-          note=f"package={args.package} app_uid={uid}（设备端每轮重解 pid，不过滤 uid）")
-    emit("conn_probe", "done", f"app_uid={uid}")
+    check("conn_probe_started", 0 if collector else 1, optional=True,
+          note=f"package={args.package} app_uid={uid}" if collector else "未核实目标 UID。")
+    emit("conn_probe", "done" if collector else "skipped", f"app_uid={uid}")
 
     # 设备端 pcap（P0，2026-10-18）：**必须在 am start 之前**起，和 conn_probe 同一个
     # 理由——外发就在启动那一刻。它解决的是 hook 结构性给不出的东西：hook 拿到的是
@@ -168,7 +181,12 @@ def _stage_head(ctx) -> None:
         emit("pcap", "skipped", "--no-pcap：不抓包，完整报文不可得")
     else:
         emit("pcap", "running", "设备端 pcap 采集（tcpdump）")
-        pcap_rec = pcap_capture.PcapRecorder()
+        port = args.fixture_http_port
+        remote = f"/data/local/tmp/vscan-capture-{uuid.uuid4().hex}.pcap"
+        pcap_rec = pcap_capture.PcapRecorder(
+            remote=remote, iface="lo" if port is not None else "any",
+            bpf=(f"ip and host 127.0.0.1 and tcp port {port}" if port is not None
+                 else f"not tcp port {env.FRIDA_PORT}"))
         ctx.pcap_rec = pcap_rec
         pcap_ok, pcap_note = pcap_rec.start(out / "pcap-start.log", args.seconds + 120)
         check("pcap_started", 0 if pcap_ok else 1, optional=True, note=pcap_note)

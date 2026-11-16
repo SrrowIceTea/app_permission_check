@@ -23,6 +23,7 @@ from __future__ import annotations
 import unittest
 
 import evaluation_mobile as ev
+from line_egress_evidence import admitted_flows, build_flows
 from test_analyze import ctx, read, rule
 
 
@@ -40,6 +41,27 @@ class EgressTest(unittest.TestCase):
         self.assertIsNotNone(f)
         self.assertEqual(f["content_match_basis"], "value_hash_in_payload")
         self.assertEqual(f["pairs"][0]["matched_token"], "digit15_shape:abc123")
+
+    def test_verified_nmea_pairs_with_coordinate_read_using_device_clock(self):
+        row = {
+            "ts": 2, "proto": "nmea", "checksum_ok": True, "sentence": "RMC",
+            "line": "$GPRMC,124213,A,3954.5399,N,11623.82,E,15.0*28",
+            "attribution": "tcp_stream_socket_inode", "direction": "from_app",
+            "attributed": True, "uid": 42, "first_frame": "3", "frame": "4",
+            "tcp_stream": "5", "socket_inode": 9,
+        }
+        observation = read(1, "precise_location", 100000) | {
+            "ts": 1500, "api": "android.location.Location.getLatitude()D"}
+        c = ctx(reads=[observation])
+        flows = build_flows([row, {**row, "attribution": "listen_port"},
+                             {**row, "checksum_ok": False}, {**row, "direction": "to_app"}], session="s",
+                            package=c["package"], uid=42, pcap_sha256="0" * 64)
+        self.assertEqual(1, len(admitted_flows(flows, session="s", package=c["package"])))
+        c["pcap_line_flows"] = flows
+        result = ev.evaluate(rule("data_egress", "read_before_egress_within_window", "precise_location"), c)
+        self.assertEqual("shape_tag", result["content_match_basis"])
+        self.assertEqual("device_epoch_ms", result["pairs"][0]["clock_basis"])
+        self.assertEqual("4", result["pairs"][0]["capture_ref"]["frame"])
 
     def test_top_level_value_match_form_raw(self):
         """值级命中时，顶层 finding 必须带出 value_match_form=raw（risk_score 依赖它）。

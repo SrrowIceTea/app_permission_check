@@ -144,8 +144,8 @@ def chat(cfg: dict, *, system: str, user: str, tag: str) -> dict:
                 raw_bytes = e.read()
                 complete = True
                 detail = raw_bytes.decode("utf-8", errors="replace")[:300]
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as read_error:  # noqa: BLE001  错误正文读不到时保留状态码，不阻断重试
+                detail = f"[error-body-unreadable:{type(read_error).__name__}]"
             last_err = f"HTTP {e.code} {e.reason} {detail}"
         except http.client.IncompleteRead as e:
             # 保留已收到的残片供诊断，但绝不解析或接受截断正文。

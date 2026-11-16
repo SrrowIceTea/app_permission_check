@@ -46,7 +46,7 @@ export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 | SDK / JDK | `ls "$VSCAN_SDK/platform-tools/adb.exe" "$VSCAN_JDK"` | 走 `core/sdk_paths.py` 的 `VSCAN_SDK`/`VSCAN_JDK` 覆盖位，别改 LEGACY 候选表 |
 | jadx | `ls "$VSCAN_JADX"/lib/jadx-*-all.jar` | 指到含 `lib/jadx-*-all.jar` 的那层（**不是 `bin/`**），否则静态 `MissingTool` |
 | frida-server | `ls output/_frida/frida-server` | 批次默认读这个路径（`output/_frida/` 本机尚不存在，批次会建）。没有就从仓库 `output/vehicle-device-setup/frida-server` 复制（原开发机路径 `D:/Anroid/frida-server`）；**版本必须等于宿主 `frida.__version__`**（本次均 17.18.0） |
-| 测试集 | `ls "D:/数据集/数据集/F-Droid-60"/*.apk \| wc -l` | 应为 60。**用户说的"D:/测试集"不存在**，真实位置是 `D:/数据集/数据集/F-Droid-60`。先 `ls` 再动手，别照抄用户给的路径 |
+| 测试集 | `ls "D:/数据集/数据集/F-Droid-60"/*.apk \| wc -l` | 应为 60。**用户说的"D:/测试集"不存在**，真实位置是 `D:/数据集/数据集/F-Droid-60`。先 `ls` 再动手，别照抄用户给的路径。**2026-11-11 本机实测该目录不存在**：`batch_thirdparty.py` 现在用 `core/env_guard.diagnose_apk_dir()` 分开报「目录不存在 / 目录在但没 APK / `--only` 全过滤」，不会再把路径错显示成「没有 .apk」 |
 
 ---
 
@@ -719,3 +719,41 @@ ON3 说明**握手通 ≠ 采到流量**（请求被第二道闸掐掉）；ON5 
 三个样本 `verification.passed` 全为 `true`，但 `conns.covered` **全为 `false`**
 （`pid_lost_rounds_est` 100–200），`policy.available` 全为 `false`。
 下一轮这些数字变了，先怀疑环境或钩子版本，别直接当成样本行为变化。
+
+### 10.11 回环目标（`127.0.0.1` / `adb reverse`）是双盲区（2026-11-15 实测）
+
+给第三方样本搭"自有服务端 + 回执"时，**不要让被测应用访问回环地址**：
+
+- WebView 对 `127.0.0.1` 直连会绕过系统代理（mitmproxy 一条 flow 都拿不到）；
+- Chromium 网络栈不走 `libcore.io.Linux.connect`，钩子也看不到；
+- 结果：回执端有 2 条 GET、工具侧 flows=0 / 外发=0，只看 flows 会写成"没有外发"。
+
+**但 pcap 抓得到**（`tcpdump -i any` 含 lo）：装上 tshark 后，`127.0.0.1:18899` 的
+4 条请求行与页面正文都能还原。所以回环不是"全盲"，是"代理+钩子盲、pcap 可解"——
+判阴性之前必须先看 `pcap_http.py` 的解码结果。
+
+改用宿主局域网 IP（如 `http://10.18.80.25:18900/...`）后，同一动作立刻产生 4 条 flow。
+但注意：单包窗口下这些 flow 的归因是 `single_package_fallback`（排除法，无 uid/时间差），
+summary 会多出 `flows_by_attribution` / `flows_identity_verified` 两个字段，
+引用时按 candidate 处理，别写成"按时间归因"。
+
+另：受控窗口（`--max-rounds 0`）用 `--action-log` 登记外部动作，见 `mobile/tools/log_action.py`；
+不登记的话 `business_action_made` 会判红——这是**有意**的，别为了变绿去补假动作。
+
+tshark 不用装系统版：把 Wireshark MSI 用 `msiexec /a <msi> /qn TARGETDIR=<dir>` 解到
+`output/_tools/wireshark`（不注册、不装 Npcap），`find_tshark()` 会优先命中这个项目路径。
+本机实测 4.6.9 可直接跑 `tshark -r x.pcap`。
+
+换机时把已安装的 `tshark.exe` 或组织提供的便携版本配置成 `VSCAN_TSHARK`，开始前运行
+`& $env:VSCAN_TSHARK --version` 核对。设备验收开头记录 `tshark_available`；缺少解码器时
+仍保存 pcap 供复解。部分 TLS 无法解密时，`http_messages_extracted` 记录是否解出 HTTP，
+具体 TLS 缺口看 `http-stats.json`。CI 的离线回归不覆盖新设备 pcap。
+
+单次运行使用新 `--out`，失败目录原样保留。跑批重试在样本目录下创建 `try-*`。
+零观测需要人工复核时，可提供 `--confirm-no-activity <JSON>`，包含 `package`、`reviewer`、
+`basis`。两类钩子就绪、目标进程存活且窗口未截断时，复核后的零观测为降级结果，
+仍保留失败判据与复核摘要。第三方采集保持设备的 QUIC 行为，代理中未确认归属的流只留计数。
+
+自有回环明文 HTTP 复验传 `--fixture-http-port <设备端口>`。该模式仅抓回环接口上的指定
+TCP 端口，并用 tshark 按 HTTP 解码。用请求路径与独立服务端回执交叉核对。
+设备端 pcap 每轮拥有独立文件名。常规第三方抓包排除 Frida 控制端口。

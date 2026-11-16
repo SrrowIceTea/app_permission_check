@@ -22,6 +22,7 @@ from core.collector.payloads import capture
 from core.collector.collector_server import Collector
 from correlate import body_scan_totals, load_rules, load_jsonl
 from egress_calibration import calibrate
+from vehicle.rules.python.calibrate_permissions import compiled_permissions
 from report_extras import payload_images
 from gadget_prepare import prepare
 
@@ -122,6 +123,24 @@ class EvaluationTests(unittest.TestCase):
         results = evaluate_data_egress([rule()], reads, chosen)
         self.assertEqual(2, len(results))
         self.assertEqual({f['package'] for f in chosen}, {f['package'] for f in results})
+
+
+class PermissionCalibrationTests(unittest.TestCase):
+    def test_only_explicit_values_on_permission_declarations_are_used(self):
+        attr = 'http://schemas.android.com/apk/res/android:'
+        tree = f'''E: manifest (line=1)
+  A: package="test.owner"
+  E: permission (line=2)
+    A: {attr}name(0x01010003)="test.normal"
+    A: {attr}protectionLevel(0x01010009)=0x00000000
+  E: permission (line=3)
+    A: {attr}name(0x01010003)="test.no_value"
+    E: meta-data (line=4)
+      A: {attr}protectionLevel(0x01010009)=0x00000012
+  E: uses-permission (line=5)
+    A: {attr}name(0x01010003)="test.requested"
+    A: {attr}protectionLevel(0x01010009)=0x00000012'''
+        self.assertEqual(('test.owner', {'test.normal': 0}), compiled_permissions(tree))
 
 
 class OwnershipTests(unittest.TestCase):

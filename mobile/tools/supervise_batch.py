@@ -29,7 +29,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import shutil
 import subprocess
@@ -44,6 +43,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "mobile" / "traffic"))
 
 from core import sdk_paths  # noqa: E402
+from core.log_rotation import open_capped  # noqa: E402
 
 ADB = sdk_paths.sdk_tool("platform-tools", "adb.exe")
 EMULATOR = sdk_paths.sdk_tool("emulator", "emulator.exe")
@@ -57,7 +57,8 @@ LOG: Path = Path("supervise.log")
 def log(msg: str) -> None:
     line = f"[{time.strftime('%H:%M:%S')}] {msg}"
     print(line, flush=True)
-    with LOG.open("a", encoding="utf-8") as fh:
+    # 守护进程一跑几小时、每轮还追加一次，走有上限的追加（超 20 MB 分卷）。
+    with open_capped(LOG) as fh:
         fh.write(line + "\n")
 
 
@@ -130,7 +131,7 @@ def start_emulator(seconds_boot: int = 420) -> bool:
         log("占位代理未能在 8888 就绪——启动模拟器会让 SLIRP 重定向静默失效，放弃本轮")
         return False
     log("占位代理就绪，启动模拟器（headless / swiftshader）")
-    emu_log = (RUN_DIR / "emulator.log").open("a", encoding="utf-8")
+    emu_log = open_capped(RUN_DIR / "emulator.log")
     emu_log.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} 重启 =====\n")
     emu_log.flush()
     subprocess.Popen(
@@ -169,19 +170,14 @@ def start_emulator(seconds_boot: int = 420) -> bool:
 
 
 def batch_progress(out_dir: Path, apk_dir: Path) -> tuple[int, int]:
+    from batch_plan import completed_attempt
+
     apks = sorted(apk_dir.glob("*.apk"))
     done = 0
     for d in out_dir.glob("*"):
         if not d.is_dir() or d.name.startswith("_"):
             continue
-        vf = d / "verification.json"
-        if not vf.exists():
-            continue
-        try:
-            passed = json.loads(vf.read_text(encoding="utf-8")).get("passed") is True
-        except (json.JSONDecodeError, OSError):
-            continue
-        if passed and (d / "out" / "mobile-report.pdf").exists():
+        if completed_attempt(d):
             done += 1
     return done, len(apks)
 
@@ -201,7 +197,7 @@ def run_batch(args, cats: list[str]) -> int:
     # 传给 correlate（传了会挡住默认库回退）。
     if getattr(args, "policy_store", None):
         cmd += ["--policy-store", str(args.policy_store)]
-    with (RUN_DIR / "batch.log").open("a", encoding="utf-8") as fh:
+    with open_capped(RUN_DIR / "batch.log") as fh:
         fh.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} 批次启动 =====\n")
         fh.flush()
         return subprocess.call(cmd, stdout=fh, stderr=subprocess.STDOUT, cwd=str(ROOT))

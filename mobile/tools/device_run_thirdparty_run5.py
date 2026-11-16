@@ -16,71 +16,14 @@ sys.path.insert(0, str(HERE))
 import thirdparty_env as env      # noqa: E402
 import apk_meta                  # noqa: E402  APK 版本号/包名（政策绑定用）
 sys.path.insert(0, str(ROOT))
-from core.io_utils import load_jsonl_counting  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "policy"))
 from policy_library import load_policy, register_policy  # noqa: E402
 
-from device_run_thirdparty_helpers import apk_permissions, has_api_key  # noqa: E402
+from device_run_thirdparty_helpers import (  # noqa: E402
+    apk_permissions, has_api_key, device_api,
+)
 MOBILE = ROOT / "mobile"
 PY = sys.executable
-
-
-def _stage_armed(ctx) -> None:
-    """钩子必须自证挂载（M016）：没有 ARMED 就是没挂上，不是"应用没动作"；
-    armed 之外必须有**真实事件**（§8.1 A2），零事件必须判失败并写进 gaps。
-    """
-    args = ctx.args
-    session = ctx.session
-    check = ctx.check
-    # 收尾：把样本强制停掉。**必须放在死亡取证之后**（在跑就杀会让 alive 永远为 false，
-    # 那是自己制造假结论）；不停掉的话，样本会带着残留状态活到下一样本的窗口里——
-    # 实测：一轮 camera 跑完后它的 MainActivity 一直留在前台，下一轮开跑时机器人
-    # 先从别人家的界面上做 overlay 清理。停止样本只影响我们安装的测试副本。
-    env.adb("shell", "am", "force-stop", args.package, timeout=60)
-
-    hook_events: dict[str, list[dict]] = {}
-    for name, fname in (("privacy", "reads.jsonl"), ("consent", "consent.jsonl")):
-        if args.no_hooks:
-            # 对照实验：本来就没挂钩子，"没 ARMED"是设计使然，不是失败
-            check(f"hook_{name}_armed", 0, optional=True,
-                  note="对照实验：--no-hooks，本项按设计不适用")
-            continue
-        events = []
-        p = session / fname
-        if p.exists():
-            # 分行走 core.io_utils（只认 LF）。原来用 `str.splitlines()`：JSON 字符串里
-            # 合法的 U+0085/U+2028 也会被当换行，把一条事件切成两段不可解析的碎片——
-            # 而这里的结论是「有没有 ARMED / 有没有真实事件」，误判方向恰好是把
-            # "采到了"读成"没采到"（2026-10-20 实测 flows.jsonl 一条记录含 59 个 U+0085）。
-            events, skipped = load_jsonl_counting(p)
-            if skipped:
-                check(f"hook_{name}_jsonl_parse", 1, optional=True,
-                      note=f"{fname} 有 {skipped} 行无法解析（证据不完整，判据按下界计）")
-        hook_events[fname] = events
-        armed = any(e.get("ev") == "ARMED" for e in events)
-        script_error = any(e.get("ev") in ("SCRIPT_ERROR", "ERROR") for e in events)
-        check(f"hook_{name}_armed", 0 if armed else 1,
-              note=None if armed else ("钩子脚本抛错，未挂载" if script_error
-                                       else "没有 ARMED 事件：钩子没跑起来"))
-
-    # ---- A2（§8.1）：`armed` 之外必须有**真实事件**，且这是**强制**判据 ----
-    # `armed` 只证明钩子挂上了，不证明捕得到：夹具与 5 个第三方样本实测都是
-    # "58/58 armed; failed=0" 而 reads.jsonl 只有 START/ARMED 两行。
-    # 零事件时这里必须判失败并写进 gaps——不许为了让判据变绿而把它改回 optional（§8.6 第 1 条）。
-    real_reads = []
-    if args.no_hooks:
-        check("runtime_events_captured", 0, optional=True,
-              note="对照实验：--no-hooks，本项按设计不适用")
-    else:
-        real_reads = [e for e in hook_events.get("reads.jsonl", [])
-                      if e.get("ev") not in ("START", "ARMED")]
-        check("runtime_events_captured", 0 if real_reads else 1,
-              note=(f"reads.jsonl 有 {len(real_reads)} 条 START/ARMED 之外的真实事件"
-                    if real_reads else
-                    "reads.jsonl 只有 START/ARMED：钩子挂上了，但一条运行时事件都没捕到。"
-                    "armed ≠ 能捕到（§8.1 A2）——据此**不得**写「该应用未收集」；"
-                    "先按 A1 排查插桩是否把应用打死，或本轮 UI 未触碰被监视 API"))
-    ctx.real_reads = real_reads
 
 
 def _stage_finalize(ctx) -> None:
@@ -199,6 +142,7 @@ def _stage_finalize(ctx) -> None:
          "--session", str(session), "--package", args.package,
          "--permissions", str(o / "requested-permissions.txt"),
          "--app-category", args.app_category,
+         "--device-api", device_api(env),
          # 静态副本在**样本目录**下（`out/static`，见 static_copied 那段），
          # 不是报告输出子目录 `out/out/`——写错位置会导致 dexfacts 读不到、
          # R8 混淆样本的代码行号全丢（2026-10-20 冒烟首轮就是这么白跑的）。
@@ -221,6 +165,11 @@ def _stage_finalize(ctx) -> None:
     # 编排层知道、而工具无法从数据里推出来的缺口，逐条写进 bundle.gaps（前缀 [orch]）。
     for note in env.orchestrator_notes(ctx.death, args.package, ctx.coverage):
         bundle_cmd += ["--note", note]
+    for row in ctx.checks:
+        if row["name"] == "startup_calls_covered" and row["exit_code"]:
+            bundle_cmd += ["--note", "【启动期覆盖】" + row["note"]]
+    if ctx.read_repeat_count:
+        bundle_cmd += ["--note", f"【定位取值】汇总了 {ctx.read_repeat_count} 次同调用点、同值的重复取值。"]
     # correlate 算出的**口径类**缺口要带进证据包：bundle 只读 session/findings，
     # 不读 summary.json，于是"14 条全是排除法归因""没有可观测的同意时刻"这类
     # 限定条件只留在 summary 里，报告上看不到（2026-10-19 审计发现）。
@@ -230,6 +179,10 @@ def _stage_finalize(ctx) -> None:
         for gap in _summary.get("gaps", []) or []:
             if "单包排除法" in gap:
                 bundle_cmd += ["--note", "【归因口径】" + gap]
+            elif "跨版本适用性未经验证" in gap:
+                bundle_cmd += ["--note", "【规则适用范围】" + gap]
+            elif "pcap 行协议" in gap or "仅凭监听端口" in gap:
+                bundle_cmd += ["--note", "【行协议证据】" + gap]
             elif "没有可观测的同意时刻" in gap or "用户是否作出选择" in gap:
                 bundle_cmd += ["--note", "【同意口径】" + gap]
     except (OSError, ValueError):
@@ -241,8 +194,10 @@ def _stage_finalize(ctx) -> None:
     if not args.no_hooks and not ctx.real_reads:
         # 零运行时事件是**采集链路的事实**，必须以 [orch] 缺口进证据包与报告，
         # 而不是让报告看起来"本轮没有发现"。
-        bundle_cmd += ["--note", "本轮 reads.jsonl 只有 START/ARMED，零运行时事件："
-                                 "钩子已挂载但不能据此判定「应用未收集」（§8.1 A1/A2）"]
+        bundle_cmd += ["--note", "本轮没有记录到应用运行时事件，"
+                                 "应用是否收集数据仍无法判定（§8.1 A1/A2）。"]
+        if ctx.no_activity_review:
+            bundle_cmd += ["--note", "场景零观测已经人工复核；设备验证保留零观测判据及复核记录。"]
     emit("bundle", "running", "证据封装（含加固探测与 [orch] 缺口）")
     if not ctx.ca_rec.get("installed"):
         # 没装成 CA 时，报告必须自己说出"HTTPS 没解开"，否则读者会把
@@ -250,6 +205,9 @@ def _stage_finalize(ctx) -> None:
         bundle_cmd += ["--note", "【HTTPS 未解密】本轮系统 CA 未安装成功或显式跳过："
                                  "flows.jsonl 为空不代表没有外发，只能引用 pcap 中"
                                  "未解密的 TLS 帧数与 conn_probe 的连接记录"]
+    if (session / "scope-discarded.json").is_file():
+        bundle_cmd += ["--note", "【归因范围】代理只保留通过包名与 UID 核对的流。"
+                       "被拒绝的流只留计数，见 session/scope-discarded.json。"]
     check("bundle", env.run(bundle_cmd, out / "bundle.log"))
     emit("bundle", "done", "bundle.json 已生成")
 

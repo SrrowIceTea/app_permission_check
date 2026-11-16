@@ -105,13 +105,13 @@ vscanner/
 
 ```bash
 PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
-"$PY" tools/run_regressions.py            # 车载/内核 18 组：completion/rules-contract/event-store/
+"$PY" tools/run_regressions.py            # 车载/内核 22 组：组名以 tools/run_regressions.py::CHECKS 为准
                                           #   codeloc/correlate/vehicle-evidence/vehicle-pipeline/
                                           #   collector/tagging-vehicle/dashboard/vehicle-webapp/
                                           #   vehicle-expanded-review/runtime/privacy-runtime/parity/
                                           #   workbench/hook-bundles/frida-bundle-config
 "$PY" mobile/tools/run_mobile_checks.py   # 移动端 63 项
-"$PY" tools/check_mobile_branch.py        # 移动分支 24 组（含 workbench/policy/AI/前端契约）
+"$PY" tools/check_mobile_branch.py        # 移动分支 26 组（含 workbench/policy/AI/前端契约）
 ```
 
 ## 边界（必须保留）

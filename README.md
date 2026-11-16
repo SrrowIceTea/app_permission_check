@@ -26,6 +26,7 @@ vscanner/
 ## 普通第三方车载开发（2026-11-02）
 
 统一入口：`./vehicle.ps1 prepare --install-deps`、`coverage`、`profiles`、`capture`、`audit`、`samples`、`benchmark`。
+开发记录见 [开发日志](docs/DEVELOPMENT_LOG.md)。
 当前以 AAOS 35 为动态基线，版本/车型范围见 [vehicle/COMPATIBILITY.md](vehicle/COMPATIBILITY.md)，
 运行步骤见 [vehicle/README.md](vehicle/README.md)，[覆盖链](vehicle/coverage/generated/COVERAGE.md)、
 [车载场景](vehicle/scenarios/CATALOG.md)、[独立样本评估](vehicle/bench/README.md) 分别保留验收范围。
@@ -104,7 +105,7 @@ vscanner/
 $py = "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
 
 # 1) 仓库级离线回归（不需要设备/网络/API key）
-& $py tools/run_regressions.py                 # 18 组（带 --mobile 为 19 组）：completion/rules-contract/event-store/...
+& $py tools/run_regressions.py                 # 22 组（--mobile 23、--prepare --mobile 24）；组名以 tools/run_regressions.py::CHECKS 为准
 
 # 2) 移动侧离线回归 + 端点干跑（63 项；看 output/mobile-regression-*/verification.json）
 & $py mobile/tools/run_mobile_checks.py

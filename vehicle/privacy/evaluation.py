@@ -32,7 +32,7 @@ def load_general_rules(version='15', db=RULE_DB):
     row_version = ROW_VERSION.get(requested)
     if row_version is None:
         raise ValueError(f'通用隐私规则未登记平台：{requested}')
-    conn = sqlite3.connect(f'file:{db.resolve().as_posix()}?mode=ro', uri=True)
+    conn = sqlite3.connect(db.resolve().as_uri() + '?mode=ro', uri=True)
     conn.row_factory = sqlite3.Row
     try:
         rows = {r['rule_id']: dict(r) for r in conn.execute(

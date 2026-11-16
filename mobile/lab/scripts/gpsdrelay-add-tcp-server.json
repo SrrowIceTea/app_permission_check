@@ -1,0 +1,82 @@
+{
+  "name": "gpsdrelay-add-tcp-server",
+  "note": "gpsdRelay 2.2：在界面里加一条 TCP 监听（0.0.0.0:18960）并打开行内开关。坐标只在没有文本节点时使用：FAB 与行内开关都是 Compose 图标/开关，uiautomator 里 text/content-desc 都为空，只能按坐标点（1080x600 视口实测 (1345,633) / (1360,214)）。**开关必须在按工具栏启动之前打开**：服务只在启动时读一次 enabled 列表，启动后再开开关不会重读（2026-11-15 实测：日志 'starting servers' 之后零连接）。",
+  "steps": [
+    {
+      "action": "wait_text",
+      "text": "gpsdRelay",
+      "timeout_s": 25
+    },
+    {
+      "action": "tap_xy",
+      "x": 1345,
+      "y": 633
+    },
+    {
+      "action": "wait_text",
+      "text": "TCP Server",
+      "timeout_s": 10
+    },
+    {
+      "action": "tap_text",
+      "text": "TCP Server"
+    },
+    {
+      "action": "wait_text",
+      "text": "Add TCP Server",
+      "timeout_s": 10
+    },
+    {
+      "action": "tap_text",
+      "text": "0.0.0.0"
+    },
+    {
+      "action": "input_text",
+      "text": "0.0.0.0",
+      "clear": true,
+      "clear_keys": 12
+    },
+    {
+      "action": "tap_text",
+      "text": "Port"
+    },
+    {
+      "action": "input_text",
+      "text": "18960"
+    },
+    {
+      "action": "key",
+      "keycode": "KEYCODE_BACK"
+    },
+    {
+      "action": "sleep",
+      "seconds": 1
+    },
+    {
+      "action": "assert_text",
+      "text": "NMEA relaying"
+    },
+    {
+      "action": "tap_text",
+      "text": "Add"
+    },
+    {
+      "action": "sleep",
+      "seconds": 2
+    },
+    {
+      "action": "tap_xy",
+      "x": 1360,
+      "y": 214,
+      "note": "行内开关：打开后 Server.enabled=1"
+    },
+    {
+      "action": "sleep",
+      "seconds": 1
+    },
+    {
+      "action": "assert_text",
+      "text": "T:0.0.0.0:18960"
+    }
+  ]
+}

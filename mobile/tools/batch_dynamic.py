@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -39,11 +40,18 @@ sys.path.insert(0, str(ROOT))
 
 from apk_meta import launchable_activity  # noqa: E402
 import thirdparty_env  # noqa: E402
+from core.log_rotation import open_capped  # noqa: E402
+from device_run_thirdparty_run6 import has_device_attempt  # noqa: E402
 
 
 def run(cmd: list[str], log: Path, timeout: int) -> int:
-    """跑子进程，输出直落日志。收尾一 taskkill 就该留下能读的尾巴。"""
-    with log.open("a", encoding="utf-8") as fh:
+    """跑子进程，输出直落日志。收尾一 taskkill 就该留下能读的尾巴。
+
+    日志走 `core.log_rotation.open_capped`：`batch_plan._write_header` 现在**追加**表头
+    （不截断），跨 `--resume` 的上一轮现场会累积，达到 20 MB 就在下次打开时分卷
+    （旧卷只读不动，见该模块 docstring）。
+    """
+    with open_capped(log) as fh:
         fh.write(f"\n$ {' '.join(cmd)}\n")
         fh.flush()
         proc = subprocess.run(cmd, cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT,
@@ -70,6 +78,10 @@ def dynamic_step(item: dict, args, cat_map: dict, apk_dir: Path) -> dict:
                         f" 类目未逐样本指定，按默认 {category!r}（可能不准确）").strip())
 
     proxy = None
+    sample_log = apk_dir / "run.log"
+    if has_device_attempt(apk_dir) or (apk_dir / "mitm-early.log").exists():
+        apk_dir = Path(tempfile.mkdtemp(prefix="try-", dir=apk_dir))
+        rec["dir"] = str(apk_dir)
     sess_dir = apk_dir / "session"
     sess_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -105,7 +117,7 @@ def dynamic_step(item: dict, args, cat_map: dict, apk_dir: Path) -> dict:
     if tls_bypass:
         cmd.append("--tls-bypass")   # 放最末：命令行尾巴上有没有它，一眼可判
     try:
-        rc = run(cmd, apk_dir / "run.log", timeout=3600)
+        rc = run(cmd, sample_log, timeout=3600)
     finally:
         # 前置代理的生命周期终点：无论 device_run 正常结束、失败还是被超时打断，
         # 都要把整棵进程树收掉（孤儿 mitmdump 会占着 8888，让下一样本的前置失败）。
@@ -118,7 +130,7 @@ def dynamic_step(item: dict, args, cat_map: dict, apk_dir: Path) -> dict:
     rec["status"] = "ok" if rc == 0 else "device_failed"
     # 覆盖率账本（A4，2026-10-19）：把该样本"窗口是否被死亡截断"摘进汇总，
     # 否则批次层面只看得到 ok/failed，看不到"这一条结论其实只观测了 16 秒"。
-    ver_p = apk_dir / "out" / "verification.json"
+    ver_p = apk_dir / "verification.json"
     if ver_p.exists():
         try:
             ver = json.loads(ver_p.read_text(encoding="utf-8"))

@@ -49,6 +49,7 @@ from core.evidence import codeloc  # noqa: E402  # 违规代码行号：从运�
 from core.evidence.app_classes import load_app_classes  # noqa: E402  # 认 R8 混淆后的类名（与移动侧同一套）
 from core.collector.parse_stats import body_parse_totals  # noqa: E402
 from core.io_utils import load_jsonl  # noqa: E402  # JSONL 唯一实现（§8.2 B-2）
+from core.rules_contract import load_rule_rows  # noqa: E402  # 规则行唯一读库入口
 from vehicle.pipeline.contracts import digest, read_json, write_json
 from vehicle.pipeline.evidence_manifest import INPUT_NAMES, fingerprints, input_manifest, verify_refs
 
@@ -79,17 +80,14 @@ def body_scan_totals(flows: list[dict]) -> dict:
 
 
 def load_rules(db_path: Path, version: str) -> list[dict]:
-    conn = sqlite3.connect(f"file:{db_path.resolve().as_posix()}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = [dict(r) for r in conn.execute(
-            "SELECT * FROM risk_rules WHERE android_version = ? ORDER BY rule_id", (version,))]
-        version_count = conn.execute(
-            "SELECT COUNT(*) FROM risk_rules WHERE android_version = ?", (version,)).fetchone()[0]
-    finally:
-        conn.close()
+    """转发到 core 契约层；保留本线"空规则即失败"的业务语义。
+
+    原先这里自写 sqlite 查询（URI 未 quote，含 # 的路径会被截断），与移动侧、
+    与 `core.rules_contract` 三份实现各自漂移。现在只保留失败策略。
+    """
+    rows = load_rule_rows(db_path, version)
     if not rows:
-        raise ValueError(f"规则库里没有 android_version={version} 的规则（共 {version_count} 条）")
+        raise ValueError(f"规则库里没有 android_version={version} 的规则（{db_path}）")
     return rows
 
 

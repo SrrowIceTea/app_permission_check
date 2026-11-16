@@ -71,9 +71,8 @@ cp mobile/ai/config.example.json mobile/ai/config.local.json   # ← 在这里�
 - **签名绝不手写**：所有 API 签名由 `javap -s` 从本机 `android.jar` 抽取。
   抽不到的落 `build/api_missing.json` 作为探测 TODO，**不编造**。
   （照抄 core/static 的 `(class_name, method_name, jvm_descriptor)` 三元组口径。）
-- **npm 装依赖必须跳过原生编译**：`frida-compile` 依赖 `frida` 包的原生绑定，
-  本机没有 make，`npm install` 会失败。绕过办法是**直接复用 vehicle/hooks 已装好的
-  `node_modules`**（同一套依赖，绑定已构建）。
+- **移动钩子从源码构建**：在 `mobile/hooks` 运行 `npm ci --ignore-scripts`，再运行
+  `node build.mjs`。编译器使用项目 Python 3.13 中的 Frida，换机可设 `VSCAN_PYTHON`。
 - **`/tmp` 在 Git Bash 与 Python 眼里不是同一个目录**：Bash 会把**实参**里的
   POSIX 路径转成 Windows 路径，但脚本正文里的字符串不转——`python -c` 里的
   `/tmp/x` 会落到 `C:\tmp\x`。写脚本一律用真实路径。
@@ -174,7 +173,7 @@ AI 三阶段研判（含编造校验）、PDF 报告（十章 + 三附录）、�
 （61→62，`tools/test_inventory_guard.py`：每个 `test_*` 文件要么被三个 runner 之一引用、
 要么在 `tools/test_inventory_allowlist.json` 里带具体 reason 登记，否则判红并打印路径；
 同日并发线又并入 `observed_surface` 一组 ⇒ 62→63））；
-分支全量（含 workbench/policy/AI/前端契约）**24 组**见 `tools/check_mobile_branch.py`。
+分支全量（含 workbench/policy/AI/前端契约）**26 组**见 `tools/check_mobile_branch.py`。
 
 **2026-10-13（外部评估核对后的落地，见 [EVAL_CROSSCHECK.md](EVAL_CROSSCHECK.md)、DECISIONS M021–M025）**：
 - 覆盖守护：每个数据类别要么有 API 抓手、要么显式声明 `uncovered_by_design`（构建期断言）。

@@ -1,5 +1,7 @@
 # 双人一周方案：B侧定位输入与验收接口
 
+> **历史快照（2026-11-11 归档，不作当前清单）**：现在什么状态、本周做什么见 [CURRENT_STATUS.md](CURRENT_STATUS.md)。
+
 仅用于授权测试（自有设备与已获授权APK）。B只读取A封存的输入，不启动设备、不修改Hook或App格式。
 对应桌面 `TWO_PERSON_ONE_WEEK_PLAN_CURRENT_20261110.md` 的D1–D5。
 

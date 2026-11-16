@@ -19,6 +19,8 @@ jobs:
       # 与本机一致的强制项：Windows 上不设会出现 GBK 解码崩 Reader 线程（DECISIONS M026）。
       PYTHONIOENCODING: utf-8
       PYTHONUTF8: "1"
+      # 隔离托管环境注入的 bulk-delete guard：默认会把 3 组分支回归打成 SystemExit 假红。
+      CODEBUDDY_SAFE_DELETE_ENABLED: "0"
     steps:
       - uses: actions/checkout@v4
 
@@ -34,10 +36,19 @@ jobs:
       - name: 安装 Python 依赖
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: 工程守卫（新增入口 lint + 全仓契约守卫）
+        run: |
+          # 全仓 ruff 基线尚未建立：先对新增守卫入口强制 E/F，避免把历史风格问题变成假红。
+          python -m ruff check tools/engineering_guards.py tools/test_engineering_guards.py tools/test_regression_manifest.py
+          python tools/engineering_guards.py
 
       - name: 构建 Hook 并运行车载与移动回归
         run: python tools/run_regressions.py --prepare --mobile --out output/ci
+
+      - name: 移动分支回归（第三条入口）
+        run: python tools/check_mobile_branch.py --out output/ci/branch
 
       - name: 回归判据落盘（失败运行同样保留）
         if: always()

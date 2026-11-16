@@ -17,13 +17,18 @@ import thirdparty_env as env      # noqa: E402
 import pcap_http                  # noqa: E402  pcap → 完整 HTTP 报文（复用 tshark）
 import tls_profile                # noqa: E402  keylog=0 的成因画像
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "mobile" / "analyze"))
+import http_attribution           # noqa: E402  pcap 报文 → 被测 uid 归属
+from pcap_packets import transport_packets
+from core.io_utils import load_jsonl_counting
+import pcap_line_evidence
 
 MOBILE = ROOT / "mobile"
 PY = sys.executable
 
 
 def _stage_teardown(ctx) -> None:
-    """采集窗口收尾：停抓包 / 还原代理与 QUIC 规则 / 死亡取证 / 优雅拆钩 / 事件分流。"""
+    """采集窗口收尾：停抓包、还原代理、死亡取证、拆钩和分流。"""
     args = ctx.args
     out = ctx.out
     session = ctx.session
@@ -37,6 +42,11 @@ def _stage_teardown(ctx) -> None:
     pcap_path = None
     ctx.pcap_path = None
     if ctx.pcap_rec is not None:
+        pcap_proc = ctx.pcap_rec.proc
+        if pcap_proc is not None:
+            rc = pcap_proc.poll()
+            check("pcap_alive_through_window", 0 if rc is None else 1, optional=True,
+                  note="tcpdump 持续到窗口结束" if rc is None else f"窗口结束前 tcpdump 已退出（{rc}）")
         pcap_path = ctx.pcap_rec.stop(out / "capture.pcap", out / "pcap-stop.log")
         ctx.pcap_path = pcap_path
         check("pcap_captured", 0 if pcap_path else 1, optional=True,
@@ -47,9 +57,6 @@ def _stage_teardown(ctx) -> None:
 
     env.set_proxy(ctx.prev_proxy if ctx.prev_proxy not in ("", "null") else ":0",
                   out / "proxy-restore.log")
-    # 采集窗口结束立刻撤规则：DROP 留在设备上会污染后续轮次（尤其 --reuse-mitm
-    # 的编排层多轮跑同一台模拟器时），排查别的网络问题也会被它误导。
-    env.unblock_quic(out / "quic-unblock.log")
     # 应用是否在窗口内死亡，以及死于什么。"窗口后半段没事件"有两种含义：应用没做，
     # 还是应用已经死了——只看事件文件分不出来，所以必须单独取证。
     # **必须在拆钩之前取证**（2026-10-16）：拆钩动作（无论优雅 detach 还是强杀）
@@ -122,6 +129,10 @@ def _stage_teardown(ctx) -> None:
     # 卡满 300s 超时、correlate 不返回；杀掉孤儿后整条尾段立刻跑完）。
     # 详见 thirdparty_env.kill_tree 的注释。
     # mitm 为 None = 复用了编排层预启动的代理（生命周期归编排层，这里不动它）。
+    if ctx.collector is not None:
+        rc = ctx.collector.poll()
+        check("conn_probe_alive_through_window", 0 if rc is None else 1, optional=True,
+              note="连接采样器持续到窗口结束" if rc is None else f"连接采样器已提前退出（{rc}）")
     for i, proc in enumerate(([ctx.mitm] if ctx.mitm is not None else [])
                              + ([ctx.collector] if ctx.collector else [])):
         env.kill_tree(proc, out / f"kill-{i}.log")
@@ -138,6 +149,27 @@ def _stage_teardown(ctx) -> None:
     emit("split", "done", "分流完成")
 
 
+def _attribute_pcap(ctx, stats):
+    http = ctx.out / "http_messages.jsonl"
+    packets, malformed = transport_packets(pcap_http.find_tshark(), ctx.pcap_path)
+    evidence = []
+    for path in (http, ctx.session / "conns.jsonl", ctx.session / "socket-meta.jsonl"):
+        rows, skipped = load_jsonl_counting(path)
+        valid = [row for row in rows if isinstance(row, dict)]
+        malformed += skipped + len(rows) - len(valid)
+        evidence.append(valid)
+    messages, snapshots, socket_meta = evidence
+    result = http_attribution.attribute(
+        messages, snapshots, ctx.uid, packets=packets,
+        operations=[row for row in socket_meta if row.get("ev") == "SOCKET_META"])
+    datagrams = result.pop("datagrams")
+    for path, rows in ((http, messages), (ctx.out / "attributed-udp.jsonl", datagrams)):
+        path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
+    stats.update(http_messages_total=result["total"], http_messages_attributed=result["attributed"],
+                 http_attribution=result | {"malformed_rows": malformed})
+    return result, packets
+
+
 def _stage_decode(ctx) -> None:
     """pcap → 完整 HTTP 报文（P0，2026-10-18）：
     重组/解压/分帧全部交给 tshark，只把 keylog 从事件里抽出来喂给它。
@@ -150,10 +182,31 @@ def _stage_decode(ctx) -> None:
     if ctx.pcap_path is not None:
         emit("http_msgs", "running", "pcap → 完整 HTTP 报文（tshark 解密 + 重组）")
         keys = out / "keys.log"
-        nk, labels = pcap_http.keylog_from_events(session, keys)
-        stats = pcap_http.decode(ctx.pcap_path, out / "http_messages.jsonl",
-                                 out / "bodies", keys if nk else None)
+        # 解码崩了不该把整轮采集带走（2026-11-15 实测：keylog 抽取里一次 NameError
+        # 让进程直接退出，pcap/reads 都在，却连 correlate 和报告都没生成）。
+        # 这里降级成"报文不可用"的 stats，后面的缺口/报告照常走。
+        try:
+            nk, labels = pcap_http.keylog_from_events(session, keys)
+            stats = pcap_http.decode(ctx.pcap_path, out / "http_messages.jsonl",
+                                     out / "bodies", keys if nk else None,
+                                     http_port=ctx.args.fixture_http_port)
+        except Exception as exc:  # noqa: BLE001
+            nk, labels = 0, ""
+            stats = {"ok": False, "messages": 0, "requests": 0, "responses": 0,
+                     "bodies": 0, "h1_messages": 0, "h2_messages": 0,
+                     "error": f"解码阶段异常：{type(exc).__name__}: {exc}"}
         stats["keylog_labels"] = labels
+        packets = []
+        if pcap_http.find_tshark():
+            try:
+                att, packets = _attribute_pcap(ctx, stats)
+                check("udp_attribution_checked", 0 if ctx.uid is not None else 1, optional=True,
+                      note=f"UDP 归属 {att['udp_attributed']}/{att['udp_total']}，"
+                           f"其中识别为 QUIC {att['quic_attributed']}/{att['quic_total']}。")
+            except (RuntimeError, OSError, ValueError) as exc:
+                stats["http_attribution"] = {"error": f"{type(exc).__name__}: {exc}"}
+                check("udp_attribution_checked", 1, optional=True,
+                      note=stats["http_attribution"]["error"])
         # keylog=0 有三种成因（没握手 / 会话复用 / 回调没触发），必须分开记：
         # 否则"未装上"这句会把 attach 模式的已知边界误报成采集链故障。
         prof = tls_profile.profile(session)
@@ -163,9 +216,10 @@ def _stage_decode(ctx) -> None:
                 (stats.get("tls_undecrypted_app_data") or 0) > 0:
             prof["verdict"] = "other_tls_stack"
         stats["tls_profile"] = prof
-        if nk == 0 and (stats.get("tls_undecrypted_app_data") or 0):
+        if stats["ok"] and nk == 0 and (stats.get("tls_undecrypted_app_data") or 0):
             stats["error"] = tls_profile.explain(
                 prof, int(stats.get("tls_undecrypted_app_data") or 0))
+        pcap_line_evidence.process(ctx, stats, packets)
         (out / "http-stats.json").write_text(
             json.dumps(stats, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         undecoded = stats.get("tls_undecrypted_app_data") or 0
@@ -174,13 +228,23 @@ def _stage_decode(ctx) -> None:
                 f"，body={stats['bodies']}（截断 {stats.get('bodies_truncated', 0)}）"
                 f"，keylog={nk} 行") if stats["ok"] else \
                f"0 条报文：{stats.get('error') or '未知'}"
-        if nk == 0 and undecoded:
+        attributed = stats.get("http_messages_attributed")
+        if stats.get("ok") and stats.get("messages"):
+            if attributed is None:
+                note += "；归属未完成，无法确认被测包的报文"
+            else:
+                note += f"；归属被测包 {attributed}/{stats['messages']} 条"
+        # 只有"能归属到被测包"的报文才算这条判据通过（2026-11-15）。
+        # 解出报文但一条都不属于被测应用 = pcap 里有别人的流量，不能当证据。
+        extracted = bool(stats["ok"] and attributed and attributed > 0)
+        if stats.get("ok") and stats.get("messages") and attributed == 0:
+            note += "；全部未确认归属，不得写成被测应用的外发"
+        check("http_messages_extracted", 0 if extracted else 1, optional=True, note=note)
+        if stats["ok"] and undecoded:
             # "只有明文那几条"和"没流量"在计数上长得一样，成因已由 tls_profile 判过：
             # 三种情形（no_tls_in_window / reused_session / callback_not_fired）
             # 的整改方向完全不同，所以文案直接用画像的结论，不再写笼统的"未装上"。
             note += f"；⚠ {stats.get('error') or ''}"
-            check("http_messages_extracted", 1, optional=True, note=note)
             emit("http_msgs", "partial", note)
         else:
-            check("http_messages_extracted", 0 if stats["ok"] else 1, optional=True, note=note)
-            emit("http_msgs", "done" if stats["ok"] else "failed", note)
+            emit("http_msgs", "done" if extracted else "failed", note)

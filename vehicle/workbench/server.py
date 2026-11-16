@@ -61,8 +61,8 @@ def _manifest_versions(rules: Path) -> list[str]:
         versions = data.get("android_versions")
         if isinstance(versions, list) and versions:
             return [str(v) for v in versions]
-    except (OSError, json.JSONDecodeError):
-        pass
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"[workbench] manifest 不可用（{type(exc).__name__}: {exc}），回退 13/14/15/16：版本口径未确认", flush=True)
     return ["13", "14", "15", "16"]
 
 

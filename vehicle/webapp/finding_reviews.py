@@ -101,8 +101,9 @@ def _write(path, data):
     except BaseException:
         try:
             temporary.unlink(missing_ok=True)
-        except OSError:
-            pass
+        except OSError as cleanup_error:
+            print(f'[finding_reviews] 临时文件清理失败（不覆盖原始异常）: '
+                  f'{type(cleanup_error).__name__}: {cleanup_error}', flush=True)
         raise
 
 

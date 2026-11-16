@@ -1,5 +1,9 @@
 # 交付索引（2026-10-19 更新）
 
+> **当前状态与本周工单的唯一入口是 [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md)**：
+> 代码基线、三条回归最新产物路径、未完成清单与 A 组工单状态都在那里。本文只列交付物，
+> 不记录进度；其余 `docs/` 下的计划文档顶部均已标注「历史快照，不作当前清单」。
+
 > **2026-10-19 `output/` 清理**：历史跑批产物共 208 项（`mobile-regression-*`、`thirdparty-*`、
 > `device-*`、`delivery-*`、`regression-*`、`mobile-device-*` 等）已删除，`latest-*.txt` 指针一并移除。
 > 原因：项目尚未进入集中跑测试集阶段，这些是历次调试／验收的中间产物，不是最终交付物。
@@ -84,9 +88,9 @@
 先按 [COMPLETION.md](COMPLETION.md) 初始化 `environment.ps1`，再按需运行：
 
 ```powershell
-& $VScanPython tools/run_regressions.py          # 根回归 18 组（带 --mobile 为 19 组）
+& $VScanPython tools/run_regressions.py          # 根回归 22 组（--mobile 23、--prepare --mobile 24）
 & $VScanPython mobile/tools/run_mobile_checks.py # 移动侧 63 项（2026-11-10 并入 test_privacy_implementation.mjs 等 6 个僵尸测试模块 + mobile/lab 的 24 个 + 1 个测试清单守卫 + 并发线同日加入的 observed_surface）
-& $VScanPython tools/check_mobile_branch.py      # 移动分支 24 组（含 workbench/policy/AI/前端契约）
+& $VScanPython tools/check_mobile_branch.py      # 移动分支 26 组（含 workbench/policy/AI/前端契约）
 & $VScanPython tools/device_acceptance.py
 & $VScanPython tools/gadget_acceptance.py
 & $VScanPython tools/multi_acceptance.py

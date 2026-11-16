@@ -189,8 +189,8 @@ class Handler(Responses, BaseHTTPRequestHandler):
                 self.wfile.write(b': heartbeat\n\n')
                 self.wfile.flush()
                 time.sleep(.5)
-        except (BrokenPipeError, ConnectionResetError, OSError):
-            pass  # Browser disconnect owns no job state; work continues and can reconnect.
+        except (BrokenPipeError, ConnectionResetError, OSError) as sse_error:
+            print(f'[webapp] SSE 客户端断开（任务继续）: {type(sse_error).__name__}', flush=True)
 
 
 def create_server(port, registry, review_round=None):
@@ -214,6 +214,7 @@ def main(argv=None):
         print(f'车载工作台：http://127.0.0.1:{server.server_port} （仅用于授权测试）', flush=True)
         server.serve_forever()
     except KeyboardInterrupt:
+        # 正常停机路径，不是被吞掉的异常；finally 负责关闭服务与设备。
         print('停止接收新任务，等待当前任务完成并清理设备。', flush=True)
     finally:
         if server is not None:

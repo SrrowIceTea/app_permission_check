@@ -37,7 +37,8 @@ def install(namespace, flow_log, session):
                     try:
                         save()
                     except OSError as report_error:
-                        print('COLLECTOR_HEALTH_REPORT_FAILED ' + type(report_error).__name__, flush=True)
+                        print(f"COLLECTOR_HEALTH_REPORT_FAILED {type(report_error).__name__}: "
+                              f"{report_error}（健康状态未落盘，本轮不得按完成处理）", flush=True)
                 raise
         return observed
 

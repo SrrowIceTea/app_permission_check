@@ -67,8 +67,9 @@ from device_run_thirdparty_run1 import _stage_head  # noqa: E402
 from device_run_thirdparty_run2 import _stage_launch  # noqa: E402
 from device_run_thirdparty_run3 import _stage_explore  # noqa: E402
 from device_run_thirdparty_run4 import _stage_teardown, _stage_decode  # noqa: E402
-from device_run_thirdparty_run5 import _stage_armed, _stage_finalize  # noqa: E402
-from device_run_thirdparty_run6 import _stage_verify  # noqa: E402
+from device_run_thirdparty_armed import _stage_armed  # noqa: E402
+from device_run_thirdparty_run5 import _stage_finalize  # noqa: E402
+from device_run_thirdparty_run6 import _stage_verify, claim_device_attempt, review_no_activity  # noqa: E402
 
 
 def main() -> int:
@@ -76,7 +77,9 @@ def main() -> int:
     ap.add_argument("--apk", required=True)
     ap.add_argument("--package", required=True)
     ap.add_argument("--main-activity", required=True)
-    ap.add_argument("--out", required=True, help="交付目录（已存在则沿用）")
+    ap.add_argument("--out", required=True, help="新一轮交付目录，不复用已有设备运行现场")
+    ap.add_argument("--confirm-no-activity", type=Path,
+                    help="零观测人工复核 JSON，含 package、reviewer、basis；结果仍标记为 degraded")
     ap.add_argument("--app-category", default="utility")
     ap.add_argument("--seconds", type=int, default=150, help="钩子会话时长")
     # 默认 16 → 32（2026-10-20）：点击等待从 2.8s 降到 1.5s 之后，**轮次上限**
@@ -125,8 +128,23 @@ def main() -> int:
                     help="关闭设备端 pcap 采集（默认开）。关掉后不再产出完整 HTTP 报文，"
                          "只有 hook 的 SSL_read/write 分片——gzip/chunked/h2 都读不到，"
                          "报告会把这条记成缺口")
+    ap.add_argument("--fixture-http-port", type=int, metavar="PORT",
+                    help="只抓指定自有回环 HTTP 夹具端口，按明文 HTTP 解码")
+    ap.add_argument("--action-log", default=None,
+                    help="业务动作登记（JSONL，每行 ts_ms/action/detail）。给了它就按"
+                         "『窗口内登记了几条动作』判 business_action_made，并把 ui_taps_made "
+                         "降为 optional——受控窗口（--max-rounds 0）下动作由外部注入，"
+                         "自动点击必然为 0，旧判据会把每次试点判成失败（2026-11-15 实测）")
+    ap.add_argument("--action-grace-ms", type=int, default=5000,
+                    help="业务动作的向前容差（毫秒，默认 5000）。应用启动到观测窗口开启之间"
+                         "还有一段准备时间，外部动作可能早一两秒；容差内的动作判过，但在 "
+                         "business-actions.json 里单列为 before_window_within_grace")
+    ap.add_argument("--skip-install", action="store_true",
+                    help="沿用设备上已安装且已配置的样本，不做 uninstall/install。"
+                         "用于业务前提就是既有配置的样本（服务器地址、传感器配对等）；"
+                         "判据会写成 pre-installed，不冒充本次干净安装")
     ap.add_argument("--spawn-hook", action="store_true",
-                    help="用 Frida spawn 注入（钩子在应用第一条指令前就位）替代 attach。"
+                    help="用 Frida spawn 装载脚本后恢复进程，失败时回退到 attach。"
                          "attach 模式的应用启动那一刻的联网（egress 事件）全在钩子装上之前，"
                          "导致 egress 0 事件、flows 归因 unresolved（2026-10-19 实测定性）。"
                          "spawn 模式下跳过 am start，由 run.py --spawn 启动应用并挂钩后 resume。")
@@ -136,6 +154,12 @@ def main() -> int:
                          "TLS_BYPASS_DISABLED 事件、不挂任何绕过手法。"
                          "只有被授权的第三方样本才可以打开。")
     args = ap.parse_args()
+    if args.spawn_hook and args.no_hooks:
+        ap.error("--spawn-hook 需要启用钩子")
+    if args.fixture_http_port is not None and (
+            args.no_pcap or not 1 <= args.fixture_http_port <= 65535
+            or args.fixture_http_port in (env.FRIDA_PORT, env.MITM_PORT)):
+        ap.error("--fixture-http-port 需要开启 pcap，并避开 Frida 与代理端口")
 
     # 逐样本的开关留痕（可 grep "TLS_BYPASS="）：产物里能直接回溯这一轮开没开。
     # 为什么不用环境变量：VSCAN_TLS_BYPASS 从产物里看不出来，事后无法复核。
@@ -148,6 +172,13 @@ def main() -> int:
     out = Path(args.out).resolve()
     ctx.apk = apk
     ctx.out = out
+    ctx.no_activity_review = None
+    try:
+        ctx.no_activity_confirmation = (review_no_activity(args.confirm_no_activity, args.package)
+                                        if args.confirm_no_activity else None)
+        claim_device_attempt(out)
+    except (OSError, ValueError) as error:
+        ap.error(str(error))
     ctx.session = out / "session"
     ctx.session.mkdir(parents=True, exist_ok=True)
     ctx.o = out / "out"
@@ -189,11 +220,12 @@ class RunCtx:
         "args", "apk", "out", "session", "o", "checks", "events_path",
         "emit", "check",
         "prev_proxy", "uid", "collector", "pcap_rec", "mitm", "mitm_error",
-        "main_activity", "resolved_activity",
+        "main_activity", "resolved_activity", "startup_mode",
         "ca_rec", "pid", "hooks", "segments", "all_actions", "coverage",
         "final_alive", "final_death", "seg_closed", "seg_started",
         "pcap_path", "died_in_window", "window_alive", "death",
-        "real_reads", "sha", "policy_args", "policy_source",
+        "real_reads", "read_repeat_count", "sha", "policy_args", "policy_source",
+        "no_activity_confirmation", "no_activity_review",
     )
 
 

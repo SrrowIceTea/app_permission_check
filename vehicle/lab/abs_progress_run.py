@@ -12,6 +12,7 @@ from vehicle.lab.abs_send_evidence import attribute_writes
 from vehicle.lab.ui import UI
 from vehicle.pipeline.capture_device import wait_until
 from vehicle.pipeline.contracts import ROOT, digest, read_json, write_json
+from vehicle.pipeline.device_state import ensure_wifi
 from vehicle.pipeline.preflight import validate_capture
 from vehicle.privacy.abs_contract import PACKAGE, APK_SHA256
 
@@ -56,6 +57,9 @@ def run(out,folder,apk,serial):
         identity=device.ordinary_identity(PACKAGE,10,'general')
         if digest(apk)!=APK_SHA256 or identity['installed_apk_sha256']!=APK_SHA256:
             raise ValueError('pinned installed APK required')
+        if device.call('shell','getprop','ro.kernel.qemu') != '1':
+            raise ValueError('owned AAOS emulator required')
+        ensure_wifi(device.call)
         result['identity']=identity
         library=read_json(folder/'abs-library.json')
         items=library['items']

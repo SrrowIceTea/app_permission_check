@@ -50,7 +50,7 @@ def _complete_body(flow):
             and not flow.get('terminal') and not flow.get('failure_kind'))
 
 
-def _binding_actions(capture):
+def _binding_actions(capture, session, package):
     """Only a fully verified binding may feed business-touch counts.
 
     Review P0: reading session-binding.json's own ``observed`` claim allowed a
@@ -62,7 +62,7 @@ def _binding_actions(capture):
         return {'status': 'not_supplied', 'observed': 0, 'synthetic_only': True}, 'not_supplied'
     try:
         from vehicle.pipeline.session_binding import verify_binding
-        result = verify_binding(capture)
+        result = verify_binding(capture, package=package)
     except Exception as error:  # noqa: BLE001 - 账本不能因侧车不可读而中断审计
         return {'status': 'unreadable', 'observed': 0, 'synthetic_only': True,
                 'exception_type': type(error).__name__}, 'unreadable'
@@ -74,6 +74,8 @@ def _binding_actions(capture):
                 'synthetic_only': True,
                 'observed_claimed_unverified': result.get('observed_receipts', 0)}, \
                result.get('status')
+    if result.get('session_id') != session:
+        return {'observed': 0, 'synthetic_only': True}, 'session_mismatch'
     return result.get('business_actions') or {}, result.get('status')
 
 
@@ -81,14 +83,28 @@ def _pairs(findings):
     return [pair for finding in findings for pair in (finding.get('pairs') or [])]
 
 
+def _scope_events(rows, session, package, package_field):
+    scoped, session_mismatch, package_mismatch = [], 0, 0
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if row.get('session_id') != session:
+            session_mismatch += 1
+        elif row.get(package_field) != package:
+            package_mismatch += 1
+        else:
+            scoped.append(row)
+    return scoped, session_mismatch, package_mismatch
+
+
 def build_ledger(*, session, package, reads, flows, findings, health_passed=False,
                  validation=None, capture=None, scenarios=()):
-    """Pure diagnostic aggregation over already validated, same-session inputs."""
+    """Aggregate scoped events and the findings already validated by the caller."""
     validation = validation or {}
-    scoped_reads = [r for r in reads if isinstance(r, dict)]
-    scoped_flows = [f for f in flows if isinstance(f, dict)]
-    session_mismatch = sum(1 for r in scoped_reads + scoped_flows
-                           if r.get('session_id') not in (None, session))
+    scoped_reads, read_session_gaps, read_package_gaps = _scope_events(reads, session, package, 'pkg')
+    scoped_flows, flow_session_gaps, flow_package_gaps = _scope_events(flows, session, package, 'package')
+    session_mismatch = read_session_gaps + flow_session_gaps
+    package_mismatch = read_package_gaps + flow_package_gaps
     obtained = [r for r in scoped_reads if _obtained(r)]
     identity = [r for r in obtained if uid_of(r) is not None and user_of(r) is not None]
     bodies = [f for f in scoped_flows if _complete_body(f)]
@@ -98,7 +114,7 @@ def build_ledger(*, session, package, reads, flows, findings, health_passed=Fals
         and f.get('attribution') not in (None, 'unresolved', 'ambiguous', 'single_package_fallback')
         and not is_loose(f)]
     pairs = _pairs(findings)
-    actions, binding_status = _binding_actions(capture)
+    actions, binding_status = _binding_actions(capture, session, package)
     business_touch = 0 if actions.get('synthetic_only') else actions.get('observed', 0)
     traceable = [f for f in findings if f.get('rule_id')
                  and (f.get('basis_refs') or f.get('source_refs'))]
@@ -146,7 +162,9 @@ def build_ledger(*, session, package, reads, flows, findings, health_passed=Fals
         '合成控制与固定预算比较不等于真实设备业务探索效果。',
     ]
     if session_mismatch:
-        gaps.append(f'{session_mismatch} 条事件缺少或不符会话身份；账本按未归属处理。')
+        gaps.append(f'{session_mismatch} 条事件缺少或不符会话身份，已从账本计数排除。')
+    if package_mismatch:
+        gaps.append(f'{package_mismatch} 条事件缺少或不符目标包名，已从账本计数排除。')
     if fallback:
         gaps.append(f'{len(fallback)} 条流使用 single_package_fallback 归因，必须复核。')
     if ambiguous_attribution:

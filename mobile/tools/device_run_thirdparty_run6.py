@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sys
 from pathlib import Path
 
@@ -13,6 +14,32 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 sys.path.insert(0, str(HERE))
 import thirdparty_env as env      # noqa: E402
+
+RUN_MARKER = ".device-run-started"
+
+
+def has_device_attempt(out: Path) -> bool:
+    return any((out / name).exists() for name in
+               (RUN_MARKER, "verification.json", "install.log", "frida-check.log", "capture.pcap"))
+
+
+def claim_device_attempt(out: Path) -> None:
+    """Allow caller-prepared inputs and reserve new device work without overwriting evidence."""
+    out.mkdir(parents=True, exist_ok=True)
+    if has_device_attempt(out):
+        raise FileExistsError(f"设备运行目录已有现场，请另选 --out：{out}")
+    with (out / RUN_MARKER).open("x", encoding="utf-8") as marker:
+        marker.write("device run reserved\n")
+
+
+def review_no_activity(path: Path, package: str) -> dict:
+    raw = path.read_bytes()
+    obj = json.loads(raw)
+    if not isinstance(obj, dict) or obj.get("package") != package or any(
+            not isinstance(obj.get(key), str) or not obj[key].strip() for key in ("reviewer", "basis")):
+        raise ValueError("零观测复核需要目标 package、具名 reviewer 和场景依据 basis")
+    return {key: obj[key].strip() for key in ("package", "reviewer", "basis")} | {
+        "sha256": hashlib.sha256(raw).hexdigest(), "status": "reviewed_no_runtime_observation"}
 
 
 def _stage_verify(ctx) -> int:
@@ -28,12 +55,15 @@ def _stage_verify(ctx) -> int:
         {"passed": not failed, "checks": checks, "failed": failed,
          "optional_failed": optional_failed, "session": session.name,
          "package": args.package, "apk_sha256": ctx.sha,
+         "startup_mode": ctx.startup_mode,
+         "location_getter_repeats": ctx.read_repeat_count,
+         "no_activity_review": ctx.no_activity_review,
          # 覆盖账本（A4，2026-10-19）：passed 只代表"该跑的步骤都跑了"，
          # **不代表窗口被完整观测**。插桩下进程可能中途被打死，之后的阴性结论
          # 只能限定在 observed_s 内——报告与答辩引用时要连这个字段一起引。
          "coverage": ctx.coverage,
          # 一句话判据：窗口被截断 = 本次结果可用但打折（不是 failed，也不是 full）。
-         "degraded": ctx.coverage["truncated"],
+         "degraded": ctx.coverage["truncated"] or ctx.no_activity_review is not None,
          "app_category": {"value": args.app_category, "source": "declared"},
          # serial 用 get-serialno（返回 `emulator-5554` 这种真序列号）。
          # 原先用的 get-state 只会返回字面量 "device"（不是序列号），且**同时接了多台设备时

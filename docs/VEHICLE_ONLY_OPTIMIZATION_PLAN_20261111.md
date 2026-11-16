@@ -1,5 +1,7 @@
 # 仅车载端：缺陷评估与优化范围更正
 
+> **历史快照（2026-11-11 归档，不作当前清单）**：现在什么状态、本周做什么见 [CURRENT_STATUS.md](CURRENT_STATUS.md)。
+
 日期2026-11-11；源码基线0cc32a9。仅用于授权测试（自有AAOS设备与授权APK）。
 用户最新约束：移动端暂不开发。本文替代上一版混合方案作为当前建议。
 本次只修订文档、读取代码并运行合成函数反例，没有修改业务代码、操作设备或启动移动端开发。
@@ -171,3 +173,41 @@ DroidBench等先选择本规则支持的source/sink与适用API；F-Droid不作�
   本轮未读取改写、也未删除；其中平台启动脚本默认拉起移动端服务，与本方案 §1 边界无关，
   若后续要纳入交付应先按「移动端暂不开发」收敛。本文自身（本方案文件）也是用户提供的
   未跟踪文件，仅追加 §7/§8 记录。
+
+## 9. 第四轮：诊断账本前端展示（2026-11-11，仅前端）
+
+§7 的遗留项 4「前端未改；报告只在 summary 增加诊断账本」本轮补齐。
+设备仍不在线（`adb devices` 为空），因此**没有新采集、没有新设备验收结论**，
+本节是纯离线前端交付，不改动 §7/§8 的任何「未完成」判定。
+
+`/summary` 的 `project_summary()` 本来就逐字保留原键，账本与 `capture_validation`
+已在响应里，所以**后端判定逻辑、事件库、规则库、`core/` 与 `mobile/` 一行未动**。
+
+| 改动 | 文件 | 口径 |
+|---|---|---|
+| 诊断面板 | 新增 `vehicle/frontend/ledger.js` | 展示 11 个漏斗层、7 项归因质量、通用关联覆盖、`gaps`/`limits` 原文、会话绑定与采集校验；缺字段显示「—」不补 0；各层独立计数不相加为检测率 |
+| 样式 | 新增 `vehicle/frontend/ledger.css` | 沿用既有灰阶与虚线警示，无「通过/安全/绿色」语义；窄视口自动折行 |
+| 接线 | `app.html`、`results.js`、`vehicle/webapp/server.py` 资源白名单 | 动态结果页在隐私观测面板之后追加 `U.ledgerPanel(summary)`；零构建，无 CDN、无外链、无 `innerHTML` |
+| 契约测试 | `vehicle/webapp/test_server.py` | 新增「JS/CSS 既被服务放行、又被 app.html 真正引用」断言，防止只放行不接线 |
+| 离线回归 | 新增 `vehicle/frontend/test_ledger_panel.mjs` + `tools/run_regressions.py` 的 `vehicle-ledger-ui` 组 | vm + 极小 DOM 桩跑真实 `ledger.js`，13 项：缺账本/缺字段不伪造、漏斗不相加、pending 不写成通过、`passed` 仅门禁、四种绑定状态、后端文本含 XSS 串不生成标签、源码零外链 |
+
+诚实性边界：面板只渲染后端给出的字符串与状态，不推断结论；`device_acceptance=pending`
+恒显示「待设备验收」；采集门禁 `passed` 明确标注「仅门禁，不等于设备验收」；
+`binding_consistent` 也保留「仍待设备验收」。后端若声明 `emits_findings=true` 或状态非
+`diagnostic_only`，标题改为「后端状态异常，需复核」并给警示徽标，不冒充仅诊断。
+
+### 回归结果（本轮实测）
+
+- `tools/run_regressions.py`：**21 组全绿**（新增 `vehicle-ledger-ui`；既有 20 组无新增失败）。
+- `tools/test_inventory_guard.py`：PASS，scanned=240 / referenced=233 / allowlisted=7 / unregistered=0。
+- `node --check vehicle/frontend/*.js`：全部通过；`vehicle/webapp/test_server.py` 新增资产接线断言随
+  `vehicle-webapp` 组通过。
+- `tools/check_mobile_branch.py`：21/24 组绿；`mobile_workbench`、`ai_gates`、`mobile_lab`
+  三组失败**全部**来自本机 `sitecustomize.py` 的 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`
+  （单轮删除临时目录数 50–58 超过阈值 50），堆栈落在 `tempfile.TemporaryDirectory` /
+  `Path.unlink` 的收尾，不涉及本轮任何文件。三组单独复跑分别 125 / 161 / 263 项全绿；
+  这是宿主环境的假红，不写成代码回归，也不绕过删除守卫去「刷绿」。
+
+**未执行**：真实 Chrome/CDP 浏览器验收（`browser_acceptance.mjs` / `layout_acceptance.mjs`）、
+任何设备采集与业务回执。离线单测不能替代 1440/1920/390px 几何检查；需要在设备与
+Chrome 可用时补跑，不把本节写成「前端已通过浏览器验收」。

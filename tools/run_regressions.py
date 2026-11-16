@@ -11,11 +11,17 @@ sys.path.insert(0, str(ROOT))
 from core.env_guard import BASE_DEPS, MOBILE_DEPS, enforce_dependencies
 from core.regression_output import create_output, publish_latest
 CHECKS = [
-    ('completion', '.', [sys.executable, '-m', 'unittest', 'test_completion']),
+    # 工程守卫与回归清单守卫并入本组（不新增组数；组数以 CHECKS 的实际长度为准，
+    # 不要让注释里的数字漂——2026-11-12 之前这里写死过 21，加组后就对不上）。
+    ('completion', '.', [sys.executable, '-m', 'unittest', 'test_completion',
+                         'tools.test_regression_manifest', 'tools.test_engineering_guards']),
     ('rules-contract', 'core', [sys.executable, '-m', 'unittest', 'test_rules_contract']),
     # event_store 的存储不变量此前错位在仓库根的 test_completion.py 里（§8.2 B-5）——
     # 拆到被测模块旁边，并单独成组，改 core 的人跑得到。
     ('event-store', 'core', [sys.executable, '-m', 'unittest', 'test_event_store']),
+    # 跑批日志的分卷口径：超 20 MB 分卷、旧卷不覆盖、改名失败退化成继续追加。
+    # 单列成组而不是塞进别的组，是因为它守的是 output/ 无限增长那条线。
+    ('log-rotation', '.', [sys.executable, '-m', 'unittest', 'core.test_log_rotation']),
     ('codeloc', 'core/evidence', [sys.executable, '-m', 'unittest', 'test_codeloc',
                            'test_event_lookup', 'test_sdk_attribution']),
     ('correlate', 'vehicle/analyze', [sys.executable, '-m', 'unittest', 'test_experiment']),

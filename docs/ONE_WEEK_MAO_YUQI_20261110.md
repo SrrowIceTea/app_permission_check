@@ -1,5 +1,7 @@
 # 毛宇淇一周任务交付（按 ONE_WEEK_DAILY_ASSIGNMENTS_20261110.md）
 
+> **历史快照（2026-11-11 归档，不作当前清单）**：现在什么状态、本周做什么见 [CURRENT_STATUS.md](CURRENT_STATUS.md)。
+
 > 依据：`C:/Users/m1866/Desktop/ONE_WEEK_DAILY_ASSIGNMENTS_20261110.md`（周一 11-16 ~ 周六 11-21）。
 > 本次在 2026-11-10 把该主线**可开发的部分**提前落地，日期标签沿用任务表。
 > 仅用于授权测试（自有设备与自有 APK）。本文只写已发生、可复核的事实与产物路径；

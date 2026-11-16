@@ -22,7 +22,7 @@
      不可捕获），只在结尾写的话杀早一点整个丢——07/08 号样本就是这么丢的。
 
 **它回答什么**：给定目标进程与时间窗，有没有连接（对端 IP:port 与状态）；读
-到的必须限定 TCP（不读 UDP/QUIC），"零连接"不等于"应用未外发"。
+到的包括 TCP 和 UDP 套接字快照。"零连接"不能排除采样间隔内的网络行为。
 
 用法:
   python conn_probe.py --package org.example.app --seconds 150 --out out/conns.jsonl
@@ -62,7 +62,7 @@ def main() -> int:
                     help="目标应用包名（推荐）：设备端每 PIDOF_EVERY 轮重解 pid，"
                          "应用崩溃重启也能接着采")
     ap.add_argument("--pid", type=int, default=None,
-                    help="固定 pid：读 /proc/<pid>/net/tcp{,6}，即该进程的命名空间；"
+                    help="固定 pid：读取该进程网络命名空间中的 TCP 和 UDP 套接字表；"
                          "应用重启后该 pid 失效，采样随即失明")
     ap.add_argument("--uid", type=int, default=None,
                     help="目标 uid；只在拿不到 pid 时用（读 /proc/net/tcp* 会因 netns 隔离而看不到应用）")
@@ -110,6 +110,7 @@ def main() -> int:
               flush=True)
 
     seen: dict[tuple, dict] = {}
+    last_sample: dict[tuple, int] = {}
     # **采样期间解析到过的进程 pid**（不管这些进程的 socket 有没有被记进 seen）。
     # 2026-10-20：交付物里原来只有 `pids`，它取自 seen（**产生了连接**的进程），
     # 于是"应用窗口内没有连接"会落成 `pids: []` —— 下游（体检脚本 / 终报生成器）
@@ -183,11 +184,8 @@ def main() -> int:
             t = line.split()
             if len(t) < 10:
                 continue                      # 表头/空行
-            # **只把真的来自 tcp 表的行算成采样行**（2026-10-19 实测）：
-            # 设备端脚本被 timeout/终止时 shell 会吐一行 `Terminated`（1 个字段），
-            # 以前它在长度检查之前就被计入 `rows`，于是「整个窗口都没找到进程」
-            # 也会得到 rows>0 → covered=true ——反向的假阳性，比没有更糟。
-            hit = re.match(r"/proc/(?:(\d+)/)?net/tcp6?$", t[1])
+            # Only rows from the socket tables count towards capture coverage.
+            hit = re.fullmatch(r"/proc/(?:(\d+)/)?net/((?:tcp|udp)6?)", t[1])
             if not hit:
                 st["skipped"] += 1
                 continue
@@ -203,6 +201,9 @@ def main() -> int:
                 lip, lport = t[3].split(":")
                 rip, rport = t[4].split(":")
                 rport_i = int(rport, 16)
+                lport_i = int(lport, 16)
+                timestamp = int(t[0]) // 1_000_000
+                inode = int(t[11])
             except (ValueError, IndexError):
                 st["skipped"] += 1
                 continue
@@ -212,29 +213,27 @@ def main() -> int:
             # ——应用重启后 pid 会变，沿用会把新进程的连接记到旧 pid 名下。
             # 非 `--package` 模式的来源是 `/proc/net/tcp`（无 pid），这时退回 `--pid`。
             row_pid = int(hit.group(1)) if hit.group(1) else args.pid
-            family = "tcp6" if t[1].endswith("tcp6") else "tcp"
-            remote_ip = parse_hex_ip(rip)
-            # pid 进 key：同一对端在重启前后是两个进程各自的连接，不该被并成一条。
-            key = (row_pid, remote_ip, rport_i, t[5], family)
+            family = hit.group(2)
+            local_ip, remote_ip = parse_hex_ip(lip), parse_hex_ip(rip)
+            key = (row_pid, uid, inode, family, local_ip, lport_i, remote_ip, rport_i, t[5])
             # 读-改-写必须与心跳线程的遍历互斥（`_state_lock` 见上）。
             with _state_lock:
                 if key in seen:
                     seen[key]["hits"] += 1
-                    continue
+                    if timestamp - last_sample[key] < 80:
+                        continue
+                last_sample[key] = timestamp
                 rec = {
                     "v": "1", "src": "conn_probe", "ev": "DEVICE_CONN",
-                    "ts": int(t[0]) // 1_000_000,
+                    "ts": timestamp, "socket_inode": inode,
                     "pid": row_pid, "uid": uid, "family": family,
-                    # pid 是**读取路径**里的 pid（应用进程），uid 是**socket 属主**。
-                    # Android 的应用共享同一个网络命名空间，所以这个文件里会混入
-                    # system(0)/network_stack(1073)/历史 uid 的 socket —— 归属看 uid，
-                    # 不要看 pid（2026-10-19：曾据此误判"应用有连接"）。
-                    "pid_is_owner": args.uid is not None and uid == args.uid,
+                    # pid is the namespace anchor. The socket table provides the UID.
+                    "pid_is_owner": False,
                     "remote_ip": remote_ip, "remote_port": rport_i,
                     "state": STATES.get(t[5], t[5]),
-                    "local_port": int(lport, 16), "local_ip": parse_hex_ip(lip), "hits": 1,
+                    "local_port": lport_i, "local_ip": local_ip, "hits": 1,
                 }
-                seen[key] = rec
+                seen.setdefault(key, rec.copy())
             handle.write(json.dumps(rec, ensure_ascii=False) + "\n")
             handle.flush()
     except KeyboardInterrupt:
@@ -269,8 +268,8 @@ def main() -> int:
           f"(pids_read={pids_final}); unparsed={st['skipped']}", flush=True)
     if pids_final and not seen:
         print(f"[conn_probe] 已读到 {len(pids_final)} 个进程的命名空间，但目标 uid"
-              f"{'' if args.uid is None else f' {args.uid}'} 一条 TCP socket 都没有。"
-              "本采样器不读 UDP/QUIC，故这**不等于**「应用未外发」，"
+              f"{'' if args.uid is None else f' {args.uid}'} 没有命中 TCP/UDP 快照。"
+              "短连接可能落在采样间隔内，"
               "也不等于采集失败。", flush=True)
     if st["pid_lost"]:
         print(f"[conn_probe] ⚠ 取得进程后又丢失 {st['pid_lost']} 次标记（每 {PID_MISS_EVERY} 轮一个）："

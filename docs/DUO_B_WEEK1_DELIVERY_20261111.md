@@ -1,5 +1,7 @@
 # 双人一周计划：B侧开发与验收交付
 
+> **历史快照（2026-11-11 归档，不作当前清单）**：现在什么状态、本周做什么见 [CURRENT_STATUS.md](CURRENT_STATUS.md)。
+
 2026-11-11。仅用于授权测试（自有设备与已获授权APK）。
 依据桌面已完成下载的 `TWO_PERSON_ONE_WEEK_PLAN_CURRENT_20261110.md`，不是旧五人计划的B。
 该输入文件SHA256：`602beeeb7c0c1e5a29e65ae7145f6ecaa7b77a7ac22f356e92a580f18fd597b0`。

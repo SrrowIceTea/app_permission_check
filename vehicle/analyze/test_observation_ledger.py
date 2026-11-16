@@ -132,10 +132,21 @@ class LedgerTests(unittest.TestCase):
 
     def test_session_mismatch_and_incomplete_reference_are_gaps(self):
         result = build_ledger(session=SESSION, package=PACKAGE,
-            reads=[read(session_id='other')], flows=[],
+            reads=[read(), read(session_id='other', data_types=['location']),
+                   read(session_id=None), read(pkg='com.other')],
+            flows=[flow(), flow(session_id='other', attribution='single_package_fallback'),
+                   flow(session_id=None), flow(package='com.other')],
             findings=[finding(pairs=[{'reference_incomplete': True}])])
-        self.assertTrue(any('会话身份' in g for g in result['gaps']))
+        self.assertTrue(any('4 条事件缺少或不符会话身份' in g for g in result['gaps']))
+        self.assertTrue(any('2 条事件缺少或不符目标包名' in g for g in result['gaps']))
         self.assertTrue(any('完整 PID' in g for g in result['gaps']))
+        self.assertEqual(1, result['funnel']['real_obtained'])
+        self.assertEqual(1, result['funnel']['identity_verified'])
+        self.assertEqual(1, result['funnel']['complete_body'])
+        self.assertEqual(1, result['funnel']['verified_body'])
+        self.assertEqual(1, result['attribution_quality']['flows'])
+        self.assertEqual(0, result['attribution_quality']['single_package_fallback'])
+        self.assertEqual(['android_id'], result['general_correlation']['observed_data_types'])
 
     def test_from_capture_reads_sidecar_without_certifying_health(self):
         with tempfile.TemporaryDirectory() as root:
@@ -144,6 +155,16 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual('diagnostic_only', result['status'])
         self.assertEqual(0, result['funnel']['healthy_session'])
         self.assertEqual(1, result['funnel']['business_touch'])
+
+    def test_from_capture_rejects_receipts_for_other_session_or_package(self):
+        with tempfile.TemporaryDirectory() as root:
+            capture = capture_with_binding(root)
+            for session, package in [('other', PACKAGE), (SESSION, 'com.other')]:
+                with self.subTest(session=session, package=package):
+                    result = from_capture(capture, session, package)
+                    self.assertEqual(0, result['funnel']['business_touch'])
+                    self.assertEqual(0, result['funnel']['business_evidence_receipts'])
+                    self.assertNotEqual('binding_consistent', result['binding_status'])
 
     def test_incomplete_binding_surfaces_device_acceptance_gap(self):
         result = build_ledger(session=SESSION, package=PACKAGE, reads=[], flows=[],

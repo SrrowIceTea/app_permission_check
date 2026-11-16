@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 from core.io_utils import load_jsonl
+from vehicle.lab.business_receipts import seal_ha_states
 from vehicle.lab.ha_api import onboard, request
 from vehicle.lab.power_run import ACTIVITY
 from vehicle.lab.ui import UI
@@ -91,7 +92,7 @@ def exercise(ui, worker, evidence, token, result, user):
                 raise RuntimeError('WebSocket observer stopped during toggle')
             state = request(STATE_PATH, token=token)
             if state['state'] == target and state['last_changed'] > prior['last_changed']:
-                receipt.update(state=target, last_changed=state['last_changed'])
+                receipt.update(state=target, last_changed=state['last_changed'], observed_ms=int(time.time() * 1000))
             return bool(receipt)
 
         wait_until(changed, 15, f'隔离 HA 实体变为 {target}')
@@ -142,7 +143,7 @@ def run(out, runtime, serial, user, port, reconnect=False):
             worker = subprocess.Popen([sys.executable, '-m', 'vehicle.pipeline.capture', '--package', PACKAGE,
                 '--user', str(user), '--serial', serial, '--frida-port', str(port), '--activity', ACTIVITY,
                 '--out', str(capture), '--seconds', '90', '--scope', 'general',
-                '--ha-websocket', '--preserve-system-proxy'], cwd=ROOT, stdout=log, stderr=log,
+                '--ha-websocket', '--preserve-system-proxy', '--no-tls-bypass'], cwd=ROOT, stdout=log, stderr=log,
                 env=dict(os.environ, PYTHONUTF8='1'))
             try:
                 def armed():
@@ -202,14 +203,13 @@ def run(out, runtime, serial, user, port, reconnect=False):
                         result['new_subscription_message_id'] = fresh[0]['message_id']
                         result['new_subscription_host_received_ts'] = reply_ts[fresh[0]['result_event_id']]
                         return True
-
                     wait_until(subscription_ready, 25, '断链后必须在全新 connection_id 上收到订阅响应')
-
                     def old_sockets_gone():
                         return not (prior_ports & app_loopback_ports(device, pid))
                     wait_until(old_sockets_gone, 15, '断链后的旧 HA 回环 socket 已消失')
                     result['old_sockets_closed'] = old_sockets_gone()
                 exercise(ui, worker, evidence, token, result, user)
+                seal_ha_states(capture, result['steps'], package=PACKAGE, user=user, entity=ENTITY)
             finally:
                 if capture.is_dir():
                     (capture / '.finish-request').touch()

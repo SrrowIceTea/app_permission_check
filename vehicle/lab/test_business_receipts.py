@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from vehicle.lab.business_receipts import seal_browser
+from vehicle.lab.business_receipts import seal_browser, seal_ha_states, seal_playback_steps
 from vehicle.pipeline.contracts import digest
 from vehicle.pipeline.session_binding import _actions
 
@@ -51,3 +51,43 @@ class BrowserReceiptsTests(unittest.TestCase):
             handle.write(json.dumps(row) + '\n')
         with self.assertRaises(ValueError):
             self.seal()
+
+    def test_ha_state_receipts_can_be_recomputed(self):
+        steps = [{'start_ms': 100 * i, 'server': {'state': state, 'last_changed': f'change-{i}',
+                 'observed_ms': 100 * i + 10, 'private': 'not part of the receipt'}}
+                 for i, state in enumerate(('on', 'off'), 1)]
+        rows = seal_ha_states(self.capture, steps, package=self.package, user=10, entity='test.light')
+        self.assertEqual([110, 210], [row['ts_ms'] for row in rows])
+        self.assertEqual(2, _actions(self.capture, self.session, self.package)['observed'])
+        receipt = json.loads((self.capture / rows[0]['receipt']).read_text(encoding='utf-8'))
+        self.assertEqual(('test.light', 'on'), (receipt['entity_id'], receipt['state']))
+        self.assertNotIn('private', receipt)
+
+    def test_stale_ha_state_refuses_and_never_publishes_actions(self):
+        steps = [{'start_ms': 100, 'server': {'state': 'on', 'last_changed': 'change-1', 'observed_ms': 110}},
+                 {'start_ms': 200, 'server': {'state': 'off', 'last_changed': 'change-2', 'observed_ms': 120}}]
+        with self.assertRaises(ValueError):
+            seal_ha_states(self.capture, steps, package=self.package, user=10, entity='test.light')
+        self.assertFalse((self.capture / 'business-actions.jsonl').exists())
+
+    def test_playback_requires_fresh_increment_and_stable_pause(self):
+        def snapshot(stamp, progress, listened, updated):
+            return {'observed_ms': stamp, 'progress': progress, 'sessions': [
+                {'id': 'server-id', 'timeListening': listened, 'updatedAt': updated}]}
+
+        steps = [
+            {'phase': 'foreground', 'activity_confirmed': True,
+             'before': snapshot(10, 0, 0, 5), 'after': snapshot(20, 5, 5, 19),
+             'paused_control': snapshot(30, 5, 5, 19)},
+            {'phase': 'background', 'activity_confirmed': True,
+             'before': snapshot(40, 5, 5, 19), 'after': snapshot(50, 10, 10, 49),
+             'paused_control': snapshot(60, 11, 10, 49)},
+        ]
+        kwargs = {'package': self.package, 'user': 10, 'item_id': 'owned-item'}
+        with self.assertRaisesRegex(ValueError, 'fresh, stable'):
+            seal_playback_steps(self.capture, steps, **kwargs)
+        self.assertFalse((self.capture / 'business-actions.jsonl').exists())
+        steps[-1]['paused_control']['progress'] = 10
+        rows = seal_playback_steps(self.capture, steps, **kwargs)
+        self.assertEqual(['playback_foreground', 'playback_background'], [row['action'] for row in rows])
+        self.assertEqual(2, _actions(self.capture, self.session, self.package)['observed'])

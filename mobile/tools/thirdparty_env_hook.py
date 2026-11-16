@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -49,6 +48,8 @@ def start_mitm(session: Path, log: Path, package: str) -> subprocess.Popen:
             str(session / "egress.jsonl"), str(session / "egress_tp.jsonl")]),
         "VSCAN_PACKAGES": package,
         "VSCAN_SESSION": session.name,
+        "VSCAN_STRICT_PACKAGE_SCOPE": "1",
+        "VSCAN_ATTRIB_CONSERVATIVE": "1",
         # 常规代理模式看得见真实目标 host:port，开目标校验把"别的 App 的流误认领给
         # 被审计包"这条静默错误路径关掉（见 core/collector/DECISIONS D413）。
         # **只在常规代理模式开**：reverse 模式所有 App 寻址同一代理端口，开了会把
@@ -219,42 +220,8 @@ def stop_hook(proc: subprocess.Popen | None, log: Path | None = None,
         return "killed"
 
 
-def app_uid(package: str) -> int | None:
-    """应用 uid（不是 pid）。取不到返回 None——调用方据此跳过采样，
-    绝不用一个猜的 uid 去采样然后报"零外发"。
-
-    顺序（2026-10-19 调整）：`pm list packages -U` 是 PackageManager 的权威回答，
-    带 user 维度（本机应用装在 user 10，`dumpsys package` 的 userId 曾与运行期
-    socket 的 uid 对不上，导致"应用有外发"被判成"没采到"）。
-    `stat /data/data/<pkg>` 只能兜底：Android 15 上它是符号链接，且卸载重装后会变。
-    """
-    probes = (
-        ("shell", "pm", "list", "packages", "--user", "0", "-U"),
-        ("shell", "stat", "-L", "-c", "%u", f"/data/user/0/{package}"),
-        ("shell", "dumpsys", "package", package),
-    )
-    for args in probes:
-        out = adb(*args, timeout=45).stdout
-        if not out.strip():
-            continue
-        if args[1] == "pm":
-            # 形如 "package:com.foo uid:10237"（-U 选项）；只认本包的 uid
-            for line in out.splitlines():
-                if f"package:{package}" in line:
-                    m = re.search(r"uid:(\d+)", line)
-                    if m:
-                        return int(m.group(1))
-            continue
-        m = re.search(r"userId=(\d+)", out)
-        if m:
-            return int(m.group(1))
-        if out.strip().isdigit():
-            return int(out.strip())
-    return None
-
-
 def start_conn_probe(session: Path, log: Path, package: str,
-                     seconds: int, uid: int | None = None) -> subprocess.Popen:
+                     seconds: int, *, uid: int) -> subprocess.Popen:
     """设备侧连接采样。
 
     这是**与客户端库无关**的外发地面真相：钩子只能证明"被挂钩的那层被走到了"，
@@ -268,12 +235,7 @@ def start_conn_probe(session: Path, log: Path, package: str,
     """
     cmd = [PY, str(Path(__file__).resolve().parent / "conn_probe.py"),
            "--package", package, "--seconds", str(seconds),
-           "--out", str(session / "conns.jsonl")]
-    # uid 给了就在解析阶段过滤（2026-10-19）：应用共享同一个网络命名空间，
-    # `/proc/<app pid>/net/tcp` 里混着 system(0)/network_stack(1073)/历史 uid 的
-    # socket，不过滤会把"别的进程在联网"读成"应用在联网"。
-    if uid is not None:
-        cmd += ["--uid", str(uid)]
+           "--out", str(session / "conns.jsonl"), "--uid", str(uid)]
     child_env = dict(os.environ)
     child_env["PYTHONUNBUFFERED"] = "1"   # 见 start_mitm 的注释：杀掉子进程时缓冲内容会丢
     proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL,

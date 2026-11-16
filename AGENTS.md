@@ -26,12 +26,13 @@ vscanner/
 6. **失败可诊断**：Hook 脚本 try/catch + 日志落盘，区分"没读到数据"和"脚本崩了"。
 7. **禁止再让用户做环境探测**（Phase 0 已完成）。
 8. **单文件 ≤300 行**；超了按职责拆分（hooks/traffic/dashboard 都有拆分的先例），拆后必须回归验证。
+9. **每次开发都写开发日志**：开始前在 [docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md) 登记范围；结束前补齐实际改动、验证命令与结果、证据路径、失败或待办。代码、规则、配置和验收工具改动都适用。日志到 300 行时转存分卷，主文件保留索引及最新记录。
 
 ## 环境事实（当前主机；入口 environment.ps1）
 
 | 项 | 值 |
 | --- | --- |
-| Python | **本机实测** `%LOCALAPPDATA%\Programs\Python\Python313\python.exe`（3.13.9，`requirements.txt` 依赖齐全；默认 `python` 是 WindowsApps 3.15，缺 frida/mitmproxy/cryptography/jsonschema/pypdf）。`environment.ps1` 用 `$env:LOCALAPPDATA` 派生，统一入口 `.\tools\python313.ps1`；旧文档里的 `C:/Users/毛宇淇/...` 是原开发机记录 |
+| Python | **本机实测** `%LOCALAPPDATA%\Programs\Python\Python313\python.exe`（3.13.9，`requirements.txt` 依赖齐全；默认 `python` 是 WindowsApps 3.15，缺 frida/mitmproxy/cryptography/jsonschema/pypdf）。`environment.ps1` 用 `$env:LOCALAPPDATA` 派生，统一入口 `.\tools\python313.ps1`；旧文档里的 `C:/Users/毛宇淇/...` 是原开发机记录。**依赖是否齐全一律看 `core/env_guard.py` 的退出码**（0 可用 / 3 缺库）；不同时点写下的"缺 jsonschema""依赖已齐"都只是当时那个解释器的状态，别当常量 |
 | SDK / JDK | **本机实测**：SDK `%LOCALAPPDATA%\Android\Sdk`（`platforms/` 有 `android-36`、`android-37.0`，两者 `optional/android.car.jar` 都在；**没有** `android-35`，`system-images/` 下**没有** automotive 镜像）；`JAVA_HOME=D:\Android\JDK`（Temurin 21.0.12.1）。**原开发机**记录为 `D:\Anroid\SDK` / `D:\Anroid\JDK`（目录名就是这种拼写）；换机用 `VSCAN_SDK` / `VSCAN_JDK` 覆盖，别把文档改回旧路径。**不要用 JBR 25** |
 | 设备 | AAOS 模拟器 `emulator-5554`：Android 15 / API 35 / userdebug / `ro.build.characteristics=automotive` / `ro.product.device=emulator_car64_x86_64`；**应用跑在 user 10**。镜像与 AVD **不在** SDK `system-images/`：AVD 在 `output/vehicle-device-setup/avd/`（`target=android-35-ext15`），镜像在 `output/vehicle-device-setup/image/x86_64/`；`ANDROID_AVD_HOME=D:\AVD` 下只有手机 AVD |
 | frida-server | 设备 `/data/local/tmp/frida-server -l 127.0.0.1:27043`（**27043 不是 27042**）；spawn 超时，用 attach |
@@ -41,6 +42,8 @@ vscanner/
 ## 跑移动端测试集（agent 操作手册）
 
 测试集在 `D:/数据集/数据集/F-Droid-60`（60 个 F-Droid 样本），**不是** `D:/测试集`。
+**本机（2026-11-11）该目录不存在**：跑批入口会明确报「目录不存在」，别把路径错当成
+「0 个样本」或「数据集为空」；换机先确认数据集是否已挂载。
 跑批入口 `mobile/tools/batch_thirdparty.py`（静态 `--static-only` → 动态 `--static-reuse`）。
 完整步骤、判据、故障处置见 [docs/AGENT_TEST_SUITE_RUNBOOK_20261019.md](docs/AGENT_TEST_SUITE_RUNBOOK_20261019.md)，
 改环境或换机后先读它，别从零试错（Wi-Fi 不自动连、System UI ANR 挡夹具、托管 Python 缺 frida 三个坑必踩）。
@@ -112,15 +115,24 @@ clone 后 `skills/` 下只有两个索引文件。需要时按 [skills/SKILLS.md
 
 ```bash
 # 统一入口：固定解析到项目 Python 3.13（VSCAN_PYTHON > .venv > Python313 安装目录）
-.\tools\python313.ps1 tools/run_regressions.py        # 18 组：completion/rules-contract/event-store/codeloc/correlate/
-                                                      #       vehicle-evidence/vehicle-pipeline/collector/tagging-vehicle/
-                                                      #       dashboard/vehicle-webapp/vehicle-expanded-review/
-                                                      #       runtime/privacy-runtime/parity/workbench/hook-bundles/
-                                                      #       frida-bundle-config
+.\tools\python313.ps1 tools/run_regressions.py        # 22 组（--mobile 23、--prepare --mobile 24）：
+                                                      #  completion / rules-contract / event-store / log-rotation /
+                                                      #  codeloc / correlate / vehicle-evidence / vehicle-pipeline /
+                                                      #  collector / vehicle-method / vehicle-optimizations /
+                                                      #  tagging-vehicle / dashboard / vehicle-webapp /
+                                                      #  vehicle-expanded-review / vehicle-ledger-ui / runtime /
+                                                      #  privacy-runtime / parity / workbench / hook-bundles /
+                                                      #  frida-bundle-config
 
 .\tools\python313.ps1 mobile/tools/run_mobile_checks.py   # 移动侧 63 项（另一条入口，改 mobile 后必须跑）
-.\tools\python313.ps1 tools/check_mobile_branch.py        # 移动分支 24 组（含 workbench / policy / AI / 7 个前端契约）
+.\tools\python313.ps1 tools/check_mobile_branch.py        # 移动分支 26 组（含 batch_plan / pipeline 前端契约 /
+                                                          #  workbench / policy / AI / 7 个 UI 契约）
 ```
+
+> **组数以代码为准**（`tools/run_regressions.py:CHECKS`、`tools/check_mobile_branch.py:CHECKS`）：
+> 上面这组数字是 2026-11-11 实测核对值。历史上本节写过 18 组、`docs/REGRESSION_CI.md` 写过
+> 历史 18/19 组口径都是手工维护漏更新——**改清单时同步本文**，或者只看 `verification.json`。
+> 当前状态与本周工单唯一入口见 [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md)。
 
 > **先确认解释器再判红**：本机默认 `python` 是 WindowsApps 的 **3.15**，缺 `frida`/`mitmproxy`/
 > `cryptography`/`jsonschema`/`pypdf`；用它跑会冒出成片 `ModuleNotFoundError` 的**假红**（实测：
