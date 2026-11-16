@@ -173,3 +173,15 @@
 - 守卫回绿：`vehicle/webapp/attachments.py:42` 被守卫判"静默吞异常"，实际 `reject()` 内部 `raise AuditError`。加 `# noqa: BLE001` 并写明理由，守卫 13/13 通过。（守卫 `_observable()` 不认"调用同模块抛异常的函数"，属已知盲点，未改判定以免重建基线。）
 - 环境对齐：车载 PDF 报告缺 `PIL`，`vehicle/webapp` 68 用例里 2 条因此红。按 `requirements.txt` 装回钉死版本 `Pillow==12.1.0` / `reportlab==5.0.1`（先前误装 13.0.0/5.1.0），复跑 68/68 通过；`vehicle/frontend` 两个 mjs 用例 2/2 通过。
 - 规范：`mobile/rules/*.bak-*`、`mobile/rules/*.tmp.summary.json` 加入 `.gitignore`（规则库备份可再生产，db 本体仍入库）。
+
+## 2026-11-16 · 一键启动前后端（start-all.ps1 / start-all.bat）
+
+- 新增 `start-all.ps1` + `start-all.bat`：起 pipeline(8771)/workbench(8770)/frontend(8090)，健康检查通过才报"就绪"，PID 落 `output/logs/start-all.json`，支持 `-Only` / `-Status` / `-Stop` / `-NoBrowser`。与旧 `start-frontend.bat` 并存（那个开三个 cmd 窗口，只能关窗口停）。
+- 三个 PS 5.1 实测坑，都已在脚本里处理：
+  - **`Start-Process` 复制环境块报「已添加项。字典中的关键字」**：Git Bash 同时导出 `HTTPS_PROXY` 与 `https_proxy`，大小写重复。`Repair-ProxyEnvCase` 在启动前把成对变量归一到大写，只留一份。
+  - **`Invoke-WebRequest` 进度条**把「正在读取 Web 响应」插进重定向输出，中文行被撕成「启启动动」；`$ProgressPreference='SilentlyContinue'` 解决。
+  - **`Format-Table` 在 GBK 控制台按字符数算宽度**，中文列头被截断；状态表改手工 `-f` 定宽输出。
+  - 另：`python -c 'print("%d.%d" % ...)'` 经 PS 5.1 传参会二次解析 → 改用 `python --version`。
+- `.bat` 必须 **ASCII + CRLF**：UTF-8 中文注释在 cmd 的 OEM 代码页下会被拆行，"rem" 后面的中文被当命令执行（实测报「不是内部或外部命令」）。`start-frontend.bat` 本来就是这个约定，新批处理沿用。
+- 验证：`-Status` 表格/说明/登记行正常；`-NoBrowser` 三服务均健康（8771 `/api/stages`、8770 `/`、8090 `/app.html` 全 200）；`-Stop` 清理 PID 并删除状态文件；`start-all.bat -Status` 经 cmd 转发无乱码。注：在 WorkBuddy 的自动化终端里，脚本退出后子进程会被会话回收（`Start-Process` 子进程随父作业结束），桌面双击不受此限——这属于执行环境差异，脚本未对此做特殊处理。
+- README「快速开始」补了一键启动小节与端口/健康检查表。

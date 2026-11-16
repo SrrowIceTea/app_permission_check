@@ -100,6 +100,25 @@ vscanner/
 
 ## 快速开始
 
+### 一键启动前后端（推荐）
+
+```cmd
+start-all.bat                  :: 起 frontend + pipeline + workbench，并打开浏览器
+start-all.bat -Only pipeline   :: 只起一键审计流水线
+start-all.bat -Status          :: 看端口/健康/本脚本启动的 PID
+start-all.bat -Stop            :: 停掉本脚本启动的服务
+```
+
+等价于 `powershell -ExecutionPolicy Bypass -File .\start-all.ps1`（参数相同）。
+脚本会自己解析 Python 3.13、检查端口是否被别的进程占用（占用则跳过，不替你杀进程），
+健康检查通过才报"就绪"，日志落在 `output/logs/<服务>.out.log` / `.err.log`。
+
+| 服务 | 端口 | 健康检查 |
+| --- | --- | --- |
+| pipeline（一键审计：静态→安装→动态→报告） | 8771 | `/api/stages` |
+| workbench（静态工作台，`vehicle/workbench`） | 8770 | `/` |
+| frontend（零构建前端） | 8090 | `/app.html` |
+
 ```powershell
 # 依赖解释器只有那个（装了 reportlab/Pillow/mitmproxy/cryptography/frida/pypdf）
 $py = "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
