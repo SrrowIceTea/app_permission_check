@@ -50,7 +50,7 @@ button,input,select { font-family:var(--font-ui); }
 .vehicle-options { gap:20px;padding:26px;border-color:rgba(207,223,235,.14);background:rgba(8,15,22,.82); }
 .vehicle-options label { font-family:var(--font-ui);font-weight:400;font-size:var(--fs-sm);color:#bec9d2; }
 .vehicle-options select,.vehicle-options input:not([type=checkbox]) {
-  font-family:var(--font-ui);font-size:var(--fs-md);line-height:var(--lh-table);background:#12202b;border-color:rgba(207,223,235,.19);
+  font-family:var(--font-ui);font-size:var(--fs-md);line-height:var(--lh-table);background-color:#12202b;border-color:rgba(207,223,235,.19);
   font-variant-numeric:tabular-nums;
 }
 .vehicle-options .authorization { font-size:var(--fs-sm);line-height:var(--lh-body);color:#aab7c2; }
