@@ -162,3 +162,14 @@
 - 结果：修后窗口 `passed=true` / `failed=[]` / 未截断 / 0 死亡；10 条结论（8 权限 + `MOB-P002/P0xx` 类，全部 `candidate`）。
 - 验证：`test_pcap_lines` 19/19（新增 CR-only 切分、LF 优先、AT/hex 分类、提示符剥离 4 条）、`test_egress_channels` + `test_http_attribution` 14/14。
 - 文档：[AUTOMOTIVE_APK_PILOT_ROUND4_20261115.md](AUTOMOTIVE_APK_PILOT_ROUND4_20261115.md)。
+
+## 2026-11-16 · 本地工作同步到 Gitee（含 rebase 冲突处置与守卫回绿）
+
+- 背景：`origin` 已在 Gitee（`mao-yuqi-12/mobile-app-permission-check`），本地 `main` 落后 1 个提交（`7d6ed30` 车载工作台联动），工作区另有 105 改 + 53 新未提交。先提交为 `58af277`（行协议 CR-only、ELM327 回执端、四轮试点文档等），再 `rebase origin/main`。
+- 冲突只 2 个文件，均按"远端重构为准、本地增量合并"处理：
+  - `environment.ps1`：整文件重写冲突。取远端新版（SDK/JDK 探测函数、`jdk.net.unixdomain.tmpdir` 不建目录的回退策略），仅把本地新增的 `VSCAN_TSHARK` 便携解码器探测块接回末尾。`Parser::ParseFile` 语法校验通过。
+  - `vehicle/frontend/results.js`：两处。复核 UI 已被远端抽到 `finding_review_ui.js`，本地内联实现删除；结果页取远端 version（保留"逐规则覆盖链"详情）。
+- 推送：`7d6ed30..58af277 main -> main`。注意本机 schannel 吊销检查离线（`CRYPT_E_REVOCATION_OFFLINE`），push/fetch 需 `-c http.sslBackend=openssl`；`-c http.schannelCheckRevoke=false` 无效。
+- 守卫回绿：`vehicle/webapp/attachments.py:42` 被守卫判"静默吞异常"，实际 `reject()` 内部 `raise AuditError`。加 `# noqa: BLE001` 并写明理由，守卫 13/13 通过。（守卫 `_observable()` 不认"调用同模块抛异常的函数"，属已知盲点，未改判定以免重建基线。）
+- 环境对齐：车载 PDF 报告缺 `PIL`，`vehicle/webapp` 68 用例里 2 条因此红。按 `requirements.txt` 装回钉死版本 `Pillow==12.1.0` / `reportlab==5.0.1`（先前误装 13.0.0/5.1.0），复跑 68/68 通过；`vehicle/frontend` 两个 mjs 用例 2/2 通过。
+- 规范：`mobile/rules/*.bak-*`、`mobile/rules/*.tmp.summary.json` 加入 `.gitignore`（规则库备份可再生产，db 本体仍入库）。

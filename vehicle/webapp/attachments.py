@@ -39,7 +39,7 @@ def create(root, record):
             reject('附件路径无效或重复。')
         try:
             raw = base64.b64decode(row.get('content_base64', ''), validate=True)
-        except (ValueError, TypeError, binascii.Error):
+        except (ValueError, TypeError, binascii.Error):  # noqa: BLE001 reject() 内部 raise AuditError，异常并未被吞
             reject('附件内容不是合法 base64。')
         total += len(raw)
         if total > MAX_BYTES:
