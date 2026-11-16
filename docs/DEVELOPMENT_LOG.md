@@ -185,3 +185,61 @@
 - `.bat` 必须 **ASCII + CRLF**：UTF-8 中文注释在 cmd 的 OEM 代码页下会被拆行，"rem" 后面的中文被当命令执行（实测报「不是内部或外部命令」）。`start-frontend.bat` 本来就是这个约定，新批处理沿用。
 - 验证：`-Status` 表格/说明/登记行正常；`-NoBrowser` 三服务均健康（8771 `/api/stages`、8770 `/`、8090 `/app.html` 全 200）；`-Stop` 清理 PID 并删除状态文件；`start-all.bat -Status` 经 cmd 转发无乱码。注：在 WorkBuddy 的自动化终端里，脚本退出后子进程会被会话回收（`Start-Process` 子进程随父作业结束），桌面双击不受此限——这属于执行环境差异，脚本未对此做特殊处理。
 - README「快速开始」补了一键启动小节与端口/健康检查表。
+
+## 2026-11-16 · 车载端一键启动（start-vehicle.bat）+ environment.ps1 双 BOM 修复
+
+- 需求：`start-all` 之前只服务移动端三件套（8771/8770/8090），车载端还得手敲 `./vehicle.ps1 web`。本轮补车载端一键入口。
+- 结论：车载端**只有一个进程**。`vehicle/webapp/server.py` 自己把 `vehicle/frontend/` 作为 `/frontend/` 发出来（`server.py:82`），不需要另起静态服务器；端口 8773，健康检查用 `/api/config`（返回 `platform=vehicle`，比 `/` 更能证明是车载服务）。
+- 新增 `start-vehicle.bat`（ASCII + CRLF，双击入口）：等价 `.\start-all.ps1 -Only vehicle`。实测 `GET /` 200 / 16007 B，`<title>V-Scanner · 车载审计工作台</title>`；`/api/config` 200 `platform=vehicle versions=13,14,15,16`；`/app.js` `/results.js` `/components.css` `/finding_review_ui.js` `/assets/vehicle-studio.png`（1.7 MB）全 200。
+- `start-all.ps1` 三处改动：
+  - **补载 `environment.ps1`**（新增 `Import-Environment`）：原来直接点 `vehicle\webapp\server.py`，绕过了 PATH/JAVA_HOME，车载静态分析（jadx 要 java）和新建采集（adb）会找不到工具。现在先 dot-source 再 `Start-Process`，子进程继承环境块；也顺带修好流水线 `boot` 阶段的 adb 可见性。
+  - 车载服务改走文档入口 `-m vehicle web --port 8773 --workdir output\vehicle-web`（与 `./vehicle.ps1 web` 同一条路），不再直接点 server.py。
+  - `-Stop` 支持按显式 `-Only` 过滤：`start-vehicle.bat -Stop` 只停车载端，8771/8770/8090 不受影响（实测 8773 释放、8771 仍在）。
+  - 浏览器只在**一个**页面打开，按 frontend → vehicle → workbench 取首选；原来写死 `frontend` 导致 `-Only vehicle` 不开浏览器。
+  - `Save-State` 由覆盖改为合并（只保留进程仍在的旧记录）：先起三件套再 `-Only vehicle` 时旧登记不再被冲掉，否则 `-Stop` 找不到它们只能 taskkill。
+- **修 `environment.ps1` 双 BOM（我的回归）**：文件开头是 `EF BB BF EF BB BF`，dot-source 时第二个 BOM 变成不可见字符，报「无法将“﻿#”项识别为 cmdlet」。这是 11-15 rebase 解冲突时用 `utf-8-sig` 读（只剥一层）再用 `utf-8-sig` 写（又加一层）留下的。已归一为单 BOM，全仓扫 `.ps1/.py/.md/.bat/.js/.html/.css/.json` 无第二处。**`./vehicle.ps1 web` 之前也会踩这条**（它同样 dot-source 该文件），只是警告没被当成失败。
+- 环境限制：在自动化终端里 `Start-Process` 子进程会随调用结束被回收，所以"启动→验证→停止"必须在同一次调用内完成；桌面双击 `start-vehicle.bat` 不受此限（服务是独立进程，关窗口不影响）。
+
+## 2026-11-16 · 车载 live 采集失败归因 + 设备准备脚本（prepare-vehicle-device）
+
+- 现象：8773 上传 `app-debug.apk` 选「新建 AAOS 采集」，静态 2.2 s、反编译 10.8 s 均完成，`AAOS 设备采集` 2.2 s 红，报「设备命令失败」，事件在 capture 阶段 `failed`，审计与看板停在等待。
+- 归因（不是工具/靶子/规则问题）：`job.json` `mode=live, serial=emulator-5554`；`failure.log` 栈为 `workflow.py:26 → capture_device.py:25 ordinary_identity → call('shell','pm','list','features')`，返回码 1；同一时刻 `adb devices` **空列表**。即设备不在线，采集的第一条前置命令就失败（该命令用于判定 `android.hardware.type.automotive`）。
+- 另一层限制：在本机自动化会话里 `Start-Process` 起的模拟器会在调用结束时被回收——实测两次都能在 21 s 内 `sys.boot_completed=1`、`characteristics=automotive`，但调用一结束进程即消失。因此模拟器必须由用户自己的窗口启动（桌面双击 `prepare-vehicle-device.bat` 或 `start-vehicle.bat`）。
+- 新增 `prepare-vehicle-device.ps1` / `.bat`：按 live 采集的真实前置逐条落实并复核——① 起 AVD `VScanner_AAOS_35_P1`（`ANDROID_AVD_HOME` 指向 `output/vehicle-device-setup/avd`）② 等开机 ③ `adb root`（以 `shell id` 的 uid=0 为准，不看 `adb root` 回显）④ `pm list features` 校验 automotive + API 35 + 当前用户 ⑤ 推送并 `nohup` 启动 frida-server 到 `127.0.0.1:27043` ⑥ 比对装机 APK 与本地 sha256，不一致才重装到 user 10 ⑦ `am start` 并 `pidof` 确认在跑。
+- 实测（完整一遍）：adb 解析 → 模拟器 21 s 开机 → root `uid=0` → AAOS/API 35/user 10 → frida-server pid 2171 → 装机 sha256 `5ed05e6c…7df22a0` 与本地一致（不重装）→ 应用 pid 2428。脚本 253 行，`Parser::ParseFile` 语法通过；失败路径也验过（`-NoEmulator -BootTimeoutSec 4` 给出超时原文并以 1 退出）。
+- 三个 PS 5.1 实务坑（都已在脚本内处理）：`HTTPS_PROXY`/`https_proxy` 大小写重复让 `Start-Process` 直接抛「已添加项」，启动前归一；`adb pull/push` 的进度写 stderr，在 `$ErrorActionPreference='Stop'` 下会变成终止性 `NativeCommandError`，统一经 `Invoke-Adb` 并临时放宽；`adb shell "... &"` 不 `nohup` 且不重定向 stdin 时，客户端会一直等 pty → 脚本挂死，改成 `nohup … >/dev/null 2>&1 </dev/null &` 并给客户端 10 s 超时。
+- 已知：`start-all.ps1` 现 365 行，超项目 300 行约定（守卫只管 .py，暂未拦），下次拆成 `tools/start_all_lib.ps1`。
+
+## 2026-11-16 · 车载 AI 证据包去重与值级分档（P0 修复）
+
+- 触发：真模型首跑（`output/ai-realcheck-20261116-1540`）的 finding-1 hint 里出现「evidence_capabilities.value_match=false 与 finding 的 value_match=true 不一致…证据矛盾」。核查确认不是幻觉：证据包同一行内两个同名字段语义相反。
+- 改动：
+  - `vehicle/ai/review.py`：`evidence_package` 不再下发原始 `value_match`（pairs 是唯一权威）；SYSTEM 提示补 `value_basis` 三档说明。
+  - `vehicle/ai/evidence_capability.py`：新增 `VALUE_PLAINTEXT_BASES` / `VALUE_HASHED_BASES` 与 `value_basis()`；`value_match` 只在明文等值命中时为 true，新增 `value_match_hashed`；`property_marker_only` 只在确无内容级匹配时为 true；未知依据记 `unknown`；`evidence_state` 增 `content_hash_match`；新增「以哈希形式」claim 规则；否定窗口 6→12 字符并补 `无法确认/不能确认/无法核实/未能确认`。
+  - 测试：新增 `vehicle/ai/test_value_basis.py`（8 例），`test_evidence_capability.py` 补 2 例否认式用例，并把值级档位测试拆出以守住 300 行约定；`tools/run_regressions.py` 登记新组。
+  - 决策记录：`vehicle/analyze/DECISIONS.md` D520。
+- 验证：
+  - `python -m unittest vehicle.ai.test_evidence_capability vehicle.ai.test_value_basis` → 29 例全过。
+  - `python tools/run_regressions.py` → 22 组全部 exit 0（含 `completion` 守卫；首轮曾因测试文件 306 行被判红，拆分后回绿）。
+  - 真跑 `output/ai-fixcheck-20261116-1602`：`{"status":"completed","findings":2}`，1 次调用 HTTP 200、无 `validation-error-*`；finding-1 hint 变为「明文等值命中（value_basis=plaintext，pair_count=2）…但 source_located=false…」，不再出现「证据矛盾」，优先级由 medium 升到 high。
+  - 对照：修复前 `output/ai-fixcheck-20261116-1556` 首轮因「无法确认具体值泄露、唯一来源或归属」误判越界触发一次重试（`ai/validation-error-0.txt`），修复后同输入零重试。
+- 未做（已声明边界）：`value_match` 仍只认明文等值，哈希档不授予「已传输具体值」也不授予 `source_located`；来源收敛条件未放宽。`start-all.ps1` 仍不传 `--ai-config`，一键启动默认离线（见 `vehicle/frontend/README.md:59`）。
+
+## 2026-11-16 · 车载 AI 复核接入启动脚本 + 全链路实测（含一处未修缺陷）
+
+- 接入：`start-all.ps1` 的 vehicle 服务默认带 `--ai-config vehicle\ai\config.local.json`（该文件在 `.gitignore`，本机已有 35 字符 key、`deepseek-chat`）；找不到只警告不阻断，`-NoAi` 显式关。`/api/config` 由 `ai_configured=false` 变为 **true**，页面「辅助复核」可勾选。
+- 顺手修的两件事：① hook bundle 是 2026-11-10 构建、7 个源码已变更，`stale_hook_bundle` 直接拒跑——按提示 `core\frida_host\build.py --platform vehicle` 重建 13 个 bundle（`hook_vehicle_all` 884,991 B）；② 新增 `tools/vehicle_demo_e2e.py`（154 行）：读 config → 预授予可授的车载权限 → uiautomator 取按钮坐标 → 原始字节 POST 上传 → 轮询阶段 → 进入 capture 后点按钮 → 打印结论/AI/阶段耗时。
+- **一次完整通过**（`output/vehicle-web/v-67c13e7c24bb4eee98f96b63dec5e10d`）：5 阶段全 done，总 68.9 s（static 2.7 s / decompile 17.2 s / capture 39.9 s / audit 9.1 s / dashboard 0.04 s）；`findings=11`，**observed 5**（PERF_VEHICLE_SPEED、GEAR_SELECTION、CURRENT_GEAR、FUEL_LEVEL、EV_BATTERY_LEVEL）+ candidate 6；采集校验 10/10 全 true；AI 返回 11 条 review，observed 级 `review_priority=medium`、候选级 `low`，全部 `needs_human_review=true`，`evidence_sha256=c3204bf0…`。
+- **未修缺陷（重要）**：收尾偶发卡死。4 次里 3 次 `workers_stopped_cleanly=false`——`reads` worker 在 `script.unload()` 上不再返回，30 s 后被 `stop_workers` 强杀（`exit_code=1, forced=true`），整轮判 `capture_unhealthy`，但**证据本身完整**（reads.jsonl 13–49 行、其余 9 条校验全 true）。对照通过的轮次，6 个释放动作各耗时 0.003–0.008 s，说明不是"慢"而是真阻塞。已在 `core/frida_host/shutdown.py` 加 `FRIDA_CLEANUP_START <stage>` 埋点（下一步就能看到卡在哪一步），根因未定位。
+- 另两条实测结论：① 点「索权演示」会拉起运行时权限框，`original_process_alive=false`（应用被拖死），随后 detach 卡住——演示与自检只点「读取 VHAL → 外泄 HTTP」，权限结论走清单静态分析；② AI 返回的 `model` 字段是 `deepseek-flash`，与 `config.local.json` 里的 `deepseek-chat` 不一致（服务端回显），不影响结果，但报告引用时不要直接当配置值。
+- 演示口径：静态 + live 采集 + AI 三段都能现场跑；若采集报 `capture_unhealthy` 且失败项只有 `workers_stopped_cleanly`，直接「重试」即可（证据已落盘，别把它读成"没采到"）。
+
+## 2026-11-16 · capture_unhealthy 假阴性 + AI 复核失败连带整轮失败（两个 P0）
+
+- 现象：8773「新建 AAOS 采集」失败，弹窗「设备命令失败 / 采集健康校验未通过」，`capture/verification.json` 10 条判据里**只有 `original_process_alive=false`**，其余全 true；而同一时刻 `pidof com.vscanner.targetapp` 仍是 2533，`process-lifecycle.jsonl` 30/30 次采样都是 `[2533]`。即**假阴性**，不是应用崩溃。
+- 根因（已用现场数据复现）：`capture.py` 的 `initial_pid` 来自 `re.search(r'attached pid (\d+)', reads.log)`。驱动要**全部脚本加载完**才打印这一行，而就绪判据在 `TLS_BYPASS_DISABLED`（`readiness.py:30`）就翻真——用该轮 `reads.jsonl` 逐条喂 `readiness.ready`，第 11 条即成立，`attached pid` 要到第 15 条之后才出现，窗口约 70ms，而 `wait_until` 轮询 250ms。抢在这个窗口里读日志 → `initial_pid=None` → `alive = initial_pid is not None and ...` 直接短路为 False，并且不会抛异常（所以 `device_cleanup_and_identity` 也不会出现），表面看就像"进程死了"。
+- 修法：新增 `vehicle/pipeline/capture_process.py`（58 行，含授权声明）。`attached_pid()` 按 **钩子事件 pid > 生命周期 `attached_pids` > 日志行** 三级解析并返回来源；`process_alive()` 有 pid 走 `/proc/<pid>`，没有则降级 `pidof` 并显式标注 `weaker_than_proc_check`（不把降级当强证据）。`verification.json` 新增 `original_process: {pid, pid_source, probe, passed}`，判定从此可复核。`capture.py` 从 346 拆回 **300 行**（守卫上限）。实测：`pid_source=reads_event, probe=proc_dir, passed=true`，10/10 判据全绿。
+- 第二个 P0（同一轮暴露）：AI 复核失败会**连带整轮 audit 失败**。该轮 `failure.log`：`vehicle/ai/review.py:91 → core/ai/llm_client.py:162 LLMError: Tunnel connection failed: 502 Bad Gateway`，此时 `findings.jsonl` 已在盘上，但 PDF 与看板都没产出。改成 `audit.ai_review()` 包装：失败返回 `{status:'failed', degraded:true, reason, error}` 继续出报告，复核失败在 summary/报告/结果页都可见。用指向死端口 `127.0.0.1:9` 的临时配置验证：`pipeline_status=completed`、11 条结论、PDF 96KB、`ai_review.status=failed`。
+- 第三个缺陷（AI 为什么老失败）：`evidence_capability` 的否定词表漏了单字「无」，后缀表只有「无法证实」。真实模型输出 `无值匹配、无哈希命中` 与 `政策披露一致性无法判定` 两句**正确的否定句被判越界**，两次尝试都因此作废。补 `无` 到 `NEGATION_MARKERS`、`无法判定/无法确认/无法核实/难以判定` 到 `DENIAL_SUFFIXES`，越权断言（`已传输具体车速`、`值以哈希形式出现`、`证据不足，但已传输具体车速`）仍全部拦下。修后同一份采集 AI 复核 **11/11 completed**。
+- 验证：`vehicle/pipeline` 112/112、`vehicle/ai` 29/29、工程守卫 13/13、测试清单 `unregistered=0 stale=0`。新增回归：`AttachedPidResolutionTests`（5 条，含"日志缺行仍能从事件拿到 pid"）、`AiReviewDegradeTests`（1 条）、两条真实否定句（`test_evidence_capability`）。
+- 环境提示：自动化终端会回收 `Start-Process` 起的模拟器，本轮复验到一半设备被回收；桌面演示仍需先跑 `prepare-vehicle-device.bat`。

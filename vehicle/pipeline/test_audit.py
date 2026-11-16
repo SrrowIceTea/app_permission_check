@@ -132,5 +132,23 @@ class AuditPipelineTests(unittest.TestCase):
             self.assertFalse((folder / 'vehicle-audit.pdf').exists())
 
 
+class AiReviewDegradeTests(unittest.TestCase):
+    """LLM 端点故障不得带走整轮审计（2026-11-16 代理 502 实测）。"""
+
+    def test_review_failure_returns_named_gap_instead_of_raising(self):
+        from vehicle.pipeline import audit as audit_module
+
+        def boom(*args, **kwargs):
+            raise RuntimeError('Tunnel connection failed: 502 Bad Gateway')
+
+        with patch('vehicle.ai.review.review', boom):
+            result = audit_module.ai_review([], 'profile', 'cfg.json', Path('out'), {})
+
+        self.assertEqual('failed', result['status'])
+        self.assertTrue(result['degraded'])
+        self.assertIn('502 Bad Gateway', result['error']['message'])
+        self.assertEqual('RuntimeError', result['error']['type'])
+
+
 if __name__ == '__main__':
     unittest.main()

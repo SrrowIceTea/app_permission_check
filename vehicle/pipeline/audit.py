@@ -23,6 +23,23 @@ from vehicle.pipeline.evidence_manifest import (
     artifact_ref, capture_paths, fingerprints, input_manifest, verify_document, verify_refs)
 from vehicle.pipeline.preflight import validate_capture
 from vehicle.pipeline.scenarios import load_scenarios
+
+
+def ai_review(records, profile, ai_config, output, policy):
+    """AI 复核是辅助证据，不是交付前提：调用失败留痕降级，不带走整轮审计。
+
+    2026-11-16 实测：LLM 端点经本机代理偶发 `502 Bad Gateway`，`review()` 抛
+    LLMError 后整轮 audit 判 failed，findings.jsonl 已经在盘上却不出 PDF 与看板。
+    复核本身写明"不替代证据校验"，所以这里把它降级成 status=failed 的显式缺口，
+    失败原因进 summary.json / 报告 / 结果页，其余阶段仍然 fail-closed。
+    """
+    from vehicle.ai.review import review
+    try:
+        return review(records, profile, Path(ai_config), output, policy=policy)
+    except Exception as error:  # noqa: BLE001 - 失败必须落到 summary 与报告，不能静默
+        return {'status': 'failed', 'degraded': True,
+                'reason': 'AI 复核调用失败，本轮未产出研判；证据、规则命中与 PDF 不受影响。',
+                'error': {'type': type(error).__name__, 'message': str(error)[:300]}}
 from vehicle.policy.assessment import assess_policy
 
 
@@ -182,9 +199,8 @@ def _audit(execution, capture, output, package, version, scenarios, ai_config, p
     document['review_order_caveat'] = 'Experimental engineering weights; not calibrated risk probability.'
     document['ai_review'] = {'status': 'skipped', 'reason': 'AI configuration not supplied'}
     if ai_config:
-        from vehicle.ai.review import review
-        document['ai_review'] = stage('ai_review', lambda: review(records, profile,
-            Path(ai_config), output / 'ai', policy=document['policy_assessment']))
+        document['ai_review'] = stage('ai_review', lambda: ai_review(records, profile,
+            ai_config, output / 'ai', document['policy_assessment']))
     if pdf:
         report_input = output / 'report-input.json'
         write_json(report_input, document)

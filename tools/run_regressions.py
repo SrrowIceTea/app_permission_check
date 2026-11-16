@@ -79,6 +79,7 @@ CHECKS = [
         'vehicle.analyze.test_method_evidence', 'vehicle.analyze.test_coverage_layers',
         'vehicle.analyze.test_detection_summary', 'vehicle.analyze.test_batch_alignment',
         'vehicle.ai.test_evidence_capability',
+        'vehicle.ai.test_value_basis',
         'vehicle.bench.test_ablation', 'vehicle.bench.test_governance',
         'vehicle.bench.test_cross_model_review', 'vehicle.bench.test_claim_verdicts',
         # 四种判定口径反例 + 命题↔求值器契约（2026-11-17 周二小 PR）

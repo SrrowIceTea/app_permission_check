@@ -1,19 +1,19 @@
 {
   "schema": 1,
-  "platform": "shared",
+  "platform": "vehicle",
   "bundle": "hook_egress.bundle.js",
-  "bundle_sha256": "e8f527bccc84cfe684c53164da279635a431c991813e73f62ffc6ad1e72e18c5",
-  "bundle_bytes": 729893,
+  "bundle_sha256": "1617d54b8e46ce6c2c497c7d3f562275df01512fba4754e1083c99451eb49592",
+  "bundle_bytes": 733493,
   "entry": "vehicle/hooks/hook_egress.js",
-  "built_at": "2026-11-11T15:15:36+08:00",
+  "built_at": "2026-11-16T16:06:25+08:00",
   "builder": {
     "path": "core/frida_host/build.py",
     "sha256": "e4c88dff962d39f717e422f332e9cb6d8727f4235232d0d8dd0e4ec830669ae7"
   },
-  "source_fingerprint": "1c852b0c514cb7ed5bd09016aaffd4fa87f5499e56c802af013d87061adfbd48",
+  "source_fingerprint": "54e330a77e09717f49cc2db76820fa4b73fc31edf79835f53a1538f0fd986bd4",
   "sources": {
-    "core/frida_host/request_targets.js": "efa213faaf2ab55c4e6aca19ae5a032a794b4f72da35036b98b20f2f464c6b2e",
-    "vehicle/hooks/hook_egress.js": "21006f3028e718c527c174ca689e4a4008cdff234387ff3d1a9c4dbc00627b43",
+    "core/frida_host/request_targets.js": "141e06687f5c2d5059fddc778486a0ce6ea87aa01a55e5bbc84a6c7705956d5b",
+    "vehicle/hooks/hook_egress.js": "f87d604db5d00ebc913c1d229dce9c57c125788c71e7b3516f79397fbd2b0cd8",
     "vehicle/hooks/scope.js": "e0feaa386042b532eb569215ec600e9c591e270c1e693fc2555b6f33bf8eb2cb",
     "vehicle/hooks/vscan_runtime.js": "8906b4c5061ed9a57bd44e6e2ff9c55336df5c9068281ae2141a093cdfe1a132"
   },

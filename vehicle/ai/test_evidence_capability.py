@@ -136,6 +136,11 @@ class ReviewRegressionTests(unittest.TestCase):
             '尚不能声称已定位到具体读取',
             '并非来自这次读取',
             '本轮未观测到任何值，需复核属性名命中的证据局限',
+            # 2026-11-16 真实模型输出：单字「无」不在否定词表，被误判越界。
+            '观测到 PERF_VEHICLE_SPEED 属性相关取值，但无值匹配、无哈希命中、来源未定位',
+            '无明文命中，且未定位唯一来源',
+            # 否定落在短语之后（后缀表原先只有「无法证实」）。
+            '来源未定位，政策披露一致性无法判定',
         )
         for hint_text in negated:
             self.assertEqual([], capability_problems(hint_text, caps), hint_text)
@@ -144,6 +149,21 @@ class ReviewRegressionTests(unittest.TestCase):
         caps = capabilities(marker_finding())
         for hint_text in ('已传输具体车速', '政策已覆盖该属性', '唯一来源已确认'):
             self.assertTrue(capability_problems(hint_text, caps), hint_text)
+
+    def test_p1_2_denial_with_enumeration_stays_in_scope(self):
+        # 2026-11-16: real model output "无法确认具体值泄露、唯一来源或归属" was
+        # rejected because "、" is not a clause break and the negation stood more
+        # than 6 characters before "唯一来源". That cost a retry on every run.
+        caps = capabilities(marker_finding())
+        for text in ('且 source_located=false，无法确认具体值泄露、唯一来源或归属',
+                     '本轮无法核实归属、唯一来源与具体值',
+                     '不能确认已定位到具体读取或已传输具体车速'):
+            self.assertEqual([], capability_problems(text, caps), text)
+
+    def test_p1_2_denial_opener_does_not_exempt_a_contrast_clause(self):
+        caps = capabilities(marker_finding())
+        self.assertTrue(capability_problems('无法确认来源，但已传输具体车速', caps))
+        self.assertTrue(capability_problems('无法核实身份；来源已确定', caps))
 
     def test_p2_2_agreements_and_failed_extraction_are_not_policy_text(self):
         base = {'apk_sha256': 'X', 'source_sha256': 'Y', 'extraction_status': 'ok'}

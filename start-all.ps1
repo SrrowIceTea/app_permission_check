@@ -4,27 +4,36 @@
     一键启动 V-Scanner 前后端（仅用于授权测试）。
 
 .DESCRIPTION
-    起 3 个常驻服务，等健康检查通过后打开浏览器；支持只起其中几个、查看状态、一键停止。
+    起常驻服务，等健康检查通过后打开浏览器；支持只起其中几个、查看状态、一键停止。
     服务与端口：
         pipeline  : 8771  一键审计流水线（移动端动态，mobile/pipeline）
         workbench : 8770  静态工作台（反编译 / 规则命中 / 静动交叉，vehicle/workbench）
         frontend  : 8090  零构建前端（frontend/，入口 app.html）
-        vehicle   : 8773  车载工作台（vehicle/webapp，默认不起，用 -Only vehicle 显式开）
+        vehicle   : 8773  车载工作台（vehicle/webapp，前后端同端口，默认不起）
+
+    车载端只需一个进程：vehicle/webapp 自己提供 /frontend/ 静态文件，
+    双击 start-vehicle.bat 即等价于 .\\start-all.ps1 -Only vehicle。
 
     为什么不用 start-frontend.bat：那个脚本用 cmd 开三个窗口，关窗口才停；
     这里把 PID 落到 output\logs\start-all.json，可 -Status 查、-Stop 停，日志也留盘。
 
 .PARAMETER Only
     只起指定服务，默认 frontend,pipeline,workbench。
+    车载端用 -Only vehicle（或直接 start-vehicle.bat）。
 
 .PARAMETER NoBrowser
     不自动打开浏览器。
 
 .PARAMETER Stop
     停止上次由本脚本启动的服务（按 state 文件里的 PID）。
+    显式传 -Only 时只停其中几个，其余保留登记。
 
 .PARAMETER Status
     只查状态，不启动。
+
+.PARAMETER NoAi
+    不启用 AI 辅助复核。默认启用：找到 vehicle\ai\config.local.json 就带 --ai-config，
+    页面上的「辅助复核」才可选；找不到时只警告，服务照常起（不联网）。
 
 .PARAMETER TimeoutSec
     每个服务等待健康检查的秒数，默认 30。
@@ -32,8 +41,10 @@
 .EXAMPLE
     .\start-all.ps1
     .\start-all.ps1 -Only pipeline,frontend
+    .\start-all.ps1 -Only vehicle
     .\start-all.ps1 -Status
     .\start-all.ps1 -Stop
+    .\start-all.ps1 -Only vehicle -Stop
 #>
 param(
     [ValidateSet('frontend', 'pipeline', 'workbench', 'vehicle')]
@@ -41,6 +52,7 @@ param(
     [switch]$NoBrowser,
     [switch]$Stop,
     [switch]$Status,
+    [switch]$NoAi,
     [int]$TimeoutSec = 30
 )
 
@@ -74,6 +86,24 @@ function Repair-ProxyEnvCase {
     }
     foreach ($key in $keys) { [Environment]::SetEnvironmentVariable($key, $null, 'Process') }
     foreach ($key in $values.Keys) { [Environment]::SetEnvironmentVariable($key, $values[$key], 'Process') }
+}
+
+function Import-Environment {
+    # 与 vehicle.ps1 一样 dot-source environment.ps1：它把 SDK\platform-tools、JDK、Python 目录
+    # 加进 PATH，并设 JAVA_HOME / PYTHONUTF8 / JAVA_TOOL_OPTIONS。车载静态分析（jadx 要 java）、
+    # 车载新建采集（adb）和流水线的 boot 阶段都靠这些。Start-Process 的子进程继承本进程环境块，
+    # 所以在这里载入一次就够；载入失败不阻断启动，只把症状说清楚。
+    $envFile = Join-Path $Root 'environment.ps1'
+    if (-not (Test-Path -LiteralPath $envFile)) {
+        Write-Warn2 '没有 environment.ps1，按系统现有 PATH / JAVA_HOME 启动（jadx、adb 可能找不到）'
+        return
+    }
+    try {
+        . $envFile
+        Write-Ok ("环境已载入：JAVA_HOME={0}" -f $(if ($env:JAVA_HOME) { $env:JAVA_HOME } else { '<未设置>' }))
+    } catch {
+        Write-Warn2 ("environment.ps1 载入失败：{0}（继续用系统环境）" -f $_.Exception.Message)
+    }
 }
 
 function Resolve-Python {
@@ -122,6 +152,20 @@ function Test-Health([string]$Url) {
 function Get-Services {
     $py = Resolve-Python
     $common = @{ Python = $py; Root = $Root }
+    # 车载 AI 辅助复核：配置文件在仓库里（已被 .gitignore 忽略），存在即启用。
+    # 不传 --ai-config 时服务不联网，页面会以 ai_not_configured 拒绝勾选 AI。
+    $aiConfig = $null
+    if (-not $NoAi) {
+        $candidate = Join-Path $Root 'vehicle\ai\config.local.json'
+        if (Test-Path -LiteralPath $candidate) {
+            $aiConfig = $candidate
+        } else {
+            Write-Warn2 '未找到 vehicle\ai\config.local.json：本轮不启用 AI 辅助复核（-NoAi 可显式关掉本条提示）'
+        }
+    }
+    $vehicleArgs = @('-m', 'vehicle', 'web', '--port', '8773',
+        '--workdir', (Join-Path $Root 'output\vehicle-web'))
+    if ($aiConfig) { $vehicleArgs += @('--ai-config', $aiConfig) }
     return @(
         @{
             Name    = 'pipeline'
@@ -131,6 +175,7 @@ function Get-Services {
             File    = $common.Python
             Args    = @('mobile\pipeline\server.py', '--port', '8771',
                 '--workdir', (Join-Path $Root 'output\pipeline-runs'))
+            Url     = $null
             Note    = '一键审计流水线（动态阶段需要 adb 设备）'
         },
         @{
@@ -140,6 +185,7 @@ function Get-Services {
             WorkDir = $Root
             File    = $common.Python
             Args    = @('vehicle\workbench\server.py', '--port', '8770')
+            Url     = 'http://127.0.0.1:8770/'
             Note    = '静态工作台（反编译 / 规则命中）'
         },
         @{
@@ -149,16 +195,20 @@ function Get-Services {
             WorkDir = Join-Path $Root 'frontend'
             File    = $common.Python
             Args    = @('-m', 'http.server', '8090', '--bind', '127.0.0.1')
+            Url     = 'http://localhost:8090/app.html'
             Note    = '前端静态页（零构建）'
         },
         @{
             Name    = 'vehicle'
             Port    = 8773
-            Health  = 'http://127.0.0.1:8773/'
+            Health  = 'http://127.0.0.1:8773/api/config'
             WorkDir = $Root
             File    = $common.Python
-            Args    = @('vehicle\webapp\server.py', '--port', '8773')
-            Note    = '车载工作台（默认不启动）'
+            # 走文档入口 python -m vehicle web，与 ./vehicle.ps1 web 同一条路；
+            # 不直接点 server.py，避免以后入口改参数时这里悄悄失效。
+            Args    = $vehicleArgs
+            Url     = 'http://127.0.0.1:8773/'
+            Note    = $(if ($aiConfig) { '车载工作台（单端口，含 AI 辅助复核）' } else { '车载工作台（单端口，AI 未启用）' })
         }
     )
 }
@@ -209,10 +259,14 @@ function Invoke-Status($Services) {
     }
 }
 
-function Invoke-Stop {
-    $states = Read-State
+function Invoke-Stop([string[]]$Names) {
+    $states = @(Read-State)
     if ($states.Count -eq 0) { Write-Warn2 '没有本脚本登记过的服务。'; return }
+    # 显式传 -Only 时只停这几项，其余继续登记，避免停车载时把移动端服务一起带走。
+    $keep = @()
     foreach ($row in $states) {
+        if (-not $row.name) { continue }
+        if ($Names -and ($Names -notcontains $row.name)) { $keep += $row; continue }
         if (-not $row.pid) { continue }
         $proc = Get-Process -Id $row.pid -ErrorAction SilentlyContinue
         if (-not $proc) { Write-Warn2 ("{0}：PID {1} 已不在" -f $row.name, $row.pid); continue }
@@ -221,16 +275,24 @@ function Invoke-Stop {
             Write-Ok ("已停止 {0}（PID {1}）" -f $row.name, $row.pid)
         } catch {
             Write-Err2 ("停止 {0} 失败：{1}" -f $row.name, $_.Exception.Message)
+            $keep += $row
         }
     }
-    Remove-Item -LiteralPath $StateFile -Force -ErrorAction SilentlyContinue
+    if ($keep.Count -gt 0) { Save-State $keep }
+    else { Remove-Item -LiteralPath $StateFile -Force -ErrorAction SilentlyContinue }
 }
 
 Repair-ProxyEnvCase
+Import-Environment
 $services = Get-Services
 
 if ($Status) { Invoke-Status $services; exit 0 }
-if ($Stop) { Invoke-Stop; exit 0 }
+if ($Stop) {
+    $stopNames = $null
+    if ($PSBoundParameters.ContainsKey('Only')) { $stopNames = $Only }
+    Invoke-Stop $stopNames
+    exit 0
+}
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $selected = $services | Where-Object { $Only -contains $_.Name }
@@ -258,12 +320,25 @@ foreach ($svc in $selected) {
         port    = $svc.Port
         started = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
         health  = $svc.Health
+        url     = $svc.Url
         out     = $outLog
         err     = $errLog
     }
 }
 
-Save-State $started
+# 合并而不是覆盖：先起过移动端三件套、再 -Only vehicle 时，旧记录不能被冲掉，
+# 否则 -Stop 找不到它们，只能手工 taskkill。只保留进程仍在的旧记录。
+$previous = @(Read-State)
+$stillAlive = @($previous | Where-Object {
+    $_.name -and ($_.pid) -and
+    ($started.name -notcontains $_.name) -and
+    (Get-Process -Id $_.pid -ErrorAction SilentlyContinue)
+})
+if ($stillAlive.Count -gt 0) {
+    Write-Step ("另有 {0} 个早前启动的服务在运行：{1}" -f $stillAlive.Count,
+        (($stillAlive | ForEach-Object { "$($_.name):$($_.port)" }) -join ' '))
+}
+Save-State (@($stillAlive) + @($started))
 
 $deadline = (Get-Date).AddSeconds($TimeoutSec)
 foreach ($row in $started) {
@@ -282,9 +357,19 @@ foreach ($row in $started) {
     }
 }
 
-if (-not $NoBrowser -and ($started.name -contains 'frontend')) {
-    Start-Process 'http://localhost:8090/app.html'
-    Write-Ok '浏览器已打开：http://localhost:8090/app.html'
+if (-not $NoBrowser) {
+    # 只开一个页面，不按服务逐个开：默认组合是前端工作台，只起车载时是车载工作台。
+    $priority = @('frontend', 'vehicle', 'workbench')
+    $open = $null
+    foreach ($name in $priority) {
+        if ($failed -contains $name) { continue }
+        $open = $started | Where-Object { $_.name -eq $name -and $_.url } | Select-Object -First 1
+        if ($open) { break }
+    }
+    if ($open) {
+        Start-Process $open.url
+        Write-Ok ("浏览器已打开：{0}" -f $open.url)
+    }
 }
 
 Write-Host ('-' * 62)

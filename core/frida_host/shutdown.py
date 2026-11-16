@@ -40,6 +40,8 @@ def cleanup(frida, session, script, callback, detached, stream, store, *, timeou
     def release(name, operation, bounded=False):
         started = time.monotonic()
         row = {'stage': name, 'passed': False}
+        # 先打一行再执行：收尾若卡死，日志最后一行就是卡住的那一步。
+        print('FRIDA_CLEANUP_START ' + name, flush=True)
         try:
             if bounded:
                 with frida.Cancellable() as cancellation:

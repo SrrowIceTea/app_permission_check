@@ -9,14 +9,43 @@
 
 ## 启动
 
-在项目根目录执行：
+在项目根目录执行（最省事）：
+
+```cmd
+start-vehicle.bat
+:: 浏览器访问 http://127.0.0.1:8773 ，-Stop 只停车载端，-Status 看端口/健康
+```
+
+等价入口：
 
 ```powershell
 ./vehicle.ps1 web
 # 浏览器访问 http://127.0.0.1:8773
 ```
 
+`start-vehicle.bat` 就是 `.\start-all.ps1 -Only vehicle`，与 `./vehicle.ps1 web` 同走
+`python -m vehicle web`。三者都会 dot-source `environment.ps1`（PATH / JAVA_HOME），
+因为静态分析要 `jadx` + `java`，新建采集要 `adb`；直接 `python vehicle/webapp/server.py`
+会缺这些，不建议。
+
 也可以 `. ./environment.ps1` 后执行 `& $VScanPython -m vehicle web`。
+
+「新建 AAOS 采集」要求设备侧五件事同时成立：AAOS 特征、API 35、装在 user 10 且
+sha256 与上传的 APK 一致、应用**正在运行**、frida-server 监听 `127.0.0.1:27043`。
+缺任何一条，采集阶段会在第一条设备命令处中止（报 `设备命令失败` 或 `未检测到运行中的授权 App`）。
+用同目录的脚本一次备好：
+
+```cmd
+prepare-vehicle-device.bat              :: 起模拟器 → root → frida-server → 装靶子 → 拉起应用
+prepare-vehicle-device.bat -NoEmulator  :: 设备已由别处启动
+```
+
+窗口内只需点「**读取 VHAL**」→「**外泄 HTTP**」。不要点「索权演示」：它会拉起运行时权限框，
+实测把应用拖死，随后 frida detach 卡住、reads worker 被强杀，整轮判 `capture_unhealthy`；
+权限类结论（VSC-P001~P006）来自清单静态分析，不需要点它。
+
+服务默认带 AI 辅助复核（`start-all.ps1` 找到 `vehicle/ai/config.local.json` 即传 `--ai-config`）。
+全链路自检：`python tools/vehicle_demo_e2e.py --base http://127.0.0.1:8773`。
 默认任务目录为 `output/vehicle-web`，每次上传生成独立 UUID 目录，失败也保留。
 停止服务时等待当前任务完成；强制结束进程后，下次启动将未结束任务标为失败，绝不假定已回滚设备状态。
 同一工作目录只能由一个服务进程持有。

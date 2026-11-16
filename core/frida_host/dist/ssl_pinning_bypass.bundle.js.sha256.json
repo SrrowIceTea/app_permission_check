@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "platform": "shared",
+  "platform": "vehicle",
   "bundle": "ssl_pinning_bypass.bundle.js",
-  "bundle_sha256": "e6c26e906912aff4c13f0459c9adf86be799328c461958703dd630dd0430d009",
-  "bundle_bytes": 745978,
+  "bundle_sha256": "96b0afb1159a4f7bb9e39a51b599c942b0c141f1d727503e79a65ad24229cb1a",
+  "bundle_bytes": 749578,
   "entry": "vehicle/hooks/ssl_pinning_bypass.js",
-  "built_at": "2026-11-11T15:15:36+08:00",
+  "built_at": "2026-11-16T16:06:24+08:00",
   "builder": {
     "path": "core/frida_host/build.py",
     "sha256": "e4c88dff962d39f717e422f332e9cb6d8727f4235232d0d8dd0e4ec830669ae7"

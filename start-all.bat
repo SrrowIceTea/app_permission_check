@@ -4,6 +4,7 @@ rem  V-Scanner one-click launcher (frontend + backends)
 rem  Double-click, or pass flags through to start-all.ps1:
 rem    start-all.bat                 start frontend + pipeline + workbench
 rem    start-all.bat -Only pipeline  start the audit pipeline only
+rem    start-all.bat -Only vehicle   start the vehicle workbench (8773)
 rem    start-all.bat -Status         show ports / health
 rem    start-all.bat -Stop           stop services started by this script
 rem  ASCII-only on purpose: cmd.exe parses .bat in the OEM code page,
