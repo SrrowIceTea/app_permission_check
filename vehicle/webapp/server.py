@@ -87,7 +87,7 @@ class Handler(Responses, BaseHTTPRequestHandler):
             if path in ('/app.js', '/results.js', '/components.js', '/upload.js', '/source.js', '/review.js',
                         '/observation.js', '/ledger.js', '/review.css', '/vehicle.css', '/components.css',
                         '/ledger.css', '/fonts.css', '/typography.css', '/integration.js', '/job_ui.js',
-                        '/connection.js', '/finding_review_ui.js'):
+                        '/connection.js', '/finding_review_ui.js', '/theme-cinematic.css'):
                 target = WEB / path[1:]
                 return self.file(target, mimetypes.guess_type(target)[0] or 'text/plain')
             if path == '/assets/vehicle-studio.png':
@@ -95,6 +95,12 @@ class Handler(Responses, BaseHTTPRequestHandler):
             if path in ('/assets/fonts/manrope-1.woff2', '/assets/fonts/noto-sans-sc-1.woff2',
                         '/assets/fonts/noto-serif-sc-1.woff2'):
                 return self.file(WEB / path[1:], 'font/woff2')
+            if path == '/v2' or path.startswith('/v2/'):
+                base = (WEB / 'v2').resolve()
+                relative = path.removeprefix('/v2/') or 'index.html'
+                target = (base / relative).resolve()
+                if target == base or base in target.parents:
+                    return self.file(target, mimetypes.guess_type(target)[0] or 'application/octet-stream')
             if path == '/api/review-round':
                 if query:
                     return self.json({'error': {'message': '复核接口不接受路径或查询参数。'}}, 400)

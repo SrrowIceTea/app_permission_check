@@ -60,11 +60,6 @@
 - `job.json`、`events.jsonl`、`failure.log`、`static/`、`capture/`、`audit/` 保留对应轮次。
 - 默认未提供政策与场景记录时，沿用车载流水线的缺失说明，不虚构政策披露或场景覆盖。
 - `审计摘要` 下载的是 JSON，完整的可迁移证据仍保存在任务的 `audit/bundle/`。
-- 动态页的「本轮采集诊断」读取 `/summary` 的 `observation_ledger` 与 `capture_validation`：
-  漏斗各层是独立计数，不相加为检测率；后端缺字段显示 `—`（不补 0）；
-  `device_acceptance=pending` 显示「待设备验收」，采集门禁 `passed` 只表示门禁通过。
-  面板不产出结论、不推断设备验收，也不把 `gaps` / `limits` 文本当 HTML 注入。
-  新增 `ledger.js` / `ledger.css` 时须同时更新 `app.html` 与 `vehicle/webapp/server.py` 白名单。
 
 零构建：不新增 npm 工程、框架或 CDN 组件。也可在项目根启动普通静态服务，
 访问 `/vehicle/frontend/app.html`；API 使用本机 8773，需要同时启动上述车载服务。
@@ -77,9 +72,7 @@
 & $VScanPython tools/run_regressions.py --mobile
 node --check vehicle/frontend/app.js
 node --check vehicle/frontend/results.js
-node --check vehicle/frontend/ledger.js
 node --check vehicle/frontend/source.js
-node vehicle/frontend/test_ledger_panel.mjs   # 13 项离线口径断言，无需浏览器/设备
 # 实际 APK 与已登记采集目录片段，隔离 Chrome profile：
 node vehicle/webapp/browser_acceptance.mjs 授权.apk 已登记会话目录片段
 ```
