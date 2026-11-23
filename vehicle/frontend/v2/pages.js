@@ -111,6 +111,10 @@
       `<div class="loc-item">⚠ ${esc(g.reason || g)}</div>`).join('')}</div>`);
     if (!locs.length && r.code_loc_note) parts.push(`<div><div class="lbl">定位说明</div>${esc(r.code_loc_note)}</div>`);
     if (r.note) parts.push(`<div><div class="lbl">规则依据</div>${esc(r.note)}</div>`);
+    if (r.static_strength) parts.push(`<div><div class="lbl">静态强度</div>${esc(r.static_strength)}</div>`);
+    if (r.static_context && r.static_context.discrimination_note) {
+      parts.push(`<div><div class="lbl">区分说明</div>${esc(r.static_context.discrimination_note)}</div>`);
+    }
     const ev = (r.event_ids || []).slice(0, 12).map((id) => `<span class="ev-chip">#${esc(id)}</span>`).join('');
     if (ev || r.pair_count) parts.push(`<div><div class="lbl">事件证据</div>` +
       `${r.pair_count ? `<div class="loc-item">读取→外发 ${esc(r.pair_count)} 对</div>` : ''}${ev}</div>`);

@@ -24,6 +24,13 @@ VScanBench 新增同一自有 APK 的只读负控与发送对照。两个 AAOS �
 
 配对模式回归已覆盖只读 `0/0/0` 和发送 `8/5/5`。90 个签核配对重放经两个子代理独立复核一致。支持批次标识的夹具在五档组合模式下均命中 10 对正例、0 个额外候选，未丢失时间窗已命中的正例。第二夹具按时间窗重放。 [基准报告](../output/vscanbench-pairing-20261123/pilot-final.json) · [双人复核](../output/vscanbench-pairing-20261123/review-verification.json)
 
+## 车载 v2 工作台真实数据验收（2026-11-23）
+
+- 自有 APK 的静态任务（`mode=static`）跑通 v2 七页：概览 22 条候选、静态审计 22/22、源码页取到 jadx 文件树与正文；采集、关联审计、看板三页仍只有跳过态，未接设备。
+- 修复静态任务只读 `/findings`（按契约要求 `state=done`）导致概览 0 条、静态页空表：投影层改从 `static/static.json` 计数并写 `findings_count_source=static`，`/static` 复用规则标题口径。证据在 `output/v2-acceptance/`（不入库）。
+- 顶栏连接态改为「服务已连接 · 目标 AAOS 35」，不再用服务在线暗示设备已连。
+- `vehicle-webapp` 组测试含新增 4 例，46/46；根回归 21/22，唯一红仍是 `completion` 的 `vehicle/frontend/vehicle.css`（426 行）与 `v2/app.js`（317 行），两文件来自远程 main 且未登记基线。
+
 ## 车载一键审计复验（2026-11-18）
 
 - 使用自有 AAOS 35 模拟器、user 10 和仓库自有夹具，关闭 TLS 校验绕过。第一批三轮均有独立会话，采集校验 10/10，进程正常退出并生成 PDF 与看板。第三轮使用本机故障端点，AI 复核标为降级，任务状态为 `done`。

@@ -123,3 +123,13 @@
 - 范围为新增 Windows 运行清单，覆盖车载静态与动态、移动端、夹具构建、离线回归及按需工具，并核对本机已备的关键组件。
 - 新增 [运行依赖与环境清单](ENVIRONMENT_CHECKLIST.md)，按场景列出最小依赖、固定版本、端口、环境变量、首次启动及换机所需的大文件。
 - 用 `tools/python313.ps1 --version`、`core.env_guard`、`core.static.toolchain.describe` 和 `python -m vehicle --help` 核对解释器、依赖前置、静态工具和启动入口，并确认 SDK、AAOS 镜像、AVD、frida-server 和默认 APK 路径。PowerShell 示例语法 4/4、本地链接 11/11、依赖固定版本 9/9、`git diff --check` 均通过。本轮为文档核对，设备验收可查 [已封存的 AAOS 对照](../output/vscanbench-read-send-20261123/run-02/control-verification.json)。
+
+## 2026-11-23 · 车载 v2 工作台真实数据验收与静态结论接线
+
+- 范围为用仓库自有 APK 在真实静态任务上验收 v2 七页，核对前端调用的接口与后端契约是否一致；不使用设备与外部样本。
+- 真实任务 `v-d29d8ad8ed624470bd51655f9e893868`（`vehicle/targets/target-app` 的 debug APK，3.7 MB，`mode=static`）静态分析 2.2 秒、反编译 8.8 秒，终态 `static_only`，静态结论 22 条全为 `candidate`。
+- 修复一：`static_only` 任务在概览页显示 0 条结论、「静态审计」页空表——前端只读 `/findings`，而该接口按契约要求 `state=done`。`presentation.decorate` 改为静态任务从 `static/static.json` 按 `conclusion_level` 计数，写入 `findings_count_source=static` 与专用说明；`/static` 复用动态结论的规则标题口径（中文映射优先）；v2 概览对非 `done` 任务改读 `/static`。
+- 修复二：顶栏原写「已连接 · AAOS 35」，在无设备时会把服务在线读成设备已连；改为「服务已连接 · 目标 AAOS 35」。
+- 验证：七页逐页渲染（Edge headless `--dump-dom` 与 1440×980 截图，均在 `output/v2-acceptance/`）：概览「22 条结论 / 候选 22」、静态「22 / 22 条」并显示中文标题、源码页取到 jadx 文件树与 `AuditConsentActivity.java` 正文、动态页五阶段（2 完成 / 3 跳过）、AI 页降级文案、PDF 页禁用提示、复核页「未发布本轮证据复核」。未完成任务的 `/report`、`/dashboard`、`/evidence.zip`、`/summary`、`/coverage` 均为 404 + `audit_not_completed`。
+- `tools/python313.ps1 -m unittest vehicle.webapp.test_presentation vehicle.webapp.test_server vehicle.webapp.test_workflow vehicle.webapp.test_integration` 46/46；新增 4 例（静态计数只认 `conclusion_level`、`static_only` 标来源、`done` 仍用摘要、`/static` 带标题）。全量 `tools/run_regressions.py` 21/22，唯一红仍是 `completion`：`vehicle/frontend/vehicle.css` 426 行、`v2/app.js` 317 行，均为远程 main 带入且未登记基线。
+- 待办：`completion` 要绿只能拆分这两个文件（守卫 `--update` 只允许收紧，不能新增条目）；v2 的采集/关联审计/看板三页需接设备跑 `live` 或 `replay` 任务；AI 页对静态任务可给出更准确的原因文案。

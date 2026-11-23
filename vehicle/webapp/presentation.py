@@ -15,6 +15,8 @@ TERMINAL_STATUS = ('done', 'failed', 'skipped')
 COUNT_NOTE = ('correlated/observed/candidate 取自 findings.jsonl 的 conclusion_level 计数；'
               'unjudged 指没有上述三档结论等级的条目（缺失或其他取值），由 findings_total 减去各档之和得出；'
               '本工具不产出 policy_violation，计数只描述证据强度，不代表安全或合规结论。')
+STATIC_COUNT_NOTE = ('静态任务没有 audit/summary.json，分档计数取自 static/static.json 的 conclusion_level；'
+                     '静态结论只是候选，未经设备观测，不代表安全或合规结论。')
 TIMING_NOTE = '由 events.jsonl 的 ts（主机墙钟）两两相减得出；跨阶段间隙不计入任何阶段。'
 _CACHE = {}
 
@@ -114,6 +116,22 @@ def count_bands(summary):
     return bands, raw, gaps
 
 
+def static_counts(document):
+    """静态任务的四档计数：只按 findings[].conclusion_level 归类，不推算、不补默认值。"""
+    findings = document.get('findings') if isinstance(document, dict) else None
+    rows = [row for row in findings if isinstance(row, dict)] if isinstance(findings, list) else []
+    bands = {level: 0 for level in CONCLUDED}
+    unjudged = 0
+    for row in rows:
+        level = row.get('conclusion_level')
+        if level in bands:
+            bands[level] += 1
+        else:
+            unjudged += 1
+    bands[UNJUDGED] = unjudged
+    return bands, len(rows)
+
+
 def stage_timings(rows, stages):
     """按 events.jsonl 的时间戳算每阶段区间；无法成立的区间留空并写原因。"""
     grouped = {}
@@ -200,6 +218,13 @@ def decorate(snapshot, out, stages):
     total = _int(summary.get('findings_total')) if isinstance(summary, dict) else None
     if total is None:
         total = _int(result.get('findings_total'))
+    # 静态任务没有 audit 摘要：计数改取 static/static.json，并显式标来源，避免把候选当审计结论。
+    source = 'summary'
+    if snapshot.get('state') == 'static_only' and not isinstance(summary, dict):
+        static_document = _json(out / 'static/static.json')
+        if isinstance(static_document, dict):
+            bands, total = static_counts(static_document)
+            raw, gaps, source = None, {}, 'static'
     events = _rows(out / 'events.jsonl')
     data = dict(snapshot)
     data.update({
@@ -210,7 +235,8 @@ def decorate(snapshot, out, stages):
         'findings_total': total,
         'findings_by_conclusion_level': bands,
         'findings_by_conclusion_level_raw': raw,
-        'findings_by_conclusion_level_note': COUNT_NOTE,
+        'findings_by_conclusion_level_note': STATIC_COUNT_NOTE if source == 'static' else COUNT_NOTE,
+        'findings_count_source': source,
         'stage_timings': stage_timings(events, stages),
         'stage_timings_elapsed_ms': elapsed_ms(events),
         'stage_timings_note': TIMING_NOTE,
