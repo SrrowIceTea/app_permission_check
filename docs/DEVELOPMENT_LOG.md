@@ -2,6 +2,17 @@
 
 从 2026-11-15 起记录每次开发。按日期追加，同日多轮写明任务。开始时登记范围，收尾时记录改动、验证、证据和待办。达到 300 行时将旧记录转入按日期命名的分卷，并在这里保留索引。验收记录只引用可复核、无测试凭据的产物。
 
+## 2026-11-23 · 旧工作台的流程引导与悬停预览移植到 v2 七页工作台
+
+- 范围：`vehicle/frontend/v2/`。**不改**旧 `app.html` + `components.js` + `nav-flyout.js` + `page-identity.css` 体系——v2 是独立界面（暖纸白单主题、pill 顶栏、`section.view`），stash 里依赖 M3 角色变量与 `html[data-theme]` 亮暗分支的样式层（`page-identity.css` / `enhance.css`）与 `theme-toggle.js`、`nav-flyout.js` 在这套基线上没有落点，只移植功能本身。
+- 改动：
+  - 源码页从 `pages.js` 拆到新的 `v2/source.js`，并移植「悬停小窗」：260ms 防抖 + 按 `job.id|path` 缓存，只在悬浮行附近弹 5 行预览，**绝不改写右侧 `#codeView`**，点击才固定；左侧无空间时改贴锚点下方并与文件树列左对齐，避免压住右侧代码区；窄屏（≤860px）隐藏小窗。
+  - 新增 `v2/flow.js`：七个功能页共用的流程条（`01–07` 序号 + 「← 上一步 / 下一步 →」），概览页隐藏；点步骤只调 `VS.go()`，与顶栏 pill 走同一导航，不碰业务逻辑。
+  - `pages.js` 空态加「去概览选任务」按钮（静态/动态表格空态、AI 横幅），统一用 `[data-goto]` 委托，不各页重复绑事件。
+- 验证：Playwright（Python 3.13）+ `page.route` mock 产物接口，1360×900 实测 17 项断言全通过、`pageerror` 与 console error 均为 0：`flow_hidden_on_overview=True`、`flow_on=source`、`prev_text=← 概览`、`next_text=静态 →`、`peek_shown=True`、`right_untouched=True`、`peek_clear_of_code=True`、`peek_attached=True`、`peek_lines=6`（5 行代码 + 省略号）、`code_fixed=True`、`peek_closed=True`、`next_page=page-static`、`empty_goto_btn=1`、`goto_target=page-overview`。临时脚本跑完已删。
+- 存量红（**与本次改动无关**，`git show HEAD:` 的同名文件即如此）：`tools/engineering_guards.py` 报 `vehicle/frontend/vehicle.css = 426 行`、`vehicle/frontend/v2/app.js = 316 行` 未登记，且基线里的 `vehicle/targets/target-app/build/reports/problems/problems-report.html` 已不在原路径；`run_regressions.py` 的 `completion` 组因该守卫失败，`vehicle-pipeline` 1 failure/1 error（`test_capture_lifecycle` 的 `restore_proxy` 0 次调用）、`collector` 1 error（`FileNotFoundError`，本机缺外部可执行文件），`vehicle-ledger-ui`/`runtime`/`privacy-runtime` 三组需要 `node`（本机没有）使脚本在第 16 组中断。本次新增/修改的 5 个文件按守卫口径均 ≤300 行（`source.js` 176、`flow.js` 60、`pages.js` 234、`pages.css` 162、`index.html` 269）。
+- 待办：`v2/app.js` 316 行按职责拆到 ≤300（与 `pages.js` 重复的 `levelOf/locOf` 可抽 `v2/util.js`）；`vehicle.css` 426 行同理；基线里的 `problems-report.html` 路径漂移需显式 `--update` 或改判据，不能靠放行新违规来洗白。
+
 ## 2026-11-15 · 第三轮行协议取证与 BLE 交接
 
 - 复核 gpsdRelay pcap 和回执时间，修复连接采样窗口、跨包行重组和监听方外发归属。验证 BLE 扫描调用和结果边界。

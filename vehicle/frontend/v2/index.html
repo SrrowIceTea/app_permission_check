@@ -26,6 +26,9 @@
 </header>
 
 <main class="wrap">
+  <!-- 七步流程引导：概览页隐藏，功能页显示（flow.js 渲染） -->
+  <nav class="flow" id="flow" aria-label="审计流程" hidden></nav>
+
   <!-- ══════════ 概览 ══════════ -->
   <section class="view" id="page-overview">
     <div class="hero">
@@ -274,5 +277,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="app.js"></script>
 <script src="pages.js"></script>
+<script src="source.js"></script>
+<script src="flow.js"></script>
 </body>
 </html>

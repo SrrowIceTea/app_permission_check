@@ -1,5 +1,6 @@
-/* V·SCANNER v2 · 子页面渲染（源码 / 静态 / 动态 / AI / 报告 / 复核）
-   全部走真实产物接口；没有数据就明说原因，不伪造空态为"安全"。 */
+/* V·SCANNER v2 · 子页面渲染（静态 / 动态 / AI / 报告 / 复核）
+   全部走真实产物接口；没有数据就明说原因，不伪造空态为"安全"。
+   源码页单独在 source.js（文件树 + 悬停小窗）。 */
 (function () {
   'use strict';
   const VS = window.VS, S = VS.state;
@@ -10,7 +11,7 @@
   const LEVEL = { correlated: ['sev-h', '已关联'], observed: ['sev-m', '已观测'], candidate: ['sev-l', '候选'] };
   const STATE_CLS = { observed: 'state-ok', registration_only: 'state-warn', read_not_obtained: 'state-warn', not_observed: 'state-gap' };
   const STAGE_CN = { pending: '等待', running: '进行中', pass: '通过', done: '完成', failed: '失败', skipped: '跳过' };
-  const cache = { job: '', tree: null, path: '', view: [], lv: 'all', q: '' };
+  const cache = { view: [], lv: 'all', q: '' };
 
   function levelOf(row) { return LEVEL[String(row.conclusion_level || '').toLowerCase()] || ['sev-l', row.conclusion_level || '待判']; }
   function locOf(row) {
@@ -25,63 +26,19 @@
       ? `${job.name || job.package || 'APK'} · ${String(job.id).slice(0, 12)}…`
       : empty;
   }
-  function noJob(body, cols, msg) {
-    body.innerHTML = `<tr><td colspan="${cols}" class="tbl-empty">${msg || '请先在概览页选择一个任务'}</td></tr>`;
+  const GOTO_BTN = '<button type="button" class="tbl-empty-btn" data-goto="overview">去概览选任务</button>';
+  function noJob(body, cols, msg, withAction) {
+    body.innerHTML = `<tr><td colspan="${cols}" class="tbl-empty">${msg || '请先在概览页选择一个任务'}` +
+      `${withAction ? GOTO_BTN : ''}</td></tr>`;
   }
 
-  /* ══════════ 源码查看 ══════════ */
-  function drawTree() {
-    const list = $('#treeList');
-    if (!cache.tree) { list.innerHTML = '<li class="muted">载入中…</li>'; return; }
-    const q = $('#treeSearch').value.trim().toLowerCase();
-    const rows = cache.tree.filter((r) => !q || String(r.path).toLowerCase().includes(q));
-    if (!rows.length) {
-      list.innerHTML = `<li class="muted">${cache.tree.length ? '没有匹配的路径' : '该任务还没有反编译源码（需静态阶段完成）'}</li>`;
-      return;
-    }
-    list.innerHTML = rows.slice(0, 600).map((r) =>
-      `<li data-p="${esc(r.path)}" class="${cache.path === r.path ? 'is-on' : ''}">` +
-      `<span class="p">${esc(r.path)}</span><span class="sz">${(Number(r.size || 0) / 1024).toFixed(1)}K</span></li>`).join('');
-    if (rows.length > 600) list.insertAdjacentHTML('beforeend', '<li class="muted">只显示前 600 个文件，用搜索缩小范围</li>');
-  }
-  async function loadTree() {
-    const job = S.job;
-    badge($('#srcJob'), job, '未选择任务');
-    if (!job) { $('#treeList').innerHTML = '<li class="muted">请先在概览页选择一个任务</li>'; return; }
-    if (cache.job === job.id && cache.tree) { drawTree(); return; }
-    $('#treeList').innerHTML = '<li class="muted">载入文件树…</li>';
-    try {
-      const rows = await VS.api(`/api/pipeline/${job.id}/tree`);
-      cache.tree = Array.isArray(rows) ? rows : [];
-      cache.job = job.id;
-      drawTree();
-    } catch (e) {
-      cache.tree = null;
-      $('#treeList').innerHTML = `<li class="muted">文件树不可用：${esc(e.message)}</li>`;
-    }
-  }
-  async function loadSource(path) {
-    const job = S.job;
-    if (!job) return;
-    cache.path = path;
-    drawTree();
-    $('#codePath').textContent = path;
-    $('#codeView').textContent = '载入中…';
-    try {
-      const data = await VS.api(`/api/pipeline/${job.id}/source?path=${encodeURIComponent(path)}`);
-      $('#codeView').textContent = (data.text || '(空文件)') + (data.truncated ? '\n\n/* 文件过大，已截断 */' : '');
-      $$('#treeList li[data-p]').forEach((li) => li.classList.toggle('is-on', li.dataset.p === path));
-    } catch (e) {
-      $('#codeView').textContent = '读取失败：' + e.message;
-      VS.toast('源码读取失败');
-    }
-  }
+  /* 源码查看（文件树 / 悬停小窗）已拆到 source.js，这里只负责切页时唤起渲染 */
 
   /* ══════════ 静态审计 ══════════ */
   function renderStatic() {
     badge($('#staticJob'), S.job, '未选择任务');
     const body = $('#staticBody');
-    if (!S.job) { noJob(body, 4); $('#findingCount').textContent = '0 条'; return; }
+    if (!S.job) { noJob(body, 4, '请先在概览页选择一个任务', true); $('#findingCount').textContent = '0 条'; return; }
     const all = Array.isArray(S.rows) ? S.rows : [];
     cache.view = all.filter((r) => (cache.lv === 'all' || r.conclusion_level === cache.lv) &&
       (!cache.q || [r.rule_id, r.rule_title, r.permission, r.property, r.note, locOf(r)]
@@ -125,7 +82,7 @@
     const job = S.job;
     if (!job) {
       ['#dynStage', '#dynObs', '#dynGaps'].forEach((s) => { $(s).innerHTML = '<span class="muted">请先选择任务</span>'; });
-      noJob($('#dynBody'), 3);
+      noJob($('#dynBody'), 3, '请先在概览页选择一个任务', true);
       return;
     }
     const timings = job.stage_timings || [];
@@ -173,7 +130,7 @@
     const wrap = $('#aiSections'), banner = $('#aiBanner');
     if (!S.job) {
       banner.classList.add('is-warn');
-      banner.textContent = '请先在概览页选择一个任务';
+      banner.innerHTML = '请先在概览页选择一个任务' + GOTO_BTN;
       wrap.innerHTML = '';
       return;
     }
@@ -240,7 +197,7 @@
 
   /* ══════════ 事件与启动 ══════════ */
   function render(page) {
-    if (page === 'source') loadTree();
+    if (page === 'source') VS.source && VS.source.render();
     else if (page === 'static') renderStatic();
     else if (page === 'dynamic') renderDynamic();
     else if (page === 'ai') renderAi();
@@ -250,22 +207,15 @@
 
   VS.on('page', render);
   VS.on('job', function () {
-    cache.job = ''; cache.tree = null; cache.path = ''; cache.view = [];
-    $('#codePath').textContent = '未选择文件';
-    $('#codeView').textContent = '从左侧选择一个文件';
+    cache.view = [];
+    if (VS.source) VS.source.reset();
     render(S.page);
   });
 
-  $('#treeSearch').addEventListener('input', drawTree);
-  $('#treeList').addEventListener('click', (e) => {
-    const li = e.target.closest('li[data-p]');
-    if (li) loadSource(li.dataset.p);
-  });
-  $('#copyPath').addEventListener('click', async () => {
-    const p = $('#codePath').textContent;
-    if (!p || p === '未选择文件') { VS.toast('先从左侧选择一个文件'); return; }
-    try { await navigator.clipboard.writeText(p); VS.toast('路径已复制'); }
-    catch (e) { VS.toast('复制失败，请手动选中'); }
+  /* 空态里的「去概览」引导：统一委托，不依赖各页自己绑事件 */
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-goto]');
+    if (btn) VS.go(btn.dataset.goto);
   });
   $('#levelFilter').addEventListener('click', (e) => {
     const btn = e.target.closest('button');

@@ -121,3 +121,57 @@ tr.detail>td{background:rgba(20,18,15,.018);padding:0 18px 16px!important}
   .grid-2,.grid-3{grid-template-columns:1fr}
   .page-head{flex-direction:column;align-items:flex-start;gap:12px;padding-top:32px}
 }
+
+/* ── 源码悬停小窗（fixed 挂 body，不受 .pane 的 overflow 裁剪） ── */
+.source-peek{position:fixed;z-index:70;width:min(340px,44vw);max-height:196px;
+  display:flex;flex-direction:column;overflow:hidden;pointer-events:auto;
+  background:var(--card);border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 18px 44px rgba(20,18,15,.16);animation:peekIn .14s ease}
+@keyframes peekIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.source-peek-head{flex:none;padding:9px 12px;border-bottom:1px solid var(--line-2);
+  font:600 11px/1.4 var(--mono);color:var(--ink-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.source-peek-code{flex:1;margin:0;padding:10px 12px;overflow:hidden;
+  font:11px/1.62 var(--mono);color:var(--ink-2);white-space:pre;tab-size:2;
+  background:rgba(20,18,15,.018)}
+
+/* ── 七步流程引导 ── */
+.flow{padding:18px 0 0}
+.flow-inner{display:flex;align-items:center;gap:14px;
+  background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.flow-steps{display:flex;align-items:center;gap:2px;list-style:none;margin:0;padding:0;
+  overflow:auto;scrollbar-width:none;flex:1;min-width:0}
+.flow-steps::-webkit-scrollbar{display:none}
+.flow-steps li{position:relative;flex:none}
+.flow-steps li+li::before{content:"›";position:absolute;left:-3px;top:50%;
+  transform:translateY(-50%);color:var(--ink-3);font-size:11px}
+.flow-step{display:flex;align-items:center;gap:6px;border:0;background:transparent;
+  font:500 12px/1 var(--ui);color:var(--ink-3);padding:7px 9px 7px 11px;
+  border-radius:8px;cursor:pointer;white-space:nowrap;transition:all .18s ease}
+.flow-step i{font:600 10px/1 var(--mono);font-style:normal;color:var(--ink-3);letter-spacing:.06em}
+.flow-step:hover{background:rgba(20,18,15,.045);color:var(--ink)}
+.flow-step.is-past{color:var(--ink-2)}
+.flow-step.is-past i{color:var(--sage)}
+.flow-step.is-on{background:var(--ink);color:var(--paper)}
+.flow-step.is-on i{color:rgba(247,244,237,.62)}
+.flow-nav{display:flex;gap:8px;flex:none}
+.flow-btn{border:1px solid var(--line);background:var(--paper);color:var(--ink-2);
+  font:500 12px/1 var(--ui);padding:9px 14px;border-radius:999px;cursor:pointer;
+  white-space:nowrap;transition:all .18s ease}
+.flow-btn:hover:not(:disabled){border-color:var(--ink-3);color:var(--ink);transform:translateY(-1px)}
+.flow-btn:disabled{opacity:.4;cursor:default}
+.flow-btn-main{background:var(--accent);border-color:var(--accent);color:#fff}
+.flow-btn-main:hover:not(:disabled){border-color:var(--accent);color:#fff;filter:brightness(1.08)}
+
+/* ── 空态引导（表格与 AI 横幅共用） ── */
+.tbl-empty-btn{margin-top:10px;border:1px solid var(--line);background:var(--card);
+  color:var(--ink-2);font:500 12px/1 var(--ui);padding:8px 14px;border-radius:999px;
+  cursor:pointer;transition:all .18s ease}
+.tbl-empty-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+@media(max-width:860px){
+  .source-peek{display:none}          /* 窄屏没有横向空间放小窗，点开看右侧即可 */
+  .flow-inner{flex-wrap:wrap}
+  .flow-steps{flex-basis:100%;order:2}
+  .flow-nav{order:1;margin-left:auto}
+}
