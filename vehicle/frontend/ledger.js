@@ -140,8 +140,7 @@
     const ledger = obj(raw);
     const diagnostic = ledger.status === 'diagnostic_only' && ledger.emits_findings === false;
     head.append(node('span', 'ledger-panel__title',
-      !raw ? '本轮采集诊断 · 后端未提供账本'
-        : (diagnostic ? '本轮采集诊断 · 仅诊断，不构成结论' : '本轮采集诊断 · 后端状态异常，需复核')),
+      raw && !diagnostic ? '本轮采集诊断 · 后端状态异常，需复核' : '本轮采集诊断 · 仅诊断，不构成结论'),
       node('span', 'ledger-panel__meta',
         '会话 ' + text(ledger.session_id) + ' · 包名 ' + text(ledger.package) +
         ' · schema ' + text(ledger.schema_version)));

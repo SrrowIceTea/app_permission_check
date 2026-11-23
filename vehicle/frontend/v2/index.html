@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f7f4ed">
+<title>V·SCANNER · 车载应用审计</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="pages.css">
+</head>
+<body>
+<div class="paper" aria-hidden="true"></div>
+
+<header class="topbar">
+  <a class="brand" href="#"><span class="brand-mark">◈</span>V·SCANNER<em>AAOS</em></a>
+  <nav class="pill-nav" id="nav" aria-label="主页面导航">
+    <button class="pill is-active" data-page="overview">车载审计</button>
+    <button class="pill" data-page="source">源码查看</button>
+    <button class="pill" data-page="static">静态审计</button>
+    <button class="pill" data-page="dynamic">动态审计</button>
+    <button class="pill" data-page="ai">辅助复核</button>
+    <button class="pill" data-page="pdf">PDF 报告</button>
+    <button class="pill" data-page="review">证据复核</button>
+  </nav>
+  <div class="status"><i id="svcDot"></i><span id="svcText">连接中…</span></div>
+</header>
+
+<main class="wrap">
+  <!-- ══════════ 概览 ══════════ -->
+  <section class="view" id="page-overview">
+    <div class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Automotive App Security Audit · 仅授权测试</p>
+        <h1>把车载 App 的<br><span class="hl">每一次数据出境</span><br>都看得见。</h1>
+        <p class="lead">
+          上传一个 APK，五个阶段自动跑完：车载规则静态分析、反编译源码、设备采集、证据关联审计、看板与报告。
+          每条结论都带规则编号与代码位置，不猜、不含糊。
+        </p>
+        <div class="actions">
+          <button class="btn btn-primary" id="startBtn">开始一次审计</button>
+          <button class="btn btn-ghost" id="gotoFindings">查看最近结论 ↗</button>
+        </div>
+        <dl class="metrics">
+          <div><dt data-count="4">0</dt><dd>规则版本</dd></div>
+          <div><dt data-count="5">0</dt><dd>审计阶段</dd></div>
+          <div><dt data-count="35">0</dt><dd>目标 API</dd></div>
+        </dl>
+      </div>
+      <aside class="ring-card">
+        <div class="ring">
+          <svg width="190" height="190" viewBox="0 0 190 190" aria-hidden="true">
+            <circle class="track" cx="95" cy="95" r="82"></circle>
+            <circle class="bar" id="ringBar" cx="95" cy="95" r="82"
+                    stroke-dasharray="515.2" stroke-dashoffset="515.2"></circle>
+          </svg>
+          <span class="ring-num"><b id="ringVal">0</b><small>%</small></span>
+        </div>
+        <h3>当前任务 · 阶段进度</h3>
+        <p id="ringSub">尚未载入任务</p>
+        <ul class="ring-legend">
+          <li><i class="dot dot-h"></i><span id="lgOk">已关联 —</span></li>
+          <li><i class="dot dot-m"></i><span id="lgWarn">已观测 —</span></li>
+          <li><i class="dot dot-l"></i><span id="lgGap">候选 —</span></li>
+        </ul>
+      </aside>
+    </div>
+
+    <div class="bento" aria-label="审计配置">
+      <article class="card c1">
+        <h2>审计方式</h2>
+        <p class="sub">决定是否连真机做动态取证</p>
+        <div class="seg" data-seg="mode">
+          <button class="is-on" data-v="static">仅静态</button>
+          <button data-v="replay">静态 + 动态</button>
+          <button data-v="live">全流程</button>
+        </div>
+        <span class="field-label">当前选择</span>
+        <div class="readout" id="modeOut">仅静态</div>
+      </article>
+      <article class="card c2">
+        <h2>Android 规则版本</h2>
+        <p class="sub">按目标车机系统选择规则库</p>
+        <div class="seg" data-seg="sdk">
+          <button data-v="13">13</button><button data-v="14">14</button>
+          <button class="is-on" data-v="15">15</button><button data-v="16">16</button>
+        </div>
+        <span class="field-label">当前选择</span>
+        <div class="readout" id="sdkOut">Android 15</div>
+      </article>
+      <article class="card c3">
+        <h2>上传安装包</h2>
+        <p class="sub">仅支持自有或已授权 APK</p>
+        <div class="dz" id="dz" tabindex="0" role="button" aria-label="选择或拖入 APK">
+          <strong>拖入 APK，或点此选择</strong>
+          <span>单文件 · .apk · 最大 512 MB</span>
+        </div>
+        <label class="auth-row"><input type="checkbox" id="auth"> 我确认拥有该 APK 与设备的测试授权</label>
+        <div class="dz-file" id="dzFile">
+          <span>📦</span>
+          <div style="flex:1">
+            <div id="dzName" style="font-family:var(--mono);font-size:11.5px">—</div>
+            <div class="dz-bar"><i id="dzBar"></i></div>
+          </div>
+          <span id="dzPct" style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">0%</span>
+        </div>
+        <input type="file" id="file" accept=".apk" hidden>
+      </article>
+      <article class="card c4">
+        <h2>任务 <span id="jobCount" style="color:var(--ink-3);font-weight:400"></span></h2>
+        <p class="sub">点击任一任务查看它的结论</p>
+        <ul class="jobs" id="jobsList"><li class="jobs-empty">正在载入…</li></ul>
+      </article>
+    </div>
+
+    <section class="stages-card card" id="stagesCard" hidden>
+      <h2>当前任务阶段</h2>
+      <p class="sub" id="stagesSub">—</p>
+      <ol class="stages" id="stageList"></ol>
+    </section>
+
+    <section class="findings">
+      <div class="sec-head">
+        <h2>风险结论</h2>
+        <span id="findingsNote">尚未选择任务</span>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>等级</th><th>规则</th><th>结论</th><th>证据位置</th></tr></thead>
+          <tbody id="findingsBody"><tr><td colspan="4" class="tbl-empty">尚无可展示的结论</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <!-- ══════════ 源码查看 ══════════ -->
+  <section class="view" id="page-source" hidden>
+    <div class="page-head">
+      <div>
+        <p class="eyebrow">Source Browser</p>
+        <h2>源码查看</h2>
+        <p class="sub">反编译产物按目录浏览，点文件名在右侧看代码。</p>
+      </div>
+      <span class="badge-job" id="srcJob">未选择任务</span>
+    </div>
+    <div class="split">
+      <aside class="pane">
+        <input class="search" id="treeSearch" placeholder="过滤路径，例如 Activity">
+        <ul class="tree" id="treeList"><li class="muted">载入中…</li></ul>
+      </aside>
+      <div class="pane">
+        <div class="code-head">
+          <span id="codePath">未选择文件</span>
+          <button class="mini-btn" id="copyPath">复制路径</button>
+        </div>
+        <pre class="code" id="codeView">从左侧选择一个文件</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 静态审计 ══════════ -->
+  <section class="view" id="page-static" hidden>
+    <div class="page-head">
+      <div>
+        <p class="eyebrow">Static Findings</p>
+        <h2>静态审计</h2>
+        <p class="sub">按等级筛选、按关键字搜索；点任意一行展开证据。</p>
+      </div>
+      <span class="badge-job" id="staticJob">未选择任务</span>
+    </div>
+    <div class="filter-bar">
+      <div class="seg seg-sm" id="levelFilter">
+        <button class="is-on" data-lv="all">全部</button>
+        <button data-lv="correlated">已关联</button>
+        <button data-lv="observed">已观测</button>
+        <button data-lv="candidate">候选</button>
+      </div>
+      <input class="search" id="findingSearch" placeholder="搜索规则编号或结论关键字">
+      <span class="count-pill" id="findingCount">0 条</span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>等级</th><th>规则</th><th>结论</th><th>证据位置</th></tr></thead>
+        <tbody id="staticBody"><tr><td colspan="4" class="tbl-empty">选择任务后展示结论</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════ 动态审计 ══════════ -->
+  <section class="view" id="page-dynamic" hidden>
+    <div class="page-head">
+      <div>
+        <p class="eyebrow">Dynamic Observation</p>
+        <h2>动态审计</h2>
+        <p class="sub">设备采集阶段的状态、隐私观测与缺口。观察不改写。</p>
+      </div>
+      <span class="badge-job" id="dynJob">未选择任务</span>
+    </div>
+    <div class="grid-3">
+      <article class="card"><h2>采集阶段</h2><p class="sub">AAOS 设备采集</p><div id="dynStage" class="kv">—</div></article>
+      <article class="card"><h2>观测条目</h2><p class="sub">privacy_observation</p><div id="dynObs" class="kv">—</div></article>
+      <article class="card"><h2>字段缺口</h2><p class="sub">field_gaps</p><div id="dynGaps" class="kv">—</div></article>
+    </div>
+    <div class="tbl-wrap mt16">
+      <table>
+        <thead><tr><th>观测项</th><th>来源</th><th>状态</th></tr></thead>
+        <tbody id="dynBody"><tr><td colspan="3" class="tbl-empty">暂无观测数据（需要动态采集）</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════ 辅助复核 ══════════ -->
+  <section class="view" id="page-ai" hidden>
+    <div class="page-head">
+      <div>
+        <p class="eyebrow">AI Review</p>
+        <h2>辅助复核</h2>
+        <p class="sub">AI 只做辅助复述，不改变规则判定。</p>
+      </div>
+      <span class="badge-job" id="aiJob">未选择任务</span>
+    </div>
+    <div class="ai-banner" id="aiBanner">正在读取 AI 复核状态…</div>
+    <div class="grid-2" id="aiSections"></div>
+  </section>
+
+  <!-- ══════════ PDF 报告 ══════════ -->
+  <section class="view" id="page-pdf" hidden>
+    <div class="page-head">
+      <div>
+        <p class="eyebrow">Reports</p>
+        <h2>PDF 报告</h2>
+        <p class="sub">完成后可下载审计报告、证据包，或打开交互看板。</p>
+      </div>
+      <span class="badge-job" id="pdfJob">未选择任务</span>
+    </div>
+    <div class="grid-3">
+      <article class="card action-card">
+        <h2>审计报告 PDF</h2><p class="sub">带结论、证据与代码位置</p>
+        <div class="action-row"><a class="btn btn-primary" id="pdfOpen" target="_blank" rel="noopener">打开 PDF</a>
+          <a class="btn btn-ghost" id="pdfDown" download>下载</a></div>
+        <p class="hint-line" id="pdfHint">需要任务完成</p>
+      </article>
+      <article class="card action-card">
+        <h2>证据包</h2><p class="sub">audit 目录打包，含清单哈希</p>
+        <div class="action-row"><a class="btn btn-ghost" id="zipDown" download>下载 zip</a></div>
+        <p class="hint-line">原始产物不做二次加工</p>
+      </article>
+      <article class="card action-card">
+        <h2>交互看板</h2><p class="sub">单文件 HTML，可直接分享</p>
+        <div class="action-row"><a class="btn btn-ghost" id="dashOpen" target="_blank" rel="noopener">打开看板</a></div>
+        <p class="hint-line">离线可看</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ══════════ 证据复核 ══════════ -->
+  <section class="view" id="page-review" hidden>
+    <div class="page-head">
+      <div>
+        <p class="eyebrow">Evidence Review</p>
+        <h2>证据复核</h2>
+        <p class="sub">发布出来的复核轮次，只读；不从这里改判定。</p>
+      </div>
+      <button class="mini-btn" id="reloadReview">重新载入</button>
+    </div>
+    <div id="reviewList"><div class="card muted">正在载入复核轮次…</div></div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <span>仅用于授权测试 · 自有设备与自有 APK</span>
+  <span>V·SCANNER · AAOS 工作台 v2</span>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="app.js"></script>
+<script src="pages.js"></script>
+</body>
+</html>

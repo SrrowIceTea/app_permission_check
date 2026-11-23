@@ -1,0 +1,292 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   theme-cinematic.css — 车载工作台「影院银」主题（纯视觉覆盖层，最后加载）
+   设计目标：车作为真正的主角（用原始清晰 PNG + lighten 混合，黑底消失），
+            深石板灰底（不再纯黑），右上角环境光，UI 为悬浮毛玻璃。
+   不碰 HTML / JS / 布局逻辑，只覆盖颜色与装饰。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. 底层：原车图全亮度铺底（最底层），上面叠光晕 + 文字区薄渐变 ── */
+.app-bg {
+  background-color: #0a0d12 !important;
+  background-image:
+    /* ④ 最顶层：右上角冷白光晕，增强原图里的影棚光束（光从右上来） */
+    radial-gradient(1000px 720px at 85% 9%, rgba(200,218,245,.34), rgba(200,218,245,.08) 46%, transparent 70%),
+    /* ③ 薄暖橙点缀：黎明感 */
+    radial-gradient(700px 520px at 95% 3%, rgba(255,205,145,.10), transparent 62%),
+    /* ② 文字区左侧薄压黑：只压到 35%，再往右完全透明，让车全亮 */
+    linear-gradient(90deg, rgba(8,10,15,.50) 0%, rgba(8,10,15,.18) 30%, transparent 52%),
+    /* ① 底部薄压黑，让画面接地 */
+    linear-gradient(0deg, rgba(8,10,15,.42) 0%, transparent 44%),
+    /* 最底层：原始车图，不压暗不混合，保持原图的锐利与戏剧性光影 */
+    url("assets/vehicle-studio.png") !important;
+  background-size: auto, auto, auto, auto, cover !important;
+  background-position: center, center, center, center, 66% center !important;
+  background-repeat: no-repeat !important;
+  animation: none !important;
+}
+
+/* 不再需要车图层，原图直接在 .app-bg 里 */
+.app-rays { display: none !important; }
+
+/* ── veil 极薄，几乎不遮挡 ── */
+.app-veil {
+  background:
+    linear-gradient(90deg, rgba(8,10,15,.22) 0%, transparent 30%),
+    linear-gradient(0deg, rgba(8,10,15,.20) 0%, transparent 40%) !important;
+}
+
+/* veil::before — 环境光层：右上角主光 + 照亮车身右后侧的补光，极慢呼吸 */
+.app-veil::before {
+  content:""; position:absolute; inset:0; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(900px 680px at 84% 10%, rgba(200,218,245,.20), transparent 65%),
+    radial-gradient(820px 620px at 71% 50%, rgba(175,198,228,.13), transparent 62%);
+  animation: cine-breathe 12s ease-in-out infinite;
+}
+/* veil::after — 胶片颗粒：极淡，叠加模式，只增加质感不增加噪点感 */
+.app-veil::after {
+  content:""; position:absolute; inset:0; pointer-events:none; z-index:1;
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:180px 180px;
+  opacity:.045; mix-blend-mode:overlay;
+}
+@keyframes cine-breathe {
+  0%,100% { opacity:.82; }
+  50%     { opacity:1; }
+}
+
+/* ── 4. 左侧 rail：毛玻璃 ── */
+.rail {
+  background: rgba(9,11,16,.62) !important;
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  border-right: 1px solid rgba(255,255,255,.06) !important;
+}
+.rail-nav .nav-item { color: rgba(220,226,235,.62); transition: all .22s ease; }
+.rail-nav .nav-item:hover { color:#fff; background:rgba(255,255,255,.07); transform:translateX(2px); }
+.rail-nav .nav-item:hover::before {
+  content:""; position:absolute; left:-1px; top:14%; bottom:14%; width:2px;
+  background:linear-gradient(180deg,transparent,rgba(170,200,235,.7),transparent);
+  border-radius:2px;
+}
+.rail-nav .nav-item.active { color:#fff; background:rgba(255,255,255,.09); }
+.rail-brand { transition: all .22s ease; }
+.rail-brand:hover { color:#fff; transform:scale(1.06); }
+.rail-foot { color: rgba(220,226,235,.34) !important; }
+
+/* ── 5. 顶栏：毛玻璃 ── */
+.topbar {
+  background: rgba(9,11,16,.50) !important;
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  border-bottom: 1px solid rgba(255,255,255,.06) !important;
+}
+.topbar-label { color: rgba(220,226,235,.45) !important; letter-spacing:.03em; }
+.current-apk-name { color:#fff !important; }
+.service-addr { color: rgba(220,226,235,.6) !important; }
+
+/* ── 6. 标题区：更精致的排版 ── */
+.vehicle-brand {
+  font-size:12px !important; font-weight:600 !important; letter-spacing:.22em !important;
+  text-transform:uppercase; color:rgba(180,205,235,.85) !important;
+  display:flex; align-items:center; gap:10px;
+}
+/* eyebrow 前的引导点 + 细渐隐分隔线 */
+.vehicle-brand::before {
+  content:""; display:inline-block; width:6px; height:6px; border-radius:50%;
+  background:#a8c8ec; box-shadow:0 0 10px rgba(170,200,235,.7);
+}
+.vehicle-brand::after {
+  content:""; flex:0 0 56px; height:1px;
+  background:linear-gradient(90deg, rgba(170,200,235,.5), transparent);
+}
+.vehicle-brand span { color:rgba(220,226,235,.4) !important; letter-spacing:.18em; }
+.stage-brand h1 {
+  font-size:clamp(34px,4vw,56px) !important; font-weight:600 !important;
+  letter-spacing:-.03em !important; color:#fff !important;
+  text-shadow:0 2px 24px rgba(0,0,0,.45);
+}
+/* h1 下的短渐变分隔线，强化设计感 */
+.stage-brand h1::after {
+  content:""; display:block; width:52px; height:2px; margin-top:18px;
+  background:linear-gradient(90deg, rgba(170,200,235,.85), rgba(170,200,235,.1));
+  border-radius:2px;
+}
+.vehicle-lead { color:rgba(220,226,235,.7) !important; font-size:14px !important; margin-top:14px !important; }
+
+/* ── 7. 卡片：悬浮毛玻璃（核心质感） ── */
+.vehicle-options,
+#pipeline-progress,
+.pipeline-card,
+.vehicle-report {
+  background: rgba(17,21,29,.55) !important;
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid rgba(255,255,255,.08) !important;
+  border-radius: 14px !important;
+  box-shadow:
+    0 10px 40px rgba(0,0,0,.40),
+    inset 0 1px 0 rgba(255,255,255,.07) !important;
+  transition: transform .3s ease, box-shadow .3s ease, border-color .3s ease;
+}
+.vehicle-options:hover, .pipeline-card:hover, .vehicle-report:hover {
+  transform: translateY(-2px);
+  border-color: rgba(170,200,235,.22) !important;
+  box-shadow:
+    0 16px 48px rgba(0,0,0,.5),
+    inset 0 1px 0 rgba(255,255,255,.10) !important;
+}
+
+/* 表单控件 */
+.vehicle-options label { color:rgba(220,226,235,.72) !important; }
+.vehicle-options select,
+.vehicle-options input:not([type=checkbox]) {
+  background: rgba(255,255,255,.04) !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  border-radius: 8px !important;
+  color:#fff !important;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.vehicle-options select:focus,
+.vehicle-options input:focus {
+  border-color: rgba(170,200,235,.5) !important;
+  box-shadow: 0 0 0 3px rgba(170,200,235,.12) !important;
+  outline: none !important;
+}
+.authorization input { accent-color:#a8c8ec !important; }
+.hint { color:rgba(220,226,235,.45) !important; }
+
+/* ── 8. 上传 dropzone ── */
+#audit-stage .pipeline-dropzone {
+  background: rgba(17,21,29,.48) !important;
+  border: 1px dashed rgba(255,255,255,.20) !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: all .25s ease;
+}
+#audit-stage .pipeline-dropzone:not([aria-disabled="true"]):hover {
+  border-color: rgba(170,200,235,.45) !important;
+  background: rgba(20,25,34,.58) !important;
+  box-shadow: 0 0 0 1px rgba(170,200,235,.15), 0 8px 30px rgba(0,0,0,.35) !important;
+  transform: translateY(-1px);
+}
+#audit-stage .pipeline-dropzone:not([aria-disabled="true"]):hover .pipeline-dz-title { color:#fff; }
+.pipeline-dz-title { color:rgba(240,244,250,.95); }
+.pipeline-dz-sub { color:rgba(220,226,235,.5); }
+.dz-action {
+  background: rgba(255,255,255,.08) !important; color:#fff !important;
+  border:1px solid rgba(255,255,255,.14) !important; border-radius:8px !important;
+}
+.stage-meta { color: rgba(220,226,235,.4); }
+
+/* ── 9. 主按钮 ── */
+.pl-btn {
+  border-radius: 8px !important; transition: all .22s ease !important;
+}
+#new-audit,
+.pipeline-card .pl-btn:first-of-type {
+  color:#0a0d12 !important;
+  background: linear-gradient(180deg,#f2f5fa,#d8e0ec) !important;
+  border:1px solid rgba(255,255,255,.5) !important;
+  box-shadow: 0 4px 14px rgba(150,180,220,.25), inset 0 1px 0 rgba(255,255,255,.6);
+}
+#new-audit:hover,
+.pipeline-card .pl-btn:first-of-type:hover {
+  background: linear-gradient(180deg,#ffffff,#e4ebf5) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(150,180,220,.4), inset 0 1px 0 rgba(255,255,255,.7);
+}
+.pipeline-card .pl-btn:not(:first-of-type):hover,
+.vehicle-report .pl-btn:hover {
+  border-color: rgba(170,200,235,.5) !important; color:#fff !important;
+}
+
+/* ── 10. 进度时间线 ── */
+.progress-eyebrow, .progress-note { color: rgba(180,205,235,.85) !important; letter-spacing:.14em; }
+.progress-elapsed { color: rgba(220,226,235,.6); }
+#pipeline-timeline > .pl-running .pl-dot {
+  background:#cfe0f2 !important;
+  box-shadow: 0 0 0 4px rgba(170,200,235,.14), 0 0 16px rgba(170,200,235,.5) !important;
+  animation: cine-pulse 1.8s ease-in-out infinite;
+}
+#pipeline-timeline > .pl-pass .pl-dot,
+#pipeline-timeline > .pl-done .pl-dot {
+  background:#a8c0d8 !important; box-shadow:0 0 8px rgba(170,200,235,.3);
+}
+#pipeline-timeline > .pl-pending .pl-dot { box-shadow:inset 0 0 0 1px rgba(170,200,235,.45) !important; }
+.pl-label { color:rgba(240,244,250,.92); }
+.pl-msg { color:rgba(220,226,235,.55); }
+
+/* ── 11. 状态点 ── */
+.status-dot[data-online="true"] {
+  color:#a8c0d8 !important; background:rgba(170,200,235,.12) !important;
+  box-shadow:0 0 10px rgba(170,200,235,.4) !important;
+  animation: cine-dot 2.8s ease-in-out infinite;
+}
+
+/* ── 12. 表格 / 源码树 ── */
+.results-table { color:rgba(220,226,235,.88); }
+.vehicle-table .results-table th {
+  background: rgba(20,25,34,.85) !important;
+  box-shadow: inset 0 -1px 0 rgba(255,255,255,.10) !important;
+  backdrop-filter: blur(10px);
+}
+.results-table tbody tr:hover { background: rgba(255,255,255,.04) !important; }
+.file-tree-item { color:rgba(220,226,235,.75); }
+.file-tree-item:hover, .file-tree-item:focus-visible {
+  background: rgba(170,200,235,.10) !important; color:#fff;
+}
+.source-viewer, .code-view {
+  background: rgba(13,16,22,.5) !important; border-color: rgba(255,255,255,.08) !important;
+}
+
+/* ── 13. 页面标题（其他子页） ── */
+.page-head h2 { color:#fff !important; }
+.page-head .hint { color:rgba(220,226,235,.5); }
+.filter-input {
+  background:rgba(255,255,255,.05) !important; border:1px solid rgba(255,255,255,.12) !important;
+  color:#fff !important; border-radius:8px !important;
+}
+.empty-state { color: rgba(220,226,235,.45); }
+
+/* ── 14. 动画 ── */
+@keyframes cine-pulse {
+  0%,100% { transform:scale(1);   box-shadow:0 0 0 4px rgba(170,200,235,.14),0 0 16px rgba(170,200,235,.5); }
+  50%     { transform:scale(1.18); box-shadow:0 0 0 7px rgba(170,200,235,.05),0 0 22px rgba(170,200,235,.7); }
+}
+@keyframes cine-dot {
+  0%,100% { box-shadow:0 0 6px  rgba(170,200,235,.3); }
+  50%     { box-shadow:0 0 14px rgba(170,200,235,.55); }
+}
+
+/* ── 16. 柔和状态色：预览态常显的报错/离线，从刺眼红降为暖琥珀，保持影院氛围 ── */
+#audit-stage[data-state="idle"] .upload-error,
+#audit-stage[data-state="idle"] .pipeline-dropzone::after {
+  color: rgba(216,168,120,.92) !important;
+}
+#audit-stage[data-state="idle"] .stage-slot:has(.upload-error:not(:empty)) .pipeline-dropzone {
+  border-color: rgba(216,168,120,.38) !important;
+  background: rgba(58,44,28,.42) !important;
+  box-shadow: inset 0 0 0 1px rgba(216,168,120,.10) !important;
+}
+#service-state { color: rgba(216,184,138,.9) !important; }
+.status-dot[data-online="false"] {
+  color: #d8a878 !important;
+  background: rgba(216,168,120,.12) !important;
+  box-shadow: 0 0 8px rgba(216,168,120,.25) !important;
+}
+
+/* ── 15. 响应式：小屏把车往下压，内容区不被遮 ── */
+@media(max-width:1100px) {
+  .app-rays { background-position: 62% center !important; }
+  .app-bg { background-position: center !important; }
+}
+@media(max-width:700px) {
+  .app-rays, .app-bg, .app-veil { left:0 !important; }
+  .app-rays { background-position: 60% 30px !important; background-size: auto 460px !important; opacity:.7; }
+  .app-bg { background-color:#080a0f !important; }
+}
+@media(prefers-reduced-motion:reduce) {
+  *,*::before,*::after { animation:none !important; transition:none !important; }
+}
