@@ -64,7 +64,14 @@ def serve(handler, job, action, query):
     out = job.out
     state = job.snapshot()['state']
     if action == 'static':
-        return handler.json(document(out / 'static/static.json'))
+        data = document(out / 'static/static.json')
+        rows = data.get('findings') if isinstance(data, dict) else None
+        if isinstance(rows, list):
+            # 复用动态结论的标题口径（中文映射 > 库内原值 > 原因），静态行保留自己的 title 字段。
+            version = (job.data.get('options') or {}).get('version') or '15'
+            data['findings'] = with_titles(
+                [dict(row) for row in rows if isinstance(row, dict)], version)
+        return handler.json(data)
     if action == 'tree':
         path = jadx.index_json(out / 'static')
         return handler.json(document(path) if path.exists() else [])

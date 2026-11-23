@@ -66,6 +66,19 @@ class BlindRoundTests(unittest.TestCase):
         label = read_json(out / 'labels-draft.json')['samples'][0]
         self.assertEqual([self.plan['items'][0]['pair']], label['expected_pairs'])
 
+    def test_explicit_evidence_does_not_require_a_business_alias(self):
+        case = self.plan['cases'][0]
+        reference = case['sources'].pop('business')
+        case['sources']['receipt.json'] = reference
+        case['reference_evidence'] = [reference]
+        write_json(self.root / 'plan.json', self.plan)
+
+        out = self.root / 'compared'
+        compare(self.root, self.submit('A', 'present'), self.submit('B', 'present'), out, self.root)
+
+        label = read_json(out / 'labels-draft.json')['samples'][0]
+        self.assertEqual([reference], label['reference_evidence'])
+
     def test_separate_signoff_resolves_the_pair_without_signing_workflow_questions(self):
         compared = self.root / 'compared'
         a, b = self.submit('A', 'present', 'human'), self.submit('B', 'absent', 'human')

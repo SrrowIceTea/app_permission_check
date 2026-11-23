@@ -276,3 +276,25 @@ single_package_fallback/unknown_uid/短连接）与未支持的自然定位格�
 用 `.get()` 且空命中早退。`observation_ledger` 的 `business_touch` 只消费
 `verify_binding` 判定为 `binding_consistent` 的结果，`complete_body` 与 `verified_body` 分列，
 弱归因不计入已核验正文。PID 重用仍是已声明边界：引用层无法区分 epoch，只由生命周期观测标记嫌疑。
+
+## D520 AI 证据能力位分档与单一权威（2026-11-16）
+
+真模型首跑暴露：同一条 finding 在证据包里同时是 `value_match=true`（从 finding 复制的原始字段）
+与 `property_marker_only=true`（能力位推导），模型据此在 hint 里写「证据矛盾」——不是幻觉，
+是喂进去的数据自相矛盾。根因两处：`evidence_package` 多下发了一个与能力位不同义的
+`value_match`；`capabilities()` 只认 `content_match_basis == 'request_property_value'`，
+把 `complete_ha_webhook_battery_field`（报文内完整字段等值）与各 `*_hash` 依据一并压成
+「只有属性名命中」。
+
+现口径：① 删除证据包里的原始 `value_match`，`pairs` 是值级证据的唯一权威；
+② 新增 `value_basis` 档位 `plaintext / hashed / marker_only / unknown / none` 与
+`value_match_hashed`——`value_match` 仅在明文等值命中时为 true，`property_marker_only`
+仅在确无任何内容级匹配时为 true；③ 未知依据记 `unknown`，既不许当明文，也不许当
+marker-only（两种断言都无依据）；④ 哈希/摘要档另有 claim 规则（「以哈希形式」等），
+不得声称「已传输具体值」；⑤ 顺带修否定窗口：由固定 6 字符放宽到 12 并补
+`无法确认/不能确认/无法核实/未能确认` 开头语——真实输出「无法确认具体值泄露、唯一来源或归属」
+曾因「、」不是分句符被判越界，白烧一次重试。
+
+影响面：`risk_triage` 的 `observation_sufficient` 对完整字段匹配的 finding 现在可为 true；
+`attention_score` 不变（由 `test_new_fields_do_not_change_attention_score_semantics` 守护）。
+`value_match` 仍是 `source_located` 与 `observation_sufficient` 的门槛，本次未放宽其来源收敛条件。

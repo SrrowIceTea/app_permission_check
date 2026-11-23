@@ -42,6 +42,7 @@ from pathlib import Path
 
 from device_rows import DEVICE_VERSION, build_device_rows
 from egress_calibration import calibrate
+from permission_levels import BUILD_ID, REPORT, REVIEW_SHA256, load_levels
 from privacy_rows import insert_privacy_rules
 from privacy_observation import DEFAULT_OBSERVATION
 from source_rows import insert_source_rows
@@ -136,6 +137,11 @@ def main() -> int:
     egress_versions = tuple(v.strip() for v in args.egress_versions.split(",") if v.strip())
     schema = Path(__file__).resolve().parents[1] / "schema.sql"
     device_facts = json.loads(args.device_facts.read_text(encoding="utf-8")) if args.device_facts else {}
+    try:
+        protection_levels = load_levels(args.calibration, args.general_permissions)
+    except (KeyError, OSError, ValueError) as error:
+        print(json.dumps({"status": "failed", "message": str(error)}), file=sys.stderr)
+        return 1
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     dst = sqlite3.connect(args.out)
@@ -154,7 +160,8 @@ def main() -> int:
         counts[version] = insert_source_rows(dst, seed_dir)
 
     counts[DEVICE_VERSION] = build_device_rows(dst, args.calibration, args.general_permissions,
-                                               args.property_ids, args.cpm_signatures, device_facts)
+                                               args.property_ids, args.cpm_signatures, device_facts,
+                                               protection_levels)
     versions = sorted(counts)
     # General-privacy rules are registered after the device rows on purpose: they are
     # project-policy rules about Android SDK sources, so insert_device_rules must not
@@ -185,6 +192,10 @@ def main() -> int:
         "privacy_rules": privacy,
         "source_versions": source_versions,
         "android15_source": "device_observation",
+        "android15_protection_levels": {
+            "build_id": BUILD_ID, "review_file": REPORT.name,
+            "review_content_sha256": REVIEW_SHA256, "imported": len(protection_levels),
+        },
         "android15_rule_policy": "policy_mirrored_from_android14_with_device_provenance",
         "egress_versions": sorted(egress_versions),
         "enablement": enablement,

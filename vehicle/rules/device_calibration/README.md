@@ -124,4 +124,6 @@ $aapt2 = "$env:LOCALAPPDATA/Android/Sdk/build-tools/36.0.0/aapt2.exe"
   --out "$evidence/protection-level-recheck.json"
 ```
 
-仅写新报告。原始级别、定义包或显式整数证据有缺口时，报告逐条列入 `unresolved`。本次证据对应 A6 的编译声明。库内历史 Android 15 设备来源为 A1，仍需决定如何登记独立的 A6 证据，再重建规则库及 Room 资产。Android 13/14/16 的 30 条权限分别取证。
+仅写新报告。原始级别、定义包或显式整数证据有缺口时，报告逐条列入 `unresolved`。
+四版本构建自动读取 [冻结的 A6 报告](protection-level-aaos35-a6.json) 并核对其内容摘要。每条 Android 15 权限同时保留 A1 原始观测和独立的 A6 编译值来源，含定义包 APK 摘要。
+重建命令见 [四版本构建](../CLAUDE.md)。Android 13/14/16 的 30 条整数级别等待分别取证。

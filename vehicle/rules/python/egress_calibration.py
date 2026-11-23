@@ -7,7 +7,9 @@ from pathlib import Path
 def calibrate(db, window_ms, versions=('14', '15')):
     if window_ms != 30000:
         raise ValueError('本校准记录只批准 30000ms；其他值需新的校准依据')
-    policy = Path(__file__).resolve().parents[1] / 'EGRESS_CALIBRATION.md'
+    # Keep the bytes originally cited by the 2026-09-24 rules. The live document
+    # acquired release counts later, without a change to the authorized window.
+    policy = Path(__file__).resolve().parents[1] / 'egress-calibration-20260924.snapshot.md'
     digest = hashlib.sha256(policy.read_bytes()).hexdigest()
     # E1 is the VHAL egress calibration. VSC-GE-* general-privacy rules get their 30s
     # window from vehicle/privacy/catalog.py and their own POLICY.md basis; stamping

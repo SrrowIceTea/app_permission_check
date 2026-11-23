@@ -3,10 +3,13 @@
 合成数据只验证投影行为，不代表任何设备证据。
 """
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from vehicle.webapp.observation import annotate, observation
-from vehicle.webapp.presentation import count_bands, finding_uids, stage_timings
+from vehicle.webapp.presentation import (count_bands, decorate, finding_uids, stage_timings,
+                                         static_counts)
 from vehicle.webapp.rule_titles import resolve
 from vehicle.webapp.workflow import RULES
 
@@ -179,6 +182,44 @@ class ObservationProjectionTest(unittest.TestCase):
         self.assertEqual('observed_without_read_evidence', rows[1]['observation_reason_code'])
         self.assertEqual(1, rows[0]['read_evidence_count'])
         self.assertNotIn('read_evidence_count', rows[2])
+
+
+class StaticCountTest(unittest.TestCase):
+    """静态任务没有 audit 摘要，计数只能来自 static.json，且必须显式标来源。"""
+
+    def test_only_reported_levels_are_counted(self):
+        bands, total = static_counts({'findings': [
+            {'conclusion_level': 'candidate'}, {'conclusion_level': 'candidate'},
+            {'conclusion_level': 'observed'}, {'conclusion_level': None}, {}]})
+        self.assertEqual({'correlated': 0, 'observed': 1, 'candidate': 2, 'unjudged': 2}, bands)
+        self.assertEqual(5, total)
+
+    def test_decorate_marks_static_source_and_note(self):
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder)
+            (out / 'static').mkdir()
+            (out / 'static/static.json').write_text(json.dumps({'findings': [
+                {'rule_id': 'VSC-E001', 'conclusion_level': 'candidate'},
+                {'rule_id': 'VSC-E002', 'conclusion_level': 'candidate'},
+            ]}), encoding='utf-8')
+            data = decorate({'id': 'v-1', 'state': 'static_only', 'result': {}}, out, [])
+        self.assertEqual('static', data['findings_count_source'])
+        self.assertEqual(2, data['findings_total'])
+        self.assertEqual({'correlated': 0, 'observed': 0, 'candidate': 2, 'unjudged': 0},
+                         data['findings_by_conclusion_level'])
+        self.assertIn('static/static.json', data['findings_by_conclusion_level_note'])
+
+    def test_done_job_keeps_summary_source(self):
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder)
+            (out / 'audit').mkdir()
+            (out / 'audit/summary.json').write_text(json.dumps({
+                'findings_total': 3,
+                'findings_by_conclusion_level': {'correlated': 1, 'observed': 1, 'candidate': 1},
+            }), encoding='utf-8')
+            data = decorate({'id': 'v-2', 'state': 'done', 'result': {}}, out, [])
+        self.assertEqual('summary', data['findings_count_source'])
+        self.assertEqual(3, data['findings_total'])
 
 
 if __name__ == '__main__':

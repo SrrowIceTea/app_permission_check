@@ -152,6 +152,50 @@ O2 的 agent 初评单列，签核层级（`cross_model_signed` / `human_signed`
 夹具初评见 [窗口校准记录](WINDOW_CALIBRATION.md)。独立应用的延迟分布仍待积累；跨模型签核已可计分，但不含人工环节。
 命令正常退出表示该轮评估流程执行完成；是否完成动态评估应读 `completion`、样本状态和标注状态，不能只看退出码。
 
+## B2 VScanBench 最小基准
+
+仅用于授权测试。最小版从两个自有 APK 的已签核会话重放五档时间窗，还复验 Car Stats Viewer 的补传业务和 AAOS 读取/发送对照。案例由 [冻结清单](vscanbench-pilot.json) 绑定 APK 装机身份、采集清单、规则库和签核标签。运行目录需要保留清单指向的原始 `output/` 产物与标签参考证据。
+
+```powershell
+.\tools\python313.ps1 -m vehicle.bench.vscanbench --out output/vscanbench-replay/pilot.json
+
+$queue = 'output/b1-carstatsviewer-20261123/queue-trial-01'
+.\tools\python313.ps1 -m vehicle.bench.carstats_queue `
+  --source $queue --reference "$queue/queue-verification.json" `
+  --out output/vscanbench-replay/carstats.json
+```
+
+同值跨批误配、专设不同值负控和复核范围外候选分别计数。复核范围外的候选保留待审状态。补传验证在临时目录读取 SQLite 和 WAL，逐点比对冻结的原始 HTTPS 正文。摘要不一致、样本身份错误或证据缺失时，命令退出 2，不写成功报告。
+
+| 仅窗口重放 | 样本 | 命中 | 漏配 | 额外候选 | 其中同值跨批 | 不同值负控误命中 |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| 30 秒 | targetapp | 5 | 5 | 11 | 5 | 0/5 |
+| 30 秒 | targetapp2 | 10 | 5 | 14 | 5 | — |
+| 60 秒 | targetapp | 10 | 0 | 22 | 10 | 0/5 |
+| 60 秒 | targetapp2 | 15 | 0 | 25 | 10 | — |
+
+以上是 `subagent_signed` 自有夹具工程基线，两个 APK 共复核 90 对，包含 25 项正例、50 项同值跨批反证和 5 项不同值负控。Car Stats Viewer 在线 4 点、离线 5 点是独立应用的业务证据，单次 VHAL 读取仍无法唯一对齐。独立应用阈值待验证。 [五档报告](../../output/vscanbench-week-20261123/pilot-repeat.json) · [补传复验](../../output/vscanbench-week-20261123/carstats-replay.json)
+
+### AAOS 只读负控与发送对照
+
+两个独立采集会话复用一个 `com.vscanner.targetapp` debug APK。`read_only` 需要成功读取车速、采集健康、独立接收端和代理流均为空、无外发配对。`plain` 需要读取相同车速，再向独立接收端发送。窗口重放需要命中经动作令牌、正文摘要和主读取声明核对的同值配对。该场景记为 `workflow_only`，样本增量为零。
+
+2026-11-23 两轮采集均通过 10 项健康检查，各有 5 项成功的 VHAL 主读取，车速均为 `0.0`（`VSC-R002`）。只读轮收到 0 个请求、重放得到 0 个外发配对。发送轮收到一个请求并返回 HTTP 200，生产规则窗口得到 8 个候选，其中 5 对经夹具正文与主读取核对，包括车速 `VSC-E002`。 [对照证据](../../output/vscanbench-read-send-20261123/run-02/control-verification.json)
+
+在已准备好的专用 `VScanner_AAOS_35_P1`（API 35、user 10）上，先为自有 APK 授予已验证的 `CAR_SPEED` 和 `CAR_ENERGY` 权限，再运行以下命令。采集启动后为夹具独占建立回环转发，结束时校验转发已释放。系统代理使用原有设置，TLS 绕过关闭。
+
+```powershell
+$run = 'output/vscanbench-read-send-rerun'
+.\tools\python313.ps1 -m vehicle.lab.read_send_control --out $run
+.\tools\python313.ps1 -m vehicle.bench.read_send_control --source $run --out "$run/control-verification.json"
+```
+
+### 配对模式回归
+
+VScanBench 在报告的 `workflow_only` 下逐轮核对 `window`（仅时间窗）、`token`（仅批次标识）、`both`（优先已核对的批次声明，其他候选走时间窗）。只读轮三种模式均为 0 对。发送轮分别为 8、5、5 对，额外 3 对绑定到车速、燃油量和电池电量的诊断复读。缺失或重复的批次标识只能留下带时间窗依据的待复核候选。 [三模式报告](../../output/vscanbench-pairing-20261123/pilot-repeat.json)
+
+两个已签核夹具的 90 对均参与五档时间窗重放。第一个夹具另有 `pairing_comparison`，逐档列出新增或丢失的签核正例、移除或新增的已确认同值跨批反证。以 30 秒为例，组合模式命中从 5 对增至 10 对，额外候选从 11 对降至 0，其中有 5 对是已签核的同值跨批反证。五档均保留原时间窗命中的正例。第二个夹具的正文没有批次标识，令牌相关的两种模式在基准中记为 `not_applicable`。
+
 ## 政策快照
 
 `--policy` 接受 JSON 元数据：`package/apk_sha256/document_kind/file/sha256/source/content_type`，

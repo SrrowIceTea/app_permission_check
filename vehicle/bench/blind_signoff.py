@@ -68,7 +68,7 @@ def finalize(private, first, second, signoff, output, root=ROOT):
     first_votes = {pair_key(row['pair']): row['present'] for row in label['reviews'][0]['decisions']}
     label['expected_pairs'] = [item['pair'] for item in items if disputes.get(item['id'], {}).get(
         'present', first_votes[pair_key(item['pair'])])]
-    adjudicated_labels(label, label['apk_sha256'], label['session_id'], 'independent', root=root)
+    adjudicated_labels(label, label['apk_sha256'], label['session_id'], label['sample_origin'], root=root)
     if digest(signoff) != signoff_hash:
         raise ValueError('signoff changed during validation')
     output.mkdir(parents=True, exist_ok=False)

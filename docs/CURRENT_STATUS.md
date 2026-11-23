@@ -1,6 +1,6 @@
 # V-Scanner 当前状态与本周工单（唯一入口）
 
-> 更新：2026-11-12 00:30｜代码基线 HEAD `81f14dc`（`main`，工作区有未提交改动，见 §1.1）
+> 更新：2026-11-23｜本轮以 `main` 的 `a71895b` 为基线；§1–2 保留 11-12 工程验收快照。
 > 仅用于授权测试（自有设备与自有 APK）。本文只写**状态与工单**，不新增任何检测结论。
 > `docs/` 下 16 份计划/方案类文档与根目录那份副本顶部都已标注「历史快照（2026-11-11 归档，
 > 不作当前清单）」——它们保留证据与来龙去脉，但**不再互相替代**；要判断"现在做什么"只看本文。
@@ -9,12 +9,41 @@
 
 ---
 
+## 11/23–11/29 周计划验收
+
+| 计划项 | 本轮验收 |
+| --- | --- |
+| 11/23 补传复跑 | 仓库入口从原始 SQLite、WAL、HTTPS 正文和回执复现 4 条在线点、5 条离线点。 [补传报告](../output/vscanbench-week-20261123/carstats-replay.json) |
+| 11/24 样本资格 | Car Stats Viewer 有离线批次回执，记录粒度是行驶点。Auto4Android 上游协议给出批量车辆字段，单次读取标识和延迟参考未证实。GeelyDiagnostics 上游公开的是本机报告导出。现有证据下走 B2 备线。 [补传证据](../vehicle/bench/WINDOW_CALIBRATION.md#car-stats-viewer-断网补传) · [Auto4Android 协议](https://github.com/DigitalDistraction/Auto4Android/blob/main/docs/protocol.md) · [GeelyDiagnostics](https://github.com/lisindima/GeelyDiagnostics) |
+| 11/25–11/27 基准与报告 | 两个自有 APK、90 个已签核配对，重放 5、10、30、60、120 秒五档。同值跨批、不同值负控和范围外候选单列。 [冻结清单](../vehicle/bench/vscanbench-pilot.json) · [五档报告](../output/vscanbench-week-20261123/pilot-repeat.json) |
+| 11/28–11/29 复跑与周结 | 两次真实原始证据重放的报告 SHA-256 一致，定向测试 30/30，根离线回归 22/22。 [复跑说明](../vehicle/bench/README.md#b2-vscanbench-最小基准) · [离线回归](../output/vscanbench-week-20261123/regression/verification.json) |
+
+30 秒生产阈值沿用现有值。独立应用的窗口校准仍需可唯一对齐到一次读取的短延迟、长延迟和负控证据，当前两份夹具标签为工程复核层。
+
+VScanBench 新增同一自有 APK 的只读负控与发送对照。两个 AAOS 会话各通过 10 项健康检查。只读轮 0 个请求、0 个外发配对。发送轮 1 个 HTTP 200 回执、5 个经正文核对的主读取配对。两轮计为一个夹具工作流，沿用两份已签核样本的统计。 [原始证据复验](../output/vscanbench-read-send-20261123/run-02/control-verification.json)
+
+配对模式回归已覆盖只读 `0/0/0` 和发送 `8/5/5`。90 个签核配对重放经两个子代理独立复核一致。支持批次标识的夹具在五档组合模式下均命中 10 对正例、0 个额外候选，未丢失时间窗已命中的正例。第二夹具按时间窗重放。 [基准报告](../output/vscanbench-pairing-20261123/pilot-final.json) · [双人复核](../output/vscanbench-pairing-20261123/review-verification.json)
+
+## 车载 v2 工作台真实数据验收（2026-11-23）
+
+- 自有 APK 的静态任务（`mode=static`）跑通 v2 七页：概览 22 条候选、静态审计 22/22、源码页取到 jadx 文件树与正文；采集、关联审计、看板三页仍只有跳过态，未接设备。
+- 修复静态任务只读 `/findings`（按契约要求 `state=done`）导致概览 0 条、静态页空表：投影层改从 `static/static.json` 计数并写 `findings_count_source=static`，`/static` 复用规则标题口径。证据在 `output/v2-acceptance/`（不入库）。
+- 顶栏连接态改为「服务已连接 · 目标 AAOS 35」，不再用服务在线暗示设备已连。
+- `vehicle-webapp` 组测试含新增 4 例，46/46；根回归 21/22，唯一红仍是 `completion` 的 `vehicle/frontend/vehicle.css`（426 行）与 `v2/app.js`（317 行），两文件来自远程 main 且未登记基线。
+
+## 车载一键审计复验（2026-11-18）
+
+- 使用自有 AAOS 35 模拟器、user 10 和仓库自有夹具，关闭 TLS 校验绕过。第一批三轮均有独立会话，采集校验 10/10，进程正常退出并生成 PDF 与看板。第三轮使用本机故障端点，AI 复核标为降级，任务状态为 `done`。
+- 第一批默认 HTTP 地址未取得独立回执，会话绑定核验为 `incomplete`，已声明的会话、包、摘要与采集健康检查全部一致。证据见 [复验汇总](../output/vehicle-stability-20261118/verification.json)。
+- 使用仓库自有 debug 场景和独立本机 HTTP 接收端补测三轮。每轮有一个独立会话和一条以唯一场景标记关联的服务端回执，原目录及报告证据包均核验为 `binding_consistent`，采集正常退出，PDF 与看板齐全。第三轮验证了 AI 不可用时的降级。见 [带回执的复验汇总](../output/vehicle-stability-bound-20261118/verification.json)。
+- 旧失败记录最后一行是停止信号，无法区分刷盘、确认落盘或卸载阶段。现已增加刷盘各阶段的开始日志，本次复验未重现卡死，根因仍待确认。
+
 ## 车载复核（2026-11-14）
 
 - 本机 AAOS 已恢复。使用已有 AVD 只读冷启动，独立保存 Android 工具状态。实测 Android 15 / API 35 / user 10，镜像 AAI5.260516.001.A6。隔离 HA 2026.10.4 已启动，测试账户通过 API 鉴权。证据根为 `output/vehicle-aaos-readiness-20261114-213908/`。
 - HA 电量正文与订阅/控制各自建立了新 session。服务端确认电量 73% 和 61%，App 侧各有一条同值完整请求关联，电池模拟已恢复。订阅重连、旧连接消失和两次控制均通过。最终复验为 `ha-body-03/` 与 `ha-socket-02/`。两轮各封存两条当轮服务端回执，`binding-verification.json` 均为 `binding_consistent`，人工签核仍待完成。
 - **YAABSA v1.17.0 AAOS x86_64** 已从 [官方发布资产](https://api.github.com/repos/Vito0912/yaabsa/releases/assets/724915285) 续传，签名及装机摘要 `5a00d096…f58873` 已核验。设备 Wi-Fi 已启用但未连接时，客户端将本地 Audiobookshelf 标为不可达。接回 `AndroidWifi` 后，原生车载媒体库加载合成音频，前后台各完成一次播放和暂停。独立服务端确认两次进度变化、累计听音分别增加 13.316 秒与 13.429 秒，暂停对照进度保持稳定。服务端进度与媒体会话暂停位置分别差 6.994 秒和 7.184 秒，未达到本轮 4 秒对齐判据。新通用采集健康，审计为 `no_target_general_reads`，业务回执保存在外部验收记录，采集会话绑定仍不完整。旧版专用发送契约仍只覆盖 v1.16.0。证据在 `yaabsa-v117-business/playback-03/verification.json`。
-- 权限库共 180 行，Android 13/14/15/16 分别为 10/10/150/10 行。AAOS 35 A6 镜像已核验 **150/150** 条库内权限的编译整数与设备原始级别字符串，证据见 `output/vehicle-permission-calibration-20261114-221434/protection-level-review.json`。发布库中数值仍为空，须将 A6 证据作为独立来源接入构建，Android 13/14/16 的 30 条仍需对应版本证据。30 秒窗口已有夹具初评，人工签核仍待完成。
+- 权限库共 180 行，Android 13/14/15/16 分别为 10/10/150/10 行。11-18 将 AAOS 35 A6 的 **150/150** 条编译整数作为独立设备来源纳入发布库和 Room 资产。A6 模拟器覆盖升级和应用进程重启后，Room 两次回读逐条匹配冻结证据。Android 13/14/16 的 30 条仍待对应版本取证。 [入库验证](../output/vehicle-permission-import-20261118/verification.json) · [运行验收](../output/vehicle-permission-room-20261118/device-003/verification.json)
 - 基准、盲评、政策评估、SDK 调用栈归属、AAOS 35 覆盖表与进程生命周期监测均已有实现。仍缺独立参考与样本评测、SDK 库指纹侧车、扩展政策结构化、跨版本设备验收及晚启动/重启捕获。类加载归因、UI 探索覆盖率、分段自愈、独立设备侧连接对照和定位格式扩展仍无完整车载交付。普通第三方设备入口仍会拒绝 split APK，OEM 适配待实测。
 - 车载账本按目标包和会话排除无归属的事件及回执。修复了 Windows 路径含 `#` 时无法只读加载显式规则快照的问题。新增 HA 专用验收在采集结束前封存独立 REST 回执。根离线回归 22/22 组通过，证据见 `output/vehicle-kickoff-host-final-20261114-214942/verification.json`。
 
@@ -25,7 +54,7 @@
 - v1.17.0 源码同时包含播放状态变更触发的同步和 `pause()` 内的显式 `flush()`。目前依据为源码路径与隔离回环请求，尚未取得逐调用栈证据或验证上游补丁。设备验收与请求位置见 `yaabsa-v117-business/playback-04/verification.json`、`loopback-sync-requests.json`。根离线回归见 `output/vehicle-yaabsa-wifi-regression-20261114-235905/verification.json`。
 - `playback-07` 完成新版隔离回环请求归属和两条业务回执封存。4 条已归属请求覆盖两次暂停，2 条周期请求保留归因缺口。客户端暂停后覆盖进度的问题继续跟踪。开发与复现入口见 [开发日志](DEVELOPMENT_LOG.md)。
 
-## 1. 代码基线
+## 1. 代码基线（2026-11-12 快照）
 
 | 项 | 值 |
 | --- | --- |
@@ -86,9 +115,9 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0
 
 | # | 未完成项 | 来源 | 为什么不在本周 A 组 |
 | --- | --- | --- | --- |
-| 1 | 时间窗人工签核：车载 B1 窗口校准已出初评、待签核；移动侧 30000ms 仍是**声明值**、未由夹具校准；车载「自然定位格式扩展**与窗口标定**」里的窗口标定部分同属这条 | AGENTS「未做」+ mobile「未完成」+ VEHICLE_ONLY「未完成」3 | 需人工签核与设备实测，一周内给不出可信数字 |
-| 2 | `protection_level_value`：AAOS 35 A6 的 150 条已取得编译值并核对；仍需接入规则库构建、补 Android 13/14/16 的 30 条。移动 40 条未断言 | 本文「车载复核」+ mobile「未完成」 | 各版本使用各自来源 |
-| 3 | B2 VScanBench | AGENTS「未做」 | 研究专项，需负控与独立参考 |
+| 1 | 车载 B1 已签核两个自有 APK 的五档重放。Car Stats Viewer 已验收车速上传与 5 条断网行驶点补传 | [车载复核](../vehicle/bench/WINDOW_CALIBRATION.md) + mobile「未完成」 | 独立应用窗口仍缺可唯一对齐到单次 VHAL 读取的延迟证据，移动 30000ms 待实测 |
+| 2 | `protection_level_value`：车载 Android 15 的 150 条已入库；Android 13/14/16 的 30 条待补。移动 40 条未断言 | 本文「车载复核」+ mobile「未完成」 | 各版本使用各自来源 |
+| 3 | B2 VScanBench 最小版已交付，完整场景矩阵待扩展 | [车载基准](../vehicle/bench/README.md#b2-vscanbench-最小基准) | 新场景仍需独立参考与负控 |
 | 4 | F1 类加载归因（无 `hook_classload.js`） | AGENTS「未做」 | 需新钩子 + 设备验收 |
 | 5 | G1 UI 探索覆盖率度量 | AGENTS「未做」 | 需设备与人工标注 |
 | 6 | A4 分段自愈 | AGENTS「未做」 | 与 1/3 同类的设备专项 |
@@ -100,7 +129,7 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0
 
 **合并与剔除规则**（14 → 11）：
 
-- 车载 B1 窗口签核 与 移动侧 30000ms 校准是同一件事（时间窗）→ #1（-1）；
+- 车载跨应用阈值验证与移动侧 30000ms 校准归在时间窗议题 → #1（-1）；
 - AGENTS 的 protectionLevel 与 mobile 的 40 条是同一件事（级别映射）→ #2（-1）；
 - VEHICLE_ONLY「未完成 4」写「前端未改」，但该文件 §7 已记录"本轮补齐"，HEAD `81f14dc`
   的提交标题就是车载前端面板 → **该项已交付、不是未完成项**，剔除（-1）；

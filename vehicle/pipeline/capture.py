@@ -19,14 +19,13 @@ from core.io_utils import load_jsonl
 from vehicle.pipeline import readiness
 from vehicle.pipeline.capture_device import Device, wait_until, write_manifest
 from vehicle.pipeline.capture_lifecycle import observe_until, observe_with_lifecycle, stop_workers
-from vehicle.pipeline.capture_proxy import proxy_state, restore_proxy, verify_reversible
+from vehicle.pipeline.capture_process import attached_pid, process_alive
+from vehicle.pipeline.capture_proxy import proxy_state, restore_proxy, restore_reverse, verify_restore, verify_reversible
 from vehicle.pipeline.proxy_log import ProxyLog
 from vehicle.pipeline.contracts import ROOT, AuditError, digest, write_json
 from vehicle.pipeline.prepare import archive_hook_bundle, gated_hook_bundle, new_output
-from vehicle.privacy import ha_contract as ha
-from vehicle.privacy import ha_socket_evidence as ha_socket
-from vehicle.privacy import mg4_contract as mg4
-from vehicle.privacy import abs_contract as abs_scope
+from vehicle.privacy import ha_contract as ha, ha_socket_evidence as ha_socket
+from vehicle.privacy import mg4_contract as mg4, abs_contract as abs_scope
 from vehicle.privacy import owntracks_contract as owntracks
 
 
@@ -50,7 +49,7 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
     processes, handles = [], []
     proxy_log = None
     proxy_before, reverse_owned, proxy_owned = None, False, False
-    identity, initial_pid = None, None
+    identity, initial_pid, pid_source = None, None, 'unknown'
     verification = {'passed': False, 'session': session, 'checks': {},
                     'tls_bypass': bool(tls_bypass), 'multi_process': bool(multi_process), 'hook_bundle': hook_bundle}
     used = None
@@ -161,8 +160,8 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
                 extra=(('http_write', 'ARMED'),) if mg4_webview else ())
         wait_until(hooks_ready, 30, 'Hook 就绪')
         text = (output / 'reads.log').read_text(encoding='utf-8')
-        match = re.search(r'attached pid (\d+)', text)
-        initial_pid = int(match[1]) if match else None
+        # pid 来源优先级：钩子事件 > 生命周期采样 > 驱动日志（日志行会与就绪判据竞态）。
+        initial_pid, pid_source = attached_pid(load_jsonl(output / 'reads.jsonl'), text)
         from vehicle.lab.abs_capture import capture_syncs
         with (capture_syncs(device) if abs_send else nullcontext()) as wire:
             print(json.dumps({'status': 'capturing', 'session': session, 'seconds': seconds}), flush=True)
@@ -189,21 +188,18 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
             verification['checks']['worker_cleanup_healthy'] = False
             verification['worker_cleanup_errors'] = ['unexpected_worker_cleanup_failure']
         finally:
-            try:
-                verification['checks']['device_settings_restored'] = not proxy_owned or restore_proxy(device, proxy_before)
-            except Exception:
-                verification['checks']['device_settings_restored'] = False
-            finally:
-                try:
-                    if reverse_owned:
-                        device.call('reverse', '--remove', 'tcp:8888')
-                    verification['checks']['device_reverse_restored'] = not reverse_owned or not any(
-                        'tcp:8888' in line.split() for line in device.call('reverse', '--list').splitlines())
-                except Exception:
-                    verification['checks']['device_reverse_restored'] = False
+            verify_restore(verification, 'device_settings_restored', proxy_owned, lambda: restore_proxy(device, proxy_before))
+            verify_restore(verification, 'device_reverse_restored', reverse_owned, lambda: restore_reverse(device))
         try:
-            alive = initial_pid is not None and device.call('shell', 'test', '-d', f'/proc/{initial_pid}') == ''
+            # 收尾时生命周期采样已落盘：pid 仍未知就再解析一次（事件 > 生命周期 > 日志）。
+            if initial_pid is None:
+                initial_pid, pid_source = attached_pid(
+                    load_jsonl(output / 'reads.jsonl'),
+                    (output / 'reads.log').read_text(encoding='utf-8'),
+                    verification.get('process_lifecycle'))
+            alive, probe = process_alive(device, package, initial_pid)
             verification['checks']['original_process_alive'] = alive
+            verification['original_process'] = {'pid': initial_pid, 'pid_source': pid_source, **probe}
             if identity:
                 apk_identity = {k: v for k, v in identity.items() if k != 'owntracks_endpoint_host'}
                 verification['checks']['apk_unchanged'] = apk_identity == device.ordinary_identity(package, user, scope)

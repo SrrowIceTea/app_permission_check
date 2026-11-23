@@ -14,6 +14,7 @@ CHECKS = [
     # 工程守卫与回归清单守卫并入本组（不新增组数；组数以 CHECKS 的实际长度为准，
     # 不要让注释里的数字漂——2026-11-12 之前这里写死过 21，加组后就对不上）。
     ('completion', '.', [sys.executable, '-m', 'unittest', 'test_completion',
+                         'vehicle.rules.python.test_permission_levels',
                          'tools.test_regression_manifest', 'tools.test_engineering_guards']),
     ('rules-contract', 'core', [sys.executable, '-m', 'unittest', 'test_rules_contract']),
     # event_store 的存储不变量此前错位在仓库根的 test_completion.py 里（§8.2 B-5）——
@@ -41,7 +42,7 @@ CHECKS = [
         'tools.test_capture_week1_baseline',
         'tools.test_report_projection',
         'tools.test_week_b_integration',
-        'vehicle.bench.test_window_calibration',
+        'vehicle.bench.test_window_calibration', 'vehicle.bench.test_window_review', 'vehicle.bench.test_vscanbench',
         'core.collector.test_scope', 'core.collector.test_response_capture', 'core.collector.test_health',
         'core.collector.test_parse',
         'vehicle.pipeline.test_environment', 'vehicle.pipeline.test_acceptance',
@@ -79,6 +80,7 @@ CHECKS = [
         'vehicle.analyze.test_method_evidence', 'vehicle.analyze.test_coverage_layers',
         'vehicle.analyze.test_detection_summary', 'vehicle.analyze.test_batch_alignment',
         'vehicle.ai.test_evidence_capability',
+        'vehicle.ai.test_value_basis',
         'vehicle.bench.test_ablation', 'vehicle.bench.test_governance',
         'vehicle.bench.test_cross_model_review', 'vehicle.bench.test_claim_verdicts',
         # 四种判定口径反例 + 命题↔求值器契约（2026-11-17 周二小 PR）

@@ -108,6 +108,28 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(404, status)
         self.assertIn(b'audit_not_completed', body)
 
+    def test_static_only_job_exposes_static_counts_and_titles(self):
+        """静态任务没有 audit 摘要：概览计数与标题必须来自 static.json，且标出来源。"""
+        identity = self.submit()
+        job = self.registry.get(identity)
+        (job.out / 'static').mkdir(exist_ok=True)
+        write_json(job.out / 'static/static.json', {
+            'apk': {'package': 'com.vscanner.targetapp'},
+            'findings': [{'rule_id': 'VSC-E002', 'title': 'PERF_VEHICLE_SPEED: data_egress',
+                          'conclusion_level': 'candidate'}]})
+        status, body = self.request('GET', '/api/pipeline/' + identity)
+        self.assertEqual(200, status)
+        snapshot = json.loads(body)
+        self.assertEqual('static', snapshot['findings_count_source'])
+        self.assertEqual(1, snapshot['findings_total'])
+        self.assertEqual(1, snapshot['findings_by_conclusion_level']['candidate'])
+        status, body = self.request('GET', '/api/pipeline/' + identity + '/static')
+        self.assertEqual(200, status)
+        row = json.loads(body)['findings'][0]
+        self.assertEqual('candidate', row['conclusion_level'])
+        self.assertTrue(row['rule_title'])
+        self.assertEqual('PERF_VEHICLE_SPEED: data_egress', row['title'])
+
     def test_source_traversal_cannot_read_job_or_external_files(self):
         identity = self.submit()
         job = self.registry.get(identity)

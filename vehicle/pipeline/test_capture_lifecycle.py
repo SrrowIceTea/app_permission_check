@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-from vehicle.pipeline import capture
+from vehicle.pipeline import capture, capture_process
 from vehicle.pipeline.capture_lifecycle import observe_until
 from vehicle.pipeline.contracts import AuditError
 from vehicle.pipeline.proxy_log import MAX_LINE, ProxyLog
@@ -35,7 +35,14 @@ class CaptureLifecycleTests(unittest.TestCase):
             (root / 'vehicle/hooks/dist').mkdir(parents=True)
             (root / 'vehicle/hooks/dist/hook_vehicle_general.bundle.js').touch()
             device = MagicMock()
-            device.call.side_effect = lambda *args: '123' if args[:2] == ('shell', 'pidof') else ''
+            reverse_lists = iter(['', 'UsbFfs tcp:8888 tcp:8888', ''])
+
+            def call(*args):
+                if args == ('reverse', '--list'):
+                    return next(reverse_lists)
+                return '123' if args[:2] == ('shell', 'pidof') else ''
+
+            device.call.side_effect = call
             proxy = MagicMock(returncode=0, stdout=io.BytesIO(b'Authorization: Bearer do-not-save\n'))
             reads = MagicMock(returncode=0)
             # 本用例验证的是"代理日志过滤失败也要恢复 proxy"，不是产物新鲜度；
@@ -75,3 +82,56 @@ class CaptureLifecycleTests(unittest.TestCase):
             result = observe_until([('reads', SimpleNamespace(poll=lambda: None))], 2,
                 Path(folder) / '.finish-request', clock=lambda: ticks[0], pause=pause)
         self.assertEqual(('duration_elapsed', 2), (result['reason'], result['observed_seconds']))
+
+
+class AttachedPidResolutionTests(unittest.TestCase):
+    """2026-11-16: pid 解析竞态曾把健康采集判成 capture_unhealthy。
+
+    就绪判据在 TLS_BYPASS_DISABLED 处就翻真，而 "attached pid N" 要等全部脚本
+    加载完才打印；日志里抓不到 pid 时旧实现直接给 original_process_alive=false，
+    进程其实一直活着（30/30 次生命周期采样都是同一个 pid）。
+    """
+
+    def test_event_pid_wins_when_log_line_has_not_landed_yet(self):
+        rows = [{'src': 'vhal', 'ev': 'START'}, {'src': 'egress', 'ev': 'START', 'pid': 2533}]
+        self.assertEqual((2533, 'reads_event'), capture_process.attached_pid(rows, ''))
+
+    def test_falls_back_to_lifecycle_then_log_then_unknown(self):
+        lifecycle = {'attached_pids': [2490]}
+        self.assertEqual((2490, 'process_lifecycle'),
+                         capture_process.attached_pid([{'pid': '2533'}], '', lifecycle))
+        self.assertEqual((2501, 'reads_log'),
+                         capture_process.attached_pid([], 'attached pid 2501; collecting for 70s'))
+        self.assertEqual((None, 'unknown'), capture_process.attached_pid([], 'no marker here'))
+
+    def test_known_pid_uses_proc_dir_probe(self):
+        class Device:
+            def __init__(self):
+                self.calls = []
+            def call(self, *args):
+                self.calls.append(args)
+                return ''
+        device = Device()
+        alive, probe = capture_process.process_alive(device, 'com.vscanner.targetapp', 2533)
+        self.assertTrue(alive)
+        self.assertEqual({'probe': 'proc_dir', 'pid': 2533, 'passed': True}, probe)
+        self.assertEqual(('shell', 'test', '-d', '/proc/2533'), device.calls[0])
+
+    def test_unknown_pid_degrades_to_pidof_and_declares_it_weaker(self):
+        class Device:
+            def call(self, *args):
+                return '2533\n'
+        alive, probe = capture_process.process_alive(Device(), 'com.vscanner.targetapp', None)
+        self.assertTrue(alive)
+        self.assertEqual('pidof_after_capture', probe['probe'])
+        self.assertEqual(['2533'], probe['pids'])
+        self.assertTrue(probe['weaker_than_proc_check'])
+
+    def test_dead_process_is_still_reported_dead(self):
+        class Device:
+            def call(self, *args):
+                if args[1] == 'test':
+                    raise AuditError('device_command_failed', '设备命令失败。', '查看设备连接。')
+                return ''
+        with self.assertRaises(AuditError):
+            capture_process.process_alive(Device(), 'com.vscanner.targetapp', 999999)

@@ -71,7 +71,7 @@ vscanner/
 | --- | --- | --- |
 | 一键审计流水线 | **8771** | `python -B mobile/pipeline/server.py --port 8771 --workdir output/pipe ...` |
 | 静态工作台（旧） | **8772** | `python -B mobile/workbench/server.py` |
-| 车载审计工作台 | **8773** | `./vehicle.ps1 web`，详见 [车载前端](vehicle/frontend/README.md) |
+| 车载审计工作台 | **8773** | `start-vehicle.bat`（或 `./vehicle.ps1 web`），详见 [车载前端](vehicle/frontend/README.md) |
 | 前端静态服务器 | **8090** | `python -m http.server 8090 --bind 127.0.0.1 --directory frontend` |
 
 > 旧文档「都为 8771」已过时。Root / 非 root 由启动配置的正控决定，不能混用证明。
@@ -110,14 +110,49 @@ start-all.bat -Stop            :: 停掉本脚本启动的服务
 ```
 
 等价于 `powershell -ExecutionPolicy Bypass -File .\start-all.ps1`（参数相同）。
-脚本会自己解析 Python 3.13、检查端口是否被别的进程占用（占用则跳过，不替你杀进程），
-健康检查通过才报"就绪"，日志落在 `output/logs/<服务>.out.log` / `.err.log`。
+脚本会自己解析 Python 3.13、载入 `environment.ps1`（PATH/JAVA_HOME，jadx 与 adb 依赖它）、
+检查端口是否被别的进程占用（占用则跳过，不替你杀进程），健康检查通过才报"就绪"，
+日志落在 `output/logs/<服务>.out.log` / `.err.log`。
 
 | 服务 | 端口 | 健康检查 |
 | --- | --- | --- |
 | pipeline（一键审计：静态→安装→动态→报告） | 8771 | `/api/stages` |
 | workbench（静态工作台，`vehicle/workbench`） | 8770 | `/` |
 | frontend（零构建前端） | 8090 | `/app.html` |
+| vehicle（车载审计工作台，`vehicle/webapp`；默认不起） | 8773 | `/api/config` |
+
+### 车载端一键启动（AAOS）
+
+```cmd
+start-vehicle.bat            :: 起车载工作台并打开 http://127.0.0.1:8773/
+start-vehicle.bat -NoBrowser :: 不起浏览器
+start-vehicle.bat -Status    :: 看端口/健康
+start-vehicle.bat -Stop      :: 只停车载端，不动移动端服务
+```
+
+车载端**只有一个进程**：`vehicle/webapp` 自己把 `vehicle/frontend/` 作为 `/frontend/` 发出来，
+不需要另起 `http.server`。等价于 `.\start-all.ps1 -Only vehicle`，
+也等价于文档入口 `./vehicle.ps1 web`（两者都走 `python -m vehicle web`）。
+
+动态采集（页面上的「新建 AAOS 采集」）还会硬校验设备侧五件事：AAOS 特征、API 35、
+装包在 user 10 且 sha256 与上传一致、应用正在运行、frida-server 监听 `127.0.0.1:27043`。
+同目录的脚本一次备好并逐条复核，缺哪条报哪条：
+
+```cmd
+prepare-vehicle-device.bat              :: 起模拟器 → root → frida-server → 装靶子 → 拉起应用
+prepare-vehicle-device.bat -NoEmulator  :: 设备已由别处启动
+prepare-vehicle-device.bat -SkipApp     :: 只备设备与 frida
+```
+
+车载 AI 辅助复核**默认启用**：`start-all.ps1` 发现 `vehicle/ai/config.local.json`
+（已在 `.gitignore` 里）就带 `--ai-config`，页面 `/api/config` 返回 `ai_configured=true`；
+文件缺失只警告、服务照常起（不联网），`-NoAi` 可显式关掉。
+
+全链路自检（起服务 + 备设备之后跑，会点按钮并等 AI 返回）：
+
+```bash
+python tools/vehicle_demo_e2e.py --base http://127.0.0.1:8773 --serial emulator-5554 --seconds 30
+```
 
 ```powershell
 # 依赖解释器只有那个（装了 reportlab/Pillow/mitmproxy/cryptography/frida/pypdf）

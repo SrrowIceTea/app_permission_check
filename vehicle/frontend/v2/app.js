@@ -171,8 +171,9 @@
 
       let rows = [];
       if (['done', 'static_only', 'failed'].includes(job.state)) {
+        const action = job.state === 'static_only' ? 'static' : 'findings';  // 静态任务没有设备审计，/findings 按契约拒绝
         try {
-          const data = await api(`/api/pipeline/${encodeURIComponent(id)}/findings`);
+          const data = await api(`/api/pipeline/${encodeURIComponent(id)}/${action}`);
           rows = Array.isArray(data) ? data : (data && data.findings) || [];
         } catch (e) {
           state.note = e.message;
@@ -296,7 +297,7 @@
     try {
       const cfg = await api('/api/config');
       state.cfg = cfg;
-      online(true, `已连接 · AAOS ${cfg.api}`);
+      online(true, `服务已连接 · 目标 AAOS ${cfg.api}`);
       $$('[data-count]').forEach((el, i) => {
         const v = [(cfg.versions || []).length, (cfg.stages || []).length, cfg.api];
         if (v[i]) { el.dataset.done = '0'; countUp(el, v[i]); }
