@@ -178,6 +178,24 @@ class FixtureBatchTests(unittest.TestCase):
         self.assertEqual([], self.pairs([self.primary()], [original, other_batch]))
         self.assertEqual([], self.pairs([self.primary(), self.primary(evt_id=4, ts=1020)], [original]))
 
+    def test_missing_and_duplicate_batch_tokens_keep_window_candidates_unconfirmed(self):
+        original = self.upload(ts=1100)
+        missing = self.upload(ts=1100, request_payload={'text': json.dumps({
+            'package': PKG, 'reads': [self.CLAIM]})})
+        cases = (([missing], {2}), ([original, self.upload(ts=1200, evt_id=3)], {2, 3}))
+        for flows, flow_ids in cases:
+            with self.subTest(flow_ids=flow_ids):
+                reads = [self.primary()]
+                self.assertEqual([], self.pairs(reads, flows, 'token'))
+                window = self.pairs(reads, flows, 'window')
+                hybrid = self.pairs(reads, flows, 'both')
+                self.assertEqual(window, hybrid)
+                self.assertEqual(flow_ids, {p['flow_event_id'] for p in hybrid})
+                for pair in hybrid:
+                    self.assertEqual('value_in_window', pair['pair_basis'])
+                    self.assertIs(pair['origin_proven'], False)
+                    self.assertNotIn('token_sha256', pair)
+
 
 if __name__ == '__main__':
     unittest.main()

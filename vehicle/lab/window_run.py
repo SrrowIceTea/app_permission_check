@@ -27,6 +27,8 @@ PACKAGE = 'com.vscanner.targetapp'
 def run(out, delay=36, offline=False):
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=False)
+    database = out / 'rules.db'
+    shutil.copyfile(ROOT / 'vehicle/rules/rules_library/rules.db', database)
     d = Device('emulator-5554')
     capture = out / 'capture'
     server = ThreadingHTTPServer(('127.0.0.1', 8890), Collector)
@@ -34,7 +36,7 @@ def run(out, delay=36, offline=False):
     log = (out / 'capture.log').open('w', encoding='utf-8')
     proc = subprocess.Popen([sys.executable, '-m', 'vehicle.pipeline.capture', '--package', PACKAGE,
         '--user', '10', '--seconds', str(delay + (75 if offline else 40)), '--activity', PACKAGE + '/.MainActivity',
-        '--out', str(capture)], cwd=ROOT, stdout=log, stderr=log)
+        '--out', str(capture), '--no-tls-bypass', '--no-multi-process'], cwd=ROOT, stdout=log, stderr=log)
     actions = []
     run_token = uuid.uuid4().hex[:12]
     network = EnvironmentActions(d.call, out)
@@ -87,8 +89,10 @@ def run(out, delay=36, offline=False):
                             'receipt': str(path), 'sha256': digest(path)})
             write_json(out / 'actions.json', actions)
             time.sleep(.6)
+        # Allow the final request and its buffered read events to settle before detaching the fixture.
+        time.sleep(5)
         (capture / '.finish-request').touch()
-        proc.wait(timeout=delay + 60)
+        proc.wait(timeout=240)
         if proc.returncode:
             raise RuntimeError('capture failed; evidence retained')
     finally:
@@ -104,8 +108,10 @@ def run(out, delay=36, offline=False):
         server.server_close()
         network.close()
     manifest = read_json(capture / 'session-manifest.json')
+    if digest(database) != manifest['rules_sha256']:
+        raise ValueError('the frozen rule database differs from the capture manifest')
     reads, flows = load_jsonl(capture / 'reads.jsonl'), load_jsonl(capture / 'flows.jsonl')
-    rules = load_rules(ROOT / 'vehicle/rules/rules_library/rules.db', '15')
+    rules = load_rules(database, '15')
     by_prop = {json.loads(r['condition_json']).get('property_id'): r['rule_id']
                for r in rules if r['rule_type'] == 'data_egress' and r['enabled']}
     pairs = []
@@ -140,7 +146,10 @@ def run(out, delay=36, offline=False):
     source = ROOT / 'vehicle/targets/target-app/app/src/debug/java/com/vscanner/targetapp/AuditScenarioState.kt'
     snapshot = out / 'fixture-cache-source.kt'
     shutil.copyfile(source, snapshot)
-    refs = [out / 'actions.json', out / 'reference-alignment.json', snapshot]
+    reader_source = ROOT / 'vehicle/targets/target-app/app/src/main/java/com/vscanner/targetapp/VhalReader.kt'
+    reader = out / 'fixture-vhal-reader-source.kt'
+    shutil.copyfile(reader_source, reader)
+    refs = [out / 'actions.json', out / 'reference-alignment.json', snapshot, reader]
     refs += [Path(a['receipt']) for a in actions]
     if offline:
         refs += [out / (run_token + '-offline-environment.json'),
@@ -153,7 +162,7 @@ def run(out, delay=36, offline=False):
             {'file': str(p.resolve()), 'sha256': digest(p)} for p in refs],
         'scope': 'Explicit fixture actions and batch semantics; equal-value candidate ambiguity is not a violation.'}
     write_json(out / 'labels.json', label)
-    report = calibrate(capture, out / 'labels.json')
+    report = calibrate(capture, out / 'labels.json', rules=database)
     write_json(out / 'window-calibration.json', report)
     return report
 

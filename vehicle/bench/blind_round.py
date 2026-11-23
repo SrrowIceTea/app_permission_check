@@ -80,22 +80,25 @@ def prepare(suite, out, root=ROOT, review_mode=DEFAULT_REVIEW_MODE):
         cards.append({'title': REVIEW_TITLES[key], 'questions': questions, 'facts': facts})
         bindings.append(source.binding())
 
-    evidence = {'schema_version': 1, 'cases': cards}
-    rendered = render(evidence)
+    plan = {'schema_version': 1, 'review_mode': review_mode,
+            'reviewer_kind': reviewer_kind(review_mode), 'suite_sha256': digest(suite),
+            'cases': bindings, 'items': items, 'status': 'awaiting_independent_reviews'}
+    return freeze_review(out, {'schema_version': 1, 'cases': cards}, plan)
+
+
+def freeze_review(out, evidence, plan, *, guide=GUIDE, renderer=render):
+    rendered = renderer(evidence)
     out.mkdir(parents=True, exist_ok=False)
     private = out / 'organizer-only'
     private.mkdir()
     evidence_path = private / 'evidence.json'
     write_json(evidence_path, evidence)
     evidence_sha = digest(evidence_path)
-    plan = {'schema_version': 1, 'review_mode': review_mode,
-            'reviewer_kind': reviewer_kind(review_mode),
-            'suite_sha256': digest(suite), 'evidence_sha256': evidence_sha,
-            'cases': bindings, 'items': items, 'status': 'awaiting_independent_reviews'}
+    plan = {**plan, 'evidence_sha256': evidence_sha}
     plan_path = private / 'plan.json'
     write_json(plan_path, plan)
     plan_sha = digest(plan_path)
-    kind = reviewer_kind(review_mode)
+    kind = reviewer_kind(plan['review_mode'])
     for slot in ('A', 'B'):
         review = {'schema_version': 1, 'slot': slot, 'evidence_sha256': evidence_sha,
                   'plan_sha256': plan_sha,
@@ -103,15 +106,15 @@ def prepare(suite, out, root=ROOT, review_mode=DEFAULT_REVIEW_MODE):
                   **({'agent_id': None, 'context_mode': 'fresh', 'review_session_id': None,
                       'model_family': None, 'model_id': None}
                      if kind == 'subagent' else {}),
-                  'decisions': [{'id': item['id'], 'decision': None, 'reason': None} for item in items]}
+                  'decisions': [{'id': item['id'], 'decision': None, 'reason': None} for item in plan['items']]}
         with ZipFile(out / f'reviewer-{slot}.zip', 'x', compression=ZIP_DEFLATED) as archive:
-            archive.writestr('README.md', GUIDE)
+            archive.writestr('README.md', guide)
             archive.writestr('evidence.md', rendered)
             archive.write(evidence_path, 'evidence.json')
             archive.writestr('review.json', json.dumps(review, ensure_ascii=False, indent=2) + '\n')
     write_json(private / 'adjudication-pending.json', {'status': 'awaiting_independent_reviews',
                'evidence_sha256': evidence_sha, 'plan_sha256': plan_sha,
-               'pending_items': [item['id'] for item in items],
+               'pending_items': [item['id'] for item in plan['items']],
                'disagreements': None, 'pair_items_with_insufficient_evidence': None,
                'reviewer': None, 'reviewed_at': None})
     return plan
@@ -190,13 +193,19 @@ def build_comparison(private, first, second, root=ROOT):
                  for item in plan['items'] if 'pair' not in item]
     label = None
     if not result['pair_items_with_insufficient_evidence']:
-        binding = next(case for case in plan['cases'] if case['id'] == 'ha-battery')
+        pair_case = plan.get('pair_case', 'ha-battery')
+        binding = next(case for case in plan['cases'] if case['id'] == pair_case)
+        if any(item['case'] != pair_case for item in pair_items):
+            raise ValueError('pair items must belong to the bound sample')
         label = {key: binding[key] for key in ('id', 'apk_sha256', 'session_id')}
+        references = (binding['reference_evidence'] if 'reference_evidence' in binding
+                      else [binding['sources']['business']])
         origin = ('subagent_review' if mode in AGENT_MODES else 'agent_review'
                   if any(row.get('reviewer_kind') == 'ai' for row in (a, b)) else 'independent_review')
-        label.update(schema_version=LABEL_SCHEMA, pair_schema=2, sample_origin='independent',
+        label.update(schema_version=LABEL_SCHEMA, pair_schema=2,
+            sample_origin=binding.get('sample_origin', 'independent'),
             origin=origin, **signoff_fields(mode, 'pending'),
-            reference_evidence=[binding['sources']['business']],
+            reference_evidence=references,
             universe=[{'pair': item['pair'], 'negative_control': None} for item in pair_items],
             reviews=[{**identity(submission),
                       'decisions': [{'pair': item['pair'],

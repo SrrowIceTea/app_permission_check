@@ -1,12 +1,16 @@
 """Reference sweep must count missed delayed pairs and same-value ambiguity."""
 import copy
 import json
+import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
+from shutil import copyfile
 from unittest.mock import patch
 from core.io_utils import load_jsonl
 from vehicle.bench.metrics import pair_metrics
+from vehicle.bench import window_calibration
 from vehicle.bench.window_calibration import calibrate
 from vehicle.pipeline.contracts import ROOT, AuditError, digest, write_json
 from vehicle.pipeline.test_support import make_capture, seal_capture, PACKAGE
@@ -51,6 +55,30 @@ class WindowCalibrationTests(unittest.TestCase):
         self.assertFalse(short['independent_human_review'])
         self.assertEqual('pending', result['human_signoff'])
         self.assertEqual(before, digest(ROOT / 'vehicle/rules/rules_library/rules.db'))
+
+    def test_explicit_snapshot_gates_replay_and_supplies_both_rule_loaders(self):
+        snapshot = self.root / 'historical-rules.db'
+        copyfile(ROOT / 'vehicle/rules/rules_library/rules.db', snapshot)
+        with closing(sqlite3.connect(snapshot)) as conn:
+            conn.execute('PRAGMA application_id = 42')
+        manifest_path = self.capture / 'session-manifest.json'
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+        seal_capture(self.capture, {**manifest, 'rules_sha256': digest(snapshot)})
+
+        with patch('vehicle.pipeline.preflight.HOOK_DIRS', (self.hooks,)), \
+                patch.object(window_calibration, 'load_rules', wraps=window_calibration.load_rules) as vhal, \
+                patch.object(window_calibration, 'load_general_rules',
+                             wraps=window_calibration.load_general_rules) as general:
+            with self.assertRaises(AuditError) as error:
+                calibrate(self.capture, self.label_path)
+            self.assertEqual('replay_rules_snapshot_missing', error.exception.code)
+            result = calibrate(self.capture, self.label_path, (30000,), rules=snapshot, include_pairs=True)
+        vhal.assert_called_once_with(snapshot.resolve(), '15')
+        general.assert_called_once_with('15', db=snapshot.resolve())
+        self.assertEqual(digest(snapshot), result['rules_sha'])
+        row = result['windows'][0]
+        self.assertEqual([[self.label['expected_pairs'][0][0], 'vhal', 11, 'proxy', 20]],
+                         row['matched_pairs'])
 
     def test_agent_cannot_remove_pending_signoff_or_reference(self):
         for changed in ({'human_signoff': 'approved'}, {'reference_evidence': []}):

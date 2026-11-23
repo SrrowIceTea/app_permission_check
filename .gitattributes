@@ -1,4 +1,7 @@
 # Evidence manifests and rule builds bind these files by their exact bytes.
+vehicle/rules/baseline_android1[36]/seed_*.jsonl text eol=lf
+vehicle/rules/baseline_android1[36]/POLICY.md text eol=crlf
+vehicle/rules/egress-calibration-20260924.snapshot.md text eol=crlf
 vehicle/privacy/*_contract.py text eol=lf
 vehicle/privacy/ha_socket_evidence.py text eol=lf
 vehicle/privacy/*POLICY.md text eol=lf

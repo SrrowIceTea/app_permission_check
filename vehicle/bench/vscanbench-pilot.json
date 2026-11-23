@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "fixtures": [
+    {
+      "id": "targetapp-offline-batch",
+      "package": "com.vscanner.targetapp",
+      "label_id": "b1-window",
+      "capture_manifest": {
+        "path": "output/b1-fixture-20261121-recovery/capture/session-manifest.json",
+        "sha256": "a8020304c554f05cccda365bf147b57095ac152e8be70611bb4b37892bedf523"
+      },
+      "rules": {
+        "path": "output/b1-fixture-20261121-recovery/rules.db",
+        "sha256": "ea0ec53c95a6d0edd91e38083f00a1cda024537db4c23074c6481eb0d3cf6c18"
+      },
+      "labels": {
+        "path": "output/b1-fixture-20261121-recovery-review/signed/labels-signed.json",
+        "sha256": "ca1bebaf659b9d6d0f9247f8ff7a5e09a6b160ef8af83d937563c38e8b146779"
+      }
+    },
+    {
+      "id": "targetapp2-delayed-ui",
+      "package": "com.vscanner.targetapp2",
+      "label_id": "b1-targetapp2",
+      "capture_manifest": {
+        "path": "output/b1-cross-app-20261122/trial-03/capture/session-manifest.json",
+        "sha256": "2c24396dc6de3427c9c99af6d998def59ec577d628f53a5ac15a6a3e0a45c505"
+      },
+      "rules": {
+        "path": "output/b1-cross-app-20261122/trial-03/rules.db",
+        "sha256": "ea0ec53c95a6d0edd91e38083f00a1cda024537db4c23074c6481eb0d3cf6c18"
+      },
+      "labels": {
+        "path": "output/b1-cross-app-20261122/review/signed/labels-signed.json",
+        "sha256": "55f08faaf1df7f8a7dbe00483adfd8e999a8f792c57f6b0ff0d9a5e4873b68b1"
+      }
+    }
+  ],
+  "carstats_queue": {
+    "path": "output/b1-carstatsviewer-20261123/queue-trial-01/queue-verification.json",
+    "sha256": "f88828959de542511da284fd87aa7b053b54f0f1c3053991a3848ddd65864cb4"
+  },
+  "read_send_control": {
+    "path": "output/vscanbench-read-send-20261123/run-02/control-verification.json",
+    "sha256": "b00f320251e0d327d69b082a9114325d6b4d91669c9c59660577db1b4300663b"
+  }
+}

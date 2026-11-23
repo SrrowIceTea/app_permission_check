@@ -1,4 +1,6 @@
 """Own and verify both legacy and effective Android global proxy state."""
+from subprocess import TimeoutExpired
+
 from vehicle.pipeline.contracts import AuditError
 from vehicle.pipeline.capture_device import wait_until
 
@@ -32,3 +34,36 @@ def restore_proxy(device, state):
     if not state['legacy']:
         device.call('shell', 'settings', 'delete', 'global', 'http_proxy')
     return proxy_state(device) == state
+
+
+def restore_reverse(device):
+    endpoint = 'tcp:8888'
+
+    def mapped():
+        return any(endpoint in line.split() for line in device.call('reverse', '--list').splitlines())
+
+    if mapped():
+        device.call('reverse', '--remove', endpoint)
+    return not mapped()
+
+
+def verify_restore(verification, check, owned, operation):
+    """Retry an owned cleanup once after an ADB timeout, then require readback."""
+    verification['checks'][check] = not owned
+    if not owned:
+        return
+    attempts = verification.setdefault('network_cleanup', {}).setdefault(check, [])
+    for _ in range(2):
+        try:
+            restored = operation()
+            attempts.append({'status': 'restored' if restored else 'state_mismatch'})
+            verification['checks'][check] = restored
+            return
+        except TimeoutExpired:
+            attempts.append({'status': 'adb_timeout'})
+        except Exception as error:
+            attempt = {'status': 'failed', 'type': type(error).__name__}
+            if isinstance(error, AuditError):
+                attempt['code'] = error.code
+            attempts.append(attempt)
+            return

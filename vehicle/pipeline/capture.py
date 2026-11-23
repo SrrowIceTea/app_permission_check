@@ -20,7 +20,7 @@ from vehicle.pipeline import readiness
 from vehicle.pipeline.capture_device import Device, wait_until, write_manifest
 from vehicle.pipeline.capture_lifecycle import observe_until, observe_with_lifecycle, stop_workers
 from vehicle.pipeline.capture_process import attached_pid, process_alive
-from vehicle.pipeline.capture_proxy import proxy_state, restore_proxy, verify_reversible
+from vehicle.pipeline.capture_proxy import proxy_state, restore_proxy, restore_reverse, verify_restore, verify_reversible
 from vehicle.pipeline.proxy_log import ProxyLog
 from vehicle.pipeline.contracts import ROOT, AuditError, digest, write_json
 from vehicle.pipeline.prepare import archive_hook_bundle, gated_hook_bundle, new_output
@@ -188,18 +188,8 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
             verification['checks']['worker_cleanup_healthy'] = False
             verification['worker_cleanup_errors'] = ['unexpected_worker_cleanup_failure']
         finally:
-            try:
-                verification['checks']['device_settings_restored'] = not proxy_owned or restore_proxy(device, proxy_before)
-            except Exception:
-                verification['checks']['device_settings_restored'] = False
-            finally:
-                try:
-                    if reverse_owned:
-                        device.call('reverse', '--remove', 'tcp:8888')
-                    verification['checks']['device_reverse_restored'] = not reverse_owned or not any(
-                        'tcp:8888' in line.split() for line in device.call('reverse', '--list').splitlines())
-                except Exception:
-                    verification['checks']['device_reverse_restored'] = False
+            verify_restore(verification, 'device_settings_restored', proxy_owned, lambda: restore_proxy(device, proxy_before))
+            verify_restore(verification, 'device_reverse_restored', reverse_owned, lambda: restore_reverse(device))
         try:
             # 收尾时生命周期采样已落盘：pid 仍未知就再解析一次（事件 > 生命周期 > 日志）。
             if initial_pid is None:

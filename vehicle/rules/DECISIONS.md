@@ -276,3 +276,17 @@ debug 专用双 Service 使用不同进程，共享同一测试用户的专用�
 调试入口要求 DUMP，release 合并清单无该入口。详见 [CROSS_PROCESS.md](CROSS_PROCESS.md)。
 exec-out 缺失文件假成功与 ADB 连接中断各保留失败轮次，最终证据为本轮 device-003。
 只补充本轮同 APK/UID 协作进程的已测范围，D016 的旧证据和未测硬件断电结论不追溯改写。
+
+## D018 AAOS 35 A6 编译权限值（2026-11-18）
+
+A6 复核报告固定内容摘要、设备指纹与镜像 ID。构建逐条核对其原始级别和定义包与旧权限种子一致，
+再导入 150 个编译整数。权限行保留 A1 原始观测出处，另附 A6 定义包 APK 与测量证据摘要，
+状态仍为 `pending`。Android 13/14/16 的 30 个整数继续为 NULL。
+源码锁定产物通过 Git 属性保持字节格式。E1 使用 [原始政策快照](egress-calibration-20260924.snapshot.md)，
+使现有风险规则引用及启用范围在重建后逐字段一致。结果见 [入库验证](../../output/vehicle-permission-import-20261118/verification.json)。
+
+## D019 权限资产覆盖升级与 Room 回读（2026-11-18）
+
+以摘要匹配的旧 APK 首装，再覆盖安装带 A6 整数值的新 APK。升级备份用旧运行库文件摘要核对，
+生效版本用资产摘要与内容摘要核对。AAOS 35 A6 自有模拟器上，升级后与应用进程重启后两次
+Room 回读均逐项匹配 150 条 A6 权限值及来源。见 [运行验收](../../output/vehicle-permission-room-20261118/device-003/verification.json)。

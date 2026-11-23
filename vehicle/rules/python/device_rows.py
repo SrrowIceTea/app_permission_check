@@ -36,17 +36,16 @@ GENERAL_PERMISSION_NAMES = frozenset({
 })
 
 
-def insert_device_permissions(dst: sqlite3.Connection, calibration: Path) -> int:
+def insert_device_permissions(dst: sqlite3.Connection, calibration: Path, levels: dict) -> int:
     rows = [json.loads(line) for line in calibration.read_text(encoding="utf-8").splitlines() if line.strip()]
     payload = []
     for row in rows:
         provenance = row["provenance"]
+        compiled = levels[row["permission_name"]]
         payload.append((
             row["permission_name"], DEVICE_VERSION,
             row["protection_level_raw"],
-            # protection_level_value stays NULL: PM reports a name, not the numeric
-            # flag set, and the project forbids hardcoding flag values.
-            None,
+            compiled["protection_level_value"],
             row["permission_group"], row["description"],
             "pending",
             "[]",
@@ -57,7 +56,7 @@ def insert_device_permissions(dst: sqlite3.Connection, calibration: Path) -> int
                 "device_fingerprint": provenance["device"].get("ro.build.fingerprint"),
                 "source_file_sha256": provenance["source_file_sha256"],
                 "defining_package": row["defining_package"],
-            }], ensure_ascii=False),
+            }, compiled], ensure_ascii=False),
             f"设备实测（非源码抽取）。label={row['label']!r}",
         ))
     dst.executemany(
@@ -70,12 +69,12 @@ def insert_device_permissions(dst: sqlite3.Connection, calibration: Path) -> int
     return len(payload)
 
 
-def insert_general_permissions(dst: sqlite3.Connection, calibration: Path) -> int:
+def insert_general_permissions(dst: sqlite3.Connection, calibration: Path, levels: dict) -> int:
     rows = [json.loads(line) for line in calibration.read_text(encoding="utf-8").splitlines() if line.strip()]
     unexpected = sorted({row["permission_name"] for row in rows} - GENERAL_PERMISSION_NAMES)
     if unexpected:
         raise ValueError("Unapproved generic permissions in calibration: " + ", ".join(unexpected))
-    return insert_device_permissions(dst, calibration)
+    return insert_device_permissions(dst, calibration, levels)
 
 
 def insert_device_properties(dst: sqlite3.Connection, device_ids: Path, provenance: dict) -> int:
@@ -238,14 +237,14 @@ def insert_device_rules(dst: sqlite3.Connection, provenance: dict) -> int:
 
 
 def build_device_rows(dst: sqlite3.Connection, calibration: Path, general_permissions: Path,
-                      property_ids: Path, cpm_signatures: Path, device_facts: dict) -> dict:
+                      property_ids: Path, cpm_signatures: Path, device_facts: dict, levels: dict) -> dict:
     """构造全部 android-15 设备观测行，返回各表行数。
 
     risk_rules 必须最后构造——它的行带指向上面三张表的外键。
     """
     return {
-        "permissions": (insert_device_permissions(dst, calibration)
-                        + insert_general_permissions(dst, general_permissions)),
+        "permissions": (insert_device_permissions(dst, calibration, levels)
+                        + insert_general_permissions(dst, general_permissions, levels)),
         "vhal_properties": insert_device_properties(dst, property_ids, device_facts),
         "dangerous_apis": insert_device_apis(dst, cpm_signatures, device_facts),
         # Last on purpose: the rule rows carry foreign keys into the three tables above.

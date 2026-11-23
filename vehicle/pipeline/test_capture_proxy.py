@@ -1,6 +1,8 @@
 """Regression for the AAOS proxy that survives deletion of the legacy key."""
+from subprocess import TimeoutExpired
 import unittest
-from vehicle.pipeline.capture_proxy import proxy_state, restore_proxy, verify_reversible
+from unittest.mock import MagicMock
+from vehicle.pipeline.capture_proxy import proxy_state, restore_proxy, restore_reverse, verify_restore, verify_reversible
 from vehicle.pipeline.contracts import AuditError
 
 
@@ -35,3 +37,24 @@ class CaptureProxyTests(unittest.TestCase):
         for key, value in (('pac', 'http://test/pac'), ('exclusions', 'localhost')):
             with self.subTest(key=key), self.assertRaises(AuditError):
                 verify_reversible({**state, key: value})
+
+    def test_timed_out_reverse_remove_still_requires_readback(self):
+        device = MagicMock()
+        other = 'UsbFfs tcp:41888 tcp:41888'
+        device.call.side_effect = [f'UsbFfs tcp:8888 tcp:8888\n{other}', TimeoutExpired('adb', 45), other, other]
+        result = {'checks': {}}
+
+        verify_restore(result, 'reverse', True, lambda: restore_reverse(device))
+
+        self.assertTrue(result['checks']['reverse'])
+        self.assertEqual([{'status': 'adb_timeout'}, {'status': 'restored'}], result['network_cleanup']['reverse'])
+        self.assertEqual(1, sum(call.args[:2] == ('reverse', '--remove') for call in device.call.call_args_list))
+
+    def test_timeout_budget_exhaustion_leaves_check_failed(self):
+        result = {'checks': {}}
+        operation = MagicMock(side_effect=TimeoutExpired('adb', 45))
+
+        verify_restore(result, 'proxy', True, operation)
+
+        self.assertFalse(result['checks']['proxy'])
+        self.assertEqual(2, operation.call_count)

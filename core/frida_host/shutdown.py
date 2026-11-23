@@ -9,15 +9,23 @@ def flush_capture(frida, script, stream, body, *, transport):
     location_repeats = 'vscanFlushLocationReads' in body
     if not buffered and not location_repeats:
         return
+    stage = 'flush_cancellable'
+    print('FRIDA_CLEANUP_START ' + stage, flush=True)
     try:
         with frida.Cancellable() as cancellation:
             timer = threading.Timer(5, cancellation.cancel)
             timer.start()
             try:
                 if location_repeats:
+                    stage = 'flush_location_reads'
+                    print('FRIDA_CLEANUP_START ' + stage, flush=True)
                     script.exports_sync.vscan_flush_location_reads()
                 if buffered:
+                    stage = 'flush_transport_rpc'
+                    print('FRIDA_CLEANUP_START ' + stage, flush=True)
                     stats = script.exports_sync.vscan_flush()
+                    stage = 'flush_transport_ack'
+                    print('FRIDA_CLEANUP_START ' + stage, flush=True)
                     if stream.acknowledge(stats):
                         print("VSCAN_TRANSPORT " + json.dumps(stats), flush=True)
             finally:
@@ -25,6 +33,7 @@ def flush_capture(frida, script, stream, body, *, transport):
     except Exception as error:
         print(f"FRIDA_FLUSH_FAILED {type(error).__name__}", flush=True)
         stream.flush_failed(error)
+    print('FRIDA_FLUSH_FINISHED', flush=True)
 
 
 def cleanup(frida, session, script, callback, detached, stream, store, *, timeout=4, extra=None, pending_spawn=None):

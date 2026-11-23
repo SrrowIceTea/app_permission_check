@@ -35,7 +35,14 @@ class CaptureLifecycleTests(unittest.TestCase):
             (root / 'vehicle/hooks/dist').mkdir(parents=True)
             (root / 'vehicle/hooks/dist/hook_vehicle_general.bundle.js').touch()
             device = MagicMock()
-            device.call.side_effect = lambda *args: '123' if args[:2] == ('shell', 'pidof') else ''
+            reverse_lists = iter(['', 'UsbFfs tcp:8888 tcp:8888', ''])
+
+            def call(*args):
+                if args == ('reverse', '--list'):
+                    return next(reverse_lists)
+                return '123' if args[:2] == ('shell', 'pidof') else ''
+
+            device.call.side_effect = call
             proxy = MagicMock(returncode=0, stdout=io.BytesIO(b'Authorization: Bearer do-not-save\n'))
             reads = MagicMock(returncode=0)
             # 本用例验证的是"代理日志过滤失败也要恢复 proxy"，不是产物新鲜度；

@@ -185,10 +185,13 @@ APK 静态反编译作为**独立工作台**（vehicle/workbench，2026-09-28，
   `--resume` 额外复用本批次 `_static/` 已完成产物（判据是 `static-manifest.json`）。
   实测 3 样本并行 7m42s、同批 `--resume` 3.1s。
 
-仍**未做**（勿当成已完成）：B1 窗口校准**已出初评**（见
-[vehicle/bench/WINDOW_CALIBRATION.md](vehicle/bench/WINDOW_CALIBRATION.md)），人工签核待完成；
-A5-1 protectionLevel 标定（`permissions` 表 180 行：`protection_level_raw` **180/180 有值**，
-`protection_level_value` **180/180 为 NULL**——缺的是级别映射，不是原始值）、B2 VScanBench、
+B1 自有 AAOS 夹具补采已完成两名独立 subagent 复核与第三名仲裁，五档重放见
+[vehicle/bench/WINDOW_CALIBRATION.md](vehicle/bench/WINDOW_CALIBRATION.md)。跨应用阈值仍待独立样本验证。
+B2 VScanBench 最小版已复验两个自有 APK 的五档重放和一条独立应用补传业务，完整场景矩阵待补。
+入口见 [车载基准](vehicle/bench/README.md#b2-vscanbench-最小基准)。
+
+仍**未做**（勿当成已完成）：A5-1 protectionLevel 标定（Android 15 的 150 条已用 AAOS 35 A6 编译声明入库；
+Android 13/14/16 共 30 条的整数值仍为 NULL，待逐版本取证）、
 F1 类加载归因（无 `hook_classload.js`）、G1 UI 探索覆盖率度量、A4 分段自愈。
 
 **拆分进度**（已提交、每步回归全绿）：
