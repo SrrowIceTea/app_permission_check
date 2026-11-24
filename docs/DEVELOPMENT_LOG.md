@@ -4,6 +4,17 @@
 
 - [2026-11-15 至 2026-11-18 分卷](DEVELOPMENT_LOG_20261115_20261118.md)
 
+## 2026-11-24 · 把分支与提交约定写进 AGENTS.md
+
+- 范围：仅 `AGENTS.md`（全局约束新增第 10 条 + 新增「分支与提交流程」小节）。不改代码。
+- 起因：2026-11-23 把 v2 移植的 3 个提交直接 `git push origin feature/...:main` 推到了 `main`，而用户要求的是
+  推功能分支、由管理员审核合并。已用 `git push --force-with-lease=main:4a51546 origin cf5f3c7:main` 回退，
+  `main` 回到 `cf5f3c7`，3 个提交保留在 `feature/vehicle-frontend-ui`（`4a51546`）。代码未丢，但 `main` 历史被改写过一次。
+- 改动：约束第 10 条定为「只推功能分支，`main` 走 PR」；小节写明标准流程、PR 链接格式、三条禁止项
+  （不 `push` 到 `main`、不对 `main` force、不用 `git add -A`）和推送后自检（`git rev-parse origin/main`）。
+  同时点明「需要管理员审核」的前提是管理员把 `main` 设为保护分支，否则任何人都能直接推。
+- 未做：保护分支是 Gitee 仓库设置，本地改不了，需管理员在网页端配置；未在仓库加 `CODEOWNERS` 之类的自动化拦截。
+
 ## 2026-11-23 · 旧工作台的流程引导与悬停预览移植到 v2 七页工作台
 
 - 范围：`vehicle/frontend/v2/`。**不改**旧 `app.html` + `components.js` + `nav-flyout.js` + `page-identity.css` 体系——v2 是独立界面（暖纸白单主题、pill 顶栏、`section.view`），stash 里依赖 M3 角色变量与 `html[data-theme]` 亮暗分支的样式层（`page-identity.css` / `enhance.css`）与 `theme-toggle.js`、`nav-flyout.js` 在这套基线上没有落点，只移植功能本身。

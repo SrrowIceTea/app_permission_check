@@ -27,6 +27,36 @@ vscanner/
 7. **禁止再让用户做环境探测**（Phase 0 已完成）。
 8. **单文件 ≤300 行**；超了按职责拆分（hooks/traffic/dashboard 都有拆分的先例），拆后必须回归验证。
 9. **每次开发都写开发日志**：开始前在 [docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md) 登记范围；结束前补齐实际改动、验证命令与结果、证据路径、失败或待办。代码、规则、配置和验收工具改动都适用。日志到 300 行时转存分卷，主文件保留索引及最新记录。
+10. **只推功能分支，`main` 走 PR 由管理员合并**：改动先提交到 `feature/*` 分支并推送，再提 PR 等管理员审核合并。
+    **禁止 `git push` 到 `main`**（2026-11-23 误推过一次，靠 force push 回退）；回退 `main`、改写共享历史属破坏性操作，
+    必须先拿到用户当次的显式授权。细则见下节。
+
+## 分支与提交流程（2026-11-24）
+
+远程 `origin` = Gitee `mao-yuqi-12/mobile-app-permission-check`。`main` 是唯一目标分支，
+协作者只往 `feature/*` 推。
+
+- **"需要管理员审核"的前提是仓库设置**：只有管理员在「管理 → 分支设置」把 `main` 设为保护分支
+  （禁止直接推送 + 需审核通过才可合并）后，这条才真正生效。设置之前，任何协作者都能直接推 `main`——
+  不要因为"推成功了"就认为不需要审核。
+- 标准流程：
+
+  ```powershell
+  git switch -c feature/<主题>        # 或复用已有的 feature 分支
+  git add <逐个列出的文件>            # 不用 git add -A
+  git commit -m "feat(vehicle): ..."
+  git push -u origin feature/<主题>   # 只推功能分支
+  ```
+
+  然后在 Gitee 提 PR：`origin/feature/<主题>` → `origin/main`，等管理员审核合并。
+  PR 链接格式：`https://gitee.com/mao-yuqi-12/mobile-app-permission-check/pull/new/mao-yuqi-12:feature/<主题>...mao-yuqi-12:main`
+
+- **禁止项**：
+  - 不执行 `git push origin <分支>:main`。本地分支跟踪 `origin/main` 只是跟踪关系，**不代表可以推送**。
+  - 不对 `main` 用 `--force` / `--force-with-lease`，除非用户当次明确要求；确需回退时先 `git fetch`，
+    再用 `--force-with-lease=<ref>:<旧提交>` 锁定，避免覆盖他人提交。
+  - 不用 `git add -A`：临时验证脚本（`_*.py`）和 `output/` 产物不该进提交。
+- **推送后自检**：`git rev-parse origin/main` 应仍是你预期的提交；本次改动只能出现在功能分支上。
 
 ## 环境事实（当前主机；入口 environment.ps1）
 
