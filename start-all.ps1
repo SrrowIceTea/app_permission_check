@@ -311,7 +311,10 @@ foreach ($svc in $selected) {
     $outLog = Join-Path $LogDir ("{0}.out.log" -f $svc.Name)
     $errLog = Join-Path $LogDir ("{0}.err.log" -f $svc.Name)
     Write-Step ("启动 {0}（:{1}）→ {2}" -f $svc.Name, $svc.Port, ($svc.Args -join ' '))
-    $proc = Start-Process -FilePath $svc.File -ArgumentList $svc.Args `
+    # -ArgumentList 传数组时 PowerShell 只用空格拼接、不加引号，工程路径含空格
+    # （如 `D:\app project\...`）会被拆成多个参数，这里先给含空格的参数补引号再拼成单行。
+    $argLine = ($svc.Args | ForEach-Object { if ($_ -match '\s') { '"{0}"' -f $_ } else { "$_" } }) -join ' '
+    $proc = Start-Process -FilePath $svc.File -ArgumentList $argLine `
         -WorkingDirectory $svc.WorkDir -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput $outLog -RedirectStandardError $errLog
     $started += [pscustomobject]@{
