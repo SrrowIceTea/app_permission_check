@@ -185,7 +185,18 @@ function Ensure-Frida {
     $local = Join-Path $Root 'output\vehicle-device-setup\frida-server'
     if (-not (Test-Path -LiteralPath $local)) { throw "找不到 $local；frida-server 版本必须等于宿主 frida 版本" }
     Write-Step '推送 frida-server（约 111 MB，首次较慢）'
-    & $script:Adb -s $Serial push $local $remote | Out-Null
+    # adb push 的进度与 "1 file pushed" 全走 stderr，在 $ErrorActionPreference='Stop' 下会被
+    # PowerShell 当成终止错误，导致脚本在"文件已推完"后中断（不 chmod、不启动）。
+    # 这里临时放宽偏好级别并合并 stderr，只看 adb 自己的退出码。
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $push = & $script:Adb -s $Serial push $local $remote 2>&1
+        $pushCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    if ($pushCode -ne 0) { throw ("推送 frida-server 失败（adb 退出码 {0}）：{1}" -f $pushCode, ($push -join ' ')) }
     Invoke-Adb -Arguments @('shell', 'chmod', '755', $remote) | Out-Null
     Write-Step '启动 frida-server（监听 127.0.0.1:27043，不是默认 27042）'
     # 必须 nohup + 关掉三个流：否则 adb shell 会等这条 pty 关闭，脚本就卡在这儿。

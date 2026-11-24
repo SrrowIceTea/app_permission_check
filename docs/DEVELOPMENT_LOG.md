@@ -36,8 +36,14 @@
 - 未提交的产物：`vehicle.ps1 prepare` 重建后 `core/frida_host/dist/*.sha256.json` 会变（`platform: vehicle→shared`，
   源哈希也变）。这两个 json **已还原**：本机 `core.autocrlf=true`，工作区是 CRLF 而 git 里是 LF，
   哈希绑定换行符、属环境相关抖动，入库只会让换机后不一致。`.bundle.js` 本身被 `.gitignore` 排除，不受影响。
-- 待办：`AGENTS.md` 环境表仍是原开发机的 SDK/JDK 路径，应改成「本机主 SDK 是 `D:\app project\AndroidSdk`，
-  `%LOCALAPPDATA%` 那份是本次补装的副本」；`prepare-vehicle-device.ps1:188` 的 stderr 中断建议单独修。
+- 收尾（同日补做，用户确认后执行）：
+  - `AGENTS.md` 环境表按本机实况重写：Python 用项目 `.venv` 3.14.10、主 SDK 是 `D:\app project\AndroidSdk`
+    （`%LOCALAPPDATA%` 那份注明是补装副本）、AVD 实体在 `AndroidSdk\avd` 而 `output/.../*.ini` 只是指针、
+    本机 `dl.google.com` 可通、AGP 8.11.1 实际要 build-tools 35、Node 在 `D:\tools\node`、
+    frida-server 版本须等于 `.venv`（17.18.0）。
+  - `prepare-vehicle-device.ps1` 的 `Ensure-Frida`：`adb push` 改为临时放宽 `ErrorActionPreference` 并用 `2>&1`
+    合并 stderr，最后按 `$LASTEXITCODE` 判成败。实测：`killall frida-server` + `rm` 清掉设备端文件后复跑，
+    push 不再中断，一路走到 `[ok] frida-server 已启动（pid 10944）`，`/data/local/tmp/frida-server` 权限 `-rwxr-xr-x`，脚本退出码 0。
 
 ## 2026-11-24 · 把分支与提交约定写进 AGENTS.md
 
