@@ -1,6 +1,6 @@
 # V-Scanner 当前状态与本周工单（唯一入口）
 
-> 更新：2026-11-23｜本轮以 `main` 的 `a71895b` 为基线；§1–2 保留 11-12 工程验收快照。
+> 更新：2026-11-25｜权限标定分支基于 `origin/main` 的 `cf5f3c7`。§1–2 保留 11-12 工程验收快照。
 > 仅用于授权测试（自有设备与自有 APK）。本文只写**状态与工单**，不新增任何检测结论。
 > `docs/` 下 16 份计划/方案类文档与根目录那份副本顶部都已标注「历史快照（2026-11-11 归档，
 > 不作当前清单）」——它们保留证据与来龙去脉，但**不再互相替代**；要判断"现在做什么"只看本文。
@@ -9,9 +9,14 @@
 
 ---
 
+## Android 16 车载编译权限级别标定（2026-11-25）
+
+- 官方 AAOS 36.1 x86_64 r01 预览镜像（`BAA1.261113.001.A1`）逐条确认 10/10 项权限的编译整数，已同步发布库与 Room 预置资产。车载 Android 13/14/15/16 的 180 条权限均已标定。 [冻结证据](../vehicle/rules/device_calibration/protection-level-aaos36.1-r01.json) · [入库核对](../output/vehicle-permission-api36-20261125/publication-verification.json)
+- AAOS 36.1 / user 10 的 Room DAO 回读与发布库 180 行逐字段一致，Android 16 的 10 条整数全部匹配。 [Room 验收](../output/vehicle-permission-api36-20261125/room-verification.json)
+
 ## Android 13 车载编译权限级别标定（2026-11-24）
 
-- 官方 AAOS 33 x86_64 r05（`TEA1.250515.001`）逐条确认 10/10 项权限的编译整数，已同步发布库和 Room 预置资产。Android 13、14、15 合计 170 条已标定，Android 16 的 10 条待取证。 [冻结证据](../vehicle/rules/device_calibration/protection-level-aaos33-r05.json) · [入库核对](../output/vehicle-permission-api33-20261124/publication-verification.json)
+- 官方 AAOS 33 x86_64 r05（`TEA1.250515.001`）逐条确认 10/10 项权限的编译整数，已同步发布库和 Room 预置资产。 [冻结证据](../vehicle/rules/device_calibration/protection-level-aaos33-r05.json) · [入库核对](../output/vehicle-permission-api33-20261124/publication-verification.json)
 - AAOS 33 / user 10 的 Room DAO 回读与发布库 180 行逐项一致，Android 13 的 10 条整数全部匹配。根离线回归 22/22。 [Room 验收](../output/vehicle-permission-api33-20261124/room-verification.json) · [根回归](../output/vehicle-permission-api33-20261124/regression/verification.json)
 
 ## Android 14 车载编译权限级别标定（2026-11-24）
@@ -126,7 +131,7 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0
 | # | 未完成项 | 来源 | 为什么不在本周 A 组 |
 | --- | --- | --- | --- |
 | 1 | 车载 B1 已签核两个自有 APK 的五档重放。Car Stats Viewer 已验收车速上传与 5 条断网行驶点补传 | [车载复核](../vehicle/bench/WINDOW_CALIBRATION.md) + mobile「未完成」 | 独立应用窗口仍缺可唯一对齐到单次 VHAL 读取的延迟证据，移动 30000ms 待实测 |
-| 2 | `protection_level_value`：车载 Android 13/14/15 共 170 条已入库，Android 16 的 10 条待补。移动 40 条未断言 | 本文「Android 13 车载编译权限级别标定」+ mobile「未完成」 | 各版本使用各自来源 |
+| 2 | `protection_level_value`：车载四版本 180 条已入库。移动 40 条未断言 | 本文「Android 16 车载编译权限级别标定」+ mobile「未完成」 | 移动端需独立来源 |
 | 3 | B2 VScanBench 最小版已交付，完整场景矩阵待扩展 | [车载基准](../vehicle/bench/README.md#b2-vscanbench-最小基准) | 新场景仍需独立参考与负控 |
 | 4 | F1 类加载归因（无 `hook_classload.js`） | AGENTS「未做」 | 需新钩子 + 设备验收 |
 | 5 | G1 UI 探索覆盖率度量 | AGENTS「未做」 | 需设备与人工标注 |

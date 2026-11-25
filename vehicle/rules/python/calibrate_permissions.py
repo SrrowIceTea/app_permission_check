@@ -21,9 +21,10 @@ NAME = re.compile(r'^\s*A: http://schemas\.android\.com/apk/res/android:name\(0x
 LEVEL = re.compile(r'^\s*A: http://schemas\.android\.com/apk/res/android:protectionLevel\(0x01010009\)=(0x[0-9a-fA-F]{1,8})\s*$')
 
 
-def compiled_permissions(tree):
-    """Extract explicit integer attributes from direct manifest permission declarations."""
+def compiled_permissions(tree, permission_names=None):
+    """Extract explicit integers, optionally limited to the names under review."""
     owner, found = None, {}
+    declared = set()
     stack = []
     for line in tree.splitlines():
         element = ELEMENT.match(line)
@@ -37,15 +38,16 @@ def compiled_permissions(tree):
         elif [item[1] for item in stack] == ['manifest', 'permission']:
             attributes = stack[-1][2]
             if name := NAME.match(line):
-                attributes['name'] = name[1]
+                key = name[1]
+                if permission_names is None or key in permission_names:
+                    if key in declared:
+                        raise ValueError(f'Duplicate compiled permission {key}')
+                    declared.add(key)
+                    attributes['name'] = key
             if level := LEVEL.match(line):
                 attributes['value'] = int(level[1], 16)
-            if 'name' in attributes and 'value' in attributes and not attributes.get('recorded'):
-                key = attributes['name']
-                if key in found:
-                    raise ValueError(f'Duplicate compiled permission {key}')
-                found[key] = attributes['value']
-                attributes['recorded'] = True
+            if 'name' in attributes and 'value' in attributes:
+                found[attributes['name']] = attributes['value']
     if not owner:
         raise ValueError('No declaring package in compiled manifest')
     return owner, found
@@ -57,18 +59,6 @@ def calibrate(database, pm_output, android_version, device_facts, aapt2, package
             or device.get('ro.build.characteristics') != 'automotive'
             or not device.get('ro.build.fingerprint') or not device.get('ro.build.version.sdk')):
         raise ValueError('Evidence lacks the matching AAOS build identity')
-    pm_by_name = {}
-    for row in parse(pm_output.read_text(encoding='utf-8-sig')):
-        pm_by_name.setdefault(row['permission_name'], []).append(row)
-    compiled, artifacts = {}, {}
-    for apk in packages:
-        dump = subprocess.run([str(aapt2), 'dump', 'xmltree', '--file', 'AndroidManifest.xml', str(apk)],
-                              check=True, capture_output=True, encoding='utf-8', timeout=30)
-        owner, values = compiled_permissions(dump.stdout)
-        if owner in compiled:
-            raise ValueError(f'Multiple manifests for defining package {owner}')
-        compiled[owner] = values
-        artifacts[owner] = {'file': apk.name, 'sha256': sha256_of(apk)}
     uri = database.resolve().as_uri() + '?mode=ro'
     with closing(sqlite3.connect(uri, uri=True)) as db:
         declarations = db.execute('SELECT permission_name, protection_level_raw, protection_level_value '
@@ -76,6 +66,19 @@ def calibrate(database, pm_output, android_version, device_facts, aapt2, package
                                   (android_version,)).fetchall()
     if not declarations:
         raise ValueError('No permissions for the requested Android version')
+    permission_names = {row[0] for row in declarations}
+    pm_by_name = {}
+    for row in parse(pm_output.read_text(encoding='utf-8-sig')):
+        pm_by_name.setdefault(row['permission_name'], []).append(row)
+    compiled, artifacts = {}, {}
+    for apk in packages:
+        dump = subprocess.run([str(aapt2), 'dump', 'xmltree', '--file', 'AndroidManifest.xml', str(apk)],
+                              check=True, capture_output=True, encoding='utf-8', timeout=30)
+        owner, values = compiled_permissions(dump.stdout, permission_names)
+        if owner in compiled:
+            raise ValueError(f'Multiple manifests for defining package {owner}')
+        compiled[owner] = values
+        artifacts[owner] = {'file': apk.name, 'sha256': sha256_of(apk)}
     calibrated, unresolved = [], []
     for name, raw, stored in declarations:
         candidates = pm_by_name.get(name, [])

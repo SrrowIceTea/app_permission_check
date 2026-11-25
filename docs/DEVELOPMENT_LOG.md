@@ -153,3 +153,12 @@
 ### 独立分支复核（2026-11-25）
 
 - 从 `origin/main` 建立权限标定分支。四版本重建的发布库 SHA-256 为 `920a8284…4275d`，与现有两份构建产物和 Room 资产逐字节一致。定向测试 3/3、schema 对拍及离线 APK 和 instrumentation APK 构建通过。独立基线的工程守卫、采集收尾测试问题在未改动的 `origin/main` 上复现。 [基线复验](../output/vehicle-permission-api36-20261125/origin-main-control.log)
+
+## 2026-11-25 · Android 16 车载编译权限级别标定
+
+- 范围为确认官方 AAOS 36.1 r01 构建的 Android 16 权限整数，入库后做逐表、Room 和离线回归复验。
+- SDK 车载索引确认镜像 1,536,952,393 字节。按区间下载并核对整包 SHA-1。首次启动因 D 盘可用空间不足终止，改用系统临时目录存放专用 AVD 数据，成功启动 `BAA1.261113.001.A1`。 [设备指纹](../output/vehicle-permission-api36-20261125/device-facts.json)
+- 原校准器被范围外重复声明阻断。评分读取时仅检查待标定权限，并保留待标定重复项的拒绝逻辑和旧解析调用。用同次 PackageManager 输出和两个定义包核对，10/10 实测通过。 [原解析失败](../output/vehicle-permission-api36-20261125/original-parser.log) · [冻结证据](../vehicle/rules/device_calibration/protection-level-aaos36.1-r01.json)
+- 两次四版本重建 SHA-256 同为 `988961d2…4582b`。逐表核对只新增 Android 16 的 10 个整数和设备出处。同步规则库、Room 资产、期望摘要。发布后用原取证再次校验，10/10。 [入库核对](../output/vehicle-permission-api36-20261125/publication-verification.json) · [发布后复验](../output/vehicle-permission-api36-20261125/published-recheck.json)
+- `gradlew.bat --offline --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest` 通过。AAOS 36.1 / user 10 执行 `RulesPermissionReadbackTest`，180 行逐字段一致，Android 16 的 10 条全部确认。Python 权限定向测试 4/4，Room schema 对拍通过。 [Room 回读](../output/vehicle-permission-api36-20261125/room-verification.json)
+- `tools/run_regressions.py` 在权限分支与 UI 功能快照隔离组合上通过 22/22。权限分支单独为 21/22，唯一红项是旧 `main` 的两个超 300 行前端文件。`git diff --check` 通过，专用 AVD 已关闭。 [组合回归](../output/vehicle-permission-api36-20261125/regression-integrated-final/verification.json) · [独立回归](../output/vehicle-permission-api36-20261125/regression-permission-branch-final/verification.json)

@@ -29,7 +29,7 @@ package com.vscanner.rules
  * （同 package 的顶层声明，引用处一字未改）。
  */
 object BaselineExpectation {
-    const val SHA256 = "920a8284326a8e9ba12e7520a91ad0b1a9b4465c4f70d5073bba757f4344275d"
+    const val SHA256 = "988961d28db83bbfe22a6a819405ff9ca366341cbd36dc94fb337ba990a4582b"
     const val SOURCE_TAG = "13/14/16=AOSP release source / 15=设备实测 API 35"
 
     val VERSIONS: Map<String, VersionCounts> = mapOf(

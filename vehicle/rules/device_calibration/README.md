@@ -138,4 +138,10 @@ $aapt2 = "$env:LOCALAPPDATA/Android/Sdk/build-tools/36.0.0/aapt2.exe"
 
 Google SDK 的 AAOS 33 x86_64 r05 镜像 SHA-1 为 `4657b6da29ad4273986f3b8fa9b1caac3bb5195f`。在 `TEA1.250515.001` 上记录运行时指纹及 PackageManager 原始级别，用实际定义包 APK 复核 10 条编译整数。6 条由 `com.android.car.updatable` 定义，4 条由 `android` 定义。 [冻结证据](protection-level-aaos33-r05.json) · [Google SDK 车载镜像索引](https://dl.google.com/android/repository/sys-img/android-automotive/sys-img2-3.xml)
 
-四版本构建按版本验证冻结报告。Android 13 保留 AOSP 源码证据及 `source_verified`，追加 API 33 编译值的出处。Android 16 的 10 条待该版本取证。 [发布核对](../../../output/vehicle-permission-api33-20261124/publication-verification.json)
+四版本构建按版本验证冻结报告。Android 13 保留 AOSP 源码证据及 `source_verified`，追加 API 33 编译值的出处。 [发布核对](../../../output/vehicle-permission-api33-20261124/publication-verification.json)
+
+## Android 16 编译权限值（2026-11-25）
+
+Google SDK 的 AAOS 36.1 x86_64 r01 预览镜像 SHA-1 为 `29338babe8f39b3ccbfbf01b954b003a28b1255b`。专用 AVD 读回 Android 16、API 36、完整 SDK 36.1 及构建 `BAA1.261113.001.A1`。PackageManager 与 `android`、`com.android.car.updatable` 实际定义包的编译清单逐条一致，10 条均得到明确整数。 [冻结证据](protection-level-aaos36.1-r01.json) · [Google SDK 车载镜像索引](https://dl.google.com/android/repository/sys-img/android-automotive/sys-img2-3.xml)
+
+Android 16 的 10 条发布记录保留各自的 AOSP 定义出处和 `source_verified`，补入编译整数及设备证据。四版本 180 条均具备编译整数。 [入库核对](../../../output/vehicle-permission-api36-20261125/publication-verification.json)

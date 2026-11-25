@@ -298,3 +298,7 @@ Android 14 的 10 条原始级别与本轮 PackageManager 观测一致。发布�
 ## D021 AAOS 33 r05 编译权限值（2026-11-24）
 
 Android 13 的 10 条编译整数均来自 `TEA1.250515.001` 对应 APK 和 PackageManager。构建按源码版本绑定各自的冻结报告及设备指纹。 [标定记录](device_calibration/README.md#android-13-编译权限值2026-11-24)
+
+## D022 AAOS 36.1 r01 编译权限值（2026-11-25）
+
+Android 16 的 10 条来自 Google API 36.1 r01 预览镜像的 `BAA1.261113.001.A1`。校准器只检查本轮版本中待标定的权限名，仍拒绝范围内的重复声明。这样可重验完整的系统清单，并保留实际定义包的摘要与设备指纹。 [设备与发布记录](device_calibration/README.md#android-16-编译权限值2026-11-25)

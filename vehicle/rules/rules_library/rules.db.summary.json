@@ -57,6 +57,12 @@
     "review_content_sha256": "769f387c5429264310d92c20455c4e85a985f6184d59bfc9f9b77a93d9f3104d",
     "imported": 10
   },
+  "android16_protection_levels": {
+    "build_id": "BAA1.261113.001.A1",
+    "review_file": "protection-level-aaos36.1-r01.json",
+    "review_content_sha256": "cc5419b799659bedd0fd32a188e702d47a93d83390fdbd6becbc5671c3766674",
+    "imported": 10
+  },
   "android15_protection_levels": {
     "build_id": "AAI5.260516.001.A6",
     "review_file": "protection-level-aaos35-a6.json",
@@ -102,6 +108,6 @@
       "15"
     ]
   },
-  "database_sha256": "920a8284326a8e9ba12e7520a91ad0b1a9b4465c4f70d5073bba757f4344275d",
+  "database_sha256": "988961d28db83bbfe22a6a819405ff9ca366341cbd36dc94fb337ba990a4582b",
   "note": "android-15 rows are device observations (definition_status=pending). android-13/14/16 are source extractions. Egress rules stay disabled outside egress_versions because no window calibration exists for those releases."
 }

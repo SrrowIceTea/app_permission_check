@@ -8,7 +8,7 @@ from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
-from vehicle.rules.python import permission_levels
+from vehicle.rules.python import calibrate_permissions, permission_levels
 
 
 RULES = permission_levels.REPORT.parents[1]
@@ -18,6 +18,18 @@ GENERAL = CALIBRATION / 'permissions-general-android15.jsonl'
 
 
 class ProtectionLevelTests(unittest.TestCase):
+    def test_compiled_manifest_rejects_duplicates_only_for_permissions_under_review(self):
+        android = 'http://schemas.android.com/apk/res/android'
+        own = 'android.permission.READ_CONTACTS'
+        other = 'android.permission.SET_DEFAULT_ACCOUNT_FOR_CONTACTS'
+        tree = 'E: manifest\n  A: package="android"\n'
+        for name, level in ((other, '0x1'), (own, '0x1'), (other, '0x12')):
+            tree += (f'  E: permission\n    A: {android}:name(0x01010003)="{name}"\n'
+                     f'    A: {android}:protectionLevel(0x01010009)={level}\n')
+        self.assertEqual(('android', {own: 1}), calibrate_permissions.compiled_permissions(tree, {own}))
+        with self.assertRaisesRegex(ValueError, f'Duplicate compiled permission {other}'):
+            calibrate_permissions.compiled_permissions(tree, {other})
+
     def test_shipped_levels_and_provenance_match_review(self):
         evidence = json.loads(permission_levels.REPORT.read_text(encoding='utf-8'))
         expected = {r['permission_name']: r for r in evidence['calibrated']}
