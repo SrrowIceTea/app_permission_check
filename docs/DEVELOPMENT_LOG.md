@@ -193,3 +193,10 @@
 - v2 与旧工作台共用附件编码和复核表单。动态任务保留附件相对路径，入队后清理本次选择。完成任务按 `finding_uid` 保存人工复核，状态、人员、时间与备注从服务端回读。
 - Chrome 以已封存的自有 AAOS 35 采集回放，用合成政策、场景和两份子目录文件验收材料绑定。核对 4 个文件逐字节一致，政策提取状态为 `available`，场景标为 `synthetic_only`。录入一条「需补充证据」意见后，核对回读、刷新持久化、16 条结论等级、原审计文件摘要、ZIP 下载、静态任务隔离及旧工作台兼容。390 像素下表单通过。 [浏览器验收](../output/vehicle-v2-material-review-20261125/browser-verification.json)
 - `node --check` 和 `git -c core.whitespace=cr-at-eol diff --check` 通过。`tools/python313.ps1 tools/run_regressions.py --out output/vehicle-v2-material-review-20261125/regression` 为 22/22。本轮执行了真实采集回放和真实 APK 静态审计，政策与场景输入为验收夹具。 [根回归](../output/vehicle-v2-material-review-20261125/regression/verification.json)
+
+## 2026-11-25 · G1 车载 UI 探索覆盖率最小基准
+
+- 范围为冻结两个自有 AAOS 夹具的手动标注范围，用同一判据比较手动和自动探索，以本轮实际 UI 和运行时事件复核覆盖率。
+- 冻结两份 APK 的摘要、主 Activity、直接读取与订阅动作。新增自有设备对照入口和离线评分器。手动参考由 ADB 复现人工标注动作，自动轮使用现有探索器。评分核对同会话前台 Activity、点击和 Hook 事件，订阅须同时见到成功注册与后续回调。
+- 专用 AAOS 35 / user 10 执行四次独立 36 秒采集，均通过 11/11 健康检查。四轮页面 1/1，手动动作均 2/2，自动第一夹具 1/2，第二夹具 0/2。两次离线评分结果逐字节一致。专用只读 AVD 已关闭。 [覆盖报告](../output/vehicle-g1-20261125/coverage.json) · [方法及复现](../vehicle/bench/UI_COVERAGE.md)
+- `tools/python313.ps1 -m unittest vehicle.bench.test_ui_coverage -v` 3/3。缺少输入的命令退出 2。根回归首轮识别出评分入口的错误出口不透明，改为显式标准错误与退出码后，`tools/python313.ps1 tools/run_regressions.py --out output/vehicle-g1-20261125/regression-final` 22/22，`git diff --check` 通过。后续待验证普通车载应用的多页面范围。 [根回归](../output/vehicle-g1-20261125/regression-final/verification.json)

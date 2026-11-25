@@ -9,6 +9,10 @@
 
 ---
 
+## G1 车载 UI 探索覆盖率（2026-11-25）
+
+- 两个自有 APK 在 AAOS 35 上各完成手动参考与自动探索。四轮页面都是 1/1，两个手动参考动作均为 2/2，自动分别为 1/2 和 0/2。报告区分前台 Activity 到达、点击记录及经运行时事件证实的动作，支持从封存证据重算。 [方法与结果](../vehicle/bench/UI_COVERAGE.md) · [报告](../output/vehicle-g1-20261125/coverage.json)
+
 ## 车载 v2 政策和场景材料与人工复核（2026-11-25）
 
 - 动态任务可上传政策与场景的入口 JSON 和引用文件，保留子目录。已完成审计的结论可填写并回读人工复核。已封存 AAOS 采集回放验证合成材料的绑定、复核持久化及静态任务隔离。根回归 22/22。 [浏览器验收](../output/vehicle-v2-material-review-20261125/browser-verification.json)
@@ -127,7 +131,7 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0
 | 2 | `protection_level_value`：车载 Android 15 的 150 条已入库；Android 13/14/16 的 30 条待补。移动 40 条未断言 | 本文「车载复核」+ mobile「未完成」 | 各版本使用各自来源 |
 | 3 | B2 VScanBench 最小版已交付，完整场景矩阵待扩展 | [车载基准](../vehicle/bench/README.md#b2-vscanbench-最小基准) | 新场景仍需独立参考与负控 |
 | 4 | F1 类加载归因（无 `hook_classload.js`） | AGENTS「未做」 | 需新钩子 + 设备验收 |
-| 5 | G1 UI 探索覆盖率度量 | AGENTS「未做」 | 需设备与人工标注 |
+| 5 | G1 自有夹具最小覆盖率基准已完成 | [四轮对照](../vehicle/bench/UI_COVERAGE.md) | 普通车载应用的多页面覆盖待验证 |
 | 6 | A4 分段自愈 | AGENTS「未做」 | 与 1/3 同类的设备专项 |
 | 7 | AI 跨运行一致性 / 幻觉率无量化数据 | mobile「未完成」 | 需多次真实 key 调用，成本与口径未定 |
 | 8 | 写入类 API（`ContentResolver.insert` 等）与覆写型服务（无障碍/通知监听）未覆盖 | mobile「未完成」 | 需夹具扩展，非本周范围 |

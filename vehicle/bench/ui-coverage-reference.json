@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "source": "Owned fixture MainActivity.kt and activity_main.xml",
+  "window_seconds": 36,
+  "fixtures": {
+    "target-app": {
+      "package": "com.vscanner.targetapp",
+      "apk_sha256": "2b73d74b807728c0dc368823a8f12a4ee6f35e7bc8ecb5ac8e13594bb838791c"
+    },
+    "target-app2": {
+      "package": "com.vscanner.targetapp2",
+      "apk_sha256": "4a29bdc6c83a20d1f26c5490ca20890dabac4ff7d7330e5c03f7f81bb7ad70a3"
+    }
+  },
+  "pages": [
+    {"id": "main", "activity": ".MainActivity"}
+  ],
+  "actions": [
+    {
+      "id": "read_vhal",
+      "control": "btnRead",
+      "automatic_label": "读取 VHAL",
+      "scroll": "up",
+      "events": ["VHAL_READ"],
+      "stack": "VhalReader.readAll"
+    },
+    {
+      "id": "register_subscription",
+      "control": "btnSubscribe",
+      "scroll": "down",
+      "events": ["VHAL_READ"],
+      "accepted_registration": ["SUBSCRIPTION_REGISTER", "CALLBACK_REGISTER"],
+      "stack": "SubscriptionReader"
+    }
+  ]
+}
