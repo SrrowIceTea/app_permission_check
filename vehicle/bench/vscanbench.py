@@ -6,6 +6,7 @@ from pathlib import Path
 
 from core.io_utils import load_jsonl
 from vehicle.analyze.value_match import match_content
+from vehicle.bench.background_control import replay as replay_background
 from vehicle.bench.carstats_queue import replay as replay_queue
 from vehicle.bench.labels import adjudicated_labels, reference_identity
 from vehicle.bench.read_send_control import replay as replay_read_send
@@ -108,7 +109,7 @@ def run_fixture(case, root):
     same = same_value_cross_batch(truth, reads, flows)
 
     def play(mode):
-        replay = calibrate(capture, labels, rules=rules, include_pairs=True, pairing=mode)
+        replay = calibrate(capture, labels, rules=rules, include_pairs=True, pairing=mode, evidence_root=root)
         if replay['rules_sha'] != case['rules']['sha256'] or replay['label_sha256'] != case['labels']['sha256']:
             raise ValueError('重放使用的规则库或标签摘要发生变化。')
         return replay
@@ -151,6 +152,7 @@ def run(manifest, root=ROOT):
     workflow = bound(doc['carstats_queue'], root)
     queue = replay_queue(workflow.parent, workflow)
     bound(doc['carstats_queue'], root)
+    sessions.add(queue['session_id'])
     workflows = [{'id': 'carstats-offline-queue', 'session_id': queue['session_id'],
                   'online_points': len(queue['online_point_matches']),
                   'confirmed_offline_points': len(queue['offline_points']),
@@ -161,7 +163,16 @@ def run(manifest, root=ROOT):
         proof = bound(reference, root)
         control = replay_read_send(proof.parent, proof, include_pairing=True)
         bound(reference, root)
+        sessions.update(control[key]['session_id'] for key in ('read_only', 'positive'))
         workflows.append({'id': 'read-send-control', **control, 'source': reference})
+    if 'background_control' in doc:
+        reference = doc['background_control']
+        proof = bound(reference, root)
+        control = replay_background(proof.parent, proof)
+        bound(reference, root)
+        if any(control[key]['session_id'] in sessions for key in ('read_only', 'positive')):
+            raise ValueError('后台对照必须来自独立的采集会话。')
+        workflows.append({'id': 'background-read-send-control', **control, 'source': reference})
     return {
         'schema_version': 1, 'status': 'passed', 'scope': 'owned_fixture_engineering_pilot',
         'manifest_sha256': digest(manifest), 'fixtures': fixtures, 'independent_pair_cases': 0,
@@ -172,12 +183,13 @@ def run(manifest, root=ROOT):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', type=Path, default=PILOT)
+    parser.add_argument('--evidence-root', type=Path, default=ROOT, help='清单证据路径所在的项目根目录')
     parser.add_argument('--out', type=Path, required=True)
     args = parser.parse_args(argv)
     try:
         if args.out.exists():
             raise FileExistsError(f'输出文件已存在：{args.out}')
-        result = run(args.manifest)
+        result = run(args.manifest, root=args.evidence_root)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         write_json(args.out, result)
     except (ValueError, OSError, sqlite3.Error, KeyError, TypeError) as error:

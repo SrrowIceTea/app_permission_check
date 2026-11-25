@@ -133,7 +133,7 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0
 | --- | --- | --- | --- |
 | 1 | 车载 B1 已签核两个自有 APK 的五档重放。Car Stats Viewer 已验收车速上传与 5 条断网行驶点补传 | [车载复核](../vehicle/bench/WINDOW_CALIBRATION.md) + mobile「未完成」 | 独立应用窗口仍缺可唯一对齐到单次 VHAL 读取的延迟证据，移动 30000ms 待实测 |
 | 2 | `protection_level_value`：车载 Android 15 的 150 条已入库；Android 13/14/16 的 30 条待补。移动 40 条未断言 | 本文「车载复核」+ mobile「未完成」 | 各版本使用各自来源 |
-| 3 | B2 VScanBench 最小版已交付，完整场景矩阵待扩展 | [车载基准](../vehicle/bench/README.md#b2-vscanbench-最小基准) | 新场景仍需独立参考与负控 |
+| 3 | B2 VScanBench 已加入后台只读和发送对照，两轮均通过 11 项健康检查 | [车载基准](../vehicle/bench/README.md#aaos-后台读取与发送对照) | 继续扩充场景矩阵，签核窗口仍由既有 90 对验证 |
 | 4 | F1 类加载归因（无 `hook_classload.js`） | AGENTS「未做」 | 需新钩子 + 设备验收 |
 | 5 | G1 自有夹具最小覆盖率基准已完成 | [四轮对照](../vehicle/bench/UI_COVERAGE.md) | 普通车载应用的多页面覆盖待验证 |
 | 6 | A4 分段自愈 | AGENTS「未做」 | 与 1/3 同类的设备专项 |

@@ -89,7 +89,7 @@ def verify_pairing_modes(rules, reads, flows, window, pairs):
                 or any(p.get('pair_basis') != 'token_read_claim' or p.get('origin_proven') is not True for p in details)):
             raise ValueError(f'{mode} 模式与独立回执确认的主读取配对不一致。')
         counts[mode] = len(actual)
-    return {'pair_counts': counts, 'diagnostic_window_only_pairs': sorted(window_only)}
+    return {'pair_counts': counts, 'diagnostic_window_only_pairs': [list(pair) for pair in sorted(window_only)]}
 
 
 def replay_arm(out, mode, fixture, database, rules):

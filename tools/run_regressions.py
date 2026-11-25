@@ -43,6 +43,7 @@ CHECKS = [
         'tools.test_report_projection',
         'tools.test_week_b_integration',
         'vehicle.bench.test_window_calibration', 'vehicle.bench.test_window_review', 'vehicle.bench.test_vscanbench',
+        'vehicle.bench.test_background_control',
         'vehicle.bench.test_ui_coverage',
         'core.collector.test_scope', 'core.collector.test_response_capture', 'core.collector.test_health',
         'core.collector.test_parse',

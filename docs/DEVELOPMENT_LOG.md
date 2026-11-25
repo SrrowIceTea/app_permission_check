@@ -133,3 +133,11 @@
 - 车载探索按包、资源 ID 和按钮文案匹配两个已标注动作。UI 树将订阅按钮的 `2b` 转为 `2B`，因此文案匹配处理大小写。分别限制上下滚动，每个控件只发送一次。新动作保留资源 ID，旧会话仍可按原标签评分。 [控件观测](../output/vehicle-g1-actions-20261125/fixture-ui-diagnostics.jsonl)
 - 初轮 ADB 收尾等待超时，首个独立 ADB 实例的采集停在 Frida 刷盘。保留失败目录，最终用经过既有 G1 验收的只读 AAOS 35 镜像与专用 ADB，关闭设备 Wi-Fi 和移动数据，保留原代理设置。 [初轮日志](../output/vehicle-g1-actions-20261125/trials/target-app-automatic/capture/reads.log) · [刷盘失败](../output/vehicle-g1-actions-20261125/trials-isolated/target-app-manual/capture/reads.log) · [网络条件](../output/vehicle-g1-actions-20261125/network-baseline.json)
 - 四轮全通过采集健康检查，页面各为 1/1，自动动作由 1/2 和 0/2 提升到两个 2/2，手动均为 2/2。评分重算两次摘要一致，旧基准重算也一致。定向测试 8/8，前端状态检验 3/3，根回归 22/22。`node --check` 与 `git diff --check` 通过。 [覆盖率](../output/vehicle-g1-actions-20261125/coverage.json) · [根回归](../output/vehicle-g1-actions-20261125/regression/verification.json)
+
+## 2026-11-25 · B2 后台读取与发送对照
+
+- 范围为复用自有 AAOS 夹具的 `read_only` 和 `plain` 两个动作，记录切至桌面前后及动作结束的原始显示状态，核对 VHAL 主读取、归因流和独立回执，再将通过的对照加入 VScanBench。
+- `vehicle.lab.read_send_control --background` 附加同一自有 APK，保留主屏 Home 前和动作前后快照。离线 `vehicle.bench.background_control` 从原始 Activity、同会话 VHAL、代理流与独立回执读取证据。VScanBench 扩展清单校验参考摘要，工作流单列。首轮离线复核发现配对引用的元组与落盘 JSON 数组不等，以及隔离工作树的证据根未传入窗口标签校验，已修复。
+- 专用 AAOS 35 / user 10 中，主屏 Activity 在两个后台快照均为 `STOPPED` 且不可见。两轮健康检查各 11/11、各有 5 个成功主读取。只读轮 0 请求、0 外发配对，发送轮 1 条 HTTP 200、原始正文摘要与代理一致，三模式配对数为 8/5/5。专用模拟器及 ADB 已关闭，转发无残留。
+- 原始回放与 VScanBench 扩展分别复跑两次，各自输出字节一致。pilot 的两个 APK、五档 90 个签核配对及既有工作流逐字段一致。独立可计分案例为 0。证据目录 `output/vehicle-b2-background-20261125/`，汇总 `verification.json`，扩展清单 `vscanbench-background.json`。
+- `tools/python313.ps1 -m unittest vehicle.bench.test_background_control vehicle.bench.test_vscanbench vehicle.bench.test_window_calibration` 20/20，`tools/python313.ps1 tools/run_regressions.py --out <本轮输出>/regression-final` 22/22，`git diff --check` 通过。后台上下文由动作前后快照限定。 [使用说明](../vehicle/bench/README.md#aaos-后台读取与发送对照)

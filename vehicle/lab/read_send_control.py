@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 from core.io_utils import load_jsonl
+from vehicle.bench.background_control import CONTEXT, fixture_activity, is_background
 from vehicle.pipeline.capture_device import Device, wait_until
 from vehicle.pipeline.capture_proxy import restore_reverse, verify_restore
 from vehicle.pipeline.contracts import ROOT, digest, write_json
@@ -75,7 +76,34 @@ def receipt(device, mode, out):
     return {'mode': mode, 'token': token, 'start_ms': begin}
 
 
-def capture_arm(device, mode, out):
+def activity_snapshot(device, out, name):
+    started = time.time_ns() // 1_000_000
+    text = device.call('shell', 'dumpsys', 'activity', 'activities', timeout=8)
+    finished = time.time_ns() // 1_000_000
+    path = out / (name + '.txt')
+    path.write_text(text + '\n', encoding='utf-8')
+    return {'start_ms': started, 'end_ms': finished, 'sha256': digest(path)}, fixture_activity(text)
+
+
+def move_to_background(device, out, session):
+    foreground, initial = activity_snapshot(device, out, 'foreground')
+    if (initial['state'] != 'RESUMED' or not initial['visible']
+            or PACKAGE + '/.MainActivity' not in initial['primary_resumed_activities']):
+        raise ValueError('切换前未确认主显示屏上的自有夹具。')
+    device.call('shell', 'input', '-d', '0', 'keyevent', 'KEYCODE_HOME', timeout=5)
+    before = None
+
+    def stopped():
+        nonlocal before
+        before, current = activity_snapshot(device, out, 'before-action')
+        return current['activity_record'] == initial['activity_record'] and is_background(current)
+
+    wait_until(stopped, 12, '自有夹具进入后台')
+    return {'package': PACKAGE, 'user_id': USER, 'display_id': 0, 'session_id': session,
+            'snapshots': {'foreground': foreground, 'before-action': before}}
+
+
+def capture_arm(device, mode, out, *, background=False):
     out.mkdir()
     capture = out / 'capture'
     # One thread handles upstream requests serially and the proxy aperture is loopback-only.
@@ -86,16 +114,16 @@ def capture_arm(device, mode, out):
         server.start()
         try:
             with (out / 'capture.log').open('w', encoding='utf-8') as log:
-                capture_action(device, mode, out, capture, log)
+                capture_action(device, mode, out, capture, log, background=background)
         finally:
             receiver.shutdown()
             server.join()
             write_json(out / 'receiver.json', receiver.receipts)
 
 
-def capture_action(device, mode, out, capture, log):
+def capture_action(device, mode, out, capture, log, *, background=False):
     proc = subprocess.Popen([sys.executable, '-u', '-m', 'vehicle.pipeline.capture',
-        '--package', PACKAGE, '--serial', SERIAL, '--user', str(USER), '--seconds', '50',
+        '--package', PACKAGE, '--serial', device.serial, '--user', str(USER), '--seconds', '50',
         '--activity', PACKAGE + '/.MainActivity', '--out', str(capture),
         '--no-tls-bypass', '--no-multi-process', '--preserve-system-proxy'], cwd=ROOT, stdout=log, stderr=log)
     endpoint = 'tcp:8888'
@@ -117,10 +145,22 @@ def capture_action(device, mode, out, capture, log):
         if not any(line.split()[-2:] == [endpoint, endpoint]
                    for line in device.call('reverse', '--list').splitlines()):
             raise RuntimeError('设备转发未生效。')
+        context = None
+        if background:
+            session, = {row['session_id'] for row in load_jsonl(capture / 'reads.jsonl')
+                        if row.get('ev') == 'ARMED' and row.get('src') == 'vhal'}
+            context = move_to_background(device, out, session)
         action = receipt(device, mode, out)
         time.sleep(5)
         action['end_ms'] = time.time_ns() // 1_000_000
         write_json(out / 'action.json', action)
+        if context is not None:
+            snapshot, state = activity_snapshot(device, out, 'after-action')
+            context['action_token'] = action['token']
+            context['snapshots']['after-action'] = snapshot
+            write_json(out / CONTEXT, context)
+            if not is_background(state):
+                raise ValueError('动作完成时夹具已离开后台。')
         (capture / '.finish-request').touch()
         if proc.wait(timeout=210):
             raise RuntimeError(f'{mode} 采集失败，查看 capture.log 与 verification.json。')
@@ -142,26 +182,31 @@ def capture_action(device, mode, out, capture, log):
         raise RuntimeError(f'{mode} 设备回环转发没有恢复，查看 fixture-network.json。')
 
 
-def run(out):
-    device = Device(SERIAL)
+def run(out, *, serial=SERIAL, apk=APK, background=False):
+    device = Device(serial)
     if device.call('emu', 'avd', 'name').splitlines()[0] != AVD:
         raise ValueError('本实验只允许专用自有 AAOS 模拟器。')
     identity = device.ordinary_identity(PACKAGE, USER)
-    if digest(APK) != identity['installed_apk_sha256']:
+    if identity['device_sdk'] != 35 or device.call('shell', 'am', 'get-current-user') != str(USER):
+        raise ValueError('本实验需要 AAOS 35 和活动用户 10。')
+    if digest(apk) != identity['installed_apk_sha256']:
         raise ValueError('设备上的 APK 与本地自有 debug APK 不一致。')
     out.mkdir(parents=True, exist_ok=False)
     shutil.copyfile(ROOT / 'vehicle/rules/rules_library/rules.db', out / 'rules.db')
     write_json(out / 'fixture.json', {'package': PACKAGE, **identity})
     for mode in MODES:
         print(f'采集自有 APK 场景 {mode}…', flush=True)
-        capture_arm(device, mode, out / mode)
+        capture_arm(device, mode, out / mode, background=background)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--serial', default=SERIAL)
+    parser.add_argument('--apk', type=Path, default=APK)
+    parser.add_argument('--background', action='store_true', help='两个动作均在夹具 Activity 进入后台后执行')
     args = parser.parse_args()
-    run(args.out.resolve())
+    run(args.out.resolve(), serial=args.serial, apk=args.apk, background=args.background)
 
 
 if __name__ == '__main__':

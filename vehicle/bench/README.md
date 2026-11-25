@@ -190,6 +190,23 @@ $run = 'output/vscanbench-read-send-rerun'
 .\tools\python313.ps1 -m vehicle.bench.read_send_control --source $run --out "$run/control-verification.json"
 ```
 
+### AAOS 后台读取与发送对照
+
+同一自有 debug APK 在两个新会话先显示主 Activity，再按 Home 切到桌面。每轮使用三个 `dumpsys activity activities` 原始快照确认同一个主屏 Activity 从 `RESUMED` 转为 `STOPPED`、不可见，并在动作前后核对该状态。回放检查快照的时间、摘要、用户、会话和动作令牌。后台证据来自夹住已知动作的两个观测点。
+
+| 后台动作 | 健康检查 | 成功主读取 | 独立回执 | 仅窗口 / 批次标识 / 组合配对数 |
+| --- | ---: | ---: | --- | --- |
+| `read_only` | 11/11 | 5 | 0 请求 | 0 / 0 / 0 |
+| `plain` | 11/11 | 5 | 1 条 HTTP 200，原始正文摘要与代理一致 | 8 / 5 / 5 |
+
+```powershell
+$run = 'output/vscanbench-background-rerun'
+.\tools\python313.ps1 -m vehicle.lab.read_send_control --background --out $run
+.\tools\python313.ps1 -m vehicle.bench.background_control --source $run --out "$run/background-verification.json"
+```
+
+扩展清单在原 pilot 基础上增加 `background_control`，字段为相对于证据项目根的 `path` 和参考报告的 `sha256`。从独立工作树重放时，可用 `--evidence-root` 指明原项目根。工作流列为 `background-read-send-control`，`window_scored=false`。本轮扩展共 3 条工作流，两个自有 APK 的 90 对五档得分一致，独立可计分案例为 0。 [本地清单](../../output/vehicle-b2-background-20261125/vscanbench-background.json) · [设备证据与重放核对](../../output/vehicle-b2-background-20261125/verification.json)
+
 ### 配对模式回归
 
 VScanBench 在报告的 `workflow_only` 下逐轮核对 `window`（仅时间窗）、`token`（仅批次标识）、`both`（优先已核对的批次声明，其他候选走时间窗）。只读轮三种模式均为 0 对。发送轮分别为 8、5、5 对，额外 3 对绑定到车速、燃油量和电池电量的诊断复读。缺失或重复的批次标识只能留下带时间窗依据的待复核候选。 [三模式报告](../../output/vscanbench-pairing-20261123/pilot-repeat.json)
