@@ -1,0 +1,26 @@
+{
+  "schema": 2,
+  "source": "Owned uiCoverage AndroidManifest.xml and CoverageActivities.kt",
+  "window_seconds": 36,
+  "fixtures": {
+    "g1-multipage": {
+      "package": "com.vscanner.targetapp.g1",
+      "stack_package": "com.vscanner.targetapp",
+      "entry_activity": "com.vscanner.targetapp.CoverageMenuActivity"
+    }
+  },
+  "pages": [
+    {"id": "menu", "activity": "com.vscanner.targetapp.CoverageMenuActivity"},
+    {"id": "read", "activity": "com.vscanner.targetapp.CoverageReadActivity"},
+    {"id": "subscription", "activity": "com.vscanner.targetapp.CoverageSubscriptionActivity"}
+  ],
+  "actions": [
+    {"id": "open_read", "page": "menu", "control": "btnG1OpenRead", "destination": "read"},
+    {"id": "read_speed", "page": "read", "control": "btnG1Read", "events": ["VHAL_READ"],
+     "stack": "VhalReader.readAll", "property": "PERF_VEHICLE_SPEED"},
+    {"id": "open_subscription", "page": "read", "control": "btnG1OpenSubscription", "destination": "subscription"},
+    {"id": "subscribe_gear", "page": "subscription", "control": "btnG1Subscribe", "events": ["VHAL_READ"],
+     "accepted_registration": ["SUBSCRIPTION_REGISTER", "CALLBACK_REGISTER"],
+     "stack": "SubscriptionReader", "property": "GEAR_SELECTION"}
+  ]
+}

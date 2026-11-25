@@ -30,6 +30,11 @@ android {
             matchingFallbacks += listOf("debug")
             isDebuggable = true
         }
+        create("uiCoverage") {
+            initWith(getByName("debug"))
+            matchingFallbacks += listOf("debug")
+            applicationIdSuffix = ".g1"
+        }
         release {
             // 刻意不混淆、不加固：靶子 App 必须保持对审计工具完全可观察。
             isMinifyEnabled = false

@@ -1,4 +1,4 @@
-"""Score a fixed UI annotation against four sealed owned-fixture runs."""
+"""Score annotated pages and actions against sealed owned-fixture runs."""
 import argparse
 from pathlib import Path
 import sys
@@ -7,6 +7,7 @@ from core.io_utils import load_jsonl
 from vehicle.pipeline.contracts import digest, read_json, write_json
 
 REFERENCE = Path(__file__).with_name('ui-coverage-reference.json')
+MULTIPAGE_REFERENCE = Path(__file__).with_name('ui-coverage-multipage.json')
 MODES = ('manual', 'automatic')
 
 
@@ -50,8 +51,9 @@ def score_run(folder, fixture, reference, mode):
                    if row.get('src') == 'vhal' and row.get('ev') == 'ARMED']
     require(armed_times and observation['finished_ms'] >= min(armed_times), 'invalid capture window')
     start, end = min(armed_times), observation['finished_ms']
-    require(len(observation['views']) == 2 and all(start <= view['ts_ms'] <= end for view in observation['views']),
-            'incomplete or out-of-window view observations')
+    multipage = reference.get('schema') == 2
+    if multipage:
+        end = min(end, start + reference['window_seconds'] * 1000)
     explorer = verification.get('ui_exploration')
     if mode == 'automatic':
         require(explorer and (explorer['session'], explorer['package'], explorer['user']) == (session, package, user)
@@ -61,28 +63,49 @@ def score_run(folder, fixture, reference, mode):
     else:
         require(explorer is None, 'manual run contains automatic input')
         actions = observation['manual_actions']
+    views = explorer['views'] if multipage and explorer else observation['views']
+    require((bool(views) if multipage else len(views) == 2)
+            and all(start <= view['ts_ms'] <= end for view in views)
+            and views == sorted(views, key=lambda view: view['ts_ms']), 'invalid activity observations')
     require(all(start <= action['ts_ms'] <= end for action in actions), 'action outside capture')
     require(actions == sorted(actions, key=lambda action: action['ts_ms']), 'actions out of order')
     pages = {}
+    activities = {page['id']: page['activity'] for page in reference['pages']}
     for page in reference['pages']:
-        hit = next((view for view in observation['views'] if view['activity'] == page['activity']), None)
+        hit = next((view for view in views if view['activity'] == page['activity']), None)
         if hit:
             pages[page['id']] = hit['ts_ms']
     hits = {}
     for rule in reference['actions']:
         for index, action in enumerate(actions):
             matched = action.get('resource_id') == f"{package}:id/{rule['control']}"
-            if mode == 'automatic' and 'resource_id' not in action:
+            if not multipage and mode == 'automatic' and 'resource_id' not in action:
                 # Older frozen explorer records identify their single fixture tap by label.
                 matched = bool(rule.get('automatic_label')) and action.get('label') == rule['automatic_label']
             if not matched or action.get('kind') != 'tap' or action.get('status') != 'sent':
                 continue
             ts = action['ts_ms']
             next_ts = actions[index + 1]['ts_ms'] if index + 1 < len(actions) else end + 1
+            limit = min(next_ts, ts + 8000)
+            if multipage:
+                source = activities[rule['page']]
+                current = next((view['activity'] for view in reversed(views) if view['ts_ms'] <= ts), None)
+                if action.get('activity') != source or current != source:
+                    continue
+                if 'destination' in rule:
+                    arrival = next((view for view in views if ts < view['ts_ms'] < limit), None)
+                    if arrival and arrival['activity'] == activities[rule['destination']]:
+                        hits[rule['id']] = {'action_ms': ts, 'arrival_ms': arrival['ts_ms'],
+                                            'destination_activity': arrival['activity']}
+                        break
+                    continue
             within = [event for event in relevant if event.get('pkg') == package
-                      and ts <= event.get('host_received_ts', -1) < min(next_ts, ts + 8000)]
+                      and ts <= event.get('host_received_ts', -1) < limit]
+            prefix = fixture.get('stack_package', package)
             proof = [event for event in within if event.get('ev') in rule['events']
-                     and package + '.' + rule['stack'] in (event.get('stack') or '')]
+                     and prefix + '.' + rule['stack'] in (event.get('stack') or '')
+                     and (not multipage or (event.get('outcome') == 'ok'
+                                            and event.get('prop_name') == rule['property']))]
             if proof:
                 registrations = rule.get('accepted_registration')
                 if registrations:
@@ -105,8 +128,9 @@ def score_run(folder, fixture, reference, mode):
                               **{name: manifest['input_sha256'][name] for name in dependencies}}}
 
 
-def score(root):
-    reference = read_json(REFERENCE)
+def score(root, reference_path=REFERENCE):
+    reference = read_json(reference_path)
+    require(reference['schema'] in (1, 2), 'unsupported UI annotation schema')
     runs = {}
     for identity, fixture in reference['fixtures'].items():
         runs[identity] = {mode: score_run(root / f'{identity}-{mode}', fixture, reference, mode)
@@ -116,7 +140,7 @@ def score(root):
     require(all(lane['manual'][metric_name]['covered'] == lane['manual'][metric_name]['annotated']
                 for lane in runs.values() for metric_name in ('page_coverage', 'action_coverage')),
             'manual reference did not cover all annotated pages and actions')
-    return {'schema': 1, 'sample_origin': 'owned_fixture', 'reference_sha256': digest(REFERENCE),
+    return {'schema': reference['schema'], 'sample_origin': 'owned_fixture', 'reference_sha256': digest(reference_path),
             'window_seconds': reference['window_seconds'], 'runs': runs}
 
 
@@ -124,9 +148,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', required=True, type=Path)
     parser.add_argument('--out', required=True, type=Path)
+    parser.add_argument('--reference', default=REFERENCE, type=Path)
     args = parser.parse_args()
     try:
-        result = score(args.root)
+        result = score(args.root, args.reference)
         write_json(args.out, result)
     except (ValueError, KeyError, TypeError, OSError) as error:
         print(f'UI coverage inputs rejected: {error}', file=sys.stderr)

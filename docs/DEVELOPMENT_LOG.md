@@ -133,3 +133,10 @@
 - 车载探索按包、资源 ID 和按钮文案匹配两个已标注动作。UI 树将订阅按钮的 `2b` 转为 `2B`，因此文案匹配处理大小写。分别限制上下滚动，每个控件只发送一次。新动作保留资源 ID，旧会话仍可按原标签评分。 [控件观测](../output/vehicle-g1-actions-20261125/fixture-ui-diagnostics.jsonl)
 - 初轮 ADB 收尾等待超时，首个独立 ADB 实例的采集停在 Frida 刷盘。保留失败目录，最终用经过既有 G1 验收的只读 AAOS 35 镜像与专用 ADB，关闭设备 Wi-Fi 和移动数据，保留原代理设置。 [初轮日志](../output/vehicle-g1-actions-20261125/trials/target-app-automatic/capture/reads.log) · [刷盘失败](../output/vehicle-g1-actions-20261125/trials-isolated/target-app-manual/capture/reads.log) · [网络条件](../output/vehicle-g1-actions-20261125/network-baseline.json)
 - 四轮全通过采集健康检查，页面各为 1/1，自动动作由 1/2 和 0/2 提升到两个 2/2，手动均为 2/2。评分重算两次摘要一致，旧基准重算也一致。定向测试 8/8，前端状态检验 3/3，根回归 22/22。`node --check` 与 `git diff --check` 通过。 [覆盖率](../output/vehicle-g1-actions-20261125/coverage.json) · [根回归](../output/vehicle-g1-actions-20261125/regression/verification.json)
+
+## 2026-11-25 · G1 车载多页面探索对照
+
+- 范围为新增独立自有测试构建，标注三页的导航、VHAL 读取和订阅动作。自动和手动在同一 AAOS 构建和冻结窗口内各跑一个会话，回放前台页面与运行时动作证据并复算历史报告。
+- `:app:assembleUiCoverage :app:assembleDebug --offline --no-daemon` 通过。AAPT2 清单检查确认三页只进 `com.vscanner.targetapp.g1`。多页采集绑定 APK SHA-256，自动控制核对当前 Activity、资源 ID 及标签。评分需要实际目的页面、同会话成功车速读取及成功注册后的档位回调，清理时间不延长 36 秒窗口。
+- 最终 APK 在专用 AAOS 35 / user 10 两个独立 36 秒会话中，手动和自动均 3/3 页、4/4 动作，健康各 11/11，未记录代理 HTTP 流。每轮保留读取与订阅证据事件编号。报告复算两次字节一致。首轮历史报告重放仅因独立工作树的 CRLF 改变了标注文件字节摘要，指定原封存标注文件后两个历史报告逐字节一致。
+- `tools/python313.ps1 -m unittest vehicle.bench.test_ui_coverage vehicle.pipeline.test_capture_lifecycle` 21/21，`tools/python313.ps1 tools/run_regressions.py --out <本轮输出>/regression-final` 22/22，`git diff --check` 通过。设备、ADB 和回环转发收尾核对见 `output/vehicle-g1-multipage-20261125/device-cleanup.json`，最终报告及 APK 摘要见同目录 `verification.json`。普通第三方车载应用仍待独立对照。

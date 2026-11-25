@@ -36,3 +36,30 @@
 | `target-app2` | 1/1 | 1/1 | 2/2 | 2/2 |
 
 四个新会话复用原 APK、标注清单和 36 秒窗口。复跑在同一 AAOS 35 构建的只读实例上关闭设备 Wi-Fi 和移动数据，并保留原代理设置。两个自动会话依次发送读取和订阅，评分均匹配到直接读取、成功注册及随后回调。旧报告重算字节一致。 [新报告](../../output/vehicle-g1-actions-20261125/coverage.json) · [改进复核](../../output/vehicle-g1-actions-20261125/improvement-verification.json) · [网络条件](../../output/vehicle-g1-actions-20261125/network-baseline.json)
+
+## 2026-11-25 三页自有 APK 对照
+
+独立 `uiCoverage` 构建包名为 `com.vscanner.targetapp.g1`。测试流程依次进入目录、读取页和订阅页，复用原夹具的 `VhalReader` 与 `SubscriptionReader`。标注预先固定三页和四个动作，运行时把该构建的 APK SHA-256 冻结到本轮 `reference.json`。 [多页标注](ui-coverage-multipage.json)
+
+| 36 秒 AAOS 35 会话 | 健康检查 | 页面覆盖 | 动作覆盖 |
+| --- | ---: | ---: | ---: |
+| 手动参考 | 11/11 | 3/3 | 4/4 |
+| 自动探索 | 11/11 | 3/3 | 4/4 |
+
+- 导航需要同用户主显示屏的来源 Activity、已发送控件动作及 8 秒内、下一动作前到达的目标 Activity。
+- 直接读取需要同会话 `PERF_VEHICLE_SPEED` 成功事件和 `VhalReader.readAll` 调用栈。订阅需要成功注册及随后的 `GEAR_SELECTION` 回调，动作分母为预先标注的四项。
+- 已记录的前台样本界定覆盖范围。本轮结果适用于自有三页夹具。普通第三方车载应用的页面发现能力仍待独立验收。
+
+```powershell
+. .\environment.ps1
+Push-Location 'vehicle/targets/target-app'
+try { .\gradlew.bat :app:assembleUiCoverage --offline } finally { Pop-Location }
+$apk = 'vehicle/targets/target-app/app/build/outputs/apk/uiCoverage/app-uiCoverage.apk'
+$run = 'output/g1-multipage-rerun'
+.\tools\python313.ps1 -m vehicle.lab.ui_coverage_trial --serial emulator-5564 `
+  --multipage-apk $apk --preserve-system-proxy --out $run
+.\tools\python313.ps1 -m vehicle.bench.ui_coverage --root $run `
+  --reference "$run/reference.json" --out "$run/coverage.json"
+```
+
+设备使用自有 AAOS 35 / user 10，只读 AVD，关闭 Wi-Fi 和移动数据，并保留原系统代理。各会话关闭 TLS 绕过。 [设备验收](../../output/vehicle-g1-multipage-20261125/verification.json)

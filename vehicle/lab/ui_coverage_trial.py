@@ -11,12 +11,14 @@ from pathlib import Path
 
 from core.android_ui import nodes
 from core.io_utils import load_jsonl_counting
-from vehicle.bench.ui_coverage import MODES, REFERENCE, require
+from core.static.apkmeta import badging
+from core.static.toolchain import android_build_tool
+from vehicle.bench.ui_coverage import MODES, MULTIPAGE_REFERENCE, REFERENCE, require
 from vehicle.pipeline import readiness
 from vehicle.pipeline.capture import capture_app
 from vehicle.pipeline.capture_device import Device
 from vehicle.pipeline.contracts import ROOT, digest, read_json, write_json
-from vehicle.pipeline.ui_exploration import focused_on_target
+from vehicle.pipeline.ui_exploration import focused_activity
 from vehicle.privacy.catalog import catalog_hash
 
 
@@ -32,13 +34,9 @@ def ui_tree(device):
 
 def activity(device, package, user):
     report = device.call('shell', 'dumpsys', 'window', 'displays', timeout=8)
-    require(focused_on_target(report, package, user), f'{package} lost display 0 focus')
-    primary = re.split(r'^\s*Display: mDisplayId=(\d+)\b', report, flags=re.M)
-    section = primary[primary.index('0') + 1]
-    match = re.search(r'^\s*mCurrentFocus=Window\{\S+ u' + str(user) + ' ' +
-                      re.escape(package) + r'/([^}\s]+)', section, re.M)
-    require(match, 'focused Activity not reported')
-    return match[1].removeprefix(package)
+    current = focused_activity(report, package, user)
+    require(current, f'{package} lost display 0 focus')
+    return current
 
 
 def operator_tap(device, package, user, action):
@@ -48,11 +46,16 @@ def operator_tap(device, package, user, action):
         require(any(node['pkg'] == package for node in tree), 'target UI absent')
         target = next((node for node in tree if node['rid'] == resource_id and node['pkg'] == package
                        and node['area'] and node['clickable'] and node['enabled']), None)
-        activity(device, package, user)
+        current = activity(device, package, user)
+        if 'activity' in action:
+            require(current == action['activity'], f'foreground Activity {current} does not match the action')
         if target:
             ts = now_ms()
             device.call('shell', 'input', '-d', 0, 'tap', *target['center'], timeout=6)
-            return {'kind': 'tap', 'resource_id': resource_id, 'status': 'sent', 'ts_ms': ts}
+            result = {'kind': 'tap', 'resource_id': resource_id, 'status': 'sent', 'ts_ms': ts}
+            if 'activity' in action:
+                result['activity'] = current
+            return result
         if attempt == 3:
             break
         scroll = next((node for node in tree if node['rid'] == package + ':id/scrollContent'
@@ -79,27 +82,43 @@ def wait_ready(capture, future):
     raise TimeoutError('capture readiness did not appear')
 
 
-def run_trial(folder, fixture, reference, mode, device, user):
+def run_trial(folder, fixture, reference, mode, device, user, *, preserve_system_proxy=False):
     folder.mkdir(parents=True, exist_ok=False)
     capture = folder / 'capture'
     package = fixture['package']
+    entry = fixture.get('entry_activity', '.MainActivity')
+    multipage = reference['schema'] == 2
     device.call('shell', 'am', 'force-stop', '--user', user, package)
-    device.call('shell', 'am', 'start', '-W', '--user', user, '-n', package + '/.MainActivity')
-    require(activity(device, package, user) == '.MainActivity', 'fixture did not start on its main Activity')
+    device.call('shell', 'am', 'start', '-W', '--user', user, '-n', package + '/' + entry)
+    require(activity(device, package, user) == entry, 'fixture did not start on its reference Activity')
     evidence = {'mode': mode, 'package': package, 'user': user, 'apk_sha256': fixture['apk_sha256'],
                 'window_seconds': reference['window_seconds'], 'views': [], 'manual_actions': []}
+
+    def record_view():
+        focused = activity(device, package, user)
+        if not multipage or not evidence['views'] or evidence['views'][-1]['activity'] != focused:
+            evidence['views'].append({'activity': focused, 'ts_ms': now_ms()})
+
     with ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(capture_app, package, device.serial, user, reference['window_seconds'], capture,
-                             tls_bypass=False, multi_process=False, auto_explore=mode == 'automatic')
+                             tls_bypass=False, multi_process=False, auto_explore=mode == 'automatic',
+                             preserve_system_proxy=preserve_system_proxy)
         try:
             evidence['session'] = wait_ready(capture, future)
-            evidence['views'].append({'ts_ms': now_ms(), 'activity': activity(device, package, user)})
+            if not multipage or mode == 'manual':
+                record_view()
             if mode == 'manual':
+                pages = {page['id']: page['activity'] for page in reference['pages']}
                 for action in reference['actions']:
+                    if multipage:
+                        action = {**action, 'activity': pages[action['page']]}
                     evidence['manual_actions'].append(operator_tap(device, package, user, action))
                     time.sleep(3)
-            time.sleep(2)
-            evidence['views'].append({'ts_ms': now_ms(), 'activity': activity(device, package, user)})
+                    if multipage:
+                        record_view()
+            if not multipage:
+                time.sleep(2)
+                record_view()
         finally:
             try:
                 result = future.result(timeout=95)
@@ -116,6 +135,8 @@ def main():
     parser.add_argument('--serial', required=True)
     parser.add_argument('--user', type=int, default=10)
     parser.add_argument('--case', action='append', help='repeatable <fixture>-<mode> filter')
+    parser.add_argument('--multipage-apk', type=Path, help='local APK from :app:assembleUiCoverage')
+    parser.add_argument('--preserve-system-proxy', action='store_true')
     args = parser.parse_args()
     device = Device(args.serial)
     require(re.fullmatch(r'emulator-\d+', args.serial) and device.call('shell', 'getprop', 'ro.kernel.qemu') == '1',
@@ -123,7 +144,14 @@ def main():
     avd = device.call('emu', 'avd', 'name').splitlines()[0]
     require(avd == 'VScanner_AAOS_35_P1' and device.call('shell', 'getprop', 'ro.build.version.sdk') == '35'
             and device.call('shell', 'am', 'get-current-user') == str(args.user), 'expected owned AAOS 35 and active user')
-    reference = read_json(REFERENCE)
+    reference = read_json(MULTIPAGE_REFERENCE if args.multipage_apk else REFERENCE)
+    if args.multipage_apk:
+        fixture = reference['fixtures']['g1-multipage']
+        require(badging(android_build_tool('aapt2'), args.multipage_apk).get('package') == fixture['package'],
+                'APK is not the owned multipage fixture package')
+        fixture['apk_sha256'] = digest(args.multipage_apk)
+        args.out.mkdir(parents=True, exist_ok=False)
+        write_json(args.out / 'reference.json', reference)
     case_names = {f'{identity}-{mode}' for identity in reference['fixtures'] for mode in MODES}
     selected = set(args.case or case_names)
     require(selected <= case_names, 'unknown comparison case')
@@ -131,13 +159,14 @@ def main():
         modes = [mode for mode in MODES if f'{identity}-{mode}' in selected]
         if not modes:
             continue
-        apk = ROOT / 'vehicle' / 'targets' / identity / 'app/build/outputs/apk/debug/app-debug.apk'
+        apk = args.multipage_apk or (ROOT / 'vehicle' / 'targets' / identity / 'app/build/outputs/apk/debug/app-debug.apk')
         require(digest(apk) == fixture['apk_sha256'], f'APK does not match the frozen reference: {apk}')
         device.call('install', '-r', '-g', '--user', args.user, apk, timeout=60)
         info = device.ordinary_identity(fixture['package'], args.user)
         require(info['installed_apk_sha256'] == fixture['apk_sha256'], 'installed APK identity mismatch')
         for mode in modes:
-            run_trial(args.out / f'{identity}-{mode}', fixture, reference, mode, device, args.user)
+            run_trial(args.out / f'{identity}-{mode}', fixture, reference, mode, device, args.user,
+                      preserve_system_proxy=args.preserve_system_proxy)
 
 
 if __name__ == '__main__':
