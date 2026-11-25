@@ -290,3 +290,11 @@ A6 复核报告固定内容摘要、设备指纹与镜像 ID。构建逐条核�
 以摘要匹配的旧 APK 首装，再覆盖安装带 A6 整数值的新 APK。升级备份用旧运行库文件摘要核对，
 生效版本用资产摘要与内容摘要核对。AAOS 35 A6 自有模拟器上，升级后与应用进程重启后两次
 Room 回读均逐项匹配 150 条 A6 权限值及来源。见 [运行验收](../../output/vehicle-permission-room-20261118/device-003/verification.json)。
+
+## D020 AAOS 34 ext9 r05 编译权限值（2026-11-24）
+
+Android 14 的 10 条原始级别与本轮 PackageManager 观测一致。发布构建验证 r05 设备指纹和冻结报告摘要，把编译整数与 APK 证据附加到原权限行。保留 AOSP 原始来源与 `source_verified`。 [标定记录](device_calibration/README.md#android-14-编译权限值2026-11-24)
+
+## D021 AAOS 33 r05 编译权限值（2026-11-24）
+
+Android 13 的 10 条编译整数均来自 `TEA1.250515.001` 对应 APK 和 PackageManager。构建按源码版本绑定各自的冻结报告及设备指纹。 [标定记录](device_calibration/README.md#android-13-编译权限值2026-11-24)

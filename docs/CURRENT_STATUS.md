@@ -9,6 +9,16 @@
 
 ---
 
+## Android 13 车载编译权限级别标定（2026-11-24）
+
+- 官方 AAOS 33 x86_64 r05（`TEA1.250515.001`）逐条确认 10/10 项权限的编译整数，已同步发布库和 Room 预置资产。Android 13、14、15 合计 170 条已标定，Android 16 的 10 条待取证。 [冻结证据](../vehicle/rules/device_calibration/protection-level-aaos33-r05.json) · [入库核对](../output/vehicle-permission-api33-20261124/publication-verification.json)
+- AAOS 33 / user 10 的 Room DAO 回读与发布库 180 行逐项一致，Android 13 的 10 条整数全部匹配。根离线回归 22/22。 [Room 验收](../output/vehicle-permission-api33-20261124/room-verification.json) · [根回归](../output/vehicle-permission-api33-20261124/regression/verification.json)
+
+## Android 14 车载编译权限级别标定（2026-11-24）
+
+- 官方 AAOS 34 ext9 x86_64 r05（`UAA1.250512.001`）逐条核对 10/10 项权限，编译整数已进入发布库和 Room 预置资产，原有 AOSP 定义来源保留。 [冻结证据](../vehicle/rules/device_calibration/protection-level-aaos34-r05.json) · [入库核对](../output/vehicle-permission-api34-20261124/publication-verification.json)
+- AAOS 34 / user 10 的 Room DAO 回读与发布库 180 行逐项一致，Android 14 的 10 条整数全部通过。根离线回归 22/22。 [Room 验收](../output/vehicle-permission-api34-20261124/room-verification.json) · [根回归](../output/vehicle-permission-api34-20261124/regression/verification.json)
+
 ## 11/23–11/29 周计划验收
 
 | 计划项 | 本轮验收 |
@@ -116,7 +126,7 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0
 | # | 未完成项 | 来源 | 为什么不在本周 A 组 |
 | --- | --- | --- | --- |
 | 1 | 车载 B1 已签核两个自有 APK 的五档重放。Car Stats Viewer 已验收车速上传与 5 条断网行驶点补传 | [车载复核](../vehicle/bench/WINDOW_CALIBRATION.md) + mobile「未完成」 | 独立应用窗口仍缺可唯一对齐到单次 VHAL 读取的延迟证据，移动 30000ms 待实测 |
-| 2 | `protection_level_value`：车载 Android 15 的 150 条已入库；Android 13/14/16 的 30 条待补。移动 40 条未断言 | 本文「车载复核」+ mobile「未完成」 | 各版本使用各自来源 |
+| 2 | `protection_level_value`：车载 Android 13/14/15 共 170 条已入库，Android 16 的 10 条待补。移动 40 条未断言 | 本文「Android 13 车载编译权限级别标定」+ mobile「未完成」 | 各版本使用各自来源 |
 | 3 | B2 VScanBench 最小版已交付，完整场景矩阵待扩展 | [车载基准](../vehicle/bench/README.md#b2-vscanbench-最小基准) | 新场景仍需独立参考与负控 |
 | 4 | F1 类加载归因（无 `hook_classload.js`） | AGENTS「未做」 | 需新钩子 + 设备验收 |
 | 5 | G1 UI 探索覆盖率度量 | AGENTS「未做」 | 需设备与人工标注 |

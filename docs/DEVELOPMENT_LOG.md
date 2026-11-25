@@ -133,3 +133,23 @@
 - 验证：七页逐页渲染（Edge headless `--dump-dom` 与 1440×980 截图，均在 `output/v2-acceptance/`）：概览「22 条结论 / 候选 22」、静态「22 / 22 条」并显示中文标题、源码页取到 jadx 文件树与 `AuditConsentActivity.java` 正文、动态页五阶段（2 完成 / 3 跳过）、AI 页降级文案、PDF 页禁用提示、复核页「未发布本轮证据复核」。未完成任务的 `/report`、`/dashboard`、`/evidence.zip`、`/summary`、`/coverage` 均为 404 + `audit_not_completed`。
 - `tools/python313.ps1 -m unittest vehicle.webapp.test_presentation vehicle.webapp.test_server vehicle.webapp.test_workflow vehicle.webapp.test_integration` 46/46；新增 4 例（静态计数只认 `conclusion_level`、`static_only` 标来源、`done` 仍用摘要、`/static` 带标题）。全量 `tools/run_regressions.py` 21/22，唯一红仍是 `completion`：`vehicle/frontend/vehicle.css` 426 行、`v2/app.js` 317 行，均为远程 main 带入且未登记基线。
 - 待办：`completion` 要绿只能拆分这两个文件（守卫 `--update` 只允许收紧，不能新增条目）；v2 的采集/关联审计/看板三页需接设备跑 `live` 或 `replay` 任务；AI 页对静态任务可给出更准确的原因文案。
+
+## 2026-11-24 · Android 14 车载编译权限级别标定
+
+- 范围为从官方 API 34 车载镜像核对规则库 10 条权限，封存 PackageManager 和实际定义包的编译声明。仅在证据通过后导入发布库和 Room 资产并验证回读。
+- 整包请求停滞，改用 41 段下载。拼接后长度 1,367,927,843 字节，SHA-1 与官方索引一致。在专用 AAOS 34 ext9 r05 / `UAA1.250512.001` 上采集，使用 `vehicle.rules.python.calibrate_permissions` 核对 PackageManager 与两份定义包编译清单。10/10 条一致，发布后用同一证据复核仍为 10/10。 [冻结证据](../vehicle/rules/device_calibration/protection-level-aaos34-r05.json) · [发布后复核](../output/vehicle-permission-api34-20261124/published-recheck.json)
+- 四版本构建复用校准报告校验，导入整数、设备指纹、报告和定义包摘要。首次构建由旧工作区四份 seed 缓存的 CRLF 字节触发摘要错误，恢复为锁文件指定的 LF 并逐份校验 SHA-256，Git 内容无改动。按 [四版本构建入口](../vehicle/rules/CLAUDE.md#怎么跑) 生成暂存库，逐表对拍后同步发布库、Room 资产与期望摘要。只更新 Android 14 的 10 行整数和出处。 [逐表核对](../output/vehicle-permission-api34-20261124/publication-verification.json)
+- `gradlew.bat --offline --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest` 通过。API 34 / user 10 实际运行 `RulesPermissionReadbackTest`，从 Room DAO 导出并逐字段核对 180 行，10 条 Android 14 整数全部匹配。专用模拟器已关闭。 [Room 回读核对](../output/vehicle-permission-api34-20261124/room-verification.json)
+- `tools/python313.ps1 -m unittest vehicle.rules.python.test_permission_levels` 3/3，`tools/python313.ps1 vehicle/rules/android/tools/verify_schema_parity.py` 无差异，根 `tools/run_regressions.py` 22/22，`git diff --check` 通过。Android 13 和 16 共 20 条待各自取证。 [离线回归](../output/vehicle-permission-api34-20261124/regression/verification.json)
+
+## 2026-11-24 · Android 13 车载编译权限级别标定
+
+- 范围为用 Google SDK 的 API 33 车载镜像核对 Android 13 基线的 10 条权限，证据通过后同步发布规则库与 Room 资产，执行回读及根回归。
+- SDK 车载索引锁定 x86_64 r05 的 1,333,244,962 字节和 SHA-1。用分段下载恢复超时区间并校验整包，在独立 AVD 上确认 `TEA1.250515.001` 完整设备指纹。用 `vehicle.rules.python.calibrate_permissions` 将 PackageManager 级别与两个实际定义包的编译清单核对，10/10 通过，发布后复核同为 10/10。 [冻结证据](../vehicle/rules/device_calibration/protection-level-aaos33-r05.json) · [发布后复核](../output/vehicle-permission-api33-20261124/published-recheck.json)
+- 四版本构建按源版本使用对应的校准报告，`output/vehicle-permission-api33-20261124/build_rules.ps1` 两次重建的库 SHA-256 一致。逐表对拍只改 Android 13 权限的整数值及新出处，同步更新发布库、Room 资产、摘要和期望值。 [入库核对](../output/vehicle-permission-api33-20261124/publication-verification.json)
+- `gradlew.bat --offline --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest` 通过，AAOS 33 / user 10 运行 `RulesPermissionReadbackTest`，Room DAO 的 180 行逐项匹配，Android 13 的 10 条整数全部一致。专用 AVD 已关闭。 [Room 验收](../output/vehicle-permission-api33-20261124/room-verification.json)
+- `tools/python313.ps1 -m unittest vehicle.rules.python.test_permission_levels` 3/3，`tools/python313.ps1 vehicle/rules/android/tools/verify_schema_parity.py` 无差异，`tools/run_regressions.py` 22/22，`git diff --check` 通过。Android 16 余 10 条待取证。 [离线回归](../output/vehicle-permission-api33-20261124/regression/verification.json)
+
+### 独立分支复核（2026-11-25）
+
+- 从 `origin/main` 建立权限标定分支。四版本重建的发布库 SHA-256 为 `920a8284…4275d`，与现有两份构建产物和 Room 资产逐字节一致。定向测试 3/3、schema 对拍及离线 APK 和 instrumentation APK 构建通过。独立基线的工程守卫、采集收尾测试问题在未改动的 `origin/main` 上复现。 [基线复验](../output/vehicle-permission-api36-20261125/origin-main-control.log)

@@ -33,9 +33,14 @@ class ProtectionLevelTests(unittest.TestCase):
             rows = conn.execute('SELECT permission_name, protection_level_raw,'
                                 ' protection_level_value, definition_status, device_calibration_json'
                                 " FROM permissions WHERE android_version = '15'").fetchall()
-            other = conn.execute('SELECT COUNT(*), COUNT(protection_level_value) FROM permissions'
-                                 " WHERE android_version <> '15'").fetchone()
-        self.assertEqual((30, 0), other)
+            source_counts = {
+                version: (total, calibrated)
+                for version, total, calibrated in conn.execute(
+                    'SELECT android_version, COUNT(*), COUNT(protection_level_value) FROM permissions'
+                    " WHERE android_version <> '15' GROUP BY android_version")
+            }
+        self.assertEqual({version: (10, 10 if version in permission_levels.SOURCE_REVIEWS else 0)
+                          for version in ('13', '14', '16')}, source_counts)
         self.assertEqual(150, len(rows))
         self.assertEqual(expected.keys(), {row[0] for row in rows})
         for name, raw, value, status, provenance in rows:
@@ -47,6 +52,26 @@ class ProtectionLevelTests(unittest.TestCase):
             self.assertEqual(permission_levels.FINGERPRINT, compiled['device_fingerprint'])
             self.assertEqual(evidence['defining_apks'][reviewed['defining_package']],
                              compiled['defining_apk'])
+
+    def test_source_levels_keep_the_source_status_and_match_their_device_review(self):
+        db = RULES / 'rules_library/rules.db'
+        with closing(sqlite3.connect(db.as_uri() + '?mode=ro', uri=True)) as conn:
+            for version, (path, review_sha, api, build, fingerprint) in permission_levels.SOURCE_REVIEWS.items():
+                evidence, by_name = permission_levels.read_review(path, review_sha, version, api, build, fingerprint)
+                rows = {name: (raw, value, status, json.loads(provenance))
+                        for name, raw, value, status, provenance in conn.execute(
+                    'SELECT permission_name, protection_level_raw, protection_level_value, '
+                    'definition_status, device_calibration_json FROM permissions WHERE android_version = ?',
+                    (version,))}
+                with self.subTest(version=version):
+                    self.assertEqual(10, len(rows))
+                    self.assertEqual(rows.keys(), by_name.keys())
+                    for name, reviewed in by_name.items():
+                        raw, value, status, history = rows[name]
+                        self.assertEqual((reviewed['observed_raw'], reviewed['protection_level_value'], 'source_verified'),
+                                         (raw, value, status), name)
+                        self.assertEqual(permission_levels.value_provenance(evidence, reviewed, path, review_sha),
+                                         history[-1], name)
 
     def test_rejects_tampered_review_and_seed_disagreement(self):
         with tempfile.TemporaryDirectory() as tmp:

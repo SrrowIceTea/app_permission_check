@@ -42,7 +42,7 @@ from pathlib import Path
 
 from device_rows import DEVICE_VERSION, build_device_rows
 from egress_calibration import calibrate
-from permission_levels import BUILD_ID, REPORT, REVIEW_SHA256, load_levels
+from permission_levels import (BUILD_ID, REPORT, REVIEW_SHA256, SOURCE_REVIEWS, apply_source_levels, load_levels)
 from privacy_rows import insert_privacy_rules
 from privacy_observation import DEFAULT_OBSERVATION
 from source_rows import insert_source_rows
@@ -159,6 +159,15 @@ def main() -> int:
             raise ValueError("Unexpected or duplicate source baseline: " + version)
         counts[version] = insert_source_rows(dst, seed_dir)
 
+    compiled_sources = {}
+    for version, (path, review_sha, api, build, fingerprint) in SOURCE_REVIEWS.items():
+        if version in counts:
+            imported = apply_source_levels(dst, path, review_sha, version, api, build, fingerprint)
+            compiled_sources[f'android{version}_protection_levels'] = {
+                "build_id": build, "review_file": path.name,
+                "review_content_sha256": review_sha, "imported": imported,
+            }
+
     counts[DEVICE_VERSION] = build_device_rows(dst, args.calibration, args.general_permissions,
                                                args.property_ids, args.cpm_signatures, device_facts,
                                                protection_levels)
@@ -192,6 +201,7 @@ def main() -> int:
         "privacy_rules": privacy,
         "source_versions": source_versions,
         "android15_source": "device_observation",
+        **compiled_sources,
         "android15_protection_levels": {
             "build_id": BUILD_ID, "review_file": REPORT.name,
             "review_content_sha256": REVIEW_SHA256, "imported": len(protection_levels),
