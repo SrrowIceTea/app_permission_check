@@ -261,3 +261,28 @@ tr.detail>td{background:rgb(var(--ink-rgb) / .018);padding:0 18px 16px!important
   max-height:42vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;
   padding:12px;border:1px solid var(--line);border-radius:10px;font:12px/1.55 var(--mono);
 }
+.attachment-panel{margin:0 0 14px}
+.attachment-panel summary,.review-block__form>summary{cursor:pointer;font-weight:600}
+.attachment-panel .sub{margin:8px 0}
+.attachment-fields{display:grid;gap:8px;border:0;padding:0;margin:8px 0;min-width:0}
+.attachment-fields input[type="file"]{max-width:100%;font-size:11px}
+.finding-toggle{border:0;padding:0;background:transparent;color:inherit;font:inherit;font-weight:700;cursor:pointer;text-align:left}
+.finding-toggle:hover{text-decoration:underline}
+.review-block{max-width:380px;padding:14px 0 0;border-top:1px solid var(--line)}
+.review-block p,.review-block h4{margin:0 0 6px;overflow-wrap:anywhere}
+.review-block__title{font-size:13px;color:var(--ink)}
+.review-block__word{margin-left:8px;font-weight:600;color:var(--ink)}
+.review-block__disclaimer,.review-block__reason{color:var(--ink-3)}
+.review-block__msg[data-tone="error"]{color:var(--failure-ink)}
+.review-fieldset{display:grid;gap:8px;margin:8px 0}
+.review-fieldset label{display:grid;gap:4px}
+.review-fieldset :is(input,select,textarea){
+  width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;
+  background:var(--card);color:var(--ink);font:inherit;
+}
+.review-block .pl-btn{
+  margin:0 0 8px;padding:9px 13px;border:1px solid var(--line);border-radius:8px;
+  background:var(--ink);color:var(--paper);font:600 12px var(--ui);cursor:pointer;
+}
+.review-block .pl-btn:disabled{opacity:.5;cursor:default}
+@media(max-width:480px){.review-block{max-width:calc(100vw - 72px)}}

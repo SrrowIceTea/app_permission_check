@@ -2,26 +2,46 @@
 (function () {
   'use strict';
   const U = window.VehicleUI, $ = id => document.getElementById(id);
+  const attachments = {
+    async submit(fields, request) {
+      const files = [...fields.files.files, ...fields.folder.files];
+      const policy = fields.policy.value, scenarios = fields.scenarios.value;
+      if (!policy && !scenarios) return null;
+      if (files.length > 64 || files.reduce((sum, f) => sum + f.size, 0) > 4 * 1024 * 1024)
+        throw new Error('补充证据最多 64 个文件、合计 4 MiB。');
+      const rows = [];
+      for (const file of files) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        let text = '';
+        for (let i = 0; i < bytes.length; i += 8192) text += String.fromCharCode(...bytes.subarray(i, i + 8192));
+        rows.push({path: file.webkitRelativePath || file.name, content_base64: btoa(text)});
+      }
+      return request('/api/attachments', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({files: rows, policy, scenarios})});
+    },
+    bind(fields) {
+      const choices = filenames => {
+        for (const select of [fields.policy, fields.scenarios]) {
+          select.replaceChildren(new Option('未提供', ''), ...filenames.map(name => new Option(name, name)));
+        }
+      };
+      const inputs = [fields.files, fields.folder];
+      inputs.forEach((input, index) => input.addEventListener('change', () => {
+        inputs[1 - index].value = '';
+        choices(Array.from(input.files, file => file.webkitRelativePath || file.name).filter(name => /\.json$/i.test(name)));
+      }));
+      return () => { inputs.forEach(input => { input.value = ''; }); choices([]); };
+    },
+  };
+  window.VehicleAttachments = attachments;
+  if (!U) return;
+  const evidenceFields = () => ({files: $('evidence-files'), folder: $('evidence-folder'),
+    policy: $('policy-file'), scenarios: $('scenarios-file')});
   U.settings = function () {
     return {version: $('audit-version').value, scope: $('capture-scope').value, ai_review: String($('ai-enabled').checked),
       tls_bypass: String($('tls-bypass').checked), multi_process: String($('multi-process').checked)};
   };
-  U.attach = async function () {
-    const files = [...$('evidence-files').files, ...$('evidence-folder').files];
-    const policy = $('policy-file').value, scenarios = $('scenarios-file').value;
-    if (!policy && !scenarios) return null;
-    if (files.length > 64 || files.reduce((sum, f) => sum + f.size, 0) > 4 * 1024 * 1024)
-      throw new Error('补充证据最多 64 个文件、合计 4 MiB。');
-    const rows = [];
-    for (const file of files) {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      let text = '';
-      for (let i = 0; i < bytes.length; i += 8192) text += String.fromCharCode(...bytes.subarray(i, i + 8192));
-      rows.push({path: file.webkitRelativePath || file.name, content_base64: btoa(text)});
-    }
-    return U.get('/api/attachments', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({files: rows, policy, scenarios})});
-  };
+  U.attach = () => attachments.submit(evidenceFields(), U.get);
   U.failureActions = function (spec) {
     const box = U.node('div', 'state-panel__actions');
     const retry = U.node('button', 'pl-btn', '重试'), logs = U.node('button', 'pl-btn', '打开日志');
@@ -57,16 +77,5 @@
     cancel.onclick = () => { dialog.close(); dialog.remove(); };
     dialog.append(label, go, cancel, message); document.body.append(dialog); dialog.showModal();
   };
-  U.bindInputs = function () {
-    function changed() {
-      $(this.id === 'evidence-files' ? 'evidence-folder' : 'evidence-files').value = '';
-      const names = Array.from(this.files).map(f => f.webkitRelativePath || f.name).filter(n => /\.json$/i.test(n));
-      ['policy-file', 'scenarios-file'].forEach(id => {
-        $(id).replaceChildren(U.node('option', '', '未提供'));
-        $(id).firstChild.value = '';
-        names.forEach(name => { const option = U.node('option', '', name); option.value = name; $(id).append(option); });
-      });
-    }
-    $('evidence-files').onchange = changed; $('evidence-folder').onchange = changed;
-  };
+  U.bindInputs = () => attachments.bind(evidenceFields());
 }());

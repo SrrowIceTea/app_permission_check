@@ -47,6 +47,7 @@
 
   function locked(value) {
     busy = value;
+    VS.attachments.lock(value);
     dropzone.setAttribute('aria-disabled', String(value));
     fileInput.disabled = value;
     $('#startBtn').disabled = value;
@@ -65,9 +66,14 @@
     $('#dzBar').style.width = '100%';
     $('#dzPct').textContent = '上传中';
     try {
+      if (query.get('mode') !== 'static') {
+        const material = await VS.attachments.submit();
+        if (material) query.set('attachment_id', material.id);
+      }
       const job = await VS.api('/api/pipeline?' + query, {
         method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file,
       });
+      if (query.get('mode') !== 'static') VS.attachments.reset();
       $('#dzPct').textContent = '已提交';
       VS.followJob(job.id, {
         onTerminal: (finished) => {
@@ -167,6 +173,7 @@
     $('#modeOut').textContent = button.textContent;
     $('#replayOptions').hidden = mode !== 'replay';
     $('#liveOptions').hidden = mode !== 'live';
+    VS.attachments.setMode(mode);
     paintVersion();
     if (mode === 'live' && !deviceRefresh.disabled) refreshDevices();
     if (mode === 'replay') refreshCaptures();

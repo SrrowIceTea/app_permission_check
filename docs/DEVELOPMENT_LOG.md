@@ -186,3 +186,10 @@
 - v2 复用现有日志和重试接口。确认授权后使用同一 APK 与原设置新建重试任务，沿用上传流程的任务轮询，并可从重试任务返回原失败。提交结果无法确认时，页面提示先检查任务列表。
 - 隔离 Chrome 读取历史实采装机摘要不匹配的日志，并验证该历史副本缺少 APK 时的错误提示。真实 AAOS 采集副本临时移出一份输入，回放按预期失败；还原该文件后，浏览器重新授权，仅创建一条重试任务并完成回放。核对同一采集会话、相同 APK、原日志摘要及新证据 ZIP，390 像素下授权弹窗可操作。 [浏览器验收](../output/vehicle-v2-retry-20261125/browser-verification.json)
 - `node --check`、`git -c core.whitespace=cr-at-eol diff --check` 通过。根回归首跑有 3 组被沙箱拦截本机回环，允许回环后 `tools/python313.ps1 tools/run_regressions.py --out output/vehicle-v2-retry-20261125/regression-final` 为 22/22。新一轮设备实采重试待验证。 [回归结果](../output/vehicle-v2-retry-20261125/regression-final/verification.json)
+
+## 2026-11-25 · 车载 v2 补充证据与人工复核
+
+- 范围为在动态审计任务上传政策和场景材料，在审计结论页对具备稳定结论标识的条目写入并回读人工复核。
+- v2 与旧工作台共用附件编码和复核表单。动态任务保留附件相对路径，入队后清理本次选择。完成任务按 `finding_uid` 保存人工复核，状态、人员、时间与备注从服务端回读。
+- Chrome 以已封存的自有 AAOS 35 采集回放，用合成政策、场景和两份子目录文件验收材料绑定。核对 4 个文件逐字节一致，政策提取状态为 `available`，场景标为 `synthetic_only`。录入一条「需补充证据」意见后，核对回读、刷新持久化、16 条结论等级、原审计文件摘要、ZIP 下载、静态任务隔离及旧工作台兼容。390 像素下表单通过。 [浏览器验收](../output/vehicle-v2-material-review-20261125/browser-verification.json)
+- `node --check` 和 `git -c core.whitespace=cr-at-eol diff --check` 通过。`tools/python313.ps1 tools/run_regressions.py --out output/vehicle-v2-material-review-20261125/regression` 为 22/22。本轮执行了真实采集回放和真实 APK 静态审计，政策与场景输入为验收夹具。 [根回归](../output/vehicle-v2-material-review-20261125/regression/verification.json)

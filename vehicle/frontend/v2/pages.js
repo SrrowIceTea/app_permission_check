@@ -51,7 +51,7 @@
     body.innerHTML = cache.view.map((r, i) => {
       const [cls, label] = levelOf(r);
       return `<tr class="f-row" data-i="${i}"><td><span class="sev ${cls}">${label}</span></td>` +
-        `<td><b>${esc(r.rule_id || '—')}</b></td>` +
+        `<td><button type="button" class="finding-toggle" aria-expanded="false">${esc(r.rule_id || '—')}</button></td>` +
         `<td>${esc(r.rule_title || r.note || '—')}</td>` +
         `<td>${esc(locOf(r))}</td></tr>`;
     }).join('');
@@ -75,8 +75,6 @@
     const ev = (r.event_ids || []).slice(0, 12).map((id) => `<span class="ev-chip">#${esc(id)}</span>`).join('');
     if (ev || r.pair_count) parts.push(`<div><div class="lbl">事件证据</div>` +
       `${r.pair_count ? `<div class="loc-item">读取→外发 ${esc(r.pair_count)} 对</div>` : ''}${ev}</div>`);
-    parts.push(`<div><div class="lbl">复核状态</div>${esc(r.review_status || '未复核')}` +
-      `${r.review_note ? ' · ' + esc(r.review_note) : ''}</div>`);
     return `<tr class="detail"><td colspan="4"><div class="detail-box">${parts.join('')}</div></td></tr>`;
   }
 
@@ -265,13 +263,22 @@
     if (!tr) return;
     const next = tr.nextElementSibling;
     if (next && next.classList.contains('detail')) {
-      next.remove(); tr.classList.remove('is-open'); return;
+      next.remove();
+      tr.classList.remove('is-open');
+      $('.finding-toggle', tr).setAttribute('aria-expanded', 'false');
+      return;
     }
     $$('#staticBody tr.detail').forEach((d) => d.remove());
     $$('#staticBody tr.f-row').forEach((t) => t.classList.remove('is-open'));
+    $$('#staticBody .finding-toggle[aria-expanded="true"]').forEach((button) => button.setAttribute('aria-expanded', 'false'));
     tr.classList.add('is-open');
+    $('.finding-toggle', tr).setAttribute('aria-expanded', 'true');
     const row = cache.view[+tr.dataset.i];
-    if (row) tr.insertAdjacentHTML('afterend', detailHtml(row));
+    if (!row) return;
+    tr.insertAdjacentHTML('afterend', detailHtml(row));
+    if (S.job?.state === 'done' && row.finding_uid) {
+      $('.detail-box', tr.nextElementSibling).append(window.VehicleFindingReview.build(row, S.job.id));
+    }
   });
   $('#reloadReview').addEventListener('click', renderReview);
 }());
