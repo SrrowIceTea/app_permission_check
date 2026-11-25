@@ -5,12 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#f7f4ed">
 <title>V·SCANNER · 车载应用审计</title>
+<script src="theme.js"></script>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="pages.css">
+<link rel="stylesheet" href="themes.css">
 </head>
 <body>
 <div class="paper" aria-hidden="true"></div>
-
 <header class="topbar">
   <a class="brand" href="#"><span class="brand-mark">◈</span>V·SCANNER<em>AAOS</em></a>
   <nav class="pill-nav" id="nav" aria-label="主页面导航">
@@ -22,14 +23,20 @@
     <button class="pill" data-page="pdf">PDF 报告</button>
     <button class="pill" data-page="review">证据复核</button>
   </nav>
-  <div class="status"><i id="svcDot"></i><span id="svcText">连接中…</span></div>
+  <div class="topbar-tools">
+    <label class="theme-control"><span>主题</span>
+      <select id="themeSelect" autocomplete="off">
+        <option value="paper">纸白</option>
+        <option value="cinematic">影院银</option>
+      </select>
+    </label>
+    <div class="status"><i id="svcDot"></i><span id="svcText">连接中…</span></div>
+  </div>
 </header>
-
 <main class="wrap">
   <!-- 七步流程引导：概览页隐藏，功能页显示（flow.js 渲染） -->
   <nav class="flow" id="flow" aria-label="审计流程" hidden></nav>
 
-  <!-- ══════════ 概览 ══════════ -->
   <section class="view" id="page-overview">
     <div class="hero">
       <div class="hero-copy">
@@ -149,7 +156,6 @@
     </section>
   </section>
 
-  <!-- ══════════ 源码查看 ══════════ -->
   <section class="view" id="page-source" hidden>
     <div class="page-head">
       <div>
@@ -174,7 +180,6 @@
     </div>
   </section>
 
-  <!-- ══════════ 静态审计 ══════════ -->
   <section class="view" id="page-static" hidden>
     <div class="page-head">
       <div>
@@ -202,7 +207,6 @@
     </div>
   </section>
 
-  <!-- ══════════ 动态审计 ══════════ -->
   <section class="view" id="page-dynamic" hidden>
     <div class="page-head">
       <div>
@@ -226,7 +230,6 @@
     </div>
   </section>
 
-  <!-- ══════════ 辅助复核 ══════════ -->
   <section class="view" id="page-ai" hidden>
     <div class="page-head">
       <div>
@@ -240,7 +243,6 @@
     <div class="grid-2" id="aiSections"></div>
   </section>
 
-  <!-- ══════════ PDF 报告 ══════════ -->
   <section class="view" id="page-pdf" hidden>
     <div class="page-head">
       <div>
@@ -270,7 +272,6 @@
     </div>
   </section>
 
-  <!-- ══════════ 证据复核 ══════════ -->
   <section class="view" id="page-review" hidden>
     <div class="page-head">
       <div>

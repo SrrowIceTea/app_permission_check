@@ -1,0 +1,46 @@
+.topbar-tools { display:flex; align-items:center; gap:10px; margin-left:auto; }
+.theme-control { display:flex; align-items:center; gap:6px; color:var(--ink-2); font-size:12px; white-space:nowrap; }
+.theme-control select {
+  min-height:34px; padding:5px 7px; border:1px solid var(--line); border-radius:8px;
+  background:var(--card); color:var(--ink); font:inherit; cursor:pointer;
+}
+.theme-control select:hover { border-color:var(--ink-3); }
+.theme-control select:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+:root[data-theme="cinematic"] {
+  color-scheme:dark;
+  --paper:#0a0d12; --paper-rgb:10 13 18;
+  --card:#171e29; --card-rgb:23 30 41;
+  --ink:#edf3fb; --ink-rgb:237 243 251;
+  --ink-2:#cdd9ea; --ink-3:#a4b4c9;
+  --line:#39485d; --line-2:#2b3749;
+  --accent:#9cc8ff; --accent-rgb:156 200 255;
+  --sage:#9bd5b1; --sage-rgb:155 213 177;
+  --warn:#ecc184; --warn-rgb:236 193 132;
+  --failure-bg:#3c2530; --failure-ink:#ffc2b4;
+  --shadow:0 1px 2px #07090d80,0 12px 32px #07090d66;
+}
+
+[data-theme="cinematic"] .paper {
+  background:
+    linear-gradient(90deg,#0a0d12f8 0%,#0a0d12e6 35%,#0a0d12a6 72%),
+    linear-gradient(0deg,#0a0d12 5%,transparent 75%),
+    url("../assets/vehicle-studio.png") 72% center/cover no-repeat #0a0d12;
+}
+[data-theme="cinematic"] .flow {
+  --flow-ink:#b5d3f7; --flow-tint:#22344c;
+  --flow-rail:#465b75; --flow-dot:#7d94b0; --flow-glow:#324760;
+}
+
+@media (max-width:940px) {
+  .topbar { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 12px; }
+  .topbar-tools { display:contents; }
+  .topbar .brand { grid-row:1; grid-column:1; }
+  .topbar .status { grid-row:1; grid-column:2; justify-self:end; }
+  .topbar .pill-nav { grid-row:2; grid-column:1; margin-left:0; }
+  .theme-control { grid-row:2; grid-column:2; justify-self:end; }
+}
+@media (max-width:420px) {
+  .topbar .brand em, .theme-control span { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+  .topbar .status { padding:5px 8px; }
+}

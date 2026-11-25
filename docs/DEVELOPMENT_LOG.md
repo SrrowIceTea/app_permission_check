@@ -172,3 +172,10 @@
 - Chrome 同页实时采集与回放通过。宿主端口 54484 在采集后释放，测试前已有的 27043 映射在两轮间保持。实时和回放均为 5 条已关联、5 条已观测及 6 条候选，两份 ZIP 各 22 项摘要校验通过。首轮回放已完成，测试脚本比对下载文件头时大小写处理不一致，修正后重新走完整链路。 [浏览器验证](../output/vehicle-replay-forward-20261125/live-1795579275095/verification.json) · [归档验证](../output/vehicle-replay-forward-20261125/live-1795579275095/archive-verification.json)
 - `node --check vehicle/frontend/v2/upload.js`、`git -c core.whitespace=cr-at-eol diff --check` 通过。补齐回放目录异常诊断后，`tools/python313.ps1 tools/run_regressions.py --out output/vehicle-replay-forward-20261125/regression-final` 22/22。 [离线回归](../output/vehicle-replay-forward-20261125/regression-final/verification.json)
 - 8773 已重启并核对旧会话登记和原 AI 配置。清理了本项目早期验收创建、当前闲置的 AAOS 固定转发。 [服务核对](../output/vehicle-replay-forward-20261125/service-verification.json)
+
+## 2026-11-25 · 车载 v2 工作台主题切换
+
+- 范围为在同一车载前端加入纸白与影院银两套主题，验证切换及刷新保持当前页面、审计状态与无构建入口。
+- v2 顶栏提供纸白和影院银选项。沿用原有颜色变量和车身背景，浏览器本地保存主题；切换保持任务、路由、结论和筛选，390 像素下顶栏分两行，任务和阶段卡片改为两列。
+- 初次窄屏检查发现历史和阶段卡片的最小宽度撑开页面，调整后 Chrome 复验七个页面、两套主题、刷新恢复、当前任务和筛选，以及 390 像素页面宽度通过。 [浏览器证据](../output/vehicle-v2-themes-20261125/browser-verification.json)
+- `node --check vehicle/frontend/v2/theme.js`、`git diff --check`、`tools/python313.ps1 tools/run_regressions.py --out output/vehicle-v2-themes-20261125/regression` 通过，根回归 22/22。本次浏览器只读取现有任务。 [离线回归](../output/vehicle-v2-themes-20261125/regression/verification.json)
