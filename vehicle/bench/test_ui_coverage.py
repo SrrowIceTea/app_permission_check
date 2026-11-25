@@ -63,6 +63,18 @@ class UiCoverageTest(unittest.TestCase):
         report = self.record('manual', [action], [registration, callback])
         self.assertEqual([2, 3], report['action_coverage']['hits']['register_subscription']['event_ids'])
 
+    def test_automatic_action_with_resource_id_uses_it_instead_of_the_label(self):
+        read = {'kind': 'tap', 'status': 'sent', 'ts_ms': 2000, 'label': '读取 VHAL',
+                'resource_id': self.package + ':id/btnPerm'}
+        subscribe = {'kind': 'tap', 'status': 'sent', 'ts_ms': 4000, 'label': '订阅 VHAL',
+                     'resource_id': self.package + ':id/btnSubscribe'}
+        direct = self.event(2, 'VHAL_READ', 3000, stack=self.package + '.VhalReader.readAll')
+        registration = self.event(3, 'SUBSCRIPTION_REGISTER', 4200, accepted=True)
+        callback = self.event(4, 'VHAL_READ', 4300, stack=self.package + '.SubscriptionReader$callback')
+        report = self.record('automatic', [read, subscribe], [direct, registration, callback])
+        self.assertEqual(['read_vhal'], report['action_coverage']['misses'])
+        self.assertEqual([3, 4], report['action_coverage']['hits']['register_subscription']['event_ids'])
+
     def test_capture_digest_mismatch_rejects_runtime_evidence(self):
         self.record('automatic', [], [])
         with (self.root / 'capture/reads.jsonl').open('a', encoding='utf-8') as handle:

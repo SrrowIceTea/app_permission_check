@@ -18,8 +18,11 @@ NAVIGATION = {
     'search', 'map', 'library', 'home',
     '菜单', '打开菜单', '导航菜单', '设置', '关于', '详情', '帮助', '搜索', '地图', '媒体库', '首页',
 }
-FIXTURE = 'com.vscanner.targetapp'
-FIXTURE_READ = '2. 读取 VHAL（8 个属性）'
+FIXTURE_PACKAGES = {'com.vscanner.targetapp', 'com.vscanner.targetapp2'}
+FIXTURE_CONTROLS = (
+    ('btnRead', '2. 读取 VHAL（8 个属性）', '读取 VHAL', 'up'),
+    ('btnSubscribe', '2b. 订阅 10 秒', '订阅 VHAL', 'down'),
+)
 MAX_ACTIONS = 8
 MAX_SCROLLS = 2
 IO_LIMIT = 8
@@ -40,8 +43,42 @@ def screen_key(tree):
     return hashlib.sha256(repr(structural).encode()).hexdigest()
 
 
+def scroll_action(tree, package, scrolls, *, resource_id=None, direction='down'):
+    if scrolls >= MAX_SCROLLS:
+        return None
+    for node in tree:
+        if (node['pkg'] != package or not node['enabled'] or not node['scrollable'] or not node['area']
+                or (resource_id is not None and node['rid'] != resource_id)):
+            continue
+        left, top, right, bottom = node['bounds']
+        x, height = (left + right) // 2, bottom - top
+        if height < 100:
+            continue
+        near, far = top + height // 4, top + 3 * height // 4
+        start, end = (near, far) if direction == 'up' else (far, near)
+        label = '向上查找夹具按钮' if direction == 'up' else '向下浏览'
+        return None, {'kind': 'scroll', 'label': label}, ('swipe', x, start, x, end, 350)
+    return None
+
+
+def fixture_action(tree, package, visited, scrolls):
+    for control, text, label, direction in FIXTURE_CONTROLS:
+        resource = f'{package}:id/{control}'
+        if resource in visited:
+            continue
+        # The native Button can expose its all-caps display label in the hierarchy.
+        for node in tree:
+            if (node['pkg'] == package and node['rid'] == resource and node['text'].strip().casefold() == text.casefold()
+                    and node['enabled'] and node['clickable'] and node['area']):
+                return resource, {'kind': 'tap', 'label': label, 'resource_id': resource}, ('tap', *node['center'])
+        return scroll_action(tree, package, scrolls, resource_id=f'{package}:id/scrollContent', direction=direction)
+    return None
+
+
 def next_action(tree, package, visited, scrolls):
-    """Pick recognizable navigation controls and derive coordinates from the current tree."""
+    """Choose a fixture control or a routine navigation control on the current screen."""
+    if package in FIXTURE_PACKAGES:
+        return fixture_action(tree, package, visited, scrolls)
     screen = screen_key(tree)
     for node in tree:
         if node['pkg'] != package or not node['enabled'] or not node['area']:
@@ -50,28 +87,13 @@ def next_action(tree, package, visited, scrolls):
         target = tap_target(node, tree)
         if target['pkg'] != package or not target['clickable'] or not target['enabled']:
             continue
-        fixture_read = (package == FIXTURE and label == FIXTURE_READ
-                        and target['rid'] == FIXTURE + ':id/btnRead')
-        if not fixture_read and label.casefold() not in NAVIGATION:
+        if label.casefold() not in NAVIGATION:
             continue
         # Use the actual label bounds for a label nested inside a clickable container.
-        key = ('read',) if fixture_read else (screen, label, target['idx'])
+        key = (screen, label, target['idx'])
         if key not in visited:
-            return key, {'kind': 'tap', 'label': '读取 VHAL' if fixture_read else label}, (
-                'tap', *node['center'])
-    if scrolls < MAX_SCROLLS:
-        for node in tree:
-            if node['pkg'] == package and node['enabled'] and node['scrollable'] and node['area']:
-                left, top, right, bottom = node['bounds']
-                x, height = (left + right) // 2, bottom - top
-                if height >= 100:
-                    start, end = top + 3 * height // 4, top + height // 4
-                    direction = '向下浏览'
-                    if package == FIXTURE:
-                        start, end = end, start
-                        direction = '向上查找夹具按钮'
-                    return None, {'kind': 'scroll', 'label': direction}, ('swipe', x, start, x, end, 350)
-    return None
+            return key, {'kind': 'tap', 'label': label}, ('tap', *node['center'])
+    return scroll_action(tree, package, scrolls)
 
 
 def explore(device, package, user, deadline, stopped, workers, result):
@@ -91,6 +113,7 @@ def explore(device, package, user, deadline, stopped, workers, result):
     result['started_ms'] = time.time_ns() // 1_000_000
     result['status'] = 'stopped'
     visited, scrolls = set(), 0
+    fixture_flow = package in FIXTURE_PACKAGES
     actions = result['actions']
     path = '/data/local/tmp/vscan-ui-' + uuid.uuid4().hex + '.xml'
     # Keep XML on the device only during a single dump. Retain structural hashes locally.
@@ -115,7 +138,8 @@ def explore(device, package, user, deadline, stopped, workers, result):
                 actions[-1]['screen_changed'] = actions[-1]['screen_sha256'] != current_screen
             choice = next_action(tree, package, visited, scrolls)
             if choice is None:
-                result.update(status='completed' if actions else 'stopped', reason='no_candidates')
+                reason = 'fixture_controls_unavailable' if fixture_flow else 'no_candidates'
+                result.update(status='stopped' if fixture_flow or not actions else 'completed', reason=reason)
                 return
             key, action, command = choice
             if not target_focused():
@@ -128,11 +152,13 @@ def explore(device, package, user, deadline, stopped, workers, result):
             actions.append(action)
             adb('shell', 'input', '-d', 0, *command)
             action['status'] = 'sent'
-            if key == ('read',):
-                result.update(status='completed', reason='fixture_read_requested')
-                return
             if key is not None:
                 visited.add(key)
+                if fixture_flow:
+                    if len(visited) == len(FIXTURE_CONTROLS):
+                        result.update(status='completed', reason='fixture_actions_requested')
+                        return
+                    scrolls = 0
             else:
                 scrolls += 1
             stopped.wait(.7)

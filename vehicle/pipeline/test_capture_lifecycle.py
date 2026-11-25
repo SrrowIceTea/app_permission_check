@@ -7,14 +7,53 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+from core.android_ui import nodes
 from vehicle.pipeline import capture, capture_process
 from vehicle.pipeline.capture_lifecycle import observe_until
 from vehicle.pipeline.contracts import AuditError
 from vehicle.pipeline.proxy_log import MAX_LINE, ProxyLog
-from vehicle.pipeline.ui_exploration import explore
+from vehicle.pipeline.ui_exploration import explore, next_action
 
 
 class ExplorationTests(unittest.TestCase):
+    @staticmethod
+    def control(package, name, label, *, scrollable=False, bounds='[0,0][400,400]'):
+        return (f'<node package="{package}" resource-id="{package}:id/{name}" text="{label}" '
+                f'clickable="{str(not scrollable).lower()}" scrollable="{str(scrollable).lower()}" '
+                f'enabled="true" bounds="{bounds}"/>')
+
+    def test_owned_fixtures_request_read_then_subscribe_once(self):
+        for package in ('com.vscanner.targetapp', 'com.vscanner.targetapp2'):
+            with self.subTest(package=package):
+                tree = nodes('<hierarchy>' + self.control(package, 'btnSubscribe', '2B. 订阅 10 秒')
+                             + self.control(package, 'btnRead', '2. 读取 VHAL（8 个属性）')
+                             + self.control(package, 'btnPerm', '设置')
+                             + '</hierarchy>', strict=True)
+                first, action, _ = next_action(tree, package, set(), 0)
+                self.assertEqual(package + ':id/btnRead', first)
+                self.assertEqual(first, action['resource_id'])
+                second, action, _ = next_action(tree, package, {first}, 0)
+                self.assertEqual(package + ':id/btnSubscribe', second)
+                self.assertEqual(second, action['resource_id'])
+                self.assertIsNone(next_action(tree, package, {first, second}, 0))
+
+    def test_fixture_requires_exact_ui_identity_and_scrolls_only_outer_container(self):
+        package = 'com.vscanner.targetapp2'
+        wrong_read = self.control(package, 'btnRead', '发送')
+        foreign_read = self.control('third.party', 'btnRead', '2. 读取 VHAL（8 个属性）')
+        inner_scroll = self.control(package, 'scrollLog', '', scrollable=True, bounds='[0,0][80,200]')
+        outer_scroll = self.control(package, 'scrollContent', '', scrollable=True)
+        unrelated = self.control(package, 'btnPerm', '设置')
+        tree = nodes(f'<hierarchy>{wrong_read}{foreign_read}{unrelated}{inner_scroll}{outer_scroll}</hierarchy>', strict=True)
+        _, action, swipe = next_action(tree, package, set(), 0)
+        self.assertEqual('scroll', action['kind'])
+        self.assertEqual(200, swipe[1])
+        self.assertLess(swipe[2], swipe[4])
+        self.assertIsNone(next_action(tree, package, set(), 2))
+        self.assertIsNone(next_action(tree, 'third.party', set(), 0))
+        _, _, swipe = next_action(tree, package, {package + ':id/btnRead'}, 0)
+        self.assertGreater(swipe[2], swipe[4])
+
     def test_foreground_is_checked_again_after_reading_the_ui(self):
         fixture = 'com.vscanner.targetapp'
         hierarchy = (

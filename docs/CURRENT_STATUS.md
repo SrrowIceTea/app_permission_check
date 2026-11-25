@@ -9,6 +9,10 @@
 
 ---
 
+## G1 双夹具自动动作复验（2026-11-25）
+
+- 同一冻结基准的四个新 AAOS 35 会话通过健康检查。两份自有 APK 的主页面都是 1/1，手动参考都是 2/2，自动动作由 1/2、0/2 提升到各 2/2。动作由同会话的直接读取、成功订阅注册及后续回调确认。 [方法与结果](../vehicle/bench/UI_COVERAGE.md) · [改进复核](../output/vehicle-g1-actions-20261125/improvement-verification.json)
+
 ## G1 车载 UI 探索覆盖率（2026-11-25）
 
 - 两个自有 APK 在 AAOS 35 上各完成手动参考与自动探索。四轮页面都是 1/1，两个手动参考动作均为 2/2，自动分别为 1/2 和 0/2。报告区分前台 Activity 到达、点击记录及经运行时事件证实的动作，支持从封存证据重算。 [方法与结果](../vehicle/bench/UI_COVERAGE.md) · [报告](../output/vehicle-g1-20261125/coverage.json)

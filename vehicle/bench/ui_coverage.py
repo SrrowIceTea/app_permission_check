@@ -71,9 +71,9 @@ def score_run(folder, fixture, reference, mode):
     hits = {}
     for rule in reference['actions']:
         for index, action in enumerate(actions):
-            if mode == 'manual':
-                matched = action.get('resource_id') == f"{package}:id/{rule['control']}"
-            else:
+            matched = action.get('resource_id') == f"{package}:id/{rule['control']}"
+            if mode == 'automatic' and 'resource_id' not in action:
+                # Older frozen explorer records identify their single fixture tap by label.
                 matched = bool(rule.get('automatic_label')) and action.get('label') == rule['automatic_label']
             if not matched or action.get('kind') != 'tap' or action.get('status') != 'sent':
                 continue
