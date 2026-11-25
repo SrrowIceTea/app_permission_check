@@ -136,32 +136,103 @@ tr.detail>td{background:rgba(20,18,15,.018);padding:0 18px 16px!important}
   background:rgba(20,18,15,.018)}
 
 /* ── 七步流程引导 ── */
-.flow{padding:18px 0 0}
-.flow-inner{display:flex;align-items:center;gap:14px;
-  background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
-.flow-steps{display:flex;align-items:center;gap:2px;list-style:none;margin:0;padding:0;
-  overflow:auto;scrollbar-width:none;flex:1;min-width:0}
-.flow-steps::-webkit-scrollbar{display:none}
-.flow-steps li{position:relative;flex:none}
-.flow-steps li+li::before{content:"›";position:absolute;left:-3px;top:50%;
-  transform:translateY(-50%);color:var(--ink-3);font-size:11px}
-.flow-step{display:flex;align-items:center;gap:6px;border:0;background:transparent;
-  font:500 12px/1 var(--ui);color:var(--ink-3);padding:7px 9px 7px 11px;
-  border-radius:8px;cursor:pointer;white-space:nowrap;transition:all .18s ease}
-.flow-step i{font:600 10px/1 var(--mono);font-style:normal;color:var(--ink-3);letter-spacing:.06em}
-.flow-step:hover{background:rgba(20,18,15,.045);color:var(--ink)}
-.flow-step.is-past{color:var(--ink-2)}
-.flow-step.is-past i{color:var(--sage)}
-.flow-step.is-on{background:var(--ink);color:var(--paper)}
-.flow-step.is-on i{color:rgba(247,244,237,.62)}
-.flow-nav{display:flex;gap:8px;flex:none}
-.flow-btn{border:1px solid var(--line);background:var(--paper);color:var(--ink-2);
-  font:500 12px/1 var(--ui);padding:9px 14px;border-radius:999px;cursor:pointer;
-  white-space:nowrap;transition:all .18s ease}
-.flow-btn:hover:not(:disabled){border-color:var(--ink-3);color:var(--ink);transform:translateY(-1px)}
-.flow-btn:disabled{opacity:.4;cursor:default}
-.flow-btn-main{background:var(--accent);border-color:var(--accent);color:#fff}
-.flow-btn-main:hover:not(:disabled){border-color:var(--accent);color:#fff;filter:brightness(1.08)}
+.flow{
+  --flow-ink:#224e43;
+  --flow-tint:#e8f0eb;
+  --flow-rail:#c9d4cc;
+  --flow-dot:#76877d;
+  padding:18px 0 0;
+}
+.flow-inner{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:18px;
+  padding:8px 12px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:var(--card);
+}
+.flow-steps{
+  position:relative;
+  display:grid;
+  grid-template-columns:repeat(7,minmax(0,1fr));
+  list-style:none;
+  margin:0;
+  padding:0;
+}
+.flow-steps::before{
+  content:"";
+  position:absolute;
+  inset:15px calc(100% / 14) auto;
+  border-top:1px solid var(--flow-rail);
+}
+.flow-step{
+  position:relative;
+  display:grid;
+  justify-items:center;
+  align-content:start;
+  gap:7px;
+  width:100%;
+  min-height:48px;
+  padding:11px 2px 5px;
+  border:0;
+  border-radius:7px;
+  background:transparent;
+  color:var(--ink-2);
+  font:500 12px/1.35 var(--ui);
+  white-space:nowrap;
+  cursor:pointer;
+}
+.flow-mark{
+  width:9px;
+  height:9px;
+  border:1px solid var(--flow-dot);
+  border-radius:50%;
+  background:var(--card);
+}
+.flow-step:hover,.flow-step[aria-current="step"]{background:var(--flow-tint);color:var(--flow-ink)}
+.flow-step[aria-current="step"]{font-weight:700}
+.flow-step[aria-current="step"] .flow-mark{
+  border-color:var(--flow-ink);
+  background:var(--flow-ink);
+  box-shadow:0 0 0 3px #d0e0d7;
+}
+.flow-nav{
+  display:flex;
+  align-items:center;
+  gap:3px;
+  padding:3px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:var(--paper);
+}
+.flow-btn{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  min-height:34px;
+  border:0;
+  border-radius:5px;
+  padding:0 10px;
+  background:transparent;
+  color:var(--ink-2);
+  font:600 12px/1 var(--ui);
+  white-space:nowrap;
+  cursor:pointer;
+}
+#flowNext{background:var(--card);color:var(--flow-ink)}
+#flowPrev::before,#flowNext::after{
+  content:"";
+  width:6px;
+  height:6px;
+  border-right:1.5px solid currentColor;
+  border-top:1.5px solid currentColor;
+  transform:rotate(45deg);
+}
+#flowPrev::before{transform:rotate(-135deg)}
+.flow-btn:hover,#flowNext:hover{background:var(--flow-tint);color:var(--flow-ink)}
+.flow :is(.flow-step,.flow-btn):focus-visible{outline:2px solid var(--flow-ink);outline-offset:-2px}
 
 /* ── 空态引导（表格与 AI 横幅共用） ── */
 .tbl-empty-btn{margin-top:10px;border:1px solid var(--line);background:var(--card);
@@ -171,7 +242,6 @@ tr.detail>td{background:rgba(20,18,15,.018);padding:0 18px 16px!important}
 
 @media(max-width:860px){
   .source-peek{display:none}          /* 窄屏没有横向空间放小窗，点开看右侧即可 */
-  .flow-inner{flex-wrap:wrap}
-  .flow-steps{flex-basis:100%;order:2}
-  .flow-nav{order:1;margin-left:auto}
+  .flow-inner{grid-template-columns:minmax(0,1fr);gap:6px;padding:8px 9px}
+  .flow-nav{justify-self:end}
 }

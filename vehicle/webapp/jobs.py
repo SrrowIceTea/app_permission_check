@@ -53,7 +53,7 @@ def options(query, catalog):
         if scope not in ('all', 'general') or (scope == 'all' and result['version'] != '15'):
             raise AuditError('invalid_scope', '完整车辆范围只验证了 Android 15；其他版本请选择通用来源。', '调整采集范围。')
         result['scope'] = scope
-        for key, default in (('tls_bypass', 'false'), ('multi_process', 'true')):
+        for key, default in (('tls_bypass', 'false'), ('multi_process', 'true'), ('auto_explore', 'false')):
             if value(key, default) not in ('true', 'false'):
                 raise AuditError('invalid_switch', '采集开关必须是 true/false。', '重新选择采集设置。')
             result[key] = value(key, default) == 'true'

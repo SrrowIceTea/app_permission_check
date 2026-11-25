@@ -20,6 +20,7 @@ from vehicle.pipeline import readiness
 from vehicle.pipeline.capture_device import Device, wait_until, write_manifest
 from vehicle.pipeline.capture_lifecycle import observe_until, observe_with_lifecycle, stop_workers
 from vehicle.pipeline.capture_process import attached_pid, process_alive
+from vehicle.pipeline.ui_exploration import exploration_window
 from vehicle.pipeline.capture_proxy import proxy_state, restore_proxy, restore_reverse, verify_restore, verify_reversible
 from vehicle.pipeline.proxy_log import ProxyLog
 from vehicle.pipeline.contracts import ROOT, AuditError, digest, write_json
@@ -31,7 +32,8 @@ from vehicle.privacy import owntracks_contract as owntracks
 
 def capture_app(package, serial, user, seconds, output, activity=None, scope='all',
                 preserve_system_proxy=False, frida_port=27043, ha_webhook=False, ha_websocket=False,
-                mg4_webview=False, abs_send=False, owntracks_location=False, owntracks_host='198.18.0.1', tls_bypass=True, multi_process=True):
+                mg4_webview=False, abs_send=False, owntracks_location=False, owntracks_host='198.18.0.1',
+                tls_bypass=True, multi_process=True, auto_explore=False):
     if not re.fullmatch(r'[A-Za-z]\w*(?:\.\w+)+', package) or seconds <= 0:
         raise AuditError('invalid_capture_target', '包名无效或采集时长非正数。', '明确指定授权包名与时长。')
     if sum((ha_webhook, ha_websocket, mg4_webview, abs_send, owntracks_location)) > 1:
@@ -163,10 +165,13 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
         # pid 来源优先级：钩子事件 > 生命周期采样 > 驱动日志（日志行会与就绪判据竞态）。
         initial_pid, pid_source = attached_pid(load_jsonl(output / 'reads.jsonl'), text)
         from vehicle.lab.abs_capture import capture_syncs
-        with (capture_syncs(device) if abs_send else nullcontext()) as wire:
+        workers = [('mitm', proxy), ('reads', driver)]
+        exploration = (exploration_window(workers, seconds, device, package, user, session, verification)
+                       if auto_explore else nullcontext())
+        with (capture_syncs(device) if abs_send else nullcontext()) as wire, exploration:
             print(json.dumps({'status': 'capturing', 'session': session, 'seconds': seconds}), flush=True)
             verification['observation_stop'], verification['process_lifecycle'] = observe_with_lifecycle(
-                [('mitm', proxy), ('reads', driver)], seconds, output / '.finish-request',
+                workers, seconds, output / '.finish-request',
                 output=output, session=session, package=package, device=device,
                 observe_until_fn=observe_until)
         if wire is not None:

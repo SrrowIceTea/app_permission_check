@@ -1,6 +1,8 @@
 """Early completion must never convert a dead worker into healthy capture."""
 import io
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,6 +11,35 @@ from vehicle.pipeline import capture, capture_process
 from vehicle.pipeline.capture_lifecycle import observe_until
 from vehicle.pipeline.contracts import AuditError
 from vehicle.pipeline.proxy_log import MAX_LINE, ProxyLog
+from vehicle.pipeline.ui_exploration import explore
+
+
+class ExplorationTests(unittest.TestCase):
+    def test_foreground_is_checked_again_after_reading_the_ui(self):
+        fixture = 'com.vscanner.targetapp'
+        hierarchy = (
+            f'<hierarchy><node package="{fixture}" resource-id="{fixture}:id/btnRead" '
+            'clickable="true" enabled="true" bounds="[1,1][101,41]" '
+            'text="2. 读取 VHAL（8 个属性）"/></hierarchy>'
+        )
+        foreground = f'Display: mDisplayId=0\n  mCurrentFocus=Window{{abcd u10 {fixture}/.Main}}'
+        overlay = foreground.replace('u10 ' + fixture, 'u0 com.android.permissioncontroller')
+        device = MagicMock()
+        device.call.side_effect = ['1', '10', foreground, hierarchy, overlay]
+        result = {'actions': []}
+        explore(device, fixture, 10, time.monotonic() + 5, threading.Event(), [], result)
+        self.assertEqual('target_not_focused', result['reason'])
+        self.assertEqual([], result['actions'])
+        self.assertFalse(any(call.args[:2] == ('shell', 'input') for call in device.call.call_args_list))
+
+    def test_physical_device_receives_no_ui_commands(self):
+        device = MagicMock()
+        device.call.return_value = '0'
+        result = {'actions': []}
+        explore(device, 'test.app', 10, time.monotonic() + 5, threading.Event(), [], result)
+        self.assertEqual('emulator_required', result['reason'])
+        self.assertEqual([], result['actions'])
+        self.assertEqual(1, device.call.call_count)
 
 
 class CaptureLifecycleTests(unittest.TestCase):

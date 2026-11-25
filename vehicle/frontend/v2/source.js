@@ -94,10 +94,12 @@
     list().innerHTML = '<li class="muted">载入文件树…</li>';
     try {
       const rows = await VS.api(`/api/pipeline/${job.id}/tree`);
+      if (S.job !== job) return;
       cache.tree = Array.isArray(rows) ? rows : [];
       cache.job = job.id;
       drawTree();
     } catch (e) {
+      if (S.job !== job) return;
       cache.tree = null;
       list().innerHTML = `<li class="muted">文件树不可用：${esc(e.message)}</li>`;
     }
@@ -114,10 +116,11 @@
     $('#codeView').textContent = '载入中…';
     try {
       const data = await VS.api(`/api/pipeline/${job.id}/source?path=${encodeURIComponent(path)}`);
-      if (S.job !== job) return;
+      if (S.job !== job || cache.path !== path) return;
       $('#codeView').textContent = (data.text || '(空文件)') + (data.truncated ? '\n\n/* 文件过大，已截断 */' : '');
       $$('#treeList li[data-p]').forEach((li) => li.classList.toggle('is-on', li.dataset.p === path));
     } catch (e) {
+      if (S.job !== job || cache.path !== path) return;
       $('#codeView').textContent = '读取失败：' + e.message;
       VS.toast('源码读取失败');
     }

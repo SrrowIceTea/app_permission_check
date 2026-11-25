@@ -23,7 +23,14 @@ def capture(job, package):
     settings = job.data['options']
     scope = settings.get('scope', 'all')
     device = Device(settings['serial'])
-    identity = device.ordinary_identity(package, settings['user'], scope)
+    try:
+        identity = device.ordinary_identity(package, settings['user'], scope)
+    except AuditError as error:
+        if error.code != 'device_command_failed':
+            raise
+        raise AuditError('device_unresponsive', f'设备 {settings["serial"]} 未能响应采集前核对。',
+                         '确认 AAOS 设备仍在线，刷新设备列表后重新提交。',
+                         cause=error.record()) from error
     from vehicle.compatibility import os_version
     if os_version(identity['device_sdk']) != settings.get('version', '15'):
         raise AuditError('device_version_mismatch', '所选规则版本与实际设备不符。', '选择设备对应版本。')
@@ -42,7 +49,8 @@ def capture(job, package):
     result = capture_app(package, settings['serial'], settings['user'],
                          settings['seconds'], output, scope=scope,
                          tls_bypass=settings.get('tls_bypass', False),
-                         multi_process=settings.get('multi_process', True))
+                         multi_process=settings.get('multi_process', True),
+                         auto_explore=settings.get('auto_explore', False))
     if result.get('passed') is not True:
         cause = result.get('error') or {}
         raise AuditError('capture_unhealthy', '采集健康校验未通过。' + cause.get('message', ''),

@@ -59,7 +59,7 @@ class ServerTest(unittest.TestCase):
     def test_shell_and_all_local_assets(self):
         for path in ('/', '/frontend/app.css', '/frontend/workspace.css',
                      '/frontend/highlight.js', '/app.js', '/results.js', '/source.js', '/vehicle.css',
-                     '/ledger.js', '/ledger.css'):
+                     '/vehicle-interactions.css', '/ledger.js', '/ledger.css', '/v2/', '/v2/upload.js'):
             status, body = self.request('GET', path)
             self.assertEqual(200, status, path)
             self.assertTrue(body)
@@ -183,6 +183,32 @@ class ServerTest(unittest.TestCase):
             Registry(self.registry.root, self.catalog)
 
 
+    def test_live_devices_lists_only_responsive_supported_aaos(self):
+        snapshot = {'serial': 'emulator-5554', 'version': '15', 'api': 35, 'user': 10}
+        devices = 'List of devices attached\r\nemulator-5554\tdevice\r\nemulator-5556\toffline\r\n\r\n'
+        with patch('vehicle.webapp.live_devices.subprocess.run') as adb, \
+                patch('vehicle.webapp.live_devices.inspect_device', return_value=snapshot) as inspect:
+            adb.return_value.stdout = devices
+            status, raw = self.request('GET', '/api/live-devices')
+        self.assertEqual(200, status)
+        self.assertEqual({'devices': [snapshot], 'unavailable': 1}, json.loads(raw))
+        inspect.assert_called_once_with('emulator-5554')
+
+    def test_disconnected_device_and_wrong_version_are_rejected_before_creating_a_job(self):
+        base = '/api/pipeline?mode=live&authorized=true&scope=general&name=own.apk'
+        with patch('vehicle.webapp.live_devices.connected_states', return_value={'emulator-5554': 'device'}), \
+                patch('vehicle.webapp.live_devices.inspect_device', return_value={'version': '15', 'api': 35}):
+            for params, code in (('&serial=1&version=16', 'device_not_connected'),
+                                 ('&serial=emulator-5554&version=16', 'device_version_mismatch')):
+                with self.subTest(code=code):
+                    status, raw = self.request('POST', base + params, apk_bytes())
+                    self.assertEqual(400, status)
+                    error = json.loads(raw)['error']
+                    self.assertEqual(code, error['code'])
+                    self.assertTrue(error['next_action'])
+        self.assertEqual([], self.registry.rows())
+
+
 class RecoveryAndSettingsTest(unittest.TestCase):
     def test_interrupted_job_is_failed_on_restart(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -207,7 +233,6 @@ class RecoveryAndSettingsTest(unittest.TestCase):
                           {'mode': ['live'], 'serial': ['emulator-5554'], 'seconds': ['999']}):
                 with self.assertRaises(AuditError):
                     options({**query, 'authorized': ['true']}, catalog)
-
 
 if __name__ == '__main__':
     unittest.main()

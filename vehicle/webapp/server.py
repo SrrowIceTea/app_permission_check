@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from vehicle.pipeline.contracts import AuditError, ROOT
-from vehicle.webapp import artifacts, finding_reviews
+from vehicle.webapp import artifacts, finding_reviews, live_devices
 from vehicle.webapp.catalog import Catalog
 from vehicle.webapp.http_io import Responses
 from vehicle.webapp.jobs import Registry, STAGES, TERMINAL, options
@@ -70,6 +70,8 @@ class Handler(Responses, BaseHTTPRequestHandler):
                     if not name.lower().endswith('.apk'):
                         raise AuditError('invalid_apk_name', '只接受 APK 文件。', '重新选择 .apk 文件。')
                     with self.upload() as uploaded:
+                        if settings['mode'] == 'live':
+                            live_devices.require_live_device(settings)
                         job = self.registry.submit(uploaded, name, settings)
                     return self.json(self.registry.snapshot(job), 202)
                 segments = path.strip('/').split('/')
@@ -85,7 +87,7 @@ class Handler(Responses, BaseHTTPRequestHandler):
                 if relative in SHARED or relative == 'assets/hero-bg.jpg':
                     return self.file(target, mimetypes.guess_type(target)[0] or 'application/octet-stream')
             if path in ('/app.js', '/results.js', '/components.js', '/upload.js', '/source.js', '/review.js',
-                        '/observation.js', '/ledger.js', '/review.css', '/vehicle.css', '/components.css',
+                        '/observation.js', '/ledger.js', '/review.css', '/vehicle.css', '/vehicle-interactions.css', '/components.css',
                         '/ledger.css', '/fonts.css', '/typography.css', '/integration.js', '/job_ui.js',
                         '/connection.js', '/finding_review_ui.js', '/theme-cinematic.css'):
                 target = WEB / path[1:]
@@ -114,6 +116,8 @@ class Handler(Responses, BaseHTTPRequestHandler):
                     'captures': self.registry.catalog.rows()})
             if path == '/api/pipeline':
                 return self.json(self.registry.rows())
+            if path == '/api/live-devices':
+                return self.json(live_devices.list_live_devices())
             if path == '/api/stages':
                 return self.json(STAGES)
             segments = path.strip('/').split('/')

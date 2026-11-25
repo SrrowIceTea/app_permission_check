@@ -207,7 +207,7 @@ function Get-Services {
             # 走文档入口 python -m vehicle web，与 ./vehicle.ps1 web 同一条路；
             # 不直接点 server.py，避免以后入口改参数时这里悄悄失效。
             Args    = $vehicleArgs
-            Url     = 'http://127.0.0.1:8773/'
+            Url     = 'http://127.0.0.1:8773/v2/'
             Note    = $(if ($aiConfig) { '车载工作台（单端口，含 AI 辅助复核）' } else { '车载工作台（单端口，AI 未启用）' })
         }
     )

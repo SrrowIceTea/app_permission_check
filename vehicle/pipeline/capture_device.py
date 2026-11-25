@@ -13,9 +13,9 @@ class Device:
         self.serial = serial
         self.adb = os.environ.get('VSCAN_ADB') or sdk_paths.sdk_tool('platform-tools', 'adb.exe')
 
-    def call(self, *args, binary=False):
+    def call(self, *args, binary=False, timeout=45):
         result = subprocess.run([self.adb, '-s', self.serial, *map(str, args)], capture_output=True,
-            timeout=45, **({} if binary else {'encoding': 'utf-8', 'errors': 'replace'}))
+            timeout=timeout, **({} if binary else {'encoding': 'utf-8', 'errors': 'replace'}))
         if result.returncode:
             raise AuditError('device_command_failed', '设备命令失败。', '查看设备连接与本轮日志。',
                              operation=list(map(str, args[:3])), exit_code=result.returncode)

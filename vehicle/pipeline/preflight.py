@@ -225,6 +225,7 @@ def validate_capture(capture, package, version, rules, apk=None, *, catalog_snap
     if binding['status'] != 'binding_consistent':
         gaps.append('本轮未取得完整且一致的当前 bundle 会话绑定；不得计入新版本设备验收。')
     return {'status': 'passed', 'session_id': session, 'manifest': manifest,
+            'ui_exploration': verification.get('ui_exploration'),
             'profile': selected, 'data_scope': scope, 'target_read_events': len(target),
             'tls_readiness': tls_diagnostics, 'gaps': gaps,
             'device_acceptance': binding['device_acceptance'],

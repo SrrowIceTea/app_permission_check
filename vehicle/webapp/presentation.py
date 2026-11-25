@@ -227,6 +227,11 @@ def decorate(snapshot, out, stages):
             raw, gaps, source = None, {}, 'static'
     events = _rows(out / 'events.jsonl')
     data = dict(snapshot)
+    validation = summary.get('capture_validation') if isinstance(summary, dict) else None
+    captured = _json(out / 'capture/verification.json')
+    exploration = validation.get('ui_exploration') if isinstance(validation, dict) else None
+    if exploration is None and isinstance(captured, dict):
+        exploration = captured.get('ui_exploration')
     data.update({
         'package': identity['package'],
         'apk_sha256': identity['apk_sha256'],
@@ -241,6 +246,7 @@ def decorate(snapshot, out, stages):
         'stage_timings_elapsed_ms': elapsed_ms(events),
         'stage_timings_note': TIMING_NOTE,
         'privacy_observation': observation(summary, _rows(out / 'audit/findings.jsonl')),
+        'ui_exploration': exploration,
         'field_gaps': {**identity['gaps'], **gaps},
     })
     return data

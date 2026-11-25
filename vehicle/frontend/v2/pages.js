@@ -28,7 +28,7 @@
   }
   const GOTO_BTN = '<button type="button" class="tbl-empty-btn" data-goto="overview">去概览选任务</button>';
   function noJob(body, cols, msg, withAction) {
-    body.innerHTML = `<tr><td colspan="${cols}" class="tbl-empty">${msg || '请先在概览页选择一个任务'}` +
+    body.innerHTML = `<tr><td colspan="${cols}" class="tbl-empty">${esc(msg || '请先在概览页选择一个任务')}` +
       `${withAction ? GOTO_BTN : ''}</td></tr>`;
   }
 
@@ -84,6 +84,12 @@
   function renderDynamic() {
     badge($('#dynJob'), S.job, '未选择任务');
     const job = S.job;
+    const error = job?.state === 'failed' ? job.result?.error : null;
+    const failure = $('#dynFailure');
+    failure.hidden = !error;
+    const target = job?.options?.mode === 'live' ? `设备 ${job.options.serial} · Android ${job.options.version} 规则。` : '';
+    failure.textContent = error ? [target, error.message, error.next_action].filter(Boolean).join(' ') : '';
+    $('#dynSession').textContent = job?.result?.session || '—';
     if (!job) {
       ['#dynStage', '#dynObs', '#dynGaps'].forEach((s) => { $(s).innerHTML = '<span class="muted">请先选择任务</span>'; });
       noJob($('#dynBody'), 3, '请先在概览页选择一个任务', true);
@@ -107,7 +113,7 @@
     const count = (st) => types.filter((t) => t.state === st).length;
     $('#dynObs').innerHTML =
       `<div class="kv-row"><span class="kv-k">已观测</span><span class="state-ok"><b>${count('observed')}</b> 类</span></div>` +
-      `<div class="kv-row"><span class="kv-k">仅注册 / 未取值</span><span class="state-warn"><b>${count('registration_only')}</b> 类</span></div>` +
+      `<div class="kv-row"><span class="kv-k">仅注册 / 未取值</span><span class="state-warn"><b>${count('registration_only') + count('read_not_obtained')}</b> 类</span></div>` +
       `<div class="kv-row"><span class="kv-k">未观测</span><span class="state-gap"><b>${count('not_observed')}</b> 类</span></div>`;
     const gaps = obs.observation_gaps || [];
     const fieldGaps = Object.keys(job.field_gaps || {});
@@ -130,19 +136,26 @@
     return `<pre>${esc(JSON.stringify(v, null, 2).slice(0, 4000))}</pre>`;
   }
   async function renderAi() {
-    badge($('#aiJob'), S.job, '未选择任务');
+    const job = S.job;
+    badge($('#aiJob'), job, '未选择任务');
     const wrap = $('#aiSections'), banner = $('#aiBanner');
-    if (!S.job) {
+    wrap.replaceChildren();
+    if (!job) {
       banner.classList.add('is-warn');
       banner.innerHTML = '请先在概览页选择一个任务' + GOTO_BTN;
-      wrap.innerHTML = '';
+      return;
+    }
+    if (job.state !== 'done') {
+      banner.classList.add('is-warn');
+      banner.textContent = job.result?.ai?.reason || (job.state === 'failed'
+        ? '任务失败，未发布 AI 复核产物。' : '任务完成后可查看 AI 复核状态。');
       return;
     }
     banner.classList.remove('is-warn');
     banner.textContent = '正在读取 AI 复核状态…';
-    wrap.innerHTML = '';
     try {
-      const data = await VS.api(`/api/pipeline/${S.job.id}/ai`);
+      const data = await VS.api(`/api/pipeline/${job.id}/ai`);
+      if (S.job !== job) return;
       const st = data.status || {};
       const ok = ['done', 'ok', 'completed', 'success'].includes(String(st.status));
       banner.classList.toggle('is-warn', !ok);
@@ -150,11 +163,24 @@
         `${st.reason ? ' · ' + esc(st.reason) : ''}${st.model ? ' · 模型 ' + esc(st.model) : ''}`;
       const res = data.result;
       if (!res) { wrap.innerHTML = '<div class="card muted">本轮没有 AI 复核结果文件。AI 只做辅助复述，不改变规则判定。</div>'; return; }
-      const entries = Array.isArray(res) ? res.map((v, i) => ['条目 ' + (i + 1), v])
-        : (res && typeof res === 'object') ? Object.entries(res).slice(0, 8) : [['内容', res]];
-      wrap.innerHTML = entries.map(([k, v]) =>
-        `<article class="card ai-sec"><h2>${esc(k)}</h2>${valueHtml(v)}</article>`).join('');
+      if (Array.isArray(res.reviews)) {
+        let order = [];
+        try { order = (await VS.api(`/api/pipeline/${job.id}/summary`)).review_order || []; } catch (_) {}
+        if (S.job !== job) return;
+        const priority = { high: '高', medium: '中', low: '低' };
+        wrap.innerHTML = res.reviews.map((review) => {
+          const rule = order.find((row) => row.finding_id === review.finding_id);
+          const label = rule?.rule_id || review.finding_id || '复核条目';
+          return `<article class="card ai-sec"><h2>${esc(label)}</h2>` +
+            `<p>${esc(review.hint || '本条没有复核说明')}</p>` +
+            `<p class="muted">复核优先级 ${esc(priority[review.review_priority] || review.review_priority || '未知')}` +
+            ` · ${review.needs_human_review === true ? '需人工复核' : review.needs_human_review === false ? '未标记人工复核' : '人工复核状态未知'}</p></article>`;
+        }).join('') || '<div class="card muted">本轮没有逐条 AI 复核结果。</div>';
+      } else {
+        wrap.innerHTML = `<article class="card ai-sec"><h2>复核结果</h2>${valueHtml(res)}</article>`;
+      }
     } catch (e) {
+      if (S.job !== job) return;
       banner.classList.add('is-warn');
       banner.textContent = 'AI 复核不可用：' + e.message;
     }
@@ -168,7 +194,9 @@
     [['#pdfOpen', '/report'], ['#pdfDown', '/report'], ['#zipDown', '/evidence.zip'], ['#dashOpen', '/dashboard']]
       .forEach(([sel, act]) => {
         const a = $(sel);
-        a.href = base ? base + act : '#';
+        if (done) a.href = base + act;
+        else a.removeAttribute('href');
+        a.setAttribute('aria-disabled', String(!done));
         a.classList.toggle('is-off', !done);
       });
     $('#pdfHint').textContent = done

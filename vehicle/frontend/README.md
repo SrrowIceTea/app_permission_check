@@ -13,15 +13,24 @@
 
 ```cmd
 start-vehicle.bat
-:: 浏览器访问 http://127.0.0.1:8773 ，-Stop 只停车载端，-Status 看端口/健康
+:: 自动打开 http://127.0.0.1:8773/v2/ ，-Stop 只停车载端，-Status 看端口/健康
 ```
 
 等价入口：
 
 ```powershell
 ./vehicle.ps1 web
-# 浏览器访问 http://127.0.0.1:8773
+# 浏览器访问 http://127.0.0.1:8773/v2/
 ```
+
+选择「采集回放」时，从服务已登记的健康会话中选一轮；
+选择「实时采集」时，从在线 AAOS 设备列表中选择目标，页面会匹配 Android 规则版本并预填当前用户。确认采集时长。
+两种方式均须确认授权并上传匹配的 APK。
+动态审计页显示该任务绑定的会话，报告页提供看板、PDF 和证据 ZIP。
+
+在自有 AAOS 模拟器上勾选「自动 UI 探索」后，工作台会在采集就绪时操作目标应用的常见导航控件。
+夹具会自动触发「读取 VHAL」。动态页显示已发送的交互和停止原因，证据包保存本轮动作记录。
+权限选择、登录和发送等动作可按测试需要手动完成。探索记录反映实际触发的页面操作。
 
 `start-vehicle.bat` 就是 `.\start-all.ps1 -Only vehicle`，与 `./vehicle.ps1 web` 同走
 `python -m vehicle web`。三者都会 dot-source `environment.ps1`（PATH / JAVA_HOME），
@@ -30,9 +39,9 @@ start-vehicle.bat
 
 也可以 `. ./environment.ps1` 后执行 `& $VScanPython -m vehicle web`。
 
-「新建 AAOS 采集」要求设备侧五件事同时成立：AAOS 特征、API 35、装在 user 10 且
-sha256 与上传的 APK 一致、应用**正在运行**、frida-server 监听 `127.0.0.1:27043`。
-缺任何一条，采集阶段会在第一条设备命令处中止（报 `设备命令失败` 或 `未检测到运行中的授权 App`）。
+完整车载采集使用 AAOS API 35。目标 App 须在所选用户下安装并运行，装机 APK 的 SHA-256 须与上传文件一致，
+frida-server 须监听 `127.0.0.1:27043`。v2 在新建任务前核对设备在线状态和 Android 版本。任务失败时，
+「动态」页保留后端返回的失败原因与处理提示。
 用同目录的脚本一次备好：
 
 ```cmd

@@ -13,7 +13,8 @@ def retry(registry, job, query):
     # Browser must explicitly authorize this new operation, even for a retained APK.
     selected = dict(query)
     previous = original['options']
-    for key in ('mode', 'version', 'scope', 'tls_bypass', 'multi_process', 'serial', 'user', 'seconds', 'ai_review'):
+    for key in ('mode', 'version', 'scope', 'tls_bypass', 'multi_process', 'serial', 'user', 'seconds', 'ai_review',
+                'auto_explore'):
         if key in previous:
             value = str(previous[key]).lower() if isinstance(previous[key], bool) else str(previous[key])
             selected.setdefault(key, [value])

@@ -16,7 +16,7 @@
   <nav class="pill-nav" id="nav" aria-label="主页面导航">
     <button class="pill is-active" data-page="overview">车载审计</button>
     <button class="pill" data-page="source">源码查看</button>
-    <button class="pill" data-page="static">静态审计</button>
+    <button class="pill" data-page="static">审计结论</button>
     <button class="pill" data-page="dynamic">动态审计</button>
     <button class="pill" data-page="ai">辅助复核</button>
     <button class="pill" data-page="pdf">PDF 报告</button>
@@ -71,14 +71,27 @@
     <div class="bento" aria-label="审计配置">
       <article class="card c1">
         <h2>审计方式</h2>
-        <p class="sub">决定是否连真机做动态取证</p>
+        <p class="sub">选择静态分析、采集回放或实时审计</p>
         <div class="seg" data-seg="mode">
           <button class="is-on" data-v="static">仅静态</button>
-          <button data-v="replay">静态 + 动态</button>
-          <button data-v="live">全流程</button>
+          <button data-v="replay">采集回放</button>
+          <button data-v="live">实时采集</button>
         </div>
         <span class="field-label">当前选择</span>
         <div class="readout" id="modeOut">仅静态</div>
+        <label class="audit-field" id="replayOptions" hidden>
+          <span>已登记的采集会话</span>
+          <select id="replayCapture"><option value="">请选择采集会话</option></select>
+        </label>
+        <fieldset class="live-options" id="liveOptions" hidden>
+          <legend>授权 AAOS 设备</legend>
+          <label class="audit-field"><span>在线设备</span><select id="deviceSerial" required><option value="">请选择 AAOS 设备</option></select></label>
+          <button class="mini-btn" id="refreshDevices" type="button">刷新设备</button>
+          <p class="sub" id="deviceStatus" role="status">选择设备后自动匹配 Android 版本。</p>
+          <label class="audit-field"><span>用户编号</span><input id="deviceUser" type="number" min="0" value="10" required></label>
+          <label class="audit-field"><span>采集秒数</span><input id="deviceSeconds" type="number" min="5" max="300" value="30" required></label>
+          <label class="auth-row explore-option"><input id="autoExplore" type="checkbox"> 自动 UI 探索（仅 AAOS 模拟器）</label>
+        </fieldset>
       </article>
       <article class="card c2">
         <h2>Android 规则版本</h2>
@@ -119,6 +132,7 @@
       <h2>当前任务阶段</h2>
       <p class="sub" id="stagesSub">—</p>
       <ol class="stages" id="stageList"></ol>
+      <p id="stageFailure" class="stage-failure" role="status" hidden></p>
     </section>
 
     <section class="findings">
@@ -165,7 +179,7 @@
     <div class="page-head">
       <div>
         <p class="eyebrow">Static Findings</p>
-        <h2>静态审计</h2>
+        <h2>审计结论</h2>
         <p class="sub">按等级筛选、按关键字搜索；点任意一行展开证据。</p>
       </div>
       <span class="badge-job" id="staticJob">未选择任务</span>
@@ -198,8 +212,9 @@
       </div>
       <span class="badge-job" id="dynJob">未选择任务</span>
     </div>
+    <div class="ai-banner is-warn" id="dynFailure" role="status" hidden></div>
     <div class="grid-3">
-      <article class="card"><h2>采集阶段</h2><p class="sub">AAOS 设备采集</p><div id="dynStage" class="kv">—</div></article>
+      <article class="card"><h2>采集阶段</h2><p class="sub" id="dynSession">—</p><div id="dynStage" class="kv">—</div></article>
       <article class="card"><h2>观测条目</h2><p class="sub">privacy_observation</p><div id="dynObs" class="kv">—</div></article>
       <article class="card"><h2>字段缺口</h2><p class="sub">field_gaps</p><div id="dynGaps" class="kv">—</div></article>
     </div>
@@ -276,8 +291,9 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="app.js"></script>
-<script src="pages.js"></script>
+<script src="upload.js"></script>
+<script src="pages.js"></script><script src="static-results.js"></script>
 <script src="source.js"></script>
-<script src="flow.js"></script>
+<script src="flow.js"></script><script src="ui-exploration.js"></script>
 </body>
 </html>

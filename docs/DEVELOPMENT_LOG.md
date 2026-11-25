@@ -196,3 +196,11 @@
 - 验证：七页逐页渲染（Edge headless `--dump-dom` 与 1440×980 截图，均在 `output/v2-acceptance/`）：概览「22 条结论 / 候选 22」、静态「22 / 22 条」并显示中文标题、源码页取到 jadx 文件树与 `AuditConsentActivity.java` 正文、动态页五阶段（2 完成 / 3 跳过）、AI 页降级文案、PDF 页禁用提示、复核页「未发布本轮证据复核」。未完成任务的 `/report`、`/dashboard`、`/evidence.zip`、`/summary`、`/coverage` 均为 404 + `audit_not_completed`。
 - `tools/python313.ps1 -m unittest vehicle.webapp.test_presentation vehicle.webapp.test_server vehicle.webapp.test_workflow vehicle.webapp.test_integration` 46/46；新增 4 例（静态计数只认 `conclusion_level`、`static_only` 标来源、`done` 仍用摘要、`/static` 带标题）。全量 `tools/run_regressions.py` 21/22，唯一红仍是 `completion`：`vehicle/frontend/vehicle.css` 426 行、`v2/app.js` 317 行，均为远程 main 带入且未登记基线。
 - 待办：`completion` 要绿只能拆分这两个文件（守卫 `--update` 只允许收紧，不能新增条目）；v2 的采集/关联审计/看板三页需接设备跑 `live` 或 `replay` 任务；AI 页对静态任务可给出更准确的原因文案。
+
+## 2026-11-25 · 车载流水线自动 UI 探索
+
+- 范围为抽取移动端 UI 树解析能力，将可选的自动交互接入车载实时采集及 v2 工作台，按会话留存动作和停止原因。
+- 两端共用控件树解析与父节点定位。车载端默认手动，可在自有模拟器开启自动探索。采集就绪后核对主屏焦点、包名和用户，再执行有界点击与滚动。停止原因和动作保存在采集验证文件、审计摘要与动态页。
+- 首轮夹具停在页面底部，向下滚动未触发读取。修正后 Chrome 实测向上滚动两次并点击「读取 VHAL」，在同一会话记录 13 条读取事件，审计正常完成。关闭探索的实测任务同样完成。 [自动模式](../output/vehicle-ui-exploration-20261125/existing-1795575848388/verification.json) · [手动模式](../output/vehicle-ui-exploration-20261125/existing-1795575908249/verification.json)
+- `node --check`、`git -c core.whitespace=cr-at-eol diff --check` 通过。根离线回归 `tools/python313.ps1 tools/run_regressions.py --out output/vehicle-ui-exploration-20261125/regression-verified` 22/22。移动离线回归 62/63，界面解析相关检查通过，`device_tools` 因本机缺少 tshark 失败。 [车载回归](../output/vehicle-ui-exploration-20261125/regression-verified/verification.json) · [移动回归](../output/mobile-regression-20261125-110230-2ileyxe1/verification.json)
+- 8773 工作台已加载新版，保留原 AI 配置和任务记录。自动流程已在自有 AAOS 35 夹具上验收，通用导航策略的覆盖率和其他车载应用待实测。 [服务验证](../output/vehicle-ui-exploration-20261125/service-verification.json)

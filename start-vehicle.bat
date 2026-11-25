@@ -3,7 +3,7 @@ rem ================================================================
 rem  V-Scanner vehicle workbench launcher (AAOS audit, single port)
 rem  vehicle/webapp serves vehicle/frontend itself on 127.0.0.1:8773,
 rem  so there is no separate static server to start.
-rem    start-vehicle.bat            start and open http://127.0.0.1:8773/
+rem    start-vehicle.bat            start and open http://127.0.0.1:8773/v2/
 rem    start-vehicle.bat -NoBrowser start without opening a browser
 rem    start-vehicle.bat -Status    show ports / health
 rem    start-vehicle.bat -Stop      stop the vehicle service only

@@ -1,6 +1,4 @@
-/* V·SCANNER v2 · 七步流程引导
-   功能页顶部给"第几站 / 上一步 / 下一步"，概览页即起点不显示。
-   点击只调用 VS.go()，与顶栏 pill 走同一条导航，不碰任何业务逻辑。 */
+/* V·SCANNER v2 · 功能页流程导航。 */
 (function () {
   'use strict';
   const VS = window.VS;
@@ -8,27 +6,26 @@
   if (!box) return;
 
   const STEPS = [
-    ['overview', '概览', '选任务 · 传 APK'],
+    ['overview', '概览', '选择任务或上传 APK'],
     ['source', '源码', '反编译目录'],
-    ['static', '静态', '结论行与证据'],
-    ['dynamic', '动态', '设备观测'],
-    ['ai', '复核', 'AI 辅助复述'],
-    ['pdf', '报告', 'PDF 与证据包'],
-    ['review', '证据', '复核轮次'],
+    ['static', '结论', '审计结论与证据'],
+    ['dynamic', '动态', '设备观测与采集会话'],
+    ['ai', 'AI 复核', 'AI 辅助复核'],
+    ['pdf', '报告', '看板、PDF 与证据包'],
+    ['review', '证据', '证据复核轮次'],
   ];
   const order = STEPS.map((s) => s[0]);
-  const pad = (n) => String(n).padStart(2, '0');
 
   box.innerHTML =
     '<div class="flow-inner">' +
       '<ol class="flow-steps" id="flowSteps">' +
-        STEPS.map(([page, label, tip], i) =>
+        STEPS.map(([page, label, tip]) =>
           `<li><button type="button" class="flow-step" data-page="${page}" title="${tip}">` +
-          `<i>${pad(i + 1)}</i><span>${label}</span></button></li>`).join('') +
+          `<span class="flow-mark" aria-hidden="true"></span><span>${label}</span></button></li>`).join('') +
       '</ol>' +
       '<div class="flow-nav">' +
-        '<button type="button" class="flow-btn" id="flowPrev">← 上一步</button>' +
-        '<button type="button" class="flow-btn flow-btn-main" id="flowNext">下一步 →</button>' +
+        '<button type="button" class="flow-btn" id="flowPrev"></button>' +
+        '<button type="button" class="flow-btn" id="flowNext"></button>' +
       '</div>' +
     '</div>';
 
@@ -41,13 +38,15 @@
     box.hidden = idx <= 0;                  // 概览（含未知页回落）不显示流程条
     if (box.hidden) return;
     steps.forEach((btn, i) => {
-      btn.classList.toggle('is-on', i === idx);
-      btn.classList.toggle('is-past', i < idx);
+      if (i === idx) btn.setAttribute('aria-current', 'step');
+      else btn.removeAttribute('aria-current');
     });
-    prev.disabled = false;
-    prev.textContent = '← ' + (idx === 1 ? '概览' : STEPS[idx - 1][1]);
-    const last = idx === order.length - 1;
-    next.textContent = last ? '完成 · 回概览' : STEPS[idx + 1][1] + ' →';
+    const previousLabel = STEPS[idx - 1][1];
+    const nextLabel = STEPS[idx + 1]?.[1];
+    prev.textContent = previousLabel;
+    prev.setAttribute('aria-label', '上一页 ' + previousLabel);
+    next.textContent = nextLabel || '返回概览';
+    next.setAttribute('aria-label', nextLabel ? '下一页 ' + nextLabel : '返回概览');
   }
 
   box.addEventListener('click', (e) => {
