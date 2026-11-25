@@ -133,3 +133,10 @@
 - 验证：七页逐页渲染（Edge headless `--dump-dom` 与 1440×980 截图，均在 `output/v2-acceptance/`）：概览「22 条结论 / 候选 22」、静态「22 / 22 条」并显示中文标题、源码页取到 jadx 文件树与 `AuditConsentActivity.java` 正文、动态页五阶段（2 完成 / 3 跳过）、AI 页降级文案、PDF 页禁用提示、复核页「未发布本轮证据复核」。未完成任务的 `/report`、`/dashboard`、`/evidence.zip`、`/summary`、`/coverage` 均为 404 + `audit_not_completed`。
 - `tools/python313.ps1 -m unittest vehicle.webapp.test_presentation vehicle.webapp.test_server vehicle.webapp.test_workflow vehicle.webapp.test_integration` 46/46；新增 4 例（静态计数只认 `conclusion_level`、`static_only` 标来源、`done` 仍用摘要、`/static` 带标题）。全量 `tools/run_regressions.py` 21/22，唯一红仍是 `completion`：`vehicle/frontend/vehicle.css` 426 行、`v2/app.js` 317 行，均为远程 main 带入且未登记基线。
 - 待办：`completion` 要绿只能拆分这两个文件（守卫 `--update` 只允许收紧，不能新增条目）；v2 的采集/关联审计/看板三页需接设备跑 `live` 或 `replay` 任务；AI 页对静态任务可给出更准确的原因文案。
+
+## 2026-11-25 · B1 独立样本资格复核
+
+- 范围为从已授权会话的原始记录重放 Car Stats Viewer 车速及补传，审查三个公开候选的固定提交并记录读取标识是否传到出站记录。符合条件后才进入设备采样和 B1 计分。
+- `python -m vehicle.bench.carstats_speed` 与 `python -m vehicle.bench.carstats_queue` 用原始读数、HTTPS 正文及 SQLite 证据重放，两份输出均与封存参考逐字段一致。`python -m vehicle.bench.window_calibration --include-pairs` 用冻结规则库重放两个自有夹具，五档计数均与各自签核报告一致。证据在 `output/b1-independent-qualification-20261125/verification.json`。
+- `python -m unittest vehicle.bench.test_window_calibration vehicle.bench.test_vscanbench` 在功能分支 15/15，在保留 11/24 车速重放改动的原工作树 17/17。两个工作树均使用项目 Python。
+- Capy、Drive Assist、Android-AAOS 只做源码审查。独立可计分案例 0，沿用 30 秒生产窗口。 [候选及待验收条件](../vehicle/bench/INDEPENDENT_WINDOW_QUALIFICATION.md)
