@@ -133,3 +133,11 @@
 - 车载探索按包、资源 ID 和按钮文案匹配两个已标注动作。UI 树将订阅按钮的 `2b` 转为 `2B`，因此文案匹配处理大小写。分别限制上下滚动，每个控件只发送一次。新动作保留资源 ID，旧会话仍可按原标签评分。 [控件观测](../output/vehicle-g1-actions-20261125/fixture-ui-diagnostics.jsonl)
 - 初轮 ADB 收尾等待超时，首个独立 ADB 实例的采集停在 Frida 刷盘。保留失败目录，最终用经过既有 G1 验收的只读 AAOS 35 镜像与专用 ADB，关闭设备 Wi-Fi 和移动数据，保留原代理设置。 [初轮日志](../output/vehicle-g1-actions-20261125/trials/target-app-automatic/capture/reads.log) · [刷盘失败](../output/vehicle-g1-actions-20261125/trials-isolated/target-app-manual/capture/reads.log) · [网络条件](../output/vehicle-g1-actions-20261125/network-baseline.json)
 - 四轮全通过采集健康检查，页面各为 1/1，自动动作由 1/2 和 0/2 提升到两个 2/2，手动均为 2/2。评分重算两次摘要一致，旧基准重算也一致。定向测试 8/8，前端状态检验 3/3，根回归 22/22。`node --check` 与 `git diff --check` 通过。 [覆盖率](../output/vehicle-g1-actions-20261125/coverage.json) · [根回归](../output/vehicle-g1-actions-20261125/regression/verification.json)
+
+## 2026-11-25 · A4 车载分段采集与进程退出恢复
+
+- 范围为新增显式启用的分段采集入口。每段封存独立会话，确证原进程退出并通过收尾后，最多重启授权 Activity 一次。用故障注入验证退出段的证据保留、重采会话隔离和失败停止条件。
+- `vehicle.ps1 capture-segmented` 按段核验装机摘要，关闭 TLS 绕过。原 PID 必须在 Hook 就绪时可见、退出后消失。ADB 未知和收尾失败时停止。恢复前核对失败段的读数、流量和验证摘要。各段仍由原有 `audit` 入口独立验收。 [使用与状态](../vehicle/pipeline/CAPTURE_SEGMENTS.md)
+- 自有 AAOS 35 / user 10 上点击夹具「读取 VHAL」并确认日志后，用 `am force-stop` 注入一次退出。PID 4736 的 13 条读取记录保留，重启到 PID 4903 后完成两个 24 秒健康段，各保留 13 条读取记录并通过 11/11 健康检查。三个会话独立，运行状态为 `completed_with_gaps`。退出段被 `audit --no-pdf` 拒绝，两个健康段各生成 11 条结论记录。专用模拟器和 ADB 已关闭。证据存于 `output/vehicle-a4-recovery-20261125/` 的 `injected-exit-final-verification.json`、`audit-segment-verification.json` 和 `device-cleanup.json`。
+- 首轮设备验收被新鲜度闸拒绝，重建当前 Hook 后通过。根回归首轮独立工作树缺完整 Hook 构建和既有守卫登记的 Gradle 报告，补齐后重跑。多进程单独退出、切段间隙退出和真机恢复仍待单独验证。
+- `tools/python313.ps1 tools/run_regressions.py --out <本轮输出>/regression-final` 为 22/22，其中 `vehicle-pipeline` 为 379/379。`git diff --check` 通过。

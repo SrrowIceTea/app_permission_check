@@ -7,6 +7,7 @@
   * pid 解析原本是"读日志行"，与就绪判据存在真实竞态，值得单独被测试覆盖。
 """
 import re
+from vehicle.pipeline.contracts import AuditError
 
 # 日志里驱动打印的那一行；只在事件与生命周期都拿不到 pid 时才用。
 _LOG_MARKER = re.compile(r'attached pid (\d+)')
@@ -45,14 +46,30 @@ def attached_pid(rows, log_text, lifecycle=None):
 def process_alive(device, package, pid):
     """Return (alive, evidence) for the hooked process.
 
-    With a known PID this is the /proc directory check. Without one the probe
+    A successful shell result distinguishes a missing PID from an ADB failure.
+    Without a known PID the probe
     degrades to ``pidof`` and says so: that is a real observation, but it cannot
     tell a survivor from a restarted process, so it must not be dressed up as
     the stronger check.
     """
     if pid is not None:
-        passed = device.call('shell', 'test', '-d', f'/proc/{pid}') == ''
+        if type(pid) is not int or pid <= 0:
+            raise ValueError('PID must be a positive integer')
+        observed = device.call('shell', f'if test -d /proc/{pid}; then echo present; else echo absent; fi')
+        if observed not in ('present', 'absent'):
+            raise AuditError('process_state_unknown', '设备未返回可核验的进程状态。', '检查 ADB 后重新采集。')
+        passed = observed == 'present'
         return passed, {'probe': 'proc_dir', 'pid': pid, 'passed': passed}
     running = device.call('shell', 'pidof', package).strip().split()
     return bool(running), {'probe': 'pidof_after_capture', 'pids': running,
                            'weaker_than_proc_check': bool(running)}
+
+
+def observe_original_process(device, package, pid, pid_text):
+    """Bind the attached PID to the chosen package and establish /proc visibility."""
+    if pid is not None and str(pid) in pid_text.split():
+        alive, observation = process_alive(device, package, pid)
+        if alive:
+            return observation
+    raise AuditError('original_process_unverified', '无法确认附加时的原目标进程。',
+                     '检查同一设备用户下的应用与 ADB 进程可见性。')

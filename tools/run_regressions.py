@@ -53,6 +53,7 @@ CHECKS = [
         'vehicle.privacy.test_location_layers',
         'vehicle.privacy.test_versions',
         'vehicle.pipeline.test_capture_lifecycle',
+        'vehicle.pipeline.test_capture_segmented',
         'vehicle.pipeline.test_hook_archive',
         'vehicle.pipeline.test_binding_export',
         'vehicle.pipeline.test_capture_proxy',

@@ -103,7 +103,8 @@ class CaptureLifecycleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             (root / 'vehicle/hooks/dist').mkdir(parents=True)
-            (root / 'vehicle/hooks/dist/hook_vehicle_general.bundle.js').touch()
+            bundle = root / 'vehicle/hooks/dist/hook_vehicle_general.bundle.js'
+            bundle.touch()
             device = MagicMock()
             reverse_lists = iter(['', 'UsbFfs tcp:8888 tcp:8888', ''])
 
@@ -119,12 +120,10 @@ class CaptureLifecycleTests(unittest.TestCase):
             reads = MagicMock(returncode=0)
             # 本用例验证的是"代理日志过滤失败也要恢复 proxy"，不是产物新鲜度；
             # 新鲜度门禁由 core/frida_host 自己的用例覆盖，这里显式放行。
-            clean = {'tier': 'pass', 'code': 'clean'}
             with patch.multiple(capture, ROOT=root, Device=MagicMock(return_value=device),
                                 write_manifest=MagicMock(), wait_until=MagicMock(),
                                 observe_until=MagicMock(return_value={'reason': 'duration_elapsed'})), \
-                    patch.object(capture.freshness, 'verify', return_value=clean), \
-                    patch.object(capture.freshness, 'identity', return_value={'bundle': 'test'}), \
+                    patch.object(capture, 'gated_hook_bundle', return_value=(bundle, {'bundle': 'test'})), \
                     patch.object(capture.socket, 'socket'), \
                     patch.object(capture.subprocess, 'Popen', side_effect=[proxy, reads]), \
                     patch.object(capture, 'archive_hook_bundle', return_value=(root / 'test.js', 'a' * 64)), \
@@ -183,12 +182,13 @@ class AttachedPidResolutionTests(unittest.TestCase):
                 self.calls = []
             def call(self, *args):
                 self.calls.append(args)
-                return ''
+                return 'present'
         device = Device()
         alive, probe = capture_process.process_alive(device, 'com.vscanner.targetapp', 2533)
         self.assertTrue(alive)
         self.assertEqual({'probe': 'proc_dir', 'pid': 2533, 'passed': True}, probe)
-        self.assertEqual(('shell', 'test', '-d', '/proc/2533'), device.calls[0])
+        self.assertEqual('shell', device.calls[0][0])
+        self.assertIn('/proc/2533', device.calls[0][1])
 
     def test_unknown_pid_degrades_to_pidof_and_declares_it_weaker(self):
         class Device:
@@ -201,10 +201,17 @@ class AttachedPidResolutionTests(unittest.TestCase):
         self.assertTrue(probe['weaker_than_proc_check'])
 
     def test_dead_process_is_still_reported_dead(self):
-        class Device:
-            def call(self, *args):
-                if args[1] == 'test':
-                    raise AuditError('device_command_failed', '设备命令失败。', '查看设备连接。')
-                return ''
+        device = SimpleNamespace(call=lambda *_: 'absent')
+        alive, probe = capture_process.process_alive(device, 'com.vscanner.targetapp', 999999)
+        self.assertFalse(alive)
+        self.assertEqual({'probe': 'proc_dir', 'pid': 999999, 'passed': False}, probe)
+
+    def test_transport_failure_or_unrecognized_response_is_not_process_loss(self):
+        device = SimpleNamespace(call=MagicMock(side_effect=AuditError(
+            'device_command_failed', '设备命令失败。', '查看设备连接。')))
+        with self.assertRaises(AuditError) as failed:
+            capture_process.process_alive(device, 'com.vscanner.targetapp', 999999)
+        self.assertEqual('device_command_failed', failed.exception.code)
+        device.call = MagicMock(return_value='')
         with self.assertRaises(AuditError):
-            capture_process.process_alive(Device(), 'com.vscanner.targetapp', 999999)
+            capture_process.process_alive(device, 'com.vscanner.targetapp', 999999)
