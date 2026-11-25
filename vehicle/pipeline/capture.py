@@ -18,6 +18,7 @@ from core.frida_host import freshness  # noqa: F401  闸的补丁锚点（测试
 from core.io_utils import load_jsonl
 from vehicle.pipeline import readiness
 from vehicle.pipeline.capture_device import Device, wait_until, write_manifest
+from vehicle.pipeline.capture_forward import allocate_forward, verify_forward_cleanup
 from vehicle.pipeline.capture_lifecycle import observe_until, observe_with_lifecycle, stop_workers
 from vehicle.pipeline.capture_process import attached_pid, process_alive
 from vehicle.pipeline.ui_exploration import exploration_window
@@ -49,7 +50,7 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
     output.mkdir(parents=True, exist_ok=False)
     device, session = Device(serial), output.name + '-' + uuid.uuid4().hex
     processes, handles = [], []
-    proxy_log = None
+    proxy_log, frida_local = None, None
     proxy_before, reverse_owned, proxy_owned = None, False, False
     identity, initial_pid, pid_source = None, None, 'unknown'
     verification = {'passed': False, 'session': session, 'checks': {},
@@ -141,8 +142,10 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
         if not pid_text:
             raise AuditError('app_not_running', '目标进程未运行。', '打开授权应用或提供 --activity 后重跑。')
         # The driver independently enforces --user when selecting the PID.
+        frida_local = allocate_forward(device, frida_port)
         driver = launch([sys.executable, str(ROOT / 'core/frida_host/run.py'), '--package', package,
-            '--user', str(user), '--allow-package', package, '--script', str(archived), '--port', str(frida_port),
+            '--user', str(user), '--allow-package', package, '--script', str(archived),
+            '--port', str(frida_local), '--managed-forward', str(frida_port),
             '--stop-file', str(output / '.stop'), '--seconds', str(seconds + 40),
             '--out', str(output / 'reads.jsonl'), '--session', session,
             '--event-db', str(output / 'events.sqlite'),
@@ -193,6 +196,7 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
             verification['checks']['worker_cleanup_healthy'] = False
             verification['worker_cleanup_errors'] = ['unexpected_worker_cleanup_failure']
         finally:
+            verify_forward_cleanup(verification, device, frida_local, frida_port)
             verify_restore(verification, 'device_settings_restored', proxy_owned, lambda: restore_proxy(device, proxy_before))
             verify_restore(verification, 'device_reverse_restored', reverse_owned, lambda: restore_reverse(device))
         try:
@@ -260,7 +264,7 @@ def main(argv=None):
     parser.add_argument('--seconds', type=float, default=60)
     parser.add_argument('--out', type=Path)
     parser.add_argument('--activity')
-    parser.add_argument('--frida-port', type=int, default=27043)
+    parser.add_argument('--frida-port', type=int, default=27043, help='设备端 Frida 端口')
     parser.add_argument('--owntracks-host', default='198.18.0.1', help='自有局域网接收端 IPv4 地址')
     ha_modes = parser.add_mutually_exclusive_group()
     ha_modes.add_argument('--ha-webhook', action='store_true', help='采集隔离 HA 样本的电量 webhook 字段')

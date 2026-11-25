@@ -23,7 +23,7 @@
   function settings(file) {
     const query = new URLSearchParams({ name: file.name, mode, version, authorized: 'true' });
     if (mode === 'replay') {
-      if (!capture.value) throw new Error('请先选择已登记的采集会话');
+      if (capture.disabled || !capture.value) throw new Error('请先选择已登记的采集会话');
       query.set('capture', capture.value);
     } else if (mode === 'live') {
       const selected = devices.get(deviceSelect.value);
@@ -60,6 +60,7 @@
       if (VS.state.current === id) await VS.select(id);
       if (job && terminal.has(job.state)) {
         locked(false);
+        if (mode === 'replay' && job.state === 'done' && job.options?.mode === 'live') refreshCaptures();
         $('#dzPct').textContent = job.state === 'failed' ? '失败' : '完成';
         const error = job.result && job.result.error;
         if (error) message(['审计失败：' + error.message, error.next_action].filter(Boolean).join(' '));
@@ -107,6 +108,23 @@
     });
   }
 
+  async function refreshCaptures() {
+    if (capture.disabled) return;
+    const previous = capture.value;
+    capture.disabled = true;
+    capture.replaceChildren(new Option('正在读取采集会话…', ''));
+    try {
+      const { captures = [] } = await VS.api('/api/config');
+      capture.options[0].textContent = captures.length ? '请选择采集会话' : '暂无已完成的健康采集';
+      captures.forEach((row) => capture.add(new Option(`${row.label} · ${row.session}`, row.id)));
+      if (captures.some((row) => row.id === previous)) capture.value = previous;
+    } catch (error) {
+      capture.options[0].textContent = '读取失败，点击「采集回放」重试';
+    } finally {
+      capture.disabled = false;
+    }
+  }
+
   async function refreshDevices() {
     const previous = deviceSelect.value;
     deviceSelect.disabled = deviceRefresh.disabled = true;
@@ -143,9 +161,6 @@
       .find((item) => item.dataset.v === String(config.version));
     if (button) version = button.dataset.v;
     paintVersion();
-    const captures = config.captures || [];
-    if (!captures.length) capture.options[0].textContent = '服务没有已登记的健康采集';
-    captures.forEach((row) => capture.add(new Option(`${row.label} · ${row.session}`, row.id)));
   });
 
   $('[data-seg="sdk"]').addEventListener('click', (event) => {
@@ -167,6 +182,7 @@
     $('#liveOptions').hidden = mode !== 'live';
     paintVersion();
     if (mode === 'live' && !deviceRefresh.disabled) refreshDevices();
+    if (mode === 'replay') refreshCaptures();
   });
 
   dropzone.addEventListener('click', () => fileInput.click());

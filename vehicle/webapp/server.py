@@ -217,7 +217,7 @@ def main(argv=None):
     parser.add_argument('--ai-config', type=Path, help='显式启用车载 AI；默认不联网')
     parser.add_argument('--review-round', type=Path, help='只读发布此目录的 public-review.json；不发布其他文件')
     args = parser.parse_args(argv)
-    registry = Registry(args.workdir, Catalog(args.capture), args.ai_config)
+    registry = Registry(args.workdir, Catalog(args.capture, workdir=args.workdir), args.ai_config)
     server = None
     try:
         server = create_server(args.port, registry, args.review_round)

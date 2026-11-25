@@ -3,47 +3,7 @@
 从 2026-11-15 起记录每次开发。按日期追加，同日多轮写明任务。开始时登记范围，收尾时记录改动、验证、证据和待办。达到 300 行时将旧记录转入按日期命名的分卷，并在这里保留索引。验收记录只引用可复核、无测试凭据的产物。
 
 - [2026-11-15 至 2026-11-18 分卷](DEVELOPMENT_LOG_20261115_20261118.md)
-
-## 2026-11-24 · 本机从零搭起车载动态审计环境（Node/JDK/SDK/镜像/AVD/frida）
-
-- 范围：环境与工具链。业务代码无改动，唯一代码改动是 `start-all.ps1` 的参数引号修复（见「坑 2」）。
-- 前提纠正：`AGENTS.md` 环境表记的是原开发机（`%LOCALAPPDATA%\Android\Sdk`、`D:\Android\JDK`）。本机（HW）实际已有
-  `VSCAN_SDK`/`ANDROID_SDK_ROOT` = `D:\app project\AndroidSdk`（platform-tools、emulator、system-images、jdk-21、avd 都在），
-  JADX 在 `D:\app project\Jadx\jadx-gui-1.5.3-with-jre-win`。**按文档默认路径探测会误判成"什么都没有"**。
-- 实际补齐：
-  - Node.js 24.22.3 + npm 11.19.1 → `D:\tools\node`，写入用户 PATH（2026-11-23 `prepare` 卡在 `npm_missing` 就是缺它）
-  - Temurin JDK 21.0.13.1 → `D:\Android\JDK`（`environment.ps1` 的回退位）
-  - `build-tools;35.0.0`（AGP 8.11.1 实际用 35，先报过一次 `Install Build-Tools 35 failed`）、`build-tools;36.0.0`、
-    `platforms;android-36`（含 `optional/android.car.jar`），后两者用 robocopy 补进 `D:\app project\AndroidSdk`
-  - Gradle 8.13：`gradle-wrapper.properties` 的 `networkTimeout=10000` 下阿里云镜像会 SSL decode 中断，改为手工下载 zip 放进
-    `~/.gradle/wrapper/dists/gradle-8.13-bin/bynj8867joaln2pdnozgpow3q/` 并写 `.ok`。
-    **缓存目录名是 distributionUrl 的 MD5 再转 base36，不是 hex**（先按 hex 放了一份，gradlew 不认）
-  - `output/vehicle-device-setup/avd/VScanner_AAOS_35_P1.ini` 的 `path` 指向本机已配好的
-    `D:\app project\AndroidSdk\avd\VScanner_AAOS_35_P1.avd`（1408×792、6G data），避免复制数 GB 的 userdata
-  - `output/vehicle-device-setup/frida-server`：17.18.0 x86_64，`.xz` 用 `lzma` 解压，与 `.venv` 的 frida 17.18.0 对齐
-- 三个坑：
-  1. `prepare-vehicle-device.ps1:188` 的 `adb push` 进度走 stderr，在 `ErrorActionPreference='Stop'` 下被当终止错误，
-     脚本在推完 frida-server 后中断（文件到位但没 chmod/启动）。**没改这个脚本**，手工补 `chmod 755` + 启动 + 装 APK，再复跑脚本全绿。
-  2. `start-all.ps1:314` 用 `Start-Process -ArgumentList $svc.Args`，PowerShell 对数组只用空格拼接、不加引号，
-     `--workdir D:\app project\...\output\vehicle-web` 被拆成两个参数 → `error: unrecognized arguments: project\...`。
-     已修：先把含空格的参数补引号再拼成单行，再传给 `-ArgumentList`。
-  3. 模拟器用 `Start-Process` 启动会被执行会话回收；本次改用 WMI `Win32_Process.Create` 启动的 `emulator-5554` 存活了下来，
-     后续 `prepare-vehicle-device.ps1` 直接复用它（`[ok] 已在线，不再启动模拟器`）。
-- 验证：
-  - `emulator-5554`：API 35、当前用户 10、`adbd 已是 root`、AAOS 特征齐全
-  - `pidof frida-server` = 8768；`pm path --user 10 com.vscanner.targetapp` 有值且应用已拉起
-  - `http://127.0.0.1:8773/api/config` 200（`platform: vehicle`、`api: 35`）；`/` 200（16071 B）；`/v2/` 200（12822 B）；`/api/pipeline` 200
-- 未提交的产物：`vehicle.ps1 prepare` 重建后 `core/frida_host/dist/*.sha256.json` 会变（`platform: vehicle→shared`，
-  源哈希也变）。这两个 json **已还原**：本机 `core.autocrlf=true`，工作区是 CRLF 而 git 里是 LF，
-  哈希绑定换行符、属环境相关抖动，入库只会让换机后不一致。`.bundle.js` 本身被 `.gitignore` 排除，不受影响。
-- 收尾（同日补做，用户确认后执行）：
-  - `AGENTS.md` 环境表按本机实况重写：Python 用项目 `.venv` 3.14.10、主 SDK 是 `D:\app project\AndroidSdk`
-    （`%LOCALAPPDATA%` 那份注明是补装副本）、AVD 实体在 `AndroidSdk\avd` 而 `output/.../*.ini` 只是指针、
-    本机 `dl.google.com` 可通、AGP 8.11.1 实际要 build-tools 35、Node 在 `D:\tools\node`、
-    frida-server 版本须等于 `.venv`（17.18.0）。
-  - `prepare-vehicle-device.ps1` 的 `Ensure-Frida`：`adb push` 改为临时放宽 `ErrorActionPreference` 并用 `2>&1`
-    合并 stderr，最后按 `$LASTEXITCODE` 判成败。实测：`killall frida-server` + `rm` 清掉设备端文件后复跑，
-    push 不再中断，一路走到 `[ok] frida-server 已启动（pid 10944）`，`/data/local/tmp/frida-server` 权限 `-rwxr-xr-x`，脚本退出码 0。
+- [2026-11-24 车载环境搭建分卷](DEVELOPMENT_LOG_20261124_SETUP.md)
 
 ## 2026-11-24 · 把分支与提交约定写进 AGENTS.md
 
@@ -204,3 +164,11 @@
 - 首轮夹具停在页面底部，向下滚动未触发读取。修正后 Chrome 实测向上滚动两次并点击「读取 VHAL」，在同一会话记录 13 条读取事件，审计正常完成。关闭探索的实测任务同样完成。 [自动模式](../output/vehicle-ui-exploration-20261125/existing-1795575848388/verification.json) · [手动模式](../output/vehicle-ui-exploration-20261125/existing-1795575908249/verification.json)
 - `node --check`、`git -c core.whitespace=cr-at-eol diff --check` 通过。根离线回归 `tools/python313.ps1 tools/run_regressions.py --out output/vehicle-ui-exploration-20261125/regression-verified` 22/22。移动离线回归 62/63，界面解析相关检查通过，`device_tools` 因本机缺少 tshark 失败。 [车载回归](../output/vehicle-ui-exploration-20261125/regression-verified/verification.json) · [移动回归](../output/mobile-regression-20261125-110230-2ileyxe1/verification.json)
 - 8773 工作台已加载新版，保留原 AI 配置和任务记录。自动流程已在自有 AAOS 35 夹具上验收，通用导航策略的覆盖率和其他车载应用待实测。 [服务验证](../output/vehicle-ui-exploration-20261125/service-verification.json)
+
+## 2026-11-25 · 车载会话自动回放与 Frida 转发收尾
+
+- 范围为将已完成的车载实时采集接入工作台回放列表，并由车载采集生命周期管理独立的宿主 Frida 转发。
+- 工作台自动登记本工作目录里已完成、健康、会话一致的实时任务。v2 切换回放模式时刷新，旧实时任务也可读取。车载采集用 ADB 分配独立宿主 Frida 端口，结束时按设备及端口归属释放，并把回读结果写入采集验证。
+- Chrome 同页实时采集与回放通过。宿主端口 54484 在采集后释放，测试前已有的 27043 映射在两轮间保持。实时和回放均为 5 条已关联、5 条已观测及 6 条候选，两份 ZIP 各 22 项摘要校验通过。首轮回放已完成，测试脚本比对下载文件头时大小写处理不一致，修正后重新走完整链路。 [浏览器验证](../output/vehicle-replay-forward-20261125/live-1795579275095/verification.json) · [归档验证](../output/vehicle-replay-forward-20261125/live-1795579275095/archive-verification.json)
+- `node --check vehicle/frontend/v2/upload.js`、`git -c core.whitespace=cr-at-eol diff --check` 通过。补齐回放目录异常诊断后，`tools/python313.ps1 tools/run_regressions.py --out output/vehicle-replay-forward-20261125/regression-final` 22/22。 [离线回归](../output/vehicle-replay-forward-20261125/regression-final/verification.json)
+- 8773 已重启并核对旧会话登记和原 AI 配置。清理了本项目早期验收创建、当前闲置的 AAOS 固定转发。 [服务核对](../output/vehicle-replay-forward-20261125/service-verification.json)

@@ -49,8 +49,13 @@ from core.frida_host.message_stream import MessageStream, TRANSPORT
 FRIDA_PORT = 27043
 
 
-def ensure_forward() -> None:
+def ensure_forward(device_port=None) -> None:
     forwards = adb("forward", "--list")
+    if device_port is not None:
+        expected = [os.environ.get("VSCAN_SERIAL"), f"tcp:{FRIDA_PORT}", f"tcp:{device_port}"]
+        if expected not in [line.split() for line in forwards.splitlines()]:
+            raise RuntimeError("Caller-managed Frida forward is absent or points to another device")
+        return
     if f"tcp:{FRIDA_PORT}" not in forwards:
         adb("forward", f"tcp:{FRIDA_PORT}", f"tcp:{FRIDA_PORT}")
         print(f"established adb forward tcp:{FRIDA_PORT}", flush=True)
@@ -108,6 +113,8 @@ def main() -> int:
                              "'DeleteGlobalRef ... without being attached' abort，"
                              "每轮一次、污染 app-death 取证（2026-10-16 实测，见 "
                              "thirdparty_env.stop_hook 注释）")
+    parser.add_argument("--managed-forward", type=int, metavar="DEVICE_PORT",
+                        help="要求调用方已建立当前设备的 ADB 转发")
     args = parser.parse_args()
     if args.watch_limit is None:
         env_limit = os.environ.get("VSCAN_WATCH_LIMIT", "").strip()
@@ -182,7 +189,7 @@ def main() -> int:
         if gate['tier'] == 'warn_dirty':
             print(freshness.warning_text(gate), flush=True)
 
-    ensure_forward()
+    ensure_forward(args.managed_forward)
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
     with OwnedResources(frida) as owned:

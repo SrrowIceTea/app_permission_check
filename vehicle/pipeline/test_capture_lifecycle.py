@@ -68,9 +68,11 @@ class CaptureLifecycleTests(unittest.TestCase):
             device = MagicMock()
             reverse_lists = iter(['', 'UsbFfs tcp:8888 tcp:8888', ''])
 
-            def call(*args):
+            def call(*args, **_):
                 if args == ('reverse', '--list'):
                     return next(reverse_lists)
+                if args == ('forward', 'tcp:0', 'tcp:27043'):
+                    return '32400'
                 return '123' if args[:2] == ('shell', 'pidof') else ''
 
             device.call.side_effect = call
@@ -93,6 +95,7 @@ class CaptureLifecycleTests(unittest.TestCase):
             restore.assert_called_once()
             device.call.assert_any_call('reverse', '--remove', 'tcp:8888')
             self.assertTrue(result['checks']['device_reverse_restored'])
+            self.assertTrue(result['checks']['frida_forward_restored'])
             self.assertEqual('filter_or_io_failed', result['proxy_log']['status'])
             self.assertFalse(result['passed'])
             self.assertEqual('', (root / 'out/mitm.log').read_text(encoding='utf-8'))

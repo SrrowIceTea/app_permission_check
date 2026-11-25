@@ -20,8 +20,7 @@ def retry(registry, job, query):
             selected.setdefault(key, [value])
     if selected.get('mode', ['static'])[0] == 'replay' and not selected.get('capture', [''])[0]:
         path = Path(previous.get('capture', ''))
-        match = next((key for key, value in registry.catalog.paths.items() if value == path), '')
-        selected['capture'] = [match]
+        selected['capture'] = [registry.catalog.id_for(path)]
     settings = options(selected, registry.catalog)
     for key in ('policy', 'scenarios'):
         if previous.get(key):

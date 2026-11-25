@@ -71,8 +71,9 @@ prepare-vehicle-device.bat -NoEmulator  :: 设备已由别处启动
 静态候选不代表实际读取或外发；健康但无观测不代表安全。
 只监听 `127.0.0.1`，不接受远程 Origin/Host，不向公网开放源码与审计证据。
 
-默认列出 `output/<轮次>/[capture/]` 和 `output/<轮次>/run-*/capture/` 的健康采集。
-更深目录或其他位置通过启动参数显式登记，可重复传入：
+回放列表自动加入当前工作台已完成的实时任务，切换到「采集回放」时刷新。
+列表也会发现 `output/<轮次>/[capture/]` 和 `output/<轮次>/run-*/capture/` 的健康采集。
+其他服务或外部目录的采集可通过启动参数显式登记，参数可重复传入：
 
 ```powershell
 ./vehicle.ps1 web --capture output/本轮/授权样本/capture
@@ -86,6 +87,7 @@ prepare-vehicle-device.bat -NoEmulator  :: 设备已由别处启动
 模型输出不能改变工具结论；辅助复核与工程交付的 subagent 签核是不同产物。
 
 服务内动态任务串行，跨服务进程对同一设备使用文件锁。
+每轮采集由 ADB 分配独立宿主 Frida 端口，并在收尾时校验该转发已释放。设备侧默认端口是 27043。
 已有 CLI/其他采集工具不参与此锁，不得与页面同时争用设备、代理或 8888 端口。
 
 ## 结果与恢复

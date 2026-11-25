@@ -27,7 +27,7 @@ class ServerTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         with patch('vehicle.webapp.catalog.ROOT', self.root):
-            self.catalog = Catalog()
+            self.catalog = Catalog(workdir=self.root / 'jobs')
         def worker(job, _):
             job.event('static', 'done', 'synthetic test worker')
             job.finish('static_only', {'message': 'synthetic'})
@@ -80,6 +80,26 @@ class ServerTest(unittest.TestCase):
         self.assertEqual('vehicle', data['platform'])
         self.assertNotIn('mobile', raw.decode())
         self.assertEqual(35, data['api'])
+
+    def test_completed_live_capture_can_be_replayed_without_restarting(self):
+        identity = 'v-' + 'a' * 32
+        target = self.registry.root / identity / 'capture'
+        target.mkdir(parents=True)
+        session = 'capture-owned'
+        write_json(target / 'session-manifest.json', {'session': session})
+        write_json(target / 'verification.json', {'session': session, 'passed': True})
+        job = {'id': identity, 'options': {'mode': 'live'}, 'result': {'session': session}}
+        published = target.parent / 'job.json'
+        key = self.catalog.id_for(target)
+        for state in ('running', 'failed', 'done'):
+            write_json(published, dict(job, state=state))
+            status, raw = self.request('GET', '/api/config')
+            self.assertEqual(200, status)
+            self.assertEqual(state == 'done', key in [row['id'] for row in json.loads(raw)['captures']])
+        query = f'/api/pipeline?mode=replay&name=own.apk&authorized=true&capture={key}'
+        self.assertEqual(202, self.request('POST', query, apk_bytes())[0])
+        write_json(target / 'verification.json', {'session': 'another-session', 'passed': True})
+        self.assertEqual(400, self.request('POST', query, apk_bytes())[0])
 
     def test_reject_remote_origin_and_rebinding_host(self):
         for headers in ({'Origin': 'https://example.invalid'}, {'Host': 'example.invalid'}):
