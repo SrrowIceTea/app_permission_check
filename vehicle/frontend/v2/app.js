@@ -26,6 +26,8 @@
     if (!res.ok) {
       const problem = data?.error;
       const error = new Error(String(problem?.message || problem?.code || res.status));
+      error.code = problem?.code;
+      error.status = res.status;
       error.nextAction = problem?.next_action;
       throw error;
     }
@@ -61,7 +63,7 @@
     emit('page', page);
   }
 
-  window.VS = { api, state, on, toast, go, select, refreshJobs };
+  window.VS = { api, state, on, toast, go, select, refreshJobs, followJob };
 
   /* ── 数字滚动 / 进度环 ── */
   function countUp(el, target, dur) {
@@ -213,6 +215,27 @@
     state.jobs = Array.isArray(rows) ? rows : [];
     renderJobs();
     return state.jobs;
+  }
+
+  function followJob(id, { onTerminal, onReconnect } = {}) {
+    select(id);
+    async function poll() {
+      let job;
+      try {
+        const jobs = await refreshJobs();
+        job = jobs.find((row) => row.id === id);
+        if (state.current === id) await select(id);
+      } catch (error) {
+        onReconnect?.();
+      }
+      if (job && ['done', 'static_only', 'failed'].includes(job.state)) {
+        onTerminal?.(job);
+        toast(job.state === 'failed' ? '审计失败' : '任务已完成');
+        return;
+      }
+      setTimeout(poll, 2000);
+    }
+    setTimeout(poll, 2000);
   }
 
   /* ── 顶栏导航 ── */

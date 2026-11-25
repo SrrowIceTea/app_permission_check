@@ -179,3 +179,10 @@
 - v2 顶栏提供纸白和影院银选项。沿用原有颜色变量和车身背景，浏览器本地保存主题；切换保持任务、路由、结论和筛选，390 像素下顶栏分两行，任务和阶段卡片改为两列。
 - 初次窄屏检查发现历史和阶段卡片的最小宽度撑开页面，调整后 Chrome 复验七个页面、两套主题、刷新恢复、当前任务和筛选，以及 390 像素页面宽度通过。 [浏览器证据](../output/vehicle-v2-themes-20261125/browser-verification.json)
 - `node --check vehicle/frontend/v2/theme.js`、`git diff --check`、`tools/python313.ps1 tools/run_regressions.py --out output/vehicle-v2-themes-20261125/regression` 通过，根回归 22/22。本次浏览器只读取现有任务。 [离线回归](../output/vehicle-v2-themes-20261125/regression/verification.json)
+
+## 2026-11-25 · 车载 v2 失败日志与重试
+
+- 范围为在概览和动态页读取当前失败任务日志，经重新授权创建独立重试任务，并验证旧失败与新任务的证据隔离。
+- v2 复用现有日志和重试接口。确认授权后使用同一 APK 与原设置新建重试任务，沿用上传流程的任务轮询，并可从重试任务返回原失败。提交结果无法确认时，页面提示先检查任务列表。
+- 隔离 Chrome 读取历史实采装机摘要不匹配的日志，并验证该历史副本缺少 APK 时的错误提示。真实 AAOS 采集副本临时移出一份输入，回放按预期失败；还原该文件后，浏览器重新授权，仅创建一条重试任务并完成回放。核对同一采集会话、相同 APK、原日志摘要及新证据 ZIP，390 像素下授权弹窗可操作。 [浏览器验收](../output/vehicle-v2-retry-20261125/browser-verification.json)
+- `node --check`、`git -c core.whitespace=cr-at-eol diff --check` 通过。根回归首跑有 3 组被沙箱拦截本机回环，允许回环后 `tools/python313.ps1 tools/run_regressions.py --out output/vehicle-v2-retry-20261125/regression-final` 为 22/22。新一轮设备实采重试待验证。 [回归结果](../output/vehicle-v2-retry-20261125/regression-final/verification.json)

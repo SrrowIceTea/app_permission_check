@@ -246,3 +246,18 @@ tr.detail>td{background:rgb(var(--ink-rgb) / .018);padding:0 18px 16px!important
   .flow-inner{grid-template-columns:minmax(0,1fr);gap:6px;padding:8px 9px}
   .flow-nav{justify-self:end}
 }
+.failure-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.failure-actions[hidden]{display:none}
+.failure-dialog{
+  width:min(680px,calc(100% - 32px));max-height:85vh;overflow:auto;
+  padding:20px;border:1px solid var(--line);border-radius:var(--r);
+  background:var(--card);color:var(--ink);
+}
+.failure-dialog::backdrop{background:rgb(0 0 0 / .55)}
+.failure-dialog h2{margin:0 0 8px;font-size:18px}
+.failure-dialog .btn:disabled{opacity:.5;cursor:default;transform:none}
+.failure-dialog .auth-row{margin:16px 0}
+.failure-dialog pre{
+  max-height:42vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;
+  padding:12px;border:1px solid var(--line);border-radius:10px;font:12px/1.55 var(--mono);
+}

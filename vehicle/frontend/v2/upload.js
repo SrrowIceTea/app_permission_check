@@ -10,7 +10,6 @@
   const deviceStatus = $('#deviceStatus');
   const deviceRefresh = $('#refreshDevices');
   const devices = new Map();
-  const terminal = new Set(['done', 'static_only', 'failed']);
   let mode = 'static', version = '15', busy = false;
 
   function message(text) {
@@ -53,26 +52,6 @@
     $('#startBtn').disabled = value;
   }
 
-  async function poll(id) {
-    try {
-      const rows = await VS.refreshJobs();
-      const job = rows.find((row) => row.id === id);
-      if (VS.state.current === id) await VS.select(id);
-      if (job && terminal.has(job.state)) {
-        locked(false);
-        if (mode === 'replay' && job.state === 'done' && job.options?.mode === 'live') refreshCaptures();
-        $('#dzPct').textContent = job.state === 'failed' ? '失败' : '完成';
-        const error = job.result && job.result.error;
-        if (error) message(['审计失败：' + error.message, error.next_action].filter(Boolean).join(' '));
-        VS.toast(job.state === 'failed' ? '审计失败' : '任务已完成');
-        return;
-      }
-    } catch (error) {
-      $('#dzPct').textContent = '等待重连';
-    }
-    setTimeout(() => poll(id), 2000);
-  }
-
   async function upload(file) {
     if (!file || busy) return;
     if (!/\.apk$/i.test(file.name)) { message('只接受 .apk 文件'); return; }
@@ -90,8 +69,16 @@
         method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file,
       });
       $('#dzPct').textContent = '已提交';
-      VS.select(job.id);
-      setTimeout(() => poll(job.id), 2000);
+      VS.followJob(job.id, {
+        onTerminal: (finished) => {
+          locked(false);
+          if (mode === 'replay' && finished.state === 'done' && finished.options?.mode === 'live') refreshCaptures();
+          const error = finished.result?.error;
+          if (error) message(['审计失败：' + error.message, error.next_action].filter(Boolean).join(' '));
+          $('#dzPct').textContent = finished.state === 'failed' ? '失败' : '完成';
+        },
+        onReconnect: () => { $('#dzPct').textContent = '等待重连'; },
+      });
     } catch (error) {
       locked(false);
       message(['提交失败：' + error.message, error.nextAction].filter(Boolean).join(' '));
