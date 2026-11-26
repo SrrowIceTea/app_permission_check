@@ -82,7 +82,7 @@
 | 11/25–11/27 基准与报告 | 两个自有 APK、90 个已签核配对，重放 5、10、30、60、120 秒五档。同值跨批、不同值负控和范围外候选单列。 [冻结清单](../vehicle/bench/vscanbench-pilot.json) · [五档报告](../output/vscanbench-week-20261123/pilot-repeat.json) |
 | 11/28–11/29 复跑与周结 | 两次真实原始证据重放的报告 SHA-256 一致，定向测试 30/30，根离线回归 22/22。 [复跑说明](../vehicle/bench/README.md#b2-vscanbench-最小基准) · [离线回归](../output/vscanbench-week-20261123/regression/verification.json) |
 
-30 秒生产阈值沿用现有值。独立应用的窗口校准仍需可唯一对齐到一次读取的短延迟、长延迟和负控证据，当前两份夹具标签为工程复核层。
+11/25 复核了 Car Stats Viewer 原始车速和补传证据，并审查 Capy、Drive Assist、Android-AAOS 的固定源码。独立可计分案例仍为 0，生产阈值沿用 30 秒。下一份独立样本需提供单次读取与回执的可核验关联，并覆盖短延迟、长延迟及同值跨批负控。 [资格复核](../vehicle/bench/INDEPENDENT_WINDOW_QUALIFICATION.md)
 
 VScanBench 新增同一自有 APK 的只读负控与发送对照。两个 AAOS 会话各通过 10 项健康检查。只读轮 0 个请求、0 个外发配对。发送轮 1 个 HTTP 200 回执、5 个经正文核对的主读取配对。两轮计为一个夹具工作流，沿用两份已签核样本的统计。 [原始证据复验](../output/vscanbench-read-send-20261123/run-02/control-verification.json)
 

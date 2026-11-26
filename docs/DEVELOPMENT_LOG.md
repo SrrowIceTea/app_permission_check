@@ -372,3 +372,10 @@
 - 两次四版本重建 SHA-256 同为 `988961d2…4582b`。逐表核对只新增 Android 16 的 10 个整数和设备出处。同步规则库、Room 资产、期望摘要。发布后用原取证再次校验，10/10。 [入库核对](../output/vehicle-permission-api36-20261125/publication-verification.json) · [发布后复验](../output/vehicle-permission-api36-20261125/published-recheck.json)
 - `gradlew.bat --offline --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest` 通过。AAOS 36.1 / user 10 执行 `RulesPermissionReadbackTest`，180 行逐字段一致，Android 16 的 10 条全部确认。Python 权限定向测试 4/4，Room schema 对拍通过。 [Room 回读](../output/vehicle-permission-api36-20261125/room-verification.json)
 - `tools/run_regressions.py` 在权限分支与 UI 功能快照隔离组合上通过 22/22。权限分支单独为 21/22，唯一红项是旧 `main` 的两个超 300 行前端文件。`git diff --check` 通过，专用 AVD 已关闭。 [组合回归](../output/vehicle-permission-api36-20261125/regression-integrated-final/verification.json) · [独立回归](../output/vehicle-permission-api36-20261125/regression-permission-branch-final/verification.json)
+
+## 2026-11-25 · B1 独立样本资格复核
+
+- 范围为从已授权会话的原始记录重放 Car Stats Viewer 车速及补传，审查三个公开候选的固定提交并记录读取标识是否传到出站记录。符合条件后才进入设备采样和 B1 计分。
+- `python -m vehicle.bench.carstats_speed` 与 `python -m vehicle.bench.carstats_queue` 用原始读数、HTTPS 正文及 SQLite 证据重放，两份输出均与封存参考逐字段一致。`python -m vehicle.bench.window_calibration --include-pairs` 用冻结规则库重放两个自有夹具，五档计数均与各自签核报告一致。证据在 `output/b1-independent-qualification-20261125/verification.json`。
+- `python -m unittest vehicle.bench.test_window_calibration vehicle.bench.test_vscanbench` 在功能分支 15/15，在保留 11/24 车速重放改动的原工作树 17/17。两个工作树均使用项目 Python。
+- Capy、Drive Assist、Android-AAOS 只做源码审查。独立可计分案例 0，沿用 30 秒生产窗口。 [候选及待验收条件](../vehicle/bench/INDEPENDENT_WINDOW_QUALIFICATION.md)
