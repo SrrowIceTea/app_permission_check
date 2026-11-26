@@ -183,7 +183,7 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0
 | 2 | `protection_level_value`：车载四版本 180 条已入库。移动 40 条未断言 | 本文「Android 16 车载编译权限级别标定」+ mobile「未完成」 | 移动端需独立来源 |
 | 3 | B2 VScanBench 已加入后台只读和发送对照，两轮均通过 11 项健康检查 | [车载基准](../vehicle/bench/README.md#aaos-后台读取与发送对照) | 继续扩充场景矩阵，签核窗口仍由既有 90 对验证 |
 | 4 | F1 类加载归因（无 `hook_classload.js`） | AGENTS「未做」 | 需新钩子 + 设备验收 |
-| 5 | G1 自有夹具最小覆盖率基准已完成 | [四轮对照](../vehicle/bench/UI_COVERAGE.md) | 普通车载应用的多页面覆盖待验证 |
+| 5 | G1 已验证自有三页夹具，手动和自动各覆盖 3/3 页及 4/4 动作 | [多页设备对照](../vehicle/bench/UI_COVERAGE.md#2026-11-25-三页自有-apk-对照) | 普通第三方车载应用的多页面发现待验证 |
 | 6 | A4 分段自愈 | AGENTS「未做」 | 与 1/3 同类的设备专项 |
 | 7 | AI 跨运行一致性 / 幻觉率无量化数据 | mobile「未完成」 | 需多次真实 key 调用，成本与口径未定 |
 | 8 | 写入类 API（`ContentResolver.insert` 等）与覆写型服务（无障碍/通知监听）未覆盖 | mobile「未完成」 | 需夹具扩展，非本周范围 |

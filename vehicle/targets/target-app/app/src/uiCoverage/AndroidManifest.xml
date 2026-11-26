@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- 仅用于授权测试。Separate APK for the AAOS UI coverage benchmark. -->
+    <application>
+        <activity android:name="com.vscanner.targetapp.MainActivity" tools:node="remove" />
+        <activity android:name="com.vscanner.targetapp.CoverageMenuActivity"
+            android:exported="true" android:theme="@android:style/Theme.Material.Light" />
+        <activity android:name="com.vscanner.targetapp.CoverageReadActivity"
+            android:exported="false" android:theme="@android:style/Theme.Material.Light" />
+        <activity android:name="com.vscanner.targetapp.CoverageSubscriptionActivity"
+            android:exported="false" android:theme="@android:style/Theme.Material.Light" />
+    </application>
+</manifest>

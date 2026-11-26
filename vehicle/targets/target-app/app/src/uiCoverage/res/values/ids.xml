@@ -1,0 +1,6 @@
+<resources>
+    <item name="btnG1OpenRead" type="id" />
+    <item name="btnG1Read" type="id" />
+    <item name="btnG1OpenSubscription" type="id" />
+    <item name="btnG1Subscribe" type="id" />
+</resources>

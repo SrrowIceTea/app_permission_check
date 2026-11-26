@@ -387,3 +387,10 @@
 - 专用 AAOS 35 / user 10 中，主屏 Activity 在两个后台快照均为 `STOPPED` 且不可见。两轮健康检查各 11/11、各有 5 个成功主读取。只读轮 0 请求、0 外发配对，发送轮 1 条 HTTP 200、原始正文摘要与代理一致，三模式配对数为 8/5/5。专用模拟器及 ADB 已关闭，转发无残留。
 - 原始回放与 VScanBench 扩展分别复跑两次，各自输出字节一致。pilot 的两个 APK、五档 90 个签核配对及既有工作流逐字段一致。独立可计分案例为 0。证据目录 `output/vehicle-b2-background-20261125/`，汇总 `verification.json`，扩展清单 `vscanbench-background.json`。
 - `tools/python313.ps1 -m unittest vehicle.bench.test_background_control vehicle.bench.test_vscanbench vehicle.bench.test_window_calibration` 20/20，`tools/python313.ps1 tools/run_regressions.py --out <本轮输出>/regression-final` 22/22，`git diff --check` 通过。后台上下文由动作前后快照限定。 [使用说明](../vehicle/bench/README.md#aaos-后台读取与发送对照)
+
+## 2026-11-25 · G1 车载多页面探索对照
+
+- 范围为新增独立自有测试构建，标注三页的导航、VHAL 读取和订阅动作。自动和手动在同一 AAOS 构建和冻结窗口内各跑一个会话，回放前台页面与运行时动作证据并复算历史报告。
+- `:app:assembleUiCoverage :app:assembleDebug --offline --no-daemon` 通过。AAPT2 清单检查确认三页只进 `com.vscanner.targetapp.g1`。多页采集绑定 APK SHA-256，自动控制核对当前 Activity、资源 ID 及标签。评分需要实际目的页面、同会话成功车速读取及成功注册后的档位回调，清理时间不延长 36 秒窗口。
+- 最终 APK 在专用 AAOS 35 / user 10 两个独立 36 秒会话中，手动和自动均 3/3 页、4/4 动作，健康各 11/11，未记录代理 HTTP 流。每轮保留读取与订阅证据事件编号。报告复算两次字节一致。首轮历史报告重放仅因独立工作树的 CRLF 改变了标注文件字节摘要，指定原封存标注文件后两个历史报告逐字节一致。
+- `tools/python313.ps1 -m unittest vehicle.bench.test_ui_coverage vehicle.pipeline.test_capture_lifecycle` 21/21，`tools/python313.ps1 tools/run_regressions.py --out <本轮输出>/regression-final` 22/22，`git diff --check` 通过。设备、ADB 和回环转发收尾核对见 `output/vehicle-g1-multipage-20261125/device-cleanup.json`，最终报告及 APK 摘要见同目录 `verification.json`。普通第三方车载应用仍待独立对照。

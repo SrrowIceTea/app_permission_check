@@ -12,7 +12,7 @@ from vehicle.pipeline import capture, capture_process
 from vehicle.pipeline.capture_lifecycle import observe_until
 from vehicle.pipeline.contracts import AuditError
 from vehicle.pipeline.proxy_log import MAX_LINE, ProxyLog
-from vehicle.pipeline.ui_exploration import explore, next_action
+from vehicle.pipeline.ui_exploration import COVERAGE_PACKAGE, explore, next_action
 
 
 class ExplorationTests(unittest.TestCase):
@@ -70,6 +70,18 @@ class ExplorationTests(unittest.TestCase):
         self.assertEqual('target_not_focused', result['reason'])
         self.assertEqual([], result['actions'])
         self.assertFalse(any(call.args[:2] == ('shell', 'input') for call in device.call.call_args_list))
+
+    def test_multipage_controls_require_the_matching_activity(self):
+        package = COVERAGE_PACKAGE
+        tree = nodes('<hierarchy>' + self.control(package, 'btnG1Read', '读取 VHAL')
+                     + self.control(package, 'btnG1OpenSubscription', '打开订阅页')
+                     + self.control(package, 'btnPerm', '设置') + '</hierarchy>', strict=True)
+        self.assertIsNone(next_action(tree, package, set(), 0, activity='unrecognized'))
+        read = 'com.vscanner.targetapp.CoverageReadActivity'
+        choice = next_action(tree, package, set(), 0, activity=read)
+        self.assertEqual(package + ':id/btnG1Read', choice[0])
+        nav = next_action(tree, package, {choice[0]}, 0, activity=read)
+        self.assertEqual(package + ':id/btnG1OpenSubscription', nav[0])
 
     def test_physical_device_receives_no_ui_commands(self):
         device = MagicMock()
