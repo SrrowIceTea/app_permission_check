@@ -185,5 +185,39 @@ class DynamicReportTests(TestCase):
             self.assertIsNone(job.result["report"])
 
 
+class RunningStateTests(TestCase):
+    """执行期必须真的进入 `running`。
+
+    此前 `state` 只在 finalize 时落盘，整条流水线（实测 5–15 分钟）里
+    `/api/pipeline/<id>` 一直回 `queued`，前端刷新看到「仍在排队」，
+    无法区分"没开始"与"正在跑第 12 个阶段"。
+    """
+
+    def test_state_is_running_while_pipeline_executes(self):
+        with TemporaryDirectory() as tmp:
+            job = make_job(Path(tmp))
+            seen = {}
+
+            def fake_finalize(target, state, error=None):
+                seen["at_finalize"] = target.state
+
+            with patch.object(runner, "_run", return_value=7), \
+                    patch.object(runner, "finalize", side_effect=fake_finalize):
+                run_pipeline(job)
+            self.assertEqual(seen["at_finalize"], "running",
+                             "进入 finalize 时 state 应已是 running，不能还是 queued")
+
+    def test_running_state_is_persisted_for_api_reads(self):
+        """持久化后才能被 `/api/pipeline/<id>` 与 history.lookup 读到。"""
+        with TemporaryDirectory() as tmp:
+            job = make_job(Path(tmp))
+            with patch.object(runner, "_run", return_value=7), \
+                    patch.object(runner, "finalize"):
+                run_pipeline(job)
+            saved = json.loads((job.out / "pipeline.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved["state"], "running")
+            self.assertEqual(saved["id"], job.id)
+
+
 if __name__ == "__main__":
     main()

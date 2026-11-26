@@ -102,6 +102,14 @@ def run_pipeline(job: PipelineJob) -> None:
         return run(job, job.formal_runtime, finalize)
     events, out = job.events, job.out
     try:
+        # 状态机必须真的走到 running：此前只在 finalize 时落盘，整条流水线
+        # （实测 5–15 分钟）里 /api/pipeline/<id> 一直回 `queued`，前端刷新后
+        # 看到的是"仍在排队"，无法区分"没开始"和"正在跑第 12 个阶段"。
+        # 持久化是安全的：history.lookup 对 queued/running 会校验 owner_token，
+        # 进程没了就收敛成 failed+interrupted，不会把僵尸任务当成功。
+        job.state = "running"
+        from mobile.pipeline.history import remember  # noqa: PLC0415 与 finalize 同风格，避开循环导入
+        remember(job)
         stages.emit_events(events, "prepare", "running", f"样本 {job.name}")
         if not job.apk.exists():
             finalize(job, "failed", f"样本不存在：{job.apk}")

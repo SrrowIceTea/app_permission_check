@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import time
@@ -40,9 +41,33 @@ def early_mitm_started(job_id: str) -> bool:
 
 
 def _has_emulator_process() -> bool:
-    """adb devices 里是否有 emulator-* 进程（不管 device/offline 状态）。"""
+    """宿主机上是否还有模拟器进程在跑（**不看 adb 列表**）。
+
+    原实现只查 `adb devices` 里有没有 emulator-* 行，名字叫 process 却依赖 adb：
+    adb server 重启的那几秒设备表就是空的，于是"模拟器其实开着"被误判成
+    "没有模拟器"→ 冷启动第二台 → 之后所有裸 adb 命令报 more than one device，
+    形成自锁（2026-11-27 实跑复现两次，设备表空的同时 qemu 进程一直在）。
+    """
     out = env.adb("devices", timeout=30).stdout or ""
-    return any("emulator-" in ln for ln in out.splitlines())
+    if any("emulator-" in ln for ln in out.splitlines()):
+        return True
+    if sys.platform == "win32":
+        for image in ("qemu-system-x86_64.exe", "emulator.exe"):
+            try:
+                ps = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {image}", "/NH"],
+                                    capture_output=True, text=True, encoding="utf-8",
+                                    errors="replace", timeout=20)
+            except (OSError, subprocess.SubprocessError):
+                continue
+            if image.lower() in (ps.stdout or "").lower():
+                return True
+        return False
+    try:
+        ps = subprocess.run(["pgrep", "-f", "qemu-system|emulator"],
+                            capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return ps.returncode == 0 and bool((ps.stdout or "").strip())
 
 
 def needs_cold_start() -> bool:
@@ -88,24 +113,57 @@ def start_early_mitm(job_id: str, out: Path, package: str | None,
                        "已前置启动 mitmproxy（保证模拟器启动时的代理探测通过）")
 
 
+def _bind_serial(serial: str) -> str:
+    """把选定的设备写成 ANDROID_SERIAL。
+
+    本工具链所有 adb 调用都是裸命令（不带 `-s`）：宿主机上同时开着第二台模拟器
+    （Android Studio、上一次的残留、用户自己的 AVD）时，它们一律报
+    `error: more than one device/emulator`，形态是**静默空结果**——pidof 空、
+    CA 装不上、frida 推送失败。`device_guard()` 的原意是阻止这种失真，但它的解法
+    是「拒绝运行」；对一键审计来说正确解法是「明确绑定一台」——审计任务本来就要
+    自己决定测哪台设备，不能因为宿主多开一个模拟器就整单失败。
+    """
+    os.environ["ANDROID_SERIAL"] = serial
+    return serial
+
+
+def _pick_serial(prefer: str | None = None) -> str | None:
+    """选一台设备：显式指定的 > 当前已在用的 > 列表里第一台。"""
+    live = emu.running_emulators()
+    if not live:
+        return None
+    if prefer and prefer in live:
+        return prefer
+    current = (os.environ.get("ANDROID_SERIAL") or "").strip()
+    if current in live:
+        return current
+    return live[0]
+
+
 def ensure_device(events: Path, out: Path) -> tuple[bool, str]:
     """确保有一台可用设备；没有就冷启动模拟器。返回 (ok, reason)。"""
     from mobile.pipeline import stages  # noqa: PLC0415
-    guard = env.device_guard()
-    if guard:
-        return False, guard
 
     live = emu.running_emulators()
     if live:
         # 复用在线模拟器：它**启动时刻**的代理探测结果无法追溯——若当时没有代理
         # 在听，SLIRP 强制重定向就是关的（本轮只有设备侧 http_proxy 路径可抓）。
         # 冷启动路径已由 start_early_mitm 保证（见其注释）。
-        return True, f"已有一台模拟器在线：{live[0]}"
+        serial = _bind_serial(_pick_serial() or live[0])
+        extra = f"（共 {len(live)} 台在线，已绑定 {serial}）" if len(live) > 1 else ""
+        return True, f"已有一台模拟器在线：{serial}{extra}"
+
+    guard = env.device_guard()
+    if guard:
+        return False, guard
 
     # 有 emulator 进程但还在启动（offline）→ 等它上线，**别重复冷启动**。
     if _has_emulator_process():
         stages.emit_events(events, "boot", "running", "模拟器正在启动，等待上线…")
         if emu.wait_boot(timeout_s=240):
+            serial = _pick_serial()
+            if serial:
+                _bind_serial(serial)
             return True, "模拟器已上线"
         return False, "模拟器未在超时内上线"
 
@@ -136,13 +194,28 @@ def ensure_device(events: Path, out: Path) -> tuple[bool, str]:
     if not emu.wait_boot(timeout_s=300):
         return False, "模拟器未在超时内启动完成"
 
+    # 冷启动完成后同样要绑定 serial：后续 CA 安装、frida 推送、install 全是裸 adb。
+    serial = _pick_serial()
+    if serial:
+        _bind_serial(serial)
+
     stages.emit_events(events, "boot", "running", "安装系统 CA + 抑制 UWB HAL 崩溃循环")
+    ca_error = None
     try:
         ca = tp.install_system_ca()
+        ca_error = None if ca.get("installed") else ca.get("error", "未知原因")
     except Exception as exc:  # noqa: BLE001
-        ca = {"installed": False, "error": str(exc)}
-    if not ca.get("installed"):
-        return False, f"系统 CA 未装上：{ca.get('error', '未知原因')[:120]}"
+        ca_error = str(exc)
+    if ca_error:
+        # CA 只决定「HTTPS 能否解密」，不决定「设备能否跑动态」。把它当硬门禁会把
+        # "解不开 HTTPS"升级成整单 static_only：frida 钩子（运行时 API 证据）、安装、
+        # 交互驱动、死亡取证全都不依赖它。复用在线设备那条路径本来也不检查 CA，
+        # 两条路径口径必须一致——这里如实记录缺口，继续跑，报告里声明即可
+        # （runbook §10.5 给的处置也是"改用 Java/native 明文 hook"，不是放弃动态）。
+        stages.emit_events(
+            events, "boot", "running",
+            f"系统 CA 未装上：{ca_error[:150]}；HTTPS 无法解密，动态其余部分照常执行"
+            "（报告须声明该缺口，不得把「没有 flows」写成「没有外发」）")
     # UWB HAL 崩溃循环会挤掉样本自己的 tombstone（见 start_emulator.py 注释）
     try:
         tp.adb("shell", "stop", "vendor.uwb_hal", timeout=30)

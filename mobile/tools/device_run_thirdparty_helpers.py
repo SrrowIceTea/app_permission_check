@@ -55,6 +55,33 @@ def _count_jsonl(path: Path) -> int:
         return 0
 
 
+def traffic_gap_notes(ca_installed: bool, session: Path) -> list[str]:
+    """「本轮没有流量」的报告措辞——**必须区分三种空**，否则读者会把它们都读成
+    「应用没有外发」：
+
+    1. CA 没装上 → HTTPS 根本没解开；
+    2. CA 装上了、握手也解开了，但上游不可达（代理记录到连接失败）→ 没有可分析报文；
+    3. 真有流量 → 不产生任何缺口说明。
+
+    第 2 种是 2026-11-27 用 NewPipe 实跑暴露的：mitm.log 里有明文
+    `GET https://www.youtube.com/...`，flows 0 条，连接错误 38 条全 upstream_timeout。
+    纯函数，只读两个计数，便于离线测试。
+    """
+    if not ca_installed:
+        return ["【HTTPS 未解密】本轮系统 CA 未安装成功或显式跳过："
+                "flows.jsonl 为空不代表没有外发，只能引用 pcap 中"
+                "未解密的 TLS 帧数与 conn_probe 的连接记录"]
+    if _count_jsonl(session / "flows.jsonl"):
+        return []
+    errs = _count_jsonl(session / "flows-connect-errors.jsonl")
+    if not errs:
+        return []
+    return [f"【流量未建立】系统 CA 已安装、TLS 可解密，但本轮没有任何一条请求拿到响应；"
+            f"代理记录了 {errs} 条连接失败（上游不可达或被拒，"
+            "见 session/flows-connect-errors.jsonl）。flows 为空只说明「没有可分析的报文」，"
+            "不能写成「应用没有外发」。"]
+
+
 def _emit_events(events: Path | None, stage: str, status: str, message: str = "") -> None:
     """把阶段事件追加到 events.jsonl，供编排层（pipeline server）的 SSE 实时读取。
 

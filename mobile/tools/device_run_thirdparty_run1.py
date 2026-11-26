@@ -212,7 +212,12 @@ def _stage_head(ctx) -> None:
     else:
         emit("system_ca", "running", "安装 mitmproxy 系统 CA（/system + conscrypt APEX）")
         try:
-            sys.path.insert(0, str(ctx.out.parent.parent / "traffic"))
+            # 模块路径按**源码位置**解析，不按输出目录推算：`ctx.out` 在
+            # pipeline/批处理下是工作目录（如 D:/vscanner-tp/.../<job>/session），
+            # `out.parent.parent/"traffic"` 指过去并不存在，于是 import 直接
+            # ModuleNotFoundError，系统 CA 永远装不上、HTTPS 全解不开。
+            # 与本目录其他脚本（device_boot / start_emulator / coverage_gap）同口径。
+            sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "traffic"))
             import transparent  # noqa: E402  仅用于授权测试设备
             ca_rec = transparent.install_system_ca(log=out / "ca-install.json")
         except Exception as exc:  # noqa: BLE001  CA 失败不阻断本轮采集

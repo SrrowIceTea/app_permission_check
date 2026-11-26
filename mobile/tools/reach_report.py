@@ -170,6 +170,14 @@ def apply(supp: dict, ctx: dict) -> dict:
     out_counts = supp.setdefault("counts", {})
     out_counts["reachability_buckets"] = counts
     out_counts["findings_total"] = len(supp["findings"])
+    # `findings_by_rule_type` 必须跟着 `findings` 一起重算：本函数把 findings
+    # 收窄成 app_reachable 子集，此前只改总数不改分布，实测出现「总数 6、
+    # 按类型合计 11」这种自相矛盾的 counts（真实样本 org.fossify.voicerecorder）。
+    # 过滤前的分布仍可从 reachability_buckets / 各分桶列表复算，信息不丢。
+    by_type: dict[str, int] = {}
+    for f in supp["findings"]:
+        by_type[f["rule_type"]] = by_type.get(f["rule_type"], 0) + 1
+    out_counts["findings_by_rule_type"] = by_type
     out_counts["mapping_ambiguous_findings"] = sum(
         1 for f in supp["findings"] if f.get("mapping_ambiguous"))
     return supp

@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "policy"))
 from policy_library import load_policy, register_policy  # noqa: E402
 
 from device_run_thirdparty_helpers import (  # noqa: E402
-    apk_permissions, has_api_key, device_api,
+    apk_permissions, has_api_key, device_api, traffic_gap_notes,
 )
 MOBILE = ROOT / "mobile"
 PY = sys.executable
@@ -200,12 +200,8 @@ def _stage_finalize(ctx) -> None:
         if ctx.no_activity_review:
             bundle_cmd += ["--note", "场景零观测已经人工复核；设备验证保留零观测判据及复核记录。"]
     emit("bundle", "running", "证据封装（含加固探测与 [orch] 缺口）")
-    if not ctx.ca_rec.get("installed"):
-        # 没装成 CA 时，报告必须自己说出"HTTPS 没解开"，否则读者会把
-        # "flows 为空"读成"应用没有外发"。
-        bundle_cmd += ["--note", "【HTTPS 未解密】本轮系统 CA 未安装成功或显式跳过："
-                                 "flows.jsonl 为空不代表没有外发，只能引用 pcap 中"
-                                 "未解密的 TLS 帧数与 conn_probe 的连接记录"]
+    for note in traffic_gap_notes(bool(ctx.ca_rec.get("installed")), session):
+        bundle_cmd += ["--note", note]
     if (session / "scope-discarded.json").is_file():
         bundle_cmd += ["--note", "【归因范围】代理只保留通过包名与 UID 核对的流。"
                        "被拒绝的流只留计数，见 session/scope-discarded.json。"]

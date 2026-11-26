@@ -502,3 +502,63 @@
 - 设备回归（API36，`output/mobile-refactor-20261127/legacy-four*`）：旧四组采集 + 重放全过，五档结果与重构前逐档一致（read_only 全 0、immediate 全 1、delayed/cross_batch 30 秒内漏配、60 秒起命中）。
 - 未完成：新三组（后台/断网）在重构后的设备端重跑被环境打断。共享仓库有并行会话在反复重启 adb server、清理模拟器，采集在 `bg_read_only`/`bg_send` 完成后掉线（`device 'emulator-5566' not found`），未拿到完整 suite。离线 `unittest mobile.lab.test_window_benchmark mobile.lab.test_offline_control` 17/17；新路径与旧路径共用同一套 helper，差异仅在接收端与步骤表。待设备空出后补一次 `-m mobile.lab.offline_control_capture` + `-m mobile.lab.offline_control` 重放。
 - 既有失败（非本次引入）：`run_mobile_checks.py` 62/63，`hooks_parity` 报 `stack_capture.js` 两侧不一致（车辆侧新增 `headLimit`，移动侧副本未同步），属并行会话的改动范围，本次未处理。
+
+## 2026-11-27 · F-Droid 真实样本端到端测试：暴露并修复 6 项（完成）
+
+- 范围：从 F-Droid 官方源下载 5 个真实样本跑静态 + 一键审计流水线，暴露问题即修。**未改规则库、未改结论等级、未放宽任何判据**；只修"流程本身跑不对"的缺陷。
+- 样本：`D:/vscanner-tp/fdroid-samples-1127/`（voicerecorder 22 / newpipe 1017 / opentracks 6766 / calendar 25 / keepass.libre 45800）。宿主直连 f-droid.org 不通，走本机 7897 代理取官方 API + APK。
+- 产物：静态 `D:/vscanner-tp/run-1127/<pkg>/static/`；流水线任务 `D:/vscanner-tp/run-1127/pipeline{,2,4,6}/<job>/`（含 events.jsonl / session / 报告）。
+
+### 1. `system_ca` 永远装不上（`import transparent` 路径按输出目录推算）
+- 现象：每次 `system_ca` 阶段 `failed: ModuleNotFoundError: No module named 'transparent'`，HTTPS 全解不开。runbook §10.5 记过同一句原文，当时归因"本轮 sys.path 指错"，未修。
+- 根因：`device_run_thirdparty_run1.py` 用 `ctx.out.parent.parent/"traffic"` 反推代码目录；pipeline 下 out 在 `D:/vscanner-tp/...`，该路径不存在。其余 6 处调用点都用源码位置（`Path(__file__).parents[...]`），只有这处按输出推算。
+- 修：改为 `Path(__file__).resolve().parents[1]/"traffic"`，与 device_boot / start_emulator / coverage_gap 同口径。
+- 验证：同一台设备同一任务，阶段从 `failed(ModuleNotFoundError)` 变为 `done(CA 已进入系统库与 APEX 的 zygote 命名空间)`；`ca-install.json` 四步 rc 全 0。
+
+### 2. 任务状态长期停在 `queued`（状态机缺 running）
+- 现象：任务已跑完静态、正在动态采集，`GET /api/pipeline/<id>` 仍回 `state=queued`；前端刷新只能看到"排队中"。
+- 根因：`job.state` 只在 `finalize()` 赋值，整条流水线（实测 5–15 分钟）没有 running 态。
+- 修：`run_pipeline()` 入口置 `state="running"` 并 `remember()` 落盘。`history.lookup` 本就对 queued/running 校验 owner_token（进程没了收敛为 failed+interrupted），持久化安全。
+- 验证：`test_runner_branches` 新增 2 例（进入 finalize 时已是 running、pipeline.json 落盘 running）；实跑 `state=running`。
+
+### 3. 补充扫描计数自相矛盾（总数 6、分类合计 11）
+- 现象：真实样本 `static_mobile_supplement.json` 里 `counts.findings_total=5`，`findings_by_rule_type={"sensitive_read":11}`。
+- 根因：`reach_report.apply()` 把 `supp["findings"]` 收窄成 app_reachable 子集并重算 `findings_total`，但没重算 `findings_by_rule_type`（仍是过滤前口径）。
+- 修：`apply()` 内按新 findings 重算分布；过滤前分布仍可从 `reachability_buckets` 与各分桶复算，信息不丢。
+- 验证：`test_reachability` 新增 `ApplyCountsTest` 2 例；真实样本重跑后 5 = 5。
+
+### 4. 多设备时全链路静默失效（裸 adb 报 more than one device）
+- 现象：宿主机两台模拟器在线时，`adb root/remount/push/install` 全部失败，但错误被 `install_system_ca` 误报成"系统不可写，请用 -writable-system 重启"。
+- 根因：工具链所有 adb 调用都不带 `-s`；`device_guard()` 的原意是挡这种失真，做法却是让整单失败。
+- 修：`ensure_device()` 主动选一台并写 `ANDROID_SERIAL`（显式指定 > 当前在用 > 列表第一台），复用与冷启动两条路径都绑定。`device_guard` 保留原语义（用户显式跑批仍受保护）。
+- 验证：`test_device_boot` 3 例（多设备自动绑定、显式 serial 优先、残留 serial 改绑）；实跑事件变为"已有一台模拟器在线：emulator-5554（共 2 台在线，已绑定…）"。
+
+### 5. `_has_emulator_process()` 名不副实 → 误冷启动第二台
+- 现象：`adb devices` 恰好为空（adb server 重启的那几秒）时，明明有 qemu 在跑却被判"无在线模拟器"，冷启动第二台 → 直接触发第 4 条自锁。
+- 根因：函数名为 process，实现只查 `adb devices`。
+- 修：先查 adb 列表，再查宿主进程（Windows `tasklist /FI IMAGENAME eq qemu-system-x86_64.exe|emulator.exe`，其他平台 `pgrep -f`）。
+- 验证：`test_device_boot` 覆盖冷启动分支；真实环境 `_has_emulator_process()` 返回 True（adb 列表为空时）。
+
+### 6. CA 装不上被当成"设备不可用"，整条动态跳过
+- 现象：`adb remount` 被 dm-verity 拒后 `ensure_device` 返回 False → 13 个动态阶段全部 `skipped`，终态 `static_only`，运行时证据一条不留。
+- 判断依据：CA 只决定 HTTPS 能否解密，不决定设备能否跑动态（frida 钩子/安装/交互/死亡取证都不依赖它）；且"复用在线设备"那条路径本来就不检查 CA，两条路径口径不一致。runbook §10.5 的处置也是"改用 Java/native 明文 hook"，不是放弃动态。
+- 修：CA 失败只发 `boot running`（写明"HTTPS 无法解密，动态其余部分照常执行"），不阻断。
+- 验证：`test_device_boot` 1 例（CA 失败仍 ok，缺口留痕，UWB 抑制仍执行）。
+
+### 7. 补一条"流量未建立"缺口（CA 成功但上游全不可达）
+- 现象：NewPipe 实跑 mitm.log 有明文 `GET https://www.youtube.com/...`（TLS 已解密），但 flows 0 条、连接错误 38 条全 `upstream_timeout`（宿主到 google/youtube 无通路）。此时报告只显示 `http_messages` 失败，没有"flows 为空 ≠ 应用没有外发"的说明。
+- 修：新增 `traffic_gap_notes()`（纯函数），区分三种空：CA 未装 / CA 成功但上游不可达 / 真有流量。前两种写进 `bundle.gaps`。
+- 验证：`test_device_tools` 新增 4 例；实跑 bundle.gaps 出现「流量未建立…代理记录了 30 条连接失败…不能写成「应用没有外发」」。
+
+### 8. 既有失败闭环：`hooks_parity` stack_capture 漂移
+- 上一条 11-27 记录里挂着的 `run_mobile_checks 62/63`（车辆侧新增 `headLimit`、移动侧未同步）本次一并修掉：`mobile/hooks/stack_capture.js` 回流可选参数 `headLimit`（不传时 `head=null`，输出与旧版逐字一致），保留移动端特有的 `NO_STACK` 早退；`node build.mjs` 重建 bundle（dist 已 gitignore）。
+- 验证：parity 11/11 passed；`run_mobile_checks.py` **63/63 passed**（此前 62/63）。
+
+### 环境事实（不是平台缺陷，如实记录）
+- 宿主直连 `www.google.com` / `play.googleapis.com` / `f-droid.org` 均不通（`curl --noproxy` 超时），只有 `mirrors.tuna.tsinghua.edu.cn` 通。因此真实样本的 HTTPS 上游全部 timeout，flows 为空是网络事实，平台按第 7 条如实标注。
+- 未装 tshark：`http_messages` 阶段报 `未找到 tshark`，pcap 报文重组不可用（verification 里 already 列在 optional_failed）。
+- 设备抖动有一半来自并行会话：同一份日志前一条已记「共享仓库有并行会话在反复重启 adb server、清理模拟器」，本次复现同款（`emulator-5566 not found`）。第 4/5 条修复正是为这种环境准备的。
+
+### 待办
+- `docs/DEVELOPMENT_LOG.md` 已 480+ 行，超过 300 行上限：下次改动前把 11-26 及更早记录转分卷，主文件只留索引与最新两轮。
+- 若要把 flows 链路在无外网环境也验证一遍，需要本地可解析的上游（fixture 靶子 + tls_probe_server），本次未做。

@@ -30,7 +30,7 @@ import thirdparty_env_adb as adb_env
 from device_run_thirdparty_armed import _stage_armed
 from device_run_thirdparty_run2 import _wait_for_spawn
 from device_run_thirdparty_helpers import (  # noqa: E402
-    activity_namespace_matches, load_action_log, observation_events,
+    activity_namespace_matches, load_action_log, observation_events, traffic_gap_notes,
 )
 from device_run_thirdparty_run6 import claim_device_attempt, review_no_activity
 
@@ -201,6 +201,40 @@ class ActivityNamespaceTests(unittest.TestCase):
     def test_relative_class_is_same_package(self):
         self.assertTrue(activity_namespace_matches(
             "com.example.app", ".ui.MainActivity"))
+
+
+class TrafficGapNoteTests(unittest.TestCase):
+    """「没有流量」的三种空必须能区分——把它们混成一句，报告就会把
+    "解不开/连不上"读成"应用没有外发"（2026-11-27 NewPipe 实跑暴露）。"""
+
+    def _session(self, flows: int = 0, errors: int = 0) -> Path:
+        tmp = Path(tempfile.mkdtemp())
+        (tmp / "flows.jsonl").write_text("".join('{"a":1}\n' for _ in range(flows)),
+                                        encoding="utf-8")
+        (tmp / "flows-connect-errors.jsonl").write_text(
+            "".join('{"ev":"CONNECT_ERROR"}\n' for _ in range(errors)), encoding="utf-8")
+        return tmp
+
+    def test_ca_missing_explains_https_not_decrypted(self):
+        notes = traffic_gap_notes(False, self._session())
+        self.assertEqual(len(notes), 1)
+        self.assertIn("HTTPS 未解密", notes[0])
+
+    def test_ca_ok_but_upstream_unreachable_is_not_silence(self):
+        notes = traffic_gap_notes(True, self._session(flows=0, errors=38))
+        self.assertEqual(len(notes), 1)
+        self.assertIn("流量未建立", notes[0])
+        self.assertIn("38", notes[0])
+        self.assertIn("不能写成", notes[0])
+
+    def test_real_flows_produce_no_gap(self):
+        self.assertEqual(traffic_gap_notes(True, self._session(flows=12, errors=3)), [],
+                         "有流量时不得再报缺口，否则每次报告都带一句噪声")
+
+    def test_no_flows_and_no_errors_is_left_to_verification(self):
+        """既没 flow 也没连接错误：可能是窗口太短/应用没联网，交给 verification 判，
+        这里不臆造原因。"""
+        self.assertEqual(traffic_gap_notes(True, self._session()), [])
 
 
 if __name__ == "__main__":
