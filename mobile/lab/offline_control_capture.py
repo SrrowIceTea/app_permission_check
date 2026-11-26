@@ -1,71 +1,57 @@
-"""Capture the background/offline/resend controls on an owned mobile emulator. 仅用于授权测试。"""
+"""Capture the background/offline/resend controls on an owned mobile emulator. 仅用于授权测试。
+
+网络拓扑（关键）：
+- mitmproxy 监听宿主 18960；设备侧 `10.0.2.2:18960`（真实网络路径，SLIRP 转发到宿主回环）
+  与 `127.0.0.1:18960`（adb reverse，调试通道）都落到同一个代理，因此两条路径都能归因。
+- 接收端绑随机端口，只被代理转发到；它全程监听，所以"断网区间零回执"才是有意义的判据
+  （若接收端本身不在，零回执是废话）。
+- 断网用飞行模式（实测唯一能放倒 eth0/wlan0 的手段），断网期间 adb reverse 仍可用，
+  正好用来证明失败原因是网络而不是应用。
+"""
 from __future__ import annotations
 
 import argparse
 from contextlib import ExitStack, contextmanager
-from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
+import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import subprocess
 import sys
-import threading
 import time
 import uuid
 
 from mobile.lab.mobile_network_actions import MobileNetworkActions
-from mobile.lab.offline_control import OFFLINE_INPUTS, PACKAGE, OBSERVATION
+from mobile.lab.offline_control import PACKAGE, OBSERVATION, case_inputs
+from mobile.lab.resend_receiver import start as start_receiver
 from mobile.lab.window_benchmark import OFFLINE_STEPS, ROOT, check, load, rows, save, sha
 
 sys.path.insert(0, str(ROOT / "mobile/tools"))
-from device_capture import pick_free_port, wait_listener  # noqa: E402
+from device_capture import wait_listener  # noqa: E402
 from device_environment import AdbClient, collect_device_profile, resolve_adb  # noqa: E402
 from device_provenance import host_frida_version, inspect_gadget  # noqa: E402
 
 ACTIVITY = PACKAGE + "/.WindowBenchmarkActivity"
 GADGET_PORT = 27044
 DEVICE_HTTP = "tcp:18960"
+PROXY_PORT = 18960
 
 
 def millis():
     return time.time_ns() // 1_000_000
 
 
-class Receiver(BaseHTTPRequestHandler):
-    def do_POST(self):
-        now = millis()
-        size = self.headers.get("Content-Length", "")
-        if self.path != "/collect" or not size.isascii() or not size.isdecimal() or not 0 < int(size) <= 2048:
-            self.send_error(400)
-            return
-        self.connection.settimeout(5)
-        body = self.rfile.read(int(size))
-        if len(body) != int(size):
-            self.send_error(400)
-            return
-        try:
-            value = json.loads(body)
-            valid = (value["run"] == self.server.token and value["source_batch"] == "a"
-                     and re.fullmatch(r"[0-9a-fA-F]{16}", value["android_id"])
-                     and value.get("origin") in ("foreground", "background"))
-        except (ValueError, KeyError, TypeError):
-            valid = False
-        if not valid:
-            self.send_error(400)
-            return
-        index = len(self.server.receipts)
-        (self.server.folder / f"body-{index}.bin").open("xb").write(body)
-        checksum = sha(body)
-        self.server.receipts.append({"status": 200, "path": self.path, "sha256": checksum,
-                                     "received_ms": now, "source_batch_tokens": value.get("source_batch_tokens", []),
-                                     "body_file": f"body-{index}.bin"})
-        reply = json.dumps({"sha256": checksum}).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(reply)))
-        self.end_headers()
-        self.wfile.write(reply)
+def ensure_port_free(port):
+    probe = socket.socket()
+    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        probe.bind(("127.0.0.1", port))
+    except OSError as error:
+        raise ValueError(f"宿主端口 {port} 已被占用: {error}") from error
+    finally:
+        probe.close()
 
 
 def command(adb, *args):
@@ -114,6 +100,14 @@ def _cleanup(action):
         action()
 
 
+def best_effort(label, action):
+    try:
+        return action()
+    except Exception as error:  # noqa: BLE001
+        print(f"offline_cleanup_failed[{label}]: {error}", file=sys.stderr)
+        return None
+
+
 def read_actor(adb, pid, token):
     output = command(adb, "shell", "logcat", "-d", "--pid", pid, "-v", "raw", "-s", "VScanWindow:I")
     records = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
@@ -123,8 +117,33 @@ def read_actor(adb, pid, token):
 
 
 def trigger(adb, user, step, token):
-    command(adb, "shell", "am", "start", "-W", "--user", user, "-n", ACTIVITY,
-            "--es", "benchmark_run", token, "--es", "benchmark_step", step)
+    output = command(adb, "shell", "am", "start", "-W", "--user", user, "-n", ACTIVITY,
+                     "--es", "benchmark_run", token, "--es", "benchmark_step", step)
+    check("Error" not in output, f"am start 失败: {step}: {output[:120]}")
+
+
+def step_predicate(adb, pid, token, folder, step, read_count):
+    """按步骤名显式匹配要等的事件，不再用"记录条数"隐式推算。"""
+    if step.startswith(("bg-read", "read-")):
+        return lambda: (lambda records: records if (
+            len(obtained(rows(folder / "reads.jsonl"))) >= read_count
+            and len([r for r in records if r["event"] == "read"]) >= read_count) else None)(
+                read_actor(adb, pid, token))
+    if step.startswith("bg-probe"):
+        stage = step.removeprefix("bg-probe-")
+        return lambda: (lambda records: records if any(
+            r["event"] == "probe" and r.get("stage") == stage for r in records) else None)(
+                read_actor(adb, pid, token))
+    wanted = {"bg-send-a": "send", "bg-flush-a": "flush_done"}.get(step)
+    if step == "bg-offline-send-a":
+        def offline():
+            records = read_actor(adb, pid, token)
+            done = (any(r["event"] == "enqueue" for r in records)
+                    and any(r["event"] == "offline_failed" for r in records))
+            return records if done else None
+        return offline
+    return lambda: (lambda records: records if any(r["event"] == wanted for r in records) else None)(
+        read_actor(adb, pid, token))
 
 
 def capture_case(adb, user, apk_sha, case, token, folder, bundle, network):
@@ -132,23 +151,16 @@ def capture_case(adb, user, apk_sha, case, token, folder, bundle, network):
     for name in ("reads.jsonl", "flows.jsonl", "egress.jsonl"):
         (folder / name).touch()
     command(adb, "shell", "am", "force-stop", "--user", user, PACKAGE)
-    command(adb, "shell", "am", "start", "-W", "--user", user, "-n", ACTIVITY,
-            "--es", "benchmark_run", token)
+    command(adb, "shell", "am", "start", "-W", "--user", user, "-n", ACTIVITY, "--es", "benchmark_run", token)
     trigger(adb, user, "bg-queue-clear", token)
     pid = command(adb, "shell", "pidof", PACKAGE)
     check(pid.isdecimal(), "夹具主进程未就绪")
     offline_window = {}
     try:
         with ExitStack() as stack:
-            server = HTTPServer(("127.0.0.1", 0), Receiver)
-            server.folder, server.token, server.receipts = folder, token, []
-            stack.callback(server.server_close)
-            thread = threading.Thread(target=server.serve_forever)
-            thread.start()
-            stack.callback(thread.join)
-            stack.callback(server.shutdown)
-            proxy_port, stop_proxy = pick_free_port(), folder / ".proxy-stop"
-            env = __import__("os").environ.copy()
+            server = start_receiver(stack, folder, token)
+            stop_proxy = folder / ".proxy-stop"
+            env = os.environ.copy()
             env.update(PYTHONUTF8="1", VSCAN_SESSION=token, VSCAN_SERIAL=adb.serial,
                        VSCAN_PACKAGES=PACKAGE, VSCAN_STRICT_PACKAGE_SCOPE="0",
                        VSCAN_ATTRIB_TARGET_CHECK="1", VSCAN_ATTRIB_CONSERVATIVE="1",
@@ -157,52 +169,37 @@ def capture_case(adb, user, apk_sha, case, token, folder, bundle, network):
             proxy = start_process(stack, [sys.executable, "-u", "-c",
                 "from mitmproxy.tools.main import mitmdump; mitmdump()", "-s", str(ROOT / "mobile/traffic/addon_mobile.py"),
                 "--mode", f"reverse:http://127.0.0.1:{server.server_port}", "--listen-host", "127.0.0.1",
-                "--listen-port", str(proxy_port), "--set", "keep_host_header=true", "--set", f"confdir={folder / 'certs'}"],
+                "--listen-port", str(PROXY_PORT), "--set", "keep_host_header=true", "--set", f"confdir={folder / 'certs'}"],
                 folder / "proxy.log", env, stop_proxy)
-            check(wait_listener(proxy_port, proxy), "本机反向代理未就绪")
-            command(adb, "reverse", "--no-rebind", DEVICE_HTTP, f"tcp:{proxy_port}")
-            stack.callback(command, adb, "reverse", "--remove", DEVICE_HTTP)
+            check(wait_listener(PROXY_PORT, proxy), "本机反向代理未就绪")
+            command(adb, "reverse", "--no-rebind", DEVICE_HTTP, f"tcp:{PROXY_PORT}")
+            stack.callback(best_effort, "reverse", lambda: command(adb, "reverse", "--remove", DEVICE_HTTP))
             plan = folder / "hook-plan.json"
             save(plan, [{"script": str(bundle), "output": "reads.jsonl"}])
             stop_hook = folder / ".hook-stop"
             hook = start_process(stack, [sys.executable, "-u", str(ROOT / "mobile/tools/device_hook_driver.py"),
                 "--plan", str(plan), "--session-dir", str(folder), "--session", token,
-                "--port", str(GADGET_PORT), "--seconds", "180", "--stop-file", str(stop_hook)],
+                "--port", str(GADGET_PORT), "--seconds", "240", "--stop-file", str(stop_hook)],
                 folder / "driver.log", env, stop_hook)
             children = (proxy, hook)
             sample_until(lambda: any(r.get("src") == "privacy" and r.get("ev") == "ARMED"
                          and r.get("hook") == OBSERVATION and r.get("hooks") == 1
                          for r in rows(folder / "reads.jsonl")), children, "privacy ARMED")
-            steps = []
-            read_count = 0
+            steps, read_count = [], 0
             for step in OFFLINE_STEPS[case]:
                 started = millis()
-                if step == "wifi_off":
+                if step == "net_off":
+                    network.apply("net_off", token + "-off")
                     offline_window["offline_start_ms"] = millis()
-                    network.apply("wifi_off", token + "-off")
-                    time.sleep(1)
-                elif step == "wifi_on":
-                    network.apply("wifi_on", token + "-on")
-                    offline_window["online_confirmed_ms"] = millis()
-                    time.sleep(1)
+                elif step == "net_on":
+                    network.apply("net_on", token + "-on")
                 else:
                     trigger(adb, user, step, token)
                     read_count += int(step.startswith(("bg-read", "read-")))
-                    def delivered():
-                        records = read_actor(adb, pid, token)
-                        enough = len(obtained(rows(folder / "reads.jsonl"))) >= read_count
-                        if not enough:
-                            return None
-                        # 断网发送是后台线程 + 5s 连接超时，必须等 offline_failed
-                        # 落盘再往下走，否则 wi-fi 切换会跑在失败确认之前。
-                        if step == "bg-offline-send-a":
-                            return records if any(r.get("event") == "offline_failed" for r in records) else None
-                        return records if len(records) >= len(steps) + 1 else None
-                    sample_until(delivered, children, step, seconds=25)
+                    sample_until(step_predicate(adb, pid, token, folder, step, read_count), children, step)
+                    if step == "bg-probe-after":
+                        offline_window["online_confirmed_ms"] = millis()
                 steps.append({"step": step, "start_ms": started, "end_ms": millis()})
-                if step == "bg-flush-a":
-                    sample_until(lambda: any(r.get("event") == "flush_done" for r in read_actor(adb, pid, token)),
-                                 children, "补传完成")
             time.sleep(1)
             save(folder / "steps.json", steps)
             save(folder / "actor.json", read_actor(adb, pid, token))
@@ -222,13 +219,11 @@ def capture_case(adb, user, apk_sha, case, token, folder, bundle, network):
     manifest = {"session_id": token, "apk_sha256": apk_sha, "hook_sha256": sha(bundle.read_bytes()), "passed": True}
     driver = load(folder / "hook-driver-verification.json")
     check(str(driver.get("pid")) == pid, "Hook 未附加到实际夹具 PID")
+    if case != "bg_read_only":
+        shutil.copyfile(folder / "body-0.bin", folder / "body.bin")
     from mobile.lab.offline_control import truth_offline
     truth_offline(folder, case, manifest)
-    paths = [n for n in OFFLINE_INPUTS if (folder / n).is_file()]
-    if case != "bg_read_only":
-        paths.append("body.bin")
-        shutil.copyfile(folder / "body-0.bin", folder / "body.bin")
-    manifest["sha256"] = {name: sha((folder / name).read_bytes()) for name in paths}
+    manifest["sha256"] = {name: sha((folder / name).read_bytes()) for name in sorted(case_inputs(case))}
     save(folder / "manifest.json", manifest)
 
 
@@ -248,6 +243,7 @@ def capture(serial, apk, out):
     artifact = inspect_gadget(apk, profile, GADGET_PORT, host_frida_version())
     check(f"package:{PACKAGE}" not in command(adb, "shell", "pm", "list", "packages", "--user", user, PACKAGE).splitlines(),
           "设备已有同包应用")
+    ensure_port_free(PROXY_PORT)
     out.mkdir(parents=True, exist_ok=False)
     save(out / "device.json", {**profile, "api": api, "user": user, "artifact": artifact})
     apk_sha = sha(apk.read_bytes())
@@ -258,15 +254,19 @@ def capture(serial, apk, out):
     check("Success" in command(adb, "install", "--user", user, apk), "自有 APK 安装失败")
     network = MobileNetworkActions(adb, out)
     try:
+        path = command(adb, "shell", "pm", "path", "--user", user, PACKAGE)
+        check(path.startswith("package:/") and "\n" not in path, "装机 APK 路径不明确")
+        installed = command(adb, "shell", "sha256sum", path.removeprefix("package:"))
+        check(installed.split()[0] == apk_sha, "装机 APK 摘要不一致")
         command(adb, "forward", "--no-rebind", f"tcp:{GADGET_PORT}", f"tcp:{GADGET_PORT}")
         cases = {case: uuid.uuid4().hex for case in OFFLINE_STEPS}
         for case, token in cases.items():
             print(f"采集 {case}…", flush=True)
             capture_case(adb, user, apk_sha, case, token, out / case, built, network)
     finally:
-        command(adb, "forward", "--remove", f"tcp:{GADGET_PORT}")
-        network.close()  # 内部已写 environment-cleanup.json（含 cleanup_ok）
-        command(adb, "shell", "pm", "uninstall", "--user", user, PACKAGE)
+        best_effort("forward", lambda: command(adb, "forward", "--remove", f"tcp:{GADGET_PORT}"))
+        best_effort("network", network.close)
+        best_effort("uninstall", lambda: command(adb, "shell", "pm", "uninstall", "--user", user, PACKAGE))
     save(out / "suite.json", {"package": PACKAGE, "device_api": api, "apk_sha256": apk_sha,
                              "rules_sha256": sha((out / "rules.db").read_bytes()),
                              "hook_sha256": sha(built.read_bytes()), "cases": cases})

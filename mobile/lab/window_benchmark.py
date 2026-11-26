@@ -16,15 +16,17 @@ OBSERVATION = "fixture_native_log"
 WINDOWS = (5000, 10000, 30000, 60000, 120000)
 STEPS = {"read_only": ("read-a",), "immediate": ("read-a", "send-a"),
          "delayed": ("read-a", "send-a"), "cross_batch": ("read-a", "read-b", "send-a")}
-# 后台与断网补传对照（追加，不改旧四组）：步骤里的 wifi_off/wifi_on 是环境动作，不是 Activity 触发。
+# 后台与断网补传对照（追加，不改旧四组）：net_off/net_on 是环境动作，不是 Activity 触发。
+# offline_resend 的顺序是"探针可达 → 真断网 → 探针不可达 → 发送失败入队 → 恢复 → 探针可达 → 补传"，
+# 断网必须发生在发送之前，否则失败原因就不是断网。
 OFFLINE_STEPS = {
     "bg_read_only": ("bg-read-a",),
     "bg_send": ("bg-read-a", "bg-send-a"),
-    "offline_resend": ("bg-read-a", "bg-offline-send-a", "wifi_off", "wifi_on", "bg-flush-a"),
+    "offline_resend": ("bg-read-a", "bg-probe-before", "net_off", "bg-probe-offline",
+                       "bg-offline-send-a", "net_on", "bg-probe-after", "bg-flush-a"),
 }
 INPUTS = ("reads.jsonl", "flows.jsonl", "egress.jsonl", "actor.json", "receipts.json", "steps.json",
           "hook-driver-verification.json", "collector-health.json")
-ALL_STEPS = {**STEPS, **OFFLINE_STEPS}
 
 
 def sha(raw):

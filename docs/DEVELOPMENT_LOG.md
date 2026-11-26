@@ -445,14 +445,31 @@
 - 验证命令（仅授权测试）：`python -u output/mobile-hookstab-20261126/repro.py <label> <bundle> <token> read-a <settle>`；多轮 `repro_loop.py <rounds> <settle>`；压力/A-B `repro_stress.py`。逐轮 `result.json` 与 [验收汇总](../output/mobile-hookstab-20261126/acceptance-summary.json)。
 - 证据全部在 `output/mobile-hookstab-20261126/`（不入库）。本次为设备复验与脚本编排，未改产品代码；`repro*.py` 属一次性复现脚本，不进提交。
 
-## 2026-11-27 · 移动夹具：后台读取与断网补传对照（进行中）
+## 2026-11-27 · 移动夹具：后台读取与断网补传对照（第一轮，结论已作废）
 
 - 范围：移植车载 `window_run`/`AuditScenarioState` 的后台线程读取与断网补传机制到自有 Android ID 夹具，覆盖后台只读、后台发送、断网失败入队、恢复联网补传；独立接收端按批次回执核对，再用移动关联器重放五档窗口。仅授权测试，代码在 `feature/mobile-window-benchmark` worktree。
 - 契约约束：旧四组 `STEPS`（read_only/immediate/delayed/cross_batch）的键、顺序、判据、`suite.json`/`verification.json` 结构、`--window-override-ms` 五档与 `pairs_from()` 四元组保持不变；新能力用追加 case + 可选字段，旧 case 走原 truth()。
 - 设计要点：断网发送走 `http://10.0.2.2:18960/collect`（不经 adb reverse，真正断网失败），恢复后走 `http://127.0.0.1:18960/collect`（reverse 补传）；队列用 SharedPreferences 持久化，含批次令牌；Wi-Fi 控制用移动版（车载 `vehicle_environment_actions.py` 有 AAOS feature 限制，移动模拟器不满足）。
-- 实现：新增 `ScenarioQueue.kt`（SharedPreferences 持久化批次队列）并扩展 `WindowBenchmarkActivity.kt`（后台只读 `bg-read-a/b`、后台发送 `bg-send-a`、断网 `bg-offline-send-a`、补传 `bg-flush-a`、队列清理；断网走 `10.0.2.2` 不经 adb reverse，恢复走 `127.0.0.1`，均带 `thread`/`origin` 标记）。`hook_window_benchmark.js` 可选透传 `fixture_origin`/`fixture_thread`（旧字段不变）。新增 `mobile_network_actions.py`（移动版 Wi-Fi 控制：nonroot shell 对 wlan0 无 ip link 权限，只用有权限的 `cmd wifi`；断网真实证据由 10.0.2.2 路径无回执 + offline-window 区间提供）、`offline_control.py`（三组判据 + 五档重放）、`offline_control_capture.py`（Receiver 多回执 + 批次令牌）、`test_offline_control.py`。`window_benchmark.py` 仅追加 `OFFLINE_STEPS`/`ALL_STEPS` 常量，旧四组零改动。
+- 实现：新增 `ScenarioQueue.kt`（SharedPreferences 持久化批次队列）并扩展 `WindowBenchmarkActivity.kt`（后台只读 `bg-read-a/b`、后台发送 `bg-send-a`、断网 `bg-offline-send-a`、补传 `bg-flush-a`、队列清理；断网走 `10.0.2.2` 不经 adb reverse，恢复走 `127.0.0.1`，均带 `thread`/`origin` 标记）。`hook_window_benchmark.js` 可选透传 `fixture_origin`/`fixture_thread`（旧字段不变）。新增 `mobile_network_actions.py`（移动版 Wi-Fi 控制：nonroot shell 对 wlan0 无 ip link 权限，只用有权限的 `cmd wifi`；断网真实证据由 10.0.2.2 路径无回执 + offline-window 区间提供）、`offline_control.py`（三组判据 + 五档重放）、`offline_control_capture.py`（Receiver 多回执 + 批次令牌）、`test_offline_control.py`。`window_benchmark.py` 仅追加 `OFFLINE_STEPS` 常量，旧四组零改动。
 - 设备验收（`output/mobile-offline-20261126/full/`，API36 与旧基准同指纹）：`bg_read_only` 0 外发、`bg_send` 后台线程读取并经独立接收端 200 回执、`offline_resend` 断网失败入队（cached_batches=1）→ 恢复后补带回执带 `source_batch_tokens=["a"]`；断网区间 0 回执。三组 manifest 全 passed，环境 cleanup_ok=true，夹具/转发已清理。
 - 五档重放（`output/mobile-offline-20261126/replay/verification.json`）：`bg_read_only` 五档均 0；`bg_send` 五档均 TP=1；`offline_resend` 5 秒漏配（FN=1）、10/30/60/120 秒命中（TP=1）——补传延迟超出 5 秒窗，与既有 delayed 组同型。独立应用案例仍为 0。
 - 过程修正（如实记录）：① 首轮 `environment-cleanup.json` 重复写、Wi-Fi 恢复误依赖 "Wifi is connected"（本镜像不自动重连）与 nonroot 无 wlan0 ip link 权限，已改为 `cmd wifi enabled` + eth0 判据；② 断网发送是后台线程 5 秒超时，编排原只等读取事件就切 Wi-Fi，导致 offline_failed 晚到，已改为等 offline_failed 落盘；③ 判据 `bg_send` 曾漏返回 positive 导致误报 outside_reference，已修正；④ truth 读 `body-0.bin`（接收端原始产物）而非复制后的 body.bin。
 - 验证：`unittest mobile.lab.test_window_benchmark mobile.lab.test_offline_control` 6/6（旧四组契约保持），`mobile/tools/run_mobile_checks.py` 63/63，`git diff --check` 干净。gadget provenance 重备仅改 config.so 换行，已恢复git版本，不提交构建产物。
 - 复现命令：`node mobile/hooks/build.mjs --only hook_window_benchmark` → `gradlew :app:assembleGadget --offline --no-daemon` → `-m mobile.lab.offline_control_capture --serial <owned> --apk <apk> --out <dir>` → `-m mobile.lab.offline_control --source <dir> --out <dir>/replay`。
+- **审查更正**：三个子代理审查与本地复核确认本节"断网补传"结论不成立——`OFFLINE_STEPS` 把 `wifi_off` 排在 `bg-offline-send-a` **之后**（实测发送在 …935409–…940590 失败，`wifi_off` 从 …940590 才开始），且 `cmd wifi set-wifi-enabled disabled` 在该镜像**不能断网**（wlan0 关闭后 eth0 立即接管并保有 10.0.2.15，`10.0.2.2` 仍 0% 丢包）。失败真实原因是宿主 18960 无监听，与断网无关；`offline-window` 区间内没有发送动作，零回执判据恒真。另 `replay_offline` 无任何窗口断言、`status` 无条件 passed，`send-a` body 被无条件加字段。已由下一节修复并重新验收；本节证据只能证明"发送失败→入队→补传"。
+
+## 2026-11-27 · 后台/断网对照修复与真断网复验（完成）
+
+- 范围：修复上一节审查发现的 2 条阻塞项与 6 项重要问题，重新做设备采集与五档重放；只改 `feature/mobile-window-benchmark` worktree，证据落 `output/mobile-offline-20261126/`（不入库）。
+- 断网机制（实测选定）：`cmd wifi set-wifi-enabled disabled` 无效（wlan0 关后 eth0 接管，10.0.2.2 仍可达）；改用 `cmd connectivity airplane-mode enable`，实测 eth0/wlan0 同时 DOWN、`10.0.2.2` 返回 `Network is unreachable`，而 adb 与 `adb reverse` 不受影响（走调试通道）。判据要求"无 UP 且非回环的 IPv4 地址"，只看设置项会被 eth0 兜底骗过。
+- 步骤重排：`bg-read-a → bg-probe-before → net_off → bg-probe-offline → bg-offline-send-a → net_on → bg-probe-after → bg-flush-a`。探针只建 TCP 连接即关闭、不产生回执；断网必须发生在发送之前。
+- 接收端与代理换位：mitmproxy 固定监听宿主 18960，接收端绑随机端口。`10.0.2.2:18960`（真实网络路径）与 `127.0.0.1:18960`（reverse 调试通道）都经代理，两条路径都可归因；接收端全程在监听，因此"断网区间零回执"才有意义。
+- 契约修复：`send-a` 恢复旧三字段 body（实测 93 字节，`run/source_batch/android_id`）；后台路径才带 `origin/thread`，补传另带 `source_batch_tokens/created_ms`。`cached` 改 `ConcurrentHashMap`；`bg-queue-clear` 改全清；`enqueue`/`offline_failed` 用当前 run 计数；`flush` 逐行确认后删除；`onCreate` 补齐 step 处理；`record` 增 `ts`。
+- 判据补强：`truth_offline` 增加 START/ARMED/pid/whitelist/hook 健康校验、探针三段证据、断网窗口落在 `net_off`/`bg-probe-after` 步骤窗内、`body.bin` 改为唯一封存对象（不再读未封存的 `body-0.bin`）、`case_inputs()` 作为采集与重放共用的封存集合。
+- 五档断言：`replay_offline` 逐档 `check`——`bg_read_only` 全 0、`bg_send` 全 1、`offline_resend` 5 秒必须 0 且 30 秒以上必须 1、所有档 `outside_reference == 0`、`tp+fn == |positive|`。关联器完全失灵会直接失败。
+- 测试：`test_offline_control.py` 重写为 14 例（字段负例、探针负例、区间端点、多回执、只读外发、pid 不符、五档期望），连同旧四组 3 例共 17/17。
+- 设备验收（`output/mobile-offline-20261126/full-v2/`，API36）：三组 manifest 全 passed，`cleanup_ok=true`。`offline_resend` 实测事件序为 read → probe(before,可达) → probe(offline,不可达/ConnectException) → enqueue(cached=1) → offline_failed(cached=1) → probe(after,可达) → flush_send → flush_done；回执 `received_ms` 在 `online_confirmed_ms` 之后，断网窗口内 0 回执。
+- 五档重放（`output/mobile-offline-20261126/replay-v2/verification.json`）：`bg_read_only` 全 0；`bg_send` 全 TP=1；`offline_resend` 5 秒 FN=1、10/30/60/120 秒 TP=1；所有档 `outside_reference=0`。
+- 旧四组回归（`legacy-four-v2` + `legacy-four-replay-v2`）：read_only 全 0、immediate 全 1、delayed/cross_batch 30 秒内漏配、60 秒起命中；`send-a` body 逐字段核对为三字段。
+- 验证：`unittest mobile.lab.test_window_benchmark mobile.lab.test_offline_control` 17/17；`run_mobile_checks.py` 63/63；`git diff --check` 干净。
+- 过程修正（如实记录）：① 可达性判断最初只看地址不看链路状态，飞行模式下 `eth0 DOWN` 仍挂 10.0.2.15 会误判"断网未生效"；② 设备日志 `ts` 与宿主步骤时间来自两套时钟（偏差约 250ms），跨时钟比大小会假失败，改为用步骤顺序 + 探针结果做顺序证据；③ `offline_control_capture.py` 超 300 行，接收端按职责拆到 `resend_receiver.py`。
