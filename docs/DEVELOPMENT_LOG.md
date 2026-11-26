@@ -6,6 +6,64 @@
 - [2026-11-19 至 2026-11-22 分卷](DEVELOPMENT_LOG_20261119_20261122.md)
 - [2026-11-24 车载环境搭建分卷](DEVELOPMENT_LOG_20261124_SETUP.md)
 
+## 2026-11-26 · 车载三块可本地验证的未完成项（政策结构化 / SDK 指纹侧车 / 定位能力边界）
+
+- 范围：仅三块纯代码增量，**不接设备、不改默认结论、不改规则库、不占 8090/8771**。
+  先决约束：当前 `emulator-5554` 是 Android 17 / API 37 / 普通 emulator / user 0（非 AAOS），
+  当前 SDK 只有 android-36.1/37.2 镜像、AVD 只有 VScan_Phone/VScanner_Root_API36，
+  真机类任务（跨应用阈值、F1 钩子验收、B2 矩阵、YAABSA、G1、A4、PCAPdroid、split APK）
+  一律不做、不编造验收；用户 8771 移动端审计与 8090 HTTP 服务全程未干扰。
+  工作区既有的 20 个 11-24/11-25 未提交改动（权限标定/carstats）原样保留。
+
+### 1. 政策结构化
+- 改动：`vehicle/policy/assessment.py` 新增 `schema_version=1`、条款级 `clauses`（逐字 quote +
+  char span + 否定信号 + 七槽位占位）、顶层 `clause_refs`、每条 review 的 `review_basis`（功能/
+  精度/频率/前后台/接收方/保存期/同意范围，缺失显式 None）；`test_assessment.py` 加 4 例
+  （逐字回指、协议隔离无 clauses、否定信号只标记不解释、七槽位）。
+- 契约：`clause_refs` 此前由 `observation_conditions.py:155` 读取但 assess_policy 从不写；本轮
+  补写真实逐字定位。**未收紧** `clause_ok`（仍读 clause_refs or reviews），因
+  `vehicle/bench/ablation_faults.py:52` 的合成负控靠 reviews 满足条件，收紧会破坏负控。
+  不产出 policy_violation；necessity 仍恒为 human_review_required。
+- 验证：`vehicle.policy.test_assessment` 9/9；下游 `test_method_evidence` /
+  `pipeline.test_audit` / `webapp.test_integration` 29/29。
+
+### 2. SDK 库指纹侧车（sidecar）
+- 改动：新增 `core/static/sdk_fingerprint.py`（纯函数 + CLI）+ `test_sdk_fingerprint.py`（7 例）。
+  复用 `core/evidence/sdk_registry.SDK_PACKAGES` 唯一前缀依据，从 dexfacts.json 派生
+  `sdk-fingerprint.json`：apk_digest 身份绑定、dexfacts_sha256、确定性类集合指纹、
+  confidence=prefix_only、dex gaps 显式透传、limitation 写明"前缀非版本指纹/R8 会漏认"。
+  **默认静态分析不调用它，结论层不读它**（D712 / VEHICLE_ONLY §4）；不臆造版本。
+  新测试挂进 `tools/run_regressions.py` 的 completion 组（不新增组，组数仍 22）。
+- 验证：7/7；组数对拍守卫 `tools.test_regression_manifest` 5/5；真实样本
+  `output/mobile-audit-delivery-20261126/.../static/dexfacts.json`（1123 类无 SDK）→ 0 候选
+  （正确的诚实结果）；合成含 SDK 类样本 → 1 候选（Firebase Analytics）、1/2 类归属、宿主类未误认。
+  烟测产物 `output/sdk-fingerprint-smoke-20261126.json`（不入库）。
+
+### 3. 定位能力边界单一来源 + 单值佐证
+- 改动：新增 `vehicle/privacy/location_capability.py`（能力契约：7 种 hook 形态 / 5 种成对主形态 /
+  2 种单值佐证 / 7 类不支持形态及理由 / 误配预算 pair 1e-17 vs single 1e-9）；
+  `location_match.py` 的 `PAIR_FORMS` 改为从 capability 导入（消除循环依赖），结果新增
+  `format_capability` 快照与每条 pair 的 `supporting_single_forms`。
+  **单值形态只作已成立 pair 的佐证、绝不产生新 pair**（文档 §3.3/§6：单值误配预算高 8 个数量级）；
+  数值叶子/单值主形态/其他精度/protobuf 的负控全部保留；不加 `VSC-GE-location` 规则。
+  `observation_ledger.py` 的 `UNSUPPORTED_LOCATION_FORMS` 改为单一来源导入（保留原 5 键名 + 补 2 键）。
+  `test_location_match.py` 加 3 例（能力快照、单值仅佐证、capability 与 ledger 对拍）。
+- 验证：`test_location_match` / `test_location_layers` / `test_observation_ledger` /
+  `test_evaluation` 56/56（含 node 读真实 hook 输出用例）。
+
+### 全局验证 / 证据
+- 根离线回归 `tools/run_regressions.py --out output/vehicle-local-verify-20261126/regression`：22/22 全 0。
+  [回归记录](../output/vehicle-local-verify-20261126/regression/verification.json)
+- 工程守卫 `tools/engineering_guards.py` exit=0（6 个存量超限文件为基线已登记，与本轮无关）。
+- 新增文件行数：assessment.py 126 / sdk_fingerprint.py 134 / location_capability.py 55，均 ≤300。
+
+### 待办（真机类，本轮设备不具备，未做）
+- 独立样本单次 VHAL 读取对齐证据 → 30 秒跨应用阈值；F1 类加载归因钩子设备验收；
+  B2 完整矩阵；YAABSA 位置差与业务回执；G1 普通应用多页覆盖；A4 分段自愈；
+  PCAPdroid 设备侧对照；split APK/OEM 适配；main 保护分支（需管理员 Gitee 网页设置）。
+- 政策结构化如果需要条款级"主体/接收方/必要性"自动判定，需另立 LLM 结构化阶段并单独评估；
+  本轮只做定位/证据结构化，不下语义结论。
+
 ## 2026-11-24 · 把分支与提交约定写进 AGENTS.md
 
 - 范围：仅 `AGENTS.md`（全局约束新增第 10 条 + 新增「分支与提交流程」小节）。不改代码。
@@ -83,6 +141,95 @@
 - `tools/python313.ps1 -m unittest vehicle.webapp.test_presentation vehicle.webapp.test_server vehicle.webapp.test_workflow vehicle.webapp.test_integration` 46/46；新增 4 例（静态计数只认 `conclusion_level`、`static_only` 标来源、`done` 仍用摘要、`/static` 带标题）。全量 `tools/run_regressions.py` 21/22，唯一红仍是 `completion`：`vehicle/frontend/vehicle.css` 426 行、`v2/app.js` 317 行，均为远程 main 带入且未登记基线。
 - 待办：`completion` 要绿只能拆分这两个文件（守卫 `--update` 只允许收紧，不能新增条目）；v2 的采集/关联审计/看板三页需接设备跑 `live` 或 `replay` 任务；AI 页对静态任务可给出更准确的原因文案。
 
+## 2026-11-24 · 车载 v2 动态链路验收
+
+- 范围为拆分车载前端两个超长文件，用自有夹具的已封存采集做 v2 回放，再在专用 AAOS 35 上做实时任务；按任务核对关联、看板、PDF、证据 ZIP 和离线回归。
+- 拆分旧版 `vehicle.css` 的布局和交互样式，保留加载顺序。v2 上传控制移至 `upload.js`，从服务目录选择回放会话，实时模式显式提交设备序列号、用户及采集时长，保持 TLS 绕过关闭。任务切换按请求序号丢弃过期响应，动态页显示采集会话。
+- 在本机 8874 的隔离工作目录通过 Chrome 上传自有 APK。回放和实时轮各展示 5 条已关联、5 条已观测、6 条候选，采集健康均为 10/10，两个任务的会话不同。实时轮匹配到同会话、同包、同正文摘要的 HTTP 200 流。静态回归仍为 22 条候选，历史切换两轮的采集会话与证据链接各自对应。
+- `node output/vehicle-v2-dynamic-20261124/browser-check.mjs replay|live|static` 分别通过；`tools/python313.ps1 output/vehicle-v2-dynamic-20261124/verify-downloads.py replay-1795502857263 live-1795503152306` 通过，逐轮验证 ZIP 内 22 项引用、原采集清单、PDF 与看板。独立 HTTP 回执单独留存。 [回放](../output/vehicle-v2-dynamic-20261124/replay-1795502857263/archive-verification.json) · [实时](../output/vehicle-v2-dynamic-20261124/live-1795503152306/archive-verification.json) · [静态及历史切换](../output/vehicle-v2-dynamic-20261124/static-1795503301645/verification.json)
+- 首轮沙箱回归的回环连接报 WinError 10013，允许本机回环后 `tools/python313.ps1 tools/run_regressions.py --out output/vehicle-v2-dynamic-20261124/regression-final` 22/22，工作台组 72/72。实时验收脚本修正了 Windows ADB 换行比较和同步调用阻塞接收端的问题，失败轮保留。 `node --check` 与 `git diff --check` 通过。 [回归记录](../output/vehicle-v2-dynamic-20261124/regression-final/verification.json)
+- 后续仍需单次 VHAL 读取可独立对齐的样本证据，才能评估跨应用阈值；本轮使用自有夹具，未调整生产窗口。
+
+## 2026-11-24 · 独立样本资格复核与车速上传重放
+
+- 范围为复核已知候选的单次读取证据。若仅满足业务验收，复用已授权的 Car Stats Viewer 隔离构建，在自有 AAOS 35 保存原始 HTTPS 正文，补充 VScanBench 可复验的车速上传案例。
+- Auto4Android 上游协议公开批量车辆字段，GeelyDiagnostics 公开本机报告导出。两者的公开材料暂缺单次 VHAL 读取到短延迟、长延迟回执的参考证据。选择 B2 业务工作流。 [Auto4Android 协议](https://github.com/DigitalDistraction/Auto4Android/blob/main/docs/protocol.md#app--bridge-vehicle_data) · [GeelyDiagnostics 源码与说明](https://github.com/lisindima/GeelyDiagnostics)
+- 首轮 ADB 标准输入写入测试首选项超过 20 秒，在采集前退出。保留 `trial-speed-20261124/`；重试显式写入相同配置并逐字节读回。装机 APK 与既有隔离构建摘要相同，TLS 绕过关闭，采集健康 10/10。6 条 HTTPS 200 中有 5 条对应车速动作，逐条有 10–121 个同值读取候选。车速读回已恢复，APK 已卸载，本轮模拟器已关闭。 [证据](../output/b1-carstatsviewer-20261123/trial-speed-20261124-retry/speed-verification.json)
+- 新增 `vehicle.bench.carstats_speed`，和离线补传复用原始请求校验。用 `tools/python313.ps1 -m vehicle.bench.carstats_speed --source output/b1-carstatsviewer-20261123/trial-speed-20261124-retry --out output/b1-carstatsviewer-20261123/trial-speed-20261124-retry/speed-verification.json` 生成摘要，再带 `--reference` 复验，字节一致。
+- `tools/python313.ps1 -m vehicle.bench.vscanbench --manifest output/b2-carstats-speed-20261124/vscanbench.json --out output/b2-carstats-speed-20261124/vscanbench-report.json` 两次报告 SHA-256 相同。改错车速证据摘要退出 2，未写成功报告。默认清单报告与此前冻结版本逐字节一致。扩展清单含 3 条工作流，独立可计分案例为 0。 [扩展报告](../output/b2-carstats-speed-20261124/vscanbench-report.json)
+- `tools/python313.ps1 -m unittest vehicle.bench.test_vscanbench vehicle.bench.test_window_review vehicle.bench.test_window_calibration vehicle.bench.test_blind_round vehicle.bench.test_subagent_signoff` 36/36，`tools/python313.ps1 tools/run_regressions.py --out output/b2-carstats-speed-20261124/regression-final` 22/22，`git diff --check` 通过。 [根回归](../output/b2-carstats-speed-20261124/regression-final/verification.json)
+
+## 2026-11-24 · Android 14 车载编译权限级别标定
+
+- 范围为从官方 API 34 车载镜像核对规则库 10 条权限，封存 PackageManager 和实际定义包的编译声明。仅在证据通过后导入发布库和 Room 资产并验证回读。
+- 整包请求停滞，改用 41 段下载。拼接后长度 1,367,927,843 字节，SHA-1 与官方索引一致。在专用 AAOS 34 ext9 r05 / `UAA1.250512.001` 上采集，使用 `vehicle.rules.python.calibrate_permissions` 核对 PackageManager 与两份定义包编译清单。10/10 条一致，发布后用同一证据复核仍为 10/10。 [冻结证据](../vehicle/rules/device_calibration/protection-level-aaos34-r05.json) · [发布后复核](../output/vehicle-permission-api34-20261124/published-recheck.json)
+- 四版本构建复用校准报告校验，导入整数、设备指纹、报告和定义包摘要。首次构建由旧工作区四份 seed 缓存的 CRLF 字节触发摘要错误，恢复为锁文件指定的 LF 并逐份校验 SHA-256，Git 内容无改动。按 [四版本构建入口](../vehicle/rules/CLAUDE.md#怎么跑) 生成暂存库，逐表对拍后同步发布库、Room 资产与期望摘要。只更新 Android 14 的 10 行整数和出处。 [逐表核对](../output/vehicle-permission-api34-20261124/publication-verification.json)
+- `gradlew.bat --offline --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest` 通过。API 34 / user 10 实际运行 `RulesPermissionReadbackTest`，从 Room DAO 导出并逐字段核对 180 行，10 条 Android 14 整数全部匹配。专用模拟器已关闭。 [Room 回读核对](../output/vehicle-permission-api34-20261124/room-verification.json)
+- `tools/python313.ps1 -m unittest vehicle.rules.python.test_permission_levels` 3/3，`tools/python313.ps1 vehicle/rules/android/tools/verify_schema_parity.py` 无差异，根 `tools/run_regressions.py` 22/22，`git diff --check` 通过。Android 13 和 16 共 20 条待各自取证。 [离线回归](../output/vehicle-permission-api34-20261124/regression/verification.json)
+
+## 2026-11-24 · Android 13 车载编译权限级别标定
+
+- 范围为用 Google SDK 的 API 33 车载镜像核对 Android 13 基线的 10 条权限，证据通过后同步发布规则库与 Room 资产，执行回读及根回归。
+- SDK 车载索引锁定 x86_64 r05 的 1,333,244,962 字节和 SHA-1。用分段下载恢复超时区间并校验整包，在独立 AVD 上确认 `TEA1.250515.001` 完整设备指纹。用 `vehicle.rules.python.calibrate_permissions` 将 PackageManager 级别与两个实际定义包的编译清单核对，10/10 通过，发布后复核同为 10/10。 [冻结证据](../vehicle/rules/device_calibration/protection-level-aaos33-r05.json) · [发布后复核](../output/vehicle-permission-api33-20261124/published-recheck.json)
+- 四版本构建按源版本使用对应的校准报告，`output/vehicle-permission-api33-20261124/build_rules.ps1` 两次重建的库 SHA-256 一致。逐表对拍只改 Android 13 权限的整数值及新出处，同步更新发布库、Room 资产、摘要和期望值。 [入库核对](../output/vehicle-permission-api33-20261124/publication-verification.json)
+- `gradlew.bat --offline --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest` 通过，AAOS 33 / user 10 运行 `RulesPermissionReadbackTest`，Room DAO 的 180 行逐项匹配，Android 13 的 10 条整数全部一致。专用 AVD 已关闭。 [Room 验收](../output/vehicle-permission-api33-20261124/room-verification.json)
+- `tools/python313.ps1 -m unittest vehicle.rules.python.test_permission_levels` 3/3，`tools/python313.ps1 vehicle/rules/android/tools/verify_schema_parity.py` 无差异，`tools/run_regressions.py` 22/22，`git diff --check` 通过。Android 16 余 10 条待取证。 [离线回归](../output/vehicle-permission-api33-20261124/regression/verification.json)
+
+## 2026-11-24 · 合并远端车载工作台分支
+
+- 范围为把 `origin/feature/vehicle-frontend-ui` 快进到本地 `main`，恢复已有本地工作，核对 v2 上传、源码和审计页的合并结果。
+- 本地 `main` 从 `cf5f3c7` 快进到 `c65e1d9`。恢复备份时协调 `v2/pages.js` 的空态按钮与文本转义，核对动态会话栏、上传约束与两侧文档。原本的未提交文件已恢复为未暂存，5 个未跟踪文件逐个与备份对象对拍，备份 `365e8a6` 留存。
+- `node --check` 核对 v2 全部本地脚本，两份启动 PowerShell 脚本通过语法解析。Chrome 使用自有 APK 验收静态 22 条候选、七步导航、空态返回、悬停预览与点击固定源码，并检查回放选择及实时参数控件。 [浏览器验证](../output/vehicle-feature-merge-20261124/static-1795534693013/verification.json)
+- `tools/python313.ps1 tools/run_regressions.py --out output/vehicle-feature-merge-20261124/regression` 22/22，`git diff --check` 通过。 [离线回归](../output/vehicle-feature-merge-20261124/regression/verification.json)
+
+## 2026-11-24 · 车载启动器打开 v2 工作台
+
+- 范围为核对车载启动器实际打开的地址，将默认浏览器地址接到 v2，并验证本机启动行为。
+- `start-all.ps1` 的车载浏览器地址改为 `http://127.0.0.1:8773/v2/`，同步批处理注释和启动说明。使用已运行的车载服务打开新入口，HTTP 200，并核对七步流程和上传脚本。 [入口验证](../output/vehicle-v2-launch-20261124/verification.json)
+- PowerShell 语法解析与 `git -c core.whitespace=cr-at-eol diff --check` 通过。根离线回归 `tools/python313.ps1 tools/run_regressions.py --out output/vehicle-v2-launch-20261124/regression` 22/22。 [回归结果](../output/vehicle-v2-launch-20261124/regression/verification.json)
+
+## 2026-11-25 · v2 七步导航改版与接口复验
+
+- 范围为重做功能页流程导航，核对各页接口、三种上传任务和产物，修正已确认的前端状态错配。
+- 七步导航使用等距节点和深青色当前页，缩窄时将翻页按钮排到下一行。补充 `aria-current` 和键盘焦点样式。修正未发布报告的链接状态、仅静态任务的 AI 跳过说明、动态观测未取值计数，以及任务切换后迟到的源码和 AI 响应。
+- Chrome 复验静态候选 22 条，源码树、悬停预览、点击读取、报告禁用和 AI 跳过均正确。检查 1440 像素与 390 像素下的导航。首轮测试脚本的 Enter 模拟未触发默认事件，实际用 Tab 与空格复验通过。 [浏览器验收](../output/vehicle-v2-nav-20261124/static-1795536389560/verification.json)
+- 在自有 AAOS 35 上新采集，再按同一会话回放。两轮各有 5 条已关联、5 条已观测、6 条候选，PDF、看板与证据 ZIP 各核对 22 项引用。AI 未配置时显示真实跳过状态，证据复核页验证空态和独立服务上的测试摘要。 [实时](../output/vehicle-v2-nav-20261124/live-1795536257374/archive-verification.json) · [回放](../output/vehicle-v2-nav-20261124/replay-1795536426753/archive-verification.json) · [复核页测试](../output/vehicle-v2-nav-20261124/replay-1795536426753/verification.json)
+- v2 尚无失败重试、日志查看、政策和场景附件、人工复核写回的操作入口。本轮使用 `node --check`、`git -c core.whitespace=cr-at-eol diff --check` 和 `tools/python313.ps1 tools/run_regressions.py --out output/vehicle-v2-nav-20261124/regression` 验证，根离线回归 22/22。已确认用户服务 8773 提供新版导航，专用验收服务和模拟器已关闭。 [回归结果](../output/vehicle-v2-nav-20261124/regression/verification.json)
+
+## 2026-11-25 · v2 实时采集设备选择与错误提示
+
+- 范围为复查用户失败任务，修正设备选择和版本匹配的前置校验，保留动态失败原因并复验自有夹具。
+- 原任务在静态分析和反编译后进入实时采集。设备序列号填了 `1`，ADB 首条设备查询退出码为 1；任务选择了 Android 16，而已准备的夹具运行 Android 15。另核对到原上传文件和夹具装机文件 SHA-256 不同。 [失败日志](../output/vehicle-web/v-8b31b4fc1d7c4c47b34e7f460c5435b1/failure.log)
+- v2 实时采集改为选择在线 AAOS 设备，自动匹配规则版本和预填用户编号。后端在创建任务前复核设备与版本，动态页展示结构化失败原因和处理提示。已重启 8773 车载服务，保留原失败任务和 AI 配置。 [页面核对](../output/vehicle-live-device-20261125/existing-1795537325841/verification.json) · [服务核对](../output/vehicle-live-device-20261125/service-verification.json)
+- Chrome 使用自有 AAOS 35 和匹配的 APK 完成一轮实时采集。浏览器读取到 5 条已关联、5 条已观测和 6 条候选，PDF、看板和 ZIP 均可下载。核对通过 10 项采集健康检查、22 项归档引用和本机回执。原上传 APK 未重跑；夹具模拟器保持在线。 [采集证据](../output/vehicle-live-device-20261125/live-1795537119464/archive-verification.json)
+- `node --check` 和 `git -c core.whitespace=cr-at-eol diff --check` 通过。首轮离线回归中新增 HTTP 测试放错测试类，移到实际启动服务的测试类后，`tools/python313.ps1 tools/run_regressions.py --out output/vehicle-live-device-20261125/regression-final` 通过 22/22。 [回归结果](../output/vehicle-live-device-20261125/regression-final/verification.json)
+
+## 2026-11-25 · 车载汇报第 16、18 页和研究方向架构图
+
+- 范围为修订汇报副本第 16、18 页的文字，并交付包含三个研究方向的离线 HTML 架构图。
+- 汇报副本按原有三个方向重写第 16、18 页文案，保留原有文字样式、排版和图片。对照上版确认仅这两页的文字 XML 有改动，PPTX 包完整性检查通过。LibreOffice 渲染复核两页，原移动端截图保留并标示。
+- HTML 内嵌图标与箭头，直接从本地打开。Edge 验证桌面并排、390 像素内嵌视口纵排，打印为每图一页的 3 页。结构检查验证 3 图、12 阶段、26 个图标和页内链接。汇报与预览证据保存在 `output/vehicle-report-ppt-20261125/`。
+
+## 2026-11-25 · 研究方向架构图重绘
+
+- 范围为将三个离线 HTML 架构图改为单屏 16:9，并用分支、汇合和反馈表达车载审计流程。
+- 已生成三个自包含 HTML 文件，并更新原入口。规则标定展示规则、实测和缺口回流。取证归因展示三路归并、两路核对和分流。政策复核展示分级证据、政策与场景汇合及人工复核输出。
+- 验证三页各含一幅 1280×720 图、箭头和内嵌图标，页间链接均可解析。Edge 1280×790 逐页截图确认整图可见，预览保存在 `output/vehicle-report-ppt-20261125/diagram-preview/`。
+
+## 2026-11-25 · 动态失败原因展示
+
+- 范围为排查最新动态采集失败，在任务阶段区域展示后端错误和处理提示。
+- 最新任务的设备为 emulator-5554、Android 15、用户 10，采集前校验报 `installed_apk_mismatch`。上传 APK SHA-256 为 `5ed05e6cb659e89ef55f302c037d78f6aec8b8db4055386b933937ce071df22a`，已验证的夹具 APK 为 `2b73d74b807728c0dc368823a8f12a4ee6f35e7bc8ecb5ac8e13594bb838791c`，保留设备原安装和失败任务。
+- 概览阶段卡片显示失败原因及处理方式。Chrome 对最新失败任务验证概览与动态页，`node --check` 通过，根离线回归 22/22。 [浏览器验证](../output/vehicle-live-device-20261125/existing-1795537578979/verification.json) · [回归结果](../output/vehicle-mismatch-20261125/regression/verification.json)
+
+## 2026-11-25 · 车载静态结果、AI 复核与设备画面
+
+- 范围为在 v2 展示完整任务的静态候选和可读的 AI 复核，排查并提供夹具模拟器交互画面。
+- 审计结论页增加来自现有 static 接口的独立静态候选表，保留既有审计结论与等级筛选。AI 复核按 summary 的 finding_id 映射规则，展示说明、优先级和人工复核状态。任务切换时丢弃过期响应。
+- 原模拟器由后台无窗口方式启动，本轮已启动可见的 VScanner_AAOS_35_P1，确认窗口句柄、API 35、user 10、已安装 APK 摘要与夹具一致，启动 frida-server 和夹具应用。工作台 8773 仍在运行。
+- Chrome 读取真实任务，验证 22 条静态候选、6 条审计结论、6 条 AI 复核和规则映射。`node --check`、`git -c core.whitespace=cr-at-eol diff --check` 与 `tools/python313.ps1 tools/run_regressions.py --out output/vehicle-static-ai-20261125/regression` 通过，回归 22/22。 [浏览器验证](../output/vehicle-static-ai-20261125/existing-1795574672404/verification.json) · [回归结果](../output/vehicle-static-ai-20261125/regression/verification.json)
+- 可见模拟器本轮已完成就绪核验，未代替用户在新一轮前端任务中点击夹具。截图和采集行为需在新任务窗口内操作。
+
 ## 2026-11-25 · 车载流水线自动 UI 探索
 
 - 范围为抽取移动端 UI 树解析能力，将可选的自动交互接入车载实时采集及 v2 工作台，按会话留存动作和停止原因。
@@ -126,6 +273,14 @@
 - 冻结两份 APK 的摘要、主 Activity、直接读取与订阅动作。新增自有设备对照入口和离线评分器。手动参考由 ADB 复现人工标注动作，自动轮使用现有探索器。评分核对同会话前台 Activity、点击和 Hook 事件，订阅须同时见到成功注册与后续回调。
 - 专用 AAOS 35 / user 10 执行四次独立 36 秒采集，均通过 11/11 健康检查。四轮页面 1/1，手动动作均 2/2，自动第一夹具 1/2，第二夹具 0/2。两次离线评分结果逐字节一致。专用只读 AVD 已关闭。 [覆盖报告](../output/vehicle-g1-20261125/coverage.json) · [方法及复现](../vehicle/bench/UI_COVERAGE.md)
 - `tools/python313.ps1 -m unittest vehicle.bench.test_ui_coverage -v` 3/3。缺少输入的命令退出 2。根回归首轮识别出评分入口的错误出口不透明，改为显式标准错误与退出码后，`tools/python313.ps1 tools/run_regressions.py --out output/vehicle-g1-20261125/regression-final` 22/22，`git diff --check` 通过。后续待验证普通车载应用的多页面范围。 [根回归](../output/vehicle-g1-20261125/regression-final/verification.json)
+
+## 2026-11-25 · AAOS 13/14 标定收口与 Android 16 镜像核查
+
+- 范围为隔离交付已取证的 Android 13 和 14 编译权限值，并核查 Android 16 车载构建的可获得性。Android 16 只有在同版本系统和定义包通过原有校验后才写入发布库。
+- 已在独立 `feature/vehicle-permission-calibration` 分支复验并提交 Android 13/14，重建库、发布库及 Room 资产 SHA-256 一致。
+- AAOS 36.1 r01 (`BAA1.261113.001.A1`) 的官方镜像校验通过。专用 AVD 在系统临时目录运行。限定校准器到待标定权限后，Android 16 的 10 条编译声明与 PackageManager 一致，已在独立权限分支入库。 [取证](../output/vehicle-permission-api36-20261125/protection-level-review.json) · [入库核对](../output/vehicle-permission-api36-20261125/publication-verification.json)
+- 发布后权限复核 10/10，Room DAO 回读 180/180，权限单测 4/4，schema 对拍通过。 [回读验证](../output/vehicle-permission-api36-20261125/room-verification.json)
+- 隔离组合根回归 22/22。独立权限分支 21/22，唯一红项来自旧 `main` 的两个前端超长文件。专用 AVD 已关闭。 [组合回归](../output/vehicle-permission-api36-20261125/regression-integrated-final/verification.json)
 
 ## 2026-11-25 · G1 双夹具自动动作覆盖
 

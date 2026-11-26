@@ -23,11 +23,57 @@ TERMS = {
     'android_id': ['设备标识', 'Android ID', 'android_id', 'device identifier'],
 }
 RULE = 'VSC-REVIEW-DISCLOSURE'
+SCHEMA_VERSION = 1
+CLAUSE_BOUNDARY = re.compile(r'[^。！？!?\n；;]+')
+NEGATION_SIGNALS = ('不收集', '不共享', '不向', '不会', '未经', '未收集', '拒绝')
+BASIS_KEYS = ('function', 'precision', 'frequency', 'foreground_background',
+              'recipients', 'retention', 'consent_scope')
+
+
+def locate_clauses(text, available):
+    """Sentence-level clause locations with verbatim char spans (location aid only).
+
+    No subject/recipient/purpose verdict is inferred: every quote is an exact
+    slice of the exported policy.txt and every clause stays human-review-only.
+    """
+    if not available:
+        return [], []
+    terms = sorted({t for group in TERMS.values() for t in group}, key=len, reverse=True)
+    clauses, refs = [], []
+    for match in CLAUSE_BOUNDARY.finditer(text):
+        segment = match.group()
+        stripped = segment.strip()
+        if not stripped:
+            continue
+        lead = segment.find(stripped)
+        start, end = match.start() + lead, match.start() + lead + len(stripped)
+        hits = [t for t in terms if re.search(re.escape(t), stripped, re.IGNORECASE)]
+        if not hits:
+            continue
+        clause_id = f'c{len(clauses) + 1}'
+        quote = text[start:end]
+        clauses.append({'clause_id': clause_id, 'start': start, 'end': end,
+            'quote': quote, 'matched_terms': hits,
+            'negation_signal': any(s in stripped for s in NEGATION_SIGNALS),
+            'subject': None, 'recipients': [], 'purpose': None,
+            'retention': None, 'consent_scope': None,
+            'basis': 'keyword_sentence_span', 'needs_human_review': True})
+        refs.append({'clause_id': clause_id, 'start': start, 'end': end, 'text': quote})
+    return clauses, refs
+
+
+def review_basis(business):
+    """Seven review slots from manifest metadata; missing stays explicit None."""
+    basis = {key: business.get(key) for key in BASIS_KEYS}
+    basis['basis'] = 'manifest_business_context' if business else 'not_provided_in_manifest'
+    basis['needs_human_review'] = True
+    return basis
 
 
 def assess_policy(path, package, apk_sha256, findings, output):
     if path is None:
-        return {'status': 'not_supplied', 'reviews': [],
+        return {'status': 'not_supplied', 'schema_version': SCHEMA_VERSION,
+                'reviews': [], 'clauses': [], 'clause_refs': [],
                 'gaps': ['未提供与受测 APK 绑定的隐私政策；不能判断披露或必要性。']}
     path, output = Path(path).resolve(), Path(output)
     meta = read_json(path)
@@ -53,6 +99,7 @@ def assess_policy(path, package, apk_sha256, findings, output):
     available = extracted['status'] == 'ok' and not agreement
     text, reviews = extracted['text'], []
     business = meta.get('business_context', {})
+    clauses, clause_refs = locate_clauses(text, available)
     for index, finding in enumerate(findings):
         prop, snippets = finding.get('property'), []
         for term in TERMS.get(prop, []):
@@ -66,8 +113,10 @@ def assess_policy(path, package, apk_sha256, findings, output):
             'policy_refs': snippets, 'business_purpose': business.get('purpose'),
             'app_category': business.get('app_category', 'unknown'),
             'necessity': 'human_review_required', 'needs_human_review': True,
+            'review_basis': review_basis(business),
             'basis_refs': [{'kind': 'project_policy', 'path': 'vehicle/policy/REVIEW_POLICY.md', 'clause': 'P1'}]})
     result = {'status': 'available' if available else 'agreement_only' if agreement else 'extraction_failed',
+        'schema_version': SCHEMA_VERSION, 'clauses': clauses, 'clause_refs': clause_refs,
         'package': package, 'apk_sha256': apk_sha256, 'document_kind': meta['document_kind'],
         'source': meta['source'], 'source_sha256': digest(document),
         'text_sha256': digest(output / 'policy.txt'), 'extraction_status': extracted['status'],

@@ -102,6 +102,36 @@ class LocationMatchTests(unittest.TestCase):
                      '{"x":NaN,"loc":"30.274100,120.155100"}'):
             self.assertEqual(0, run(flows=[flow(request_payload={'text': text})])['pair_count'])
 
+    def test_capability_snapshot_declares_formats_and_budgets(self):
+        result = run()
+        cap = result['format_capability']
+        self.assertEqual(1, cap['schema_version'])
+        self.assertEqual(list(location_match.PAIR_FORMS), cap['primary_forms'])
+        self.assertEqual(['single_lat_d6', 'single_lon_d6'], cap['supporting_forms'])
+        self.assertEqual('1e-17', cap['false_match_budget']['pair'])
+        self.assertEqual('1e-9', cap['false_match_budget']['single'])
+        self.assertIn('separate_lat_lon_numeric_fields', cap['rejected_forms'])
+        self.assertTrue(result['experimental_only'])
+        self.assertFalse(result['emits_rule_findings'])
+
+    def test_single_form_is_corroboration_only_never_a_primary_match(self):
+        # 正文只含单个坐标字符串：即使单值哈希命中，也不得产生 pair。
+        for value in (FORM_VALUES['single_lat_d6'], FORM_VALUES['single_lon_d6']):
+            with self.subTest(value=value):
+                self.assertEqual(0, run(flows=[flow(value)])['pair_count'])
+        # 成对形态命中后，单值哈希同时出现才作为佐证字段附加，且不改变 pair_count。
+        both = [FORM_VALUES['pair_d6'], FORM_VALUES['single_lat_d6']]
+        result = run(flows=[flow(both)])
+        self.assertEqual(1, result['pair_count'])
+        corroborations = result['pairs'][0]['supporting_single_forms']
+        self.assertEqual(['single_lat_d6'], [c['form'] for c in corroborations])
+        self.assertTrue(all(c['role'] == 'corroboration_only' for c in corroborations))
+
+    def test_capability_source_is_shared_with_ledger(self):
+        from vehicle.analyze.observation_ledger import UNSUPPORTED_LOCATION_FORMS
+        self.assertEqual(tuple(run()['format_capability']['rejected_forms']),
+                         UNSUPPORTED_LOCATION_FORMS)
+
     def test_only_request_values_not_keys_preview_response_or_truncated_body(self):
         for payload in ({'text': '{}'}, {'text': json.dumps({FORM_VALUES['pair_d6']: True})},
                         {'text': 'x' * (2 * 1024 * 1024 + 1)},

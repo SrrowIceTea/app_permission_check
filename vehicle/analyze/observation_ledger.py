@@ -16,15 +16,11 @@ from core.collector.attribution import is_loose
 from core.collector.identity import uid_of, user_of
 from core.privacy.semantics import read_state
 from vehicle.privacy.location_match import PAIR_FORMS
+from vehicle.privacy.location_capability import REJECTED_FORMS
 
 GENERAL_EGRESS_TYPES = ('android_id', 'contacts')
-UNSUPPORTED_LOCATION_FORMS = (
-    'separate_lat_lon_numeric_fields',
-    'geojson_or_nested_object',
-    'protobuf_or_binary_payload',
-    'single_coordinate_only',
-    'precision_other_than_d6_whole_pair_string',
-)
+# 单一来源：能力边界由 location_capability 声明，避免与匹配器两处漂移。
+UNSUPPORTED_LOCATION_FORMS = tuple(REJECTED_FORMS)
 LIMITS = (
     'diagnostic_only; emits_findings=false; never a policy_violation or a compliance verdict',
     'funnel stages are independent counts, never summed into one detection rate',

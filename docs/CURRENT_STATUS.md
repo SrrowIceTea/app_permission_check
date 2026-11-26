@@ -1,6 +1,6 @@
 # V-Scanner 当前状态与本周工单（唯一入口）
 
-> 更新：2026-11-23｜本轮以 `main` 的 `a71895b` 为基线；§1–2 保留 11-12 工程验收快照。
+> 更新：2026-11-25｜§1–2 保留 11-12 工程验收快照。
 > 仅用于授权测试（自有设备与自有 APK）。本文只写**状态与工单**，不新增任何检测结论。
 > `docs/` 下 16 份计划/方案类文档与根目录那份副本顶部都已标注「历史快照（2026-11-11 归档，
 > 不作当前清单）」——它们保留证据与来龙去脉，但**不再互相替代**；要判断"现在做什么"只看本文。
@@ -8,6 +8,53 @@
 > 就是记录而不是清单。
 
 ---
+
+## 三块可本地验证增量完成（2026-11-26）
+
+> 本轮无 AAOS 设备（当前 emulator-5554 为 Android 17 / API 37 普通 emulator、user 0），
+> 只做纯代码、不接设备、不改默认结论的增量；真机类任务一律未做。详见 [开发日志](DEVELOPMENT_LOG.md#2026-11-26--车载三块可本地验证的未完成项政策结构化--sdk-指纹侧车--定位能力边界)。
+
+- **政策结构化（本地部分完成）**：`assessment.py` 输出 `schema_version=1` + 条款级逐字定位
+  `clauses`/`clause_refs` + 七槽位 `review_basis`；语义必要性仍人工复核，未收紧负控判据。
+- **SDK 库指纹侧车（本地部分完成）**：新增 `core/static/sdk_fingerprint.py`，从 dexfacts 派生
+  伴随产物（身份绑定 + 确定性指纹 + 前缀置信度 + gaps），默认分析/结论层不接线。
+- **定位能力边界（本地部分完成）**：新增 `location_capability.py` 单一来源，单值形态仅作
+  已成立 pair 的佐证；数值叶子/其他精度/protobuf 负控不变，未加 `VSC-GE-location`。
+- 验证：`vehicle.policy.test_assessment` 9/9、`core.static.test_sdk_fingerprint` 7/7、
+  定位相关 56/56；根离线回归 22/22 全 0，工程守卫 exit=0。
+  [根回归](../output/vehicle-local-verify-20261126/regression/verification.json)
+- 仍未做（需真机/样本，见 §3）：独立样本单次读取对齐→30s 阈值、F1 钩子、B2 完整矩阵、
+  YAABSA/G1/A4、PCAPdroid、split APK/OEM、`main` 保护分支（需管理员）。
+
+## 车载 v2 导航与接口复验（2026-11-25）
+
+- 七步导航已调整，桌面、390 像素窄屏及键盘通过。静态、AAOS 35 实时采集和同会话回放均实测通过，核对了源码、关联结论、看板、PDF、证据 ZIP、AI 跳过状态和证据复核摘要接口。根回归 22/22。 [开发和验收记录](DEVELOPMENT_LOG.md#2026-11-25--v2-七步导航改版与接口复验)
+- 证据复核摘要已验证无配置空态及测试摘要加载。
+
+## Android 16 车载编译权限级别标定（2026-11-25）
+
+- 独立 `feature/vehicle-permission-calibration` 分支完成 Android 16 的 10 条权限编译值。AAOS 36.1 r01 预览镜像取证通过，Room 实测回读与该分支发布库 180 行逐字段一致。 [入库](../output/vehicle-permission-api36-20261125/publication-verification.json) · [Room 验收](../output/vehicle-permission-api36-20261125/room-verification.json)
+
+## Android 13 车载编译权限级别标定（2026-11-24）
+
+- 官方 AAOS 33 x86_64 r05（`TEA1.250515.001`）逐条确认 10/10 项权限的编译整数，已同步发布库和 Room 预置资产。Android 13、14、15 合计 170 条已标定，Android 16 的 10 条待取证。 [冻结证据](../vehicle/rules/device_calibration/protection-level-aaos33-r05.json) · [入库核对](../output/vehicle-permission-api33-20261124/publication-verification.json)
+- AAOS 33 / user 10 的 Room DAO 回读与发布库 180 行逐项一致，Android 13 的 10 条整数全部匹配。根离线回归 22/22。 [Room 验收](../output/vehicle-permission-api33-20261124/room-verification.json) · [根回归](../output/vehicle-permission-api33-20261124/regression/verification.json)
+
+## Android 14 车载编译权限级别标定（2026-11-24）
+
+- 官方 AAOS 34 ext9 x86_64 r05（`UAA1.250512.001`）逐条核对 10/10 项权限，编译整数已进入发布库和 Room 预置资产，原有 AOSP 定义来源保留。 [冻结证据](../vehicle/rules/device_calibration/protection-level-aaos34-r05.json) · [入库核对](../output/vehicle-permission-api34-20261124/publication-verification.json)
+- AAOS 34 / user 10 的 Room DAO 回读与发布库 180 行逐项一致，Android 14 的 10 条整数全部通过。根离线回归 22/22。 [Room 验收](../output/vehicle-permission-api34-20261124/room-verification.json) · [根回归](../output/vehicle-permission-api34-20261124/regression/verification.json)
+
+## 车载 v2 动态链路验收（2026-11-24）
+
+- v2 已接通采集回放和实时采集的必填参数。Chrome 分别上传同一自有 APK，回放绑定已封存会话，实时轮在专用 AAOS 35 / user 10 生成新会话，TLS 校验绕过关闭。两轮采集健康均为 10/10，各展示 5 条已关联、5 条已观测、6 条候选。
+- 两轮均从当前任务页面下载 PDF、看板及证据 ZIP。ZIP 各核对 22 项证据摘要，PDF 和看板与该任务产物字节一致。实时轮本机 HTTP 200 回执的正文摘要与当前会话的抓包记录一致，独立回执保存在验收目录。 [回放证据](../output/vehicle-v2-dynamic-20261124/replay-1795502857263/archive-verification.json) · [实时证据](../output/vehicle-v2-dynamic-20261124/live-1795503152306/archive-verification.json)
+- 静态任务复验仍展示 22 条候选，切换回放和实时历史任务时，会话与下载链接随任务切换。两个超长文件已按职责拆分，根离线回归 22/22，工作台组 72/72。 [根回归](../output/vehicle-v2-dynamic-20261124/regression-final/verification.json)
+
+## 独立样本资格与 B2 扩展（2026-11-24）
+
+- Car Stats Viewer 已授权隔离构建在自有 AAOS 35 上复跑，10 项采集健康检查通过。接收端保留 6 条 HTTPS 200 原始正文，5 条对应车速对照。模拟器读回 `-7.25` 和 `13.5` m/s，正文依次为 `7.25` 和 `13.5` m/s。逐条核对时，每条对照回执有 10–121 个先于正文序列化的同值读取候选，正文缺少源读取标识。 [车速验收](../output/b1-carstatsviewer-20261123/trial-speed-20261124-retry/speed-verification.json)
+- VScanBench 扩展清单把车速上传与既有断网补传分别纳入工作流，共 3 条工作流验收。五档窗口仍使用既有两个自有 APK 的 90 对签核标签。独立可计分案例为 0，生产窗口沿用 30 秒。 [扩展重放](../output/b2-carstats-speed-20261124/vscanbench-report.json)
 
 ## G1 双夹具自动动作复验（2026-11-25）
 
@@ -59,7 +106,7 @@ VScanBench 新增同一自有 APK 的只读负控与发送对照。两个 AAOS �
 - 本机 AAOS 已恢复。使用已有 AVD 只读冷启动，独立保存 Android 工具状态。实测 Android 15 / API 35 / user 10，镜像 AAI5.260516.001.A6。隔离 HA 2026.10.4 已启动，测试账户通过 API 鉴权。证据根为 `output/vehicle-aaos-readiness-20261114-213908/`。
 - HA 电量正文与订阅/控制各自建立了新 session。服务端确认电量 73% 和 61%，App 侧各有一条同值完整请求关联，电池模拟已恢复。订阅重连、旧连接消失和两次控制均通过。最终复验为 `ha-body-03/` 与 `ha-socket-02/`。两轮各封存两条当轮服务端回执，`binding-verification.json` 均为 `binding_consistent`，人工签核仍待完成。
 - **YAABSA v1.17.0 AAOS x86_64** 已从 [官方发布资产](https://api.github.com/repos/Vito0912/yaabsa/releases/assets/724915285) 续传，签名及装机摘要 `5a00d096…f58873` 已核验。设备 Wi-Fi 已启用但未连接时，客户端将本地 Audiobookshelf 标为不可达。接回 `AndroidWifi` 后，原生车载媒体库加载合成音频，前后台各完成一次播放和暂停。独立服务端确认两次进度变化、累计听音分别增加 13.316 秒与 13.429 秒，暂停对照进度保持稳定。服务端进度与媒体会话暂停位置分别差 6.994 秒和 7.184 秒，未达到本轮 4 秒对齐判据。新通用采集健康，审计为 `no_target_general_reads`，业务回执保存在外部验收记录，采集会话绑定仍不完整。旧版专用发送契约仍只覆盖 v1.16.0。证据在 `yaabsa-v117-business/playback-03/verification.json`。
-- 权限库共 180 行，Android 13/14/15/16 分别为 10/10/150/10 行。11-18 将 AAOS 35 A6 的 **150/150** 条编译整数作为独立设备来源纳入发布库和 Room 资产。A6 模拟器覆盖升级和应用进程重启后，Room 两次回读逐条匹配冻结证据。Android 13/14/16 的 30 条仍待对应版本取证。 [入库验证](../output/vehicle-permission-import-20261118/verification.json) · [运行验收](../output/vehicle-permission-room-20261118/device-003/verification.json)
+- 权限库共 180 行，Android 13/14/15/16 分别为 10/10/150/10 行。11-18 将 AAOS 35 A6 的 **150/150** 条编译整数作为独立设备来源纳入发布库和 Room 资产。A6 模拟器覆盖升级和应用进程重启后，Room 两次回读逐条匹配冻结证据。该轮未采集 Android 13/14/16 的编译声明。 [入库验证](../output/vehicle-permission-import-20261118/verification.json) · [运行验收](../output/vehicle-permission-room-20261118/device-003/verification.json)
 - 基准、盲评、政策评估、SDK 调用栈归属、AAOS 35 覆盖表与进程生命周期监测均已有实现。仍缺独立参考与样本评测、SDK 库指纹侧车、扩展政策结构化、跨版本设备验收及晚启动/重启捕获。类加载归因、UI 探索覆盖率、分段自愈、独立设备侧连接对照和定位格式扩展仍无完整车载交付。普通第三方设备入口仍会拒绝 split APK，OEM 适配待实测。
 - 车载账本按目标包和会话排除无归属的事件及回执。修复了 Windows 路径含 `#` 时无法只读加载显式规则快照的问题。新增 HA 专用验收在采集结束前封存独立 REST 回执。根离线回归 22/22 组通过，证据见 `output/vehicle-kickoff-host-final-20261114-214942/verification.json`。
 
@@ -132,7 +179,7 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0
 | # | 未完成项 | 来源 | 为什么不在本周 A 组 |
 | --- | --- | --- | --- |
 | 1 | 车载 B1 已签核两个自有 APK 的五档重放。Car Stats Viewer 已验收车速上传与 5 条断网行驶点补传 | [车载复核](../vehicle/bench/WINDOW_CALIBRATION.md) + mobile「未完成」 | 独立应用窗口仍缺可唯一对齐到单次 VHAL 读取的延迟证据，移动 30000ms 待实测 |
-| 2 | `protection_level_value`：车载 Android 15 的 150 条已入库；Android 13/14/16 的 30 条待补。移动 40 条未断言 | 本文「车载复核」+ mobile「未完成」 | 各版本使用各自来源 |
+| 2 | `protection_level_value`：车载 Android 13/14/15 共 170 条已入库，Android 16 的 10 条待补。移动 40 条未断言 | 本文「Android 13 车载编译权限级别标定」+ mobile「未完成」 | 各版本使用各自来源 |
 | 3 | B2 VScanBench 最小版已交付，完整场景矩阵待扩展 | [车载基准](../vehicle/bench/README.md#b2-vscanbench-最小基准) | 新场景仍需独立参考与负控 |
 | 4 | F1 类加载归因（无 `hook_classload.js`） | AGENTS「未做」 | 需新钩子 + 设备验收 |
 | 5 | G1 自有夹具最小覆盖率基准已完成 | [四轮对照](../vehicle/bench/UI_COVERAGE.md) | 普通车载应用的多页面覆盖待验证 |

@@ -9,8 +9,10 @@ from core.privacy.semantics import read_state
 from vehicle.analyze.event_ref import pair_refs
 from vehicle.analyze.pair_ambiguity import annotate_candidates
 from vehicle.privacy.location_payload import request_values
+from vehicle.privacy.location_capability import (PRIMARY_FORMS, SUPPORTING_FORMS,
+                                                 capability_snapshot)
 
-PAIR_FORMS = ('pair_d6', 'pair_d6_lonlat', 'pair_raw', 'pair_raw_lonlat', 'geo_d6')
+PAIR_FORMS = PRIMARY_FORMS  # 单一来源在 location_capability，保持本模块既有名字。
 ATTRIBUTIONS = ('app_process_hook', 'system_sample', 'native_http_write')
 LIMITS = [
     'experimental_only; no registered location egress rule; no findings emitted',
@@ -60,13 +62,33 @@ def _forms(row):
             return {}, 'invalid_location_forms'
         form = item.get('form')
         if form not in PAIR_FORMS:
-            continue  # Never use single_lat_d6 or single_lon_d6, even together.
+            continue  # Never use single_lat_d6 or single_lon_d6 as a primary match.
         if not _digest(item.get('hash'), item.get('len')) or form in result:
             return {}, 'invalid_location_forms'
         result[form] = (item['hash'], item['len'])
     if result.get(row['location_form']) != (row['value_hash'], row['value_len']):
         return {}, 'primary_location_form_conflict'
     return result, None
+
+
+def _supporting_evidence(row, values):
+    """Single-coordinate forms are corroboration ONLY, never a primary match.
+
+    They carry ~1e-9 false-match budget (vs 1e-17 for pairs), so they are read
+    from the same hashed leaf set but emitted solely as an annotation on a pair
+    that was already established by a complete coordinate-pair form.
+    """
+    forms = row.get('location_forms')
+    if not isinstance(forms, list):
+        return []
+    found = []
+    for item in forms:
+        if not isinstance(item, dict) or item.get('form') not in SUPPORTING_FORMS:
+            continue
+        if _digest(item.get('hash'), item.get('len')) and (item['hash'], item['len']) in values:
+            found.append({'form': item['form'], 'hash': item['hash'], 'len': item['len'],
+                          'role': 'corroboration_only', 'false_match_budget': '1e-9'})
+    return found
 
 
 def _deduplicate(rows, diagnostics, process_scoped=False):
@@ -152,9 +174,11 @@ def evaluate(reads, flows, package, session, *, window_ms=30000):
                 'payload_provenance': provenance,
                 'matched_forms': [{'form': name, 'hash': forms[name][0], 'len': forms[name][1]}
                                   for name in matched],
+                'supporting_single_forms': _supporting_evidence(read, values),
                 'attribution_loose': is_loose(flow), 'origin_proven': False})
     ambiguous = annotate_candidates(pairs)
     return {'schema_version': 1, 'experimental_only': True, 'emits_rule_findings': False,
+        'format_capability': capability_snapshot(),
         'package': package, 'session_id': session, 'window_ms': window_ms,
         'window_calibrated_for_location': False,
         'status': 'content_candidates' if pairs else 'not_observed_within_supported_scope',

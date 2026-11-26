@@ -15,6 +15,7 @@ CHECKS = [
     # 不要让注释里的数字漂——2026-11-12 之前这里写死过 21，加组后就对不上）。
     ('completion', '.', [sys.executable, '-m', 'unittest', 'test_completion',
                          'vehicle.rules.python.test_permission_levels',
+                         'core.static.test_sdk_fingerprint',
                          'tools.test_regression_manifest', 'tools.test_engineering_guards']),
     ('rules-contract', 'core', [sys.executable, '-m', 'unittest', 'test_rules_contract']),
     # event_store 的存储不变量此前错位在仓库根的 test_completion.py 里（§8.2 B-5）——
