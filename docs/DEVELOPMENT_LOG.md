@@ -144,3 +144,13 @@
 - `mobile/tools/run_mobile_checks.py` 63/63，`tools/check_mobile_branch.py` 26/26。 [移动离线回归](../output/mobile-window-20261126/mobile-checks-native/verification.json) · [移动分支回归](../output/mobile-window-20261126/mobile-branch-native/verification.json)
 - `-m mobile.lab.window_benchmark_capture` 在 API 36 非 root 仿真环境封存四组，专用夹具已卸载，转发和模拟器已释放。两次 `-m mobile.lab.window_benchmark` 重放报告摘要相同。5/10/30 秒漏掉约 36 秒的旧批次发送，60/120 秒纳入，五档均误配同值 B。 [设备会话](../output/mobile-window-20261126/real-07/suite.json) · [清理记录](../output/mobile-window-20261126/device-cleanup-7.json) · [窗口验收](../output/mobile-window-20261126/verification.json)
 - 待办为独立移动应用的窗口取证和生产读取 Hook 的 API 36 兼容性复验。沿用生产窗口 30 秒。
+
+## 2026-11-26 · 移动端读取 Hook 稳定性复验（进行中）
+
+- 范围：在自有 API 36 手机模拟器（指纹与 real-06 相同、user build、nonroot shell）上缩小 Java 读取 Hook 的 ART/JIT 崩溃复现条件，验证稳定的真实读取观测方式；改动仅在 `feature/mobile-window-benchmark` worktree，证据落 `output/mobile-hookstab-20261126/`（不入库）。
+- 方法：新增受控编排（起驱动→等 ARMED→触发单次真实读取→抓崩溃缓冲与 pid→收尾），同设备同夹具对照 Java ArtMethod 替换 Hook 与 native observer。判据为进程存活、PRIVACY_READ 事件、日志完整三态。
+- 复现结论：Java ArtMethod 替换 Hook（`real-06` 的单 API window-benchmark bundle，SHA `5297c1b1…`）在 API 36 本轮 **0/17 崩溃**（6 轮短窗口 + 8 轮 35s 长窗口 + 3 轮单进程 20 次读取压力），每轮均抓到真实 `PRIVACY_READ`、进程存活、日志完整；在 API 37.2（16K 页）本轮 **1/4 崩溃**（`api37-java-02`：`SIGSEGV/SEGV_ACCERR @ Jit thread pool` + `detached: connection-terminated`，与 real-06 同型）。同型崩溃在 API37 被稳定复现一次，印证 M042/D-054b 的"概率性 ART/JIT 竞态、未消除"。不声称已修复。
+- 稳定观察方式：native observer（`hook_window_benchmark.bundle.js`，SHA `4baff714…`，零 ArtMethod 替换，`Interceptor.attach(__android_log_buf_write)`）在 API 36 3/3、API 37.2 3/3 全部存活，每轮 2 条真实读取事件、驱动 passed。边界：它依赖自有夹具显式日志标记，独立第三方 App 的真实读取观测仍需 Java 替换路线并按分段采集+覆盖率记账兜底。
+- 设备：API36 与 real-06 指纹一致（`…BE4B.251210.005:user/release-keys`）；API37.2 为 `…CP41.260831.007:userdebug/dev-keys`（16K 页）。两个 AVD 用 `-read-only` 隔离，均由私有夹具进程收尾、转发已释放。
+- 验证命令（仅授权测试）：`python -u output/mobile-hookstab-20261126/repro.py <label> <bundle> <token> read-a <settle>`；多轮 `repro_loop.py <rounds> <settle>`；压力/A-B `repro_stress.py`。逐轮 `result.json` 与 [验收汇总](../output/mobile-hookstab-20261126/acceptance-summary.json)。
+- 证据全部在 `output/mobile-hookstab-20261126/`（不入库）。本次为设备复验与脚本编排，未改产品代码；`repro*.py` 属一次性复现脚本，不进提交。
