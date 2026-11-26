@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from pathlib import Path
@@ -15,16 +15,14 @@ import time
 import uuid
 
 from core.privacy.semantics import obtained_reads
-from mobile.lab.window_benchmark import INPUTS, OBSERVATION, PACKAGE, ROOT, STEPS, check, load, rows, save, sha, truth
-
-sys.path.insert(0, str(ROOT / "mobile/tools"))
-from device_capture import pick_free_port, wait_listener  # noqa: E402
-from device_environment import AdbClient, collect_device_profile, resolve_adb  # noqa: E402
-from device_provenance import host_frida_version, inspect_gadget  # noqa: E402
-
-ACTIVITY = PACKAGE + "/.WindowBenchmarkActivity"
-GADGET_PORT = 27044
-DEVICE_HTTP = "tcp:18960"
+from mobile.lab.capture_common import (
+    DEVICE_HTTP, GADGET_PORT, AdbClient, assert_device_apk, capture_env, cleanup, command,
+    host_frida_version, inspect_gadget, millis, pick_free_port, prepare_device, read_actor,
+    resolve_adb, sample_until, start_activity, start_process, wait_listener, write_hook_plan,
+)
+from mobile.lab.window_benchmark import (
+    INPUTS, OBSERVATION, PACKAGE, ROOT, STEPS, check, load, rows, save, sha, truth,
+)
 
 
 class Receiver(BaseHTTPRequestHandler):
@@ -60,75 +58,8 @@ class Receiver(BaseHTTPRequestHandler):
         self.wfile.write(reply)
 
 
-def millis():
-    return time.time_ns() // 1_000_000
-
-
-def command(adb, *args):
-    result = adb(*map(str, args), timeout=35)
-    check(result.returncode == 0, f"ADB {args[:3]}: {result.stderr.strip()}")
-    return result.stdout.strip()
-
-
-@contextmanager
-def cleanup(action, *args):
-    try:
-        yield
-    except BaseException:
-        try:
-            action(*args)
-        except Exception as error:
-            print(f"mobile_window_cleanup_failed: {error}", file=sys.stderr)
-        raise
-    else:
-        action(*args)
-
-
 def uninstall_fixture(adb, user):
     check("Success" in command(adb, "shell", "pm", "uninstall", "--user", user, PACKAGE), "夹具卸载失败")
-
-
-def sample_until(predicate, processes, description, seconds=25):
-    end = time.monotonic() + seconds
-    while time.monotonic() < end:
-        check(all(child.poll() is None for child in processes), f"采集子进程提前退出，查看日志：{description}")
-        result = predicate()
-        if result:
-            return result
-        time.sleep(.25)
-    raise ValueError(f"采集等待超时：{description}")
-
-
-def start_process(stack, args, logfile, env, stop_file):
-    log = stack.enter_context(logfile.open("x", encoding="utf-8"))
-    process = subprocess.Popen(args, cwd=ROOT, env=env, stdout=log, stderr=log)
-
-    def close():
-        if process.poll() is None:
-            stop_file.touch()
-            try:
-                process.wait(timeout=20)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
-                raise ValueError(f"采集器强制停止，检查 {logfile.name}")
-        check(process.returncode == 0, f"采集器异常退出，检查 {logfile.name}")
-
-    stack.enter_context(cleanup(close))
-    return process
-
-
-def activity(adb, user, *extras):
-    output = command(adb, "shell", "am", "start", "-W", "--user", user, "-n", ACTIVITY, *extras)
-    check("Error" not in output, "夹具 Activity 启动失败")
-
-
-def read_actor(adb, pid, token):
-    output = command(adb, "shell", "logcat", "-d", "--pid", pid, "-v", "raw", "-s", "VScanWindow:I")
-    records = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
-    records = [row for row in records if row.get("run") == token]
-    check(not any(row.get("event") == "error" for row in records), "夹具动作报告失败")
-    return records
 
 
 def execute_steps(adb, user, case, token, pid, folder, children):
@@ -138,7 +69,7 @@ def execute_steps(adb, user, case, token, pid, folder, children):
         if index == 2 and case in ("delayed", "cross_batch"):
             time.sleep(36)
         started = millis()
-        activity(adb, user, "--es", "benchmark_run", token, "--es", "benchmark_step", step)
+        start_activity(adb, user, run=token, step=step)
         read_count += int(step.startswith("read-"))
 
         def delivered():
@@ -161,24 +92,19 @@ def capture_case(adb, user, apk_sha, case, token, folder, bundle):
     for name in ("reads.jsonl", "flows.jsonl", "egress.jsonl"):
         (folder / name).touch()
     command(adb, "shell", "am", "force-stop", "--user", user, PACKAGE)
-    activity(adb, user)
+    start_activity(adb, user)
     pid = command(adb, "shell", "pidof", PACKAGE)
     check(pid.isdecimal(), "夹具主进程未就绪")
     try:
         with ExitStack() as stack:
             server = stack.enter_context(HTTPServer(("127.0.0.1", 0), Receiver))
             server.folder, server.token, server.receipts = folder, token, []
-            thread = threading.Thread(target=server.serve_forever)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             stack.callback(thread.join)
             stack.callback(server.shutdown)
             proxy_port, stop_proxy = pick_free_port(), folder / ".proxy-stop"
-            env = adb.environment()
-            env.update(PYTHONUTF8="1", VSCAN_SESSION=token, VSCAN_SERIAL=adb.serial,
-                       VSCAN_PACKAGES=PACKAGE, VSCAN_STRICT_PACKAGE_SCOPE="0",
-                       VSCAN_ATTRIB_TARGET_CHECK="1", VSCAN_ATTRIB_CONSERVATIVE="1",
-                       VSCAN_FLOW_LOG=str(folder / "flows.jsonl"), VSCAN_ATTRIB_SOURCES=str(folder / "reads.jsonl"),
-                       VSCAN_STOP_FILE=str(stop_proxy), VSCAN_EVENT_DB=str(folder / "flows.sqlite"))
+            env = capture_env(adb, folder, token)
             proxy = start_process(stack, [sys.executable, "-u", "-c",
                 "from mitmproxy.tools.main import mitmdump; mitmdump()", "-s", str(ROOT / "mobile/traffic/addon_mobile.py"),
                 "--mode", f"reverse:http://127.0.0.1:{server.server_port}", "--listen-host", "127.0.0.1",
@@ -187,8 +113,7 @@ def capture_case(adb, user, apk_sha, case, token, folder, bundle):
             check(wait_listener(proxy_port, proxy), "本机反向代理未就绪")
             command(adb, "reverse", "--no-rebind", DEVICE_HTTP, f"tcp:{proxy_port}")
             stack.enter_context(cleanup(command, adb, "reverse", "--remove", DEVICE_HTTP))
-            plan = folder / "hook-plan.json"
-            save(plan, [{"script": str(bundle), "output": "reads.jsonl"}])
+            plan = write_hook_plan(folder, bundle)
             stop_hook = folder / ".hook-stop"
             hook = start_process(stack, [sys.executable, "-u", str(ROOT / "mobile/tools/device_hook_driver.py"),
                 "--plan", str(plan), "--session-dir", str(folder), "--session", token,
@@ -223,16 +148,10 @@ def capture_case(adb, user, apk_sha, case, token, folder, bundle):
 
 def capture(serial, apk, out):
     adb = AdbClient(resolve_adb(), serial)
-    check(re.fullmatch(r"emulator-\d+", adb.select_device()) and command(adb, "shell", "getprop", "ro.kernel.qemu") == "1",
-          "仅允许明确选择的自有手机模拟器")
-    api = command(adb, "shell", "getprop", "ro.build.version.sdk")
-    user = command(adb, "shell", "am", "get-current-user")
-    profile = collect_device_profile(adb, "gadget")
-    check(profile["nonroot_shell_observed"] and "automotive" not in command(adb, "shell", "getprop", "ro.build.characteristics"),
-          "需要非 root 手机模拟器")
+    api, user, profile = prepare_device(adb)
     artifact = inspect_gadget(apk, profile, GADGET_PORT, host_frida_version())
-    packages = command(adb, "shell", "pm", "list", "packages", "--user", user, PACKAGE)
-    check(f"package:{PACKAGE}" not in packages.splitlines(), "设备已有同包应用，保留其安装与数据")
+    check(f"package:{PACKAGE}" not in command(adb, "shell", "pm", "list", "packages", "--user", user, PACKAGE).splitlines(),
+          "设备已有同包应用，保留其安装与数据")
     out.mkdir(parents=True, exist_ok=False)
     save(out / "device.json", {**profile, "api": api, "user": user, "artifact": artifact})
     apk_sha = sha(apk.read_bytes())
@@ -244,10 +163,7 @@ def capture(serial, apk, out):
     shutil.copyfile(built, bundle)
     check("Success" in command(adb, "install", "--user", user, apk), "自有 APK 安装失败")
     with cleanup(uninstall_fixture, adb, user):
-        path = command(adb, "shell", "pm", "path", "--user", user, PACKAGE)
-        check(path.startswith("package:/") and "\n" not in path, "装机 APK 路径不明确")
-        installed = command(adb, "shell", "sha256sum", path.removeprefix("package:"))
-        check(installed.split()[0] == apk_sha, "装机 APK 摘要不一致")
+        assert_device_apk(adb, user, apk_sha)
         endpoint = f"tcp:{GADGET_PORT}"
         command(adb, "forward", "--no-rebind", endpoint, endpoint)
         with cleanup(command, adb, "forward", "--remove", endpoint):

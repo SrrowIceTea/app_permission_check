@@ -494,3 +494,11 @@
 - 旧四组回归（`legacy-four-v2` + `legacy-four-replay-v2`）：read_only 全 0、immediate 全 1、delayed/cross_batch 30 秒内漏配、60 秒起命中；`send-a` body 逐字段核对为三字段。
 - 验证：`unittest mobile.lab.test_window_benchmark mobile.lab.test_offline_control` 17/17；`run_mobile_checks.py` 63/63；`git diff --check` 干净。
 - 过程修正（如实记录）：① 可达性判断最初只看地址不看链路状态，飞行模式下 `eth0 DOWN` 仍挂 10.0.2.15 会误判"断网未生效"；② 设备日志 `ts` 与宿主步骤时间来自两套时钟（偏差约 250ms），跨时钟比大小会假失败，改为用步骤顺序 + 探针结果做顺序证据；③ `offline_control_capture.py` 超 300 行，接收端按职责拆到 `resend_receiver.py`。
+
+## 2026-11-27 · 移动采集脚本公共层抽取（完成，新三组设备端重跑待补）
+
+- 范围：把 `window_benchmark_capture.py` 与 `offline_control_capture.py` 中重复的 adb 包装、子进程生命周期、动作读取、采集环境注入抽到 `mobile/lab/capture_common.py`；两份脚本只保留各自的接收端语义与步骤编排。公共层 148 行，两份脚本 194/197 行（均 ≤300），重复实现约 150 行降为一份。
+- 顺带修复审查项：新采集脚本改用 `adb.environment()`（此前 `os.environ.copy()` 会丢 `VSCAN_ADB`/`ANDROID_SERIAL`）；`sys.path` 注入集中到公共层一处（此前两处重复插入）；`am start` 统一检查输出中的 `Error`（此前只有旧脚本查）。
+- 设备回归（API36，`output/mobile-refactor-20261127/legacy-four*`）：旧四组采集 + 重放全过，五档结果与重构前逐档一致（read_only 全 0、immediate 全 1、delayed/cross_batch 30 秒内漏配、60 秒起命中）。
+- 未完成：新三组（后台/断网）在重构后的设备端重跑被环境打断。共享仓库有并行会话在反复重启 adb server、清理模拟器，采集在 `bg_read_only`/`bg_send` 完成后掉线（`device 'emulator-5566' not found`），未拿到完整 suite。离线 `unittest mobile.lab.test_window_benchmark mobile.lab.test_offline_control` 17/17；新路径与旧路径共用同一套 helper，差异仅在接收端与步骤表。待设备空出后补一次 `-m mobile.lab.offline_control_capture` + `-m mobile.lab.offline_control` 重放。
+- 既有失败（非本次引入）：`run_mobile_checks.py` 62/63，`hooks_parity` 报 `stack_capture.js` 两侧不一致（车辆侧新增 `headLimit`，移动侧副本未同步），属并行会话的改动范围，本次未处理。
