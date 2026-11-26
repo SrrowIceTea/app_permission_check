@@ -138,3 +138,9 @@ A、B 独立逐题复核，同意 10 项同源配对和 35 项有反证的配对
 恢复连接后的同一次 HTTPS POST 携带全部 5 条离线行驶点。以 SQLite 主键 `driving_point_epoch_time` 对照保留的原始正文，记录时间、距离、能耗、起止标记和电量比例逐项吻合，每个点仅出现一次。用同设备时钟计算，打包时这 5 条记录已有 **55.748–64.011 秒**。采集健康 10 项通过，挡位、车速和 Wi-Fi 恢复已读回，实验 APK 已卸载。 [原始正文](../../output/b1-carstatsviewer-20261123/queue-trial-01/request-bodies/3740ee609fa399b73427709f918e8ecc971ff62c58fbd3f8769d68aff249479b.json) · [复跑入口](../../output/b1-carstatsviewer-20261123/run_queue.ps1)
 
 行驶点时间标识数据库记录，点内距离和能耗累积自一个区间，电量比例由电量与容量计算。本轮证据可定位到原始行驶点，单次 VHAL 读取仍缺独立标识，`window_scored=false`。现有候选初筛中，Auto4Android 的遥测协议使用批量车辆字段，GeelyDiagnostics 上游描述的是本机报告导出，尚未发现符合单次读取延迟取证要求的替代路径。 [Auto4Android 协议](https://github.com/DigitalDistraction/Auto4Android/blob/main/docs/protocol.md#app--bridge-vehicle_data) · [GeelyDiagnostics 项目说明](https://github.com/lisindima/GeelyDiagnostics)
+
+## 2026-11-24 复跑并保存车速原始正文
+
+复用已授权的固定源码构建，校验装机 APK 摘要，在自有 AAOS 35 上分别设置并读回 `-7.25` 和 `13.5` m/s。接收端原始 HTTPS 正文与回执摘要一致，6 条中有 2 条车速为 `7.25`，3 条为 `13.5`，另有 1 条为基线车速。两段各记录 140、141 条同值读取，5 条对照回执逐条筛出的候选数分别为 45、99、10、66、121。读取与序列化的时间先后只用于筛选候选，保留每条候选的事件编号。 [车速重放](../../output/b1-carstatsviewer-20261123/trial-speed-20261124-retry/speed-verification.json) · [构建身份](../../output/b1-carstatsviewer-20261123/apk-build.json)
+
+本轮两种来源检查分别覆盖车速绝对值与行驶点补传。Car Stats Viewer 正文仍缺把单条上传速度唯一关联到一次读取的标识，继续记作业务工作流。B1 仍需具备读取级标识、短延迟、长延迟和独立负控的样本。 [VScanBench 扩展报告](../../output/b2-carstats-speed-20261124/vscanbench-report.json)

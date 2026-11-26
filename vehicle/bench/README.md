@@ -190,6 +190,16 @@ $run = 'output/vscanbench-read-send-rerun'
 .\tools\python313.ps1 -m vehicle.bench.read_send_control --source $run --out "$run/control-verification.json"
 ```
 
+### Car Stats Viewer 车速上传
+
+扩展清单通过 `carstats_speed` 引用已冻结的车速验收摘要。重放时重新读取 AAOS 采集、动作读回和接收端原始 HTTPS 正文，核对车速的绝对值转换，并逐条列出先于序列化的同值读取候选。它和断网行驶点补传是同一独立应用的两条业务工作流，均为 `window_scored=false`。 [车速验收与资格](WINDOW_CALIBRATION.md#2026-11-24-复跑并保存车速原始正文)
+
+```powershell
+.\tools\python313.ps1 -m vehicle.bench.vscanbench `
+  --manifest output/b2-carstats-speed-20261124/vscanbench.json `
+  --out output/vscanbench-replay/with-carstats-speed.json
+```
+
 ### AAOS 后台读取与发送对照
 
 同一自有 debug APK 在两个新会话先显示主 Activity，再按 Home 切到桌面。每轮使用三个 `dumpsys activity activities` 原始快照确认同一个主屏 Activity 从 `RESUMED` 转为 `STOPPED`、不可见，并在动作前后核对该状态。回放检查快照的时间、摘要、用户、会话和动作令牌。后台证据来自夹住已知动作的两个观测点。

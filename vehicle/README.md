@@ -20,7 +20,7 @@ AAOS 35 三个应用家族的业务复验、隔离服务与 agent 初评见 [P1_
 
 ## 本机运行
 
-车载 Web 工作台已接入：`./vehicle.ps1 web`，访问 `http://127.0.0.1:8773`。
+车载 Web 工作台已接入：`./vehicle.ps1 web`，访问车载 v2 工作台 `http://127.0.0.1:8773/v2/`。
 复用移动端界面布局，车载规则与流水线独立；支持静态分析、采集重放和已安装授权 App 的新采集。
 入口、前提及边界见 [frontend/README.md](frontend/README.md)。
 

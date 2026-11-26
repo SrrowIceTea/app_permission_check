@@ -124,7 +124,7 @@ start-all.bat -Stop            :: 停掉本脚本启动的服务
 ### 车载端一键启动（AAOS）
 
 ```cmd
-start-vehicle.bat            :: 起车载工作台并打开 http://127.0.0.1:8773/
+start-vehicle.bat            :: 起车载工作台并打开 http://127.0.0.1:8773/v2/
 start-vehicle.bat -NoBrowser :: 不起浏览器
 start-vehicle.bat -Status    :: 看端口/健康
 start-vehicle.bat -Stop      :: 只停车载端，不动移动端服务

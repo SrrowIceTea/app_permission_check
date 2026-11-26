@@ -39,10 +39,10 @@ def snapshot(source):
             return [dict(row) for row in db.execute(SQL)]
 
 
-def load_receipts(source):
+def verified_requests(source):
+    """Yield independently received requests after checking the retained bytes."""
     receipts = load_jsonl(source / 'receiver.jsonl')
     require(receipts, '缺少 HTTPS 接收端回执。')
-    sent = []
     for receipt in receipts:
         sha = receipt['request_sha256']
         require(isinstance(sha, str) and re.fullmatch(r'[0-9a-f]{64}', sha), '正文摘要格式无效。')
@@ -50,10 +50,17 @@ def load_receipts(source):
         require(receipt['http_status'] == 200 and digest(path) == sha
                 and path.stat().st_size == receipt['request_size'], f'正文与 HTTPS 回执不符：{sha}。')
         doc = read_json(path)
-        require(doc.get('timestamp') == receipt['body_timestamp_ms'] and
+        require(isinstance(doc, dict) and doc.get('timestamp') == receipt['body_timestamp_ms'] and
                 doc.get('apiVersion') == receipt['api_version'] == '2.1' and
                 doc.get('appVersion') == receipt['app_version'],
                 f'HTTPS 正文版本或时间与回执不符：{sha}。')
+        yield receipt, doc
+
+
+def load_receipts(source):
+    receipts, sent = [], []
+    for receipt, doc in verified_requests(source):
+        receipts.append(receipt)
         sent.extend((receipt, point) for point in doc.get('drivingPoints') or [])
     return receipts, sent
 

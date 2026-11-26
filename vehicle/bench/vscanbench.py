@@ -8,6 +8,7 @@ from core.io_utils import load_jsonl
 from vehicle.analyze.value_match import match_content
 from vehicle.bench.background_control import replay as replay_background
 from vehicle.bench.carstats_queue import replay as replay_queue
+from vehicle.bench.carstats_speed import replay as replay_speed
 from vehicle.bench.labels import adjudicated_labels, reference_identity
 from vehicle.bench.read_send_control import replay as replay_read_send
 from vehicle.bench.window_calibration import calibrate, supports_token_replay
@@ -173,6 +174,16 @@ def run(manifest, root=ROOT):
         if any(control[key]['session_id'] in sessions for key in ('read_only', 'positive')):
             raise ValueError('后台对照必须来自独立的采集会话。')
         workflows.append({'id': 'background-read-send-control', **control, 'source': reference})
+    if 'carstats_speed' in doc:
+        reference = doc['carstats_speed']
+        proof = bound(reference, root)
+        speed = replay_speed(proof.parent, proof)
+        bound(reference, root)
+        sessions.add(speed['session_id'])
+        workflows.append({'id': 'carstats-speed-upload', 'session_id': speed['session_id'],
+                          'http_200': speed['http_200'], 'phases': speed['phases'],
+                          'window_scored': speed['window_scored'],
+                          'read_pair_eligibility': speed['read_pair_eligibility'], 'source': reference})
     return {
         'schema_version': 1, 'status': 'passed', 'scope': 'owned_fixture_engineering_pilot',
         'manifest_sha256': digest(manifest), 'fixtures': fixtures, 'independent_pair_cases': 0,

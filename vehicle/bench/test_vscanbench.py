@@ -6,7 +6,7 @@ import unittest
 from contextlib import closing
 from pathlib import Path
 
-from vehicle.bench import carstats_queue, read_send_control, vscanbench
+from vehicle.bench import carstats_queue, carstats_speed, read_send_control, vscanbench
 from vehicle.pipeline.contracts import AuditError, digest, write_json
 
 
@@ -133,6 +133,38 @@ class ReadSendControlTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, '正文、归因流或 HTTP 回执'):
                 read_send_control.verify_receiver(out, 'plain', action, actor, [flow])
 
+
+class SpeedReplayTests(unittest.TestCase):
+    def test_same_value_reads_remain_candidates_for_each_receipt(self):
+        actions = [{'speed_mps': value, 'readback_mps': value, 'command_started_ms': start,
+                    'command_finished_ms': start + 1} for value, start in ((-7.25, 10), (13.5, 30))]
+        reads = [{'evt_id': event, 'host_received_ts': t, 'ts': t, 'value_raw': value}
+                 for event, t, value in ((1, 12, '-7.25'), (2, 13, '-7.25'), (3, 25, '-7.25'), (4, 32, '13.5'))]
+        receipts = [{'speed_mps': speed, 'host_received_ms': t, 'body_timestamp_ms': t,
+                     'request_sha256': str(t)} for speed, t in ((7.25, 20), (13.5, 40))]
+        phases = carstats_speed.replay_phases(actions, reads, receipts)
+        self.assertEqual([1, 2], phases[0]['receipts'][0]['same_value_read_event_ids'])
+        self.assertEqual([4], phases[1]['receipts'][0]['same_value_read_event_ids'])
+        self.assertEqual(7.25, phases[0]['request_speed_mps'])
+        with self.assertRaisesRegex(ValueError, '没有同阶段'):
+            carstats_speed.replay_phases(actions, reads[2:], receipts)
+
+    def test_replay_rejects_mismatch_between_receipt_and_body_speed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder)
+            bodies = source / 'request-bodies'
+            bodies.mkdir()
+            body = bodies / 'request.json'
+            write_json(body, {'timestamp': 12, 'apiVersion': '2.1', 'appVersion': 'lab', 'speed': 7.25})
+            checksum = digest(body)
+            size = body.stat().st_size
+            body.rename(bodies / f'{checksum}.json')
+            record = {'request_sha256': checksum, 'request_size': size,
+                      'http_status': 200, 'body_timestamp_ms': 12, 'api_version': '2.1',
+                      'app_version': 'lab', 'path': carstats_speed.ENDPOINT, 'speed_mps': 13.5}
+            (source / 'receiver.jsonl').write_text(json.dumps(record) + '\n', encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, '正文与独立接收端回执'):
+                list(carstats_speed.online_speed_requests(source))
 
 if __name__ == '__main__':
     unittest.main()
