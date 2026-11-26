@@ -27,32 +27,36 @@ vscanner/
 7. **禁止再让用户做环境探测**（Phase 0 已完成）。
 8. **单文件 ≤300 行**；超了按职责拆分（hooks/traffic/dashboard 都有拆分的先例），拆后必须回归验证。
 9. **每次开发都写开发日志**：开始前在 [docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md) 登记范围；结束前补齐实际改动、验证命令与结果、证据路径、失败或待办。代码、规则、配置和验收工具改动都适用。日志到 300 行时转存分卷，主文件保留索引及最新记录。
-10. **日常改动走功能分支 + PR；整体收敛允许快进推 `main`**：日常改动先提交到 `feature/*` 并推送，再提 PR 等管理员审核合并。
-    仓库所有者做整体收敛时（把多条功能分支合并成一条），允许把**以 `origin/main` 为祖先**的集成分支快进推送到 `main`——
-    这是普通 push，不改写历史。**仍禁止对 `main` 使用 `--force` / `--force-with-lease` 改写历史**；回退 `main`
+10. **默认直接在 `main` 上改、提交、推送，不再"一个功能一条分支"**：改完提交到本地 `main`，再推 `origin/main`。
+    **不强制开 `feature/*`、不强制走 PR**。只有两种情况才开分支：用户明确要求；或这是一次可能整体丢弃的
+    高风险实验。无论走哪条路，**禁止对 `main` 使用 `--force` / `--force-with-lease` 改写历史**；回退 `main`
     必须先拿到用户当次的显式授权。细则见下节。
 
-## 分支与提交流程（2026-11-26 修订）
+## 提交与推送流程（2026-11-27 修订）
 
-远程 `origin` = Gitee `mao-yuqi-12/mobile-app-permission-check`。`main` 是唯一目标分支。
-日常改动仍走 `feature/*`；**整体收敛**（仓库所有者把多条功能分支合成一条）允许快进推 `main`。
+远程 `origin` = Gitee `mao-yuqi-12/mobile-app-permission-check`。**`main` 是默认工作分支**：
+直接改、直接提交、直接推。2026-11-27 之前那套"每个功能都开 `feature/*` 再提 PR"已废止——
+分支堆到 10 条没人合并，反而制造了未合并提交和合并冲突。
 
-- **"需要管理员审核"的前提是仓库设置**：只有管理员在「管理 → 分支设置」把 `main` 设为保护分支
-  （禁止直接推送 + 需审核通过才可合并）后，这条才真正生效。设置之前，任何协作者都能直接推 `main`——
-  不要因为"推成功了"就认为不需要审核。
-- **日常流程**：
+- **默认流程（绝大多数改动都走这条）**：
 
   ```powershell
-  git switch -c feature/<主题>        # 或复用已有的 feature 分支
-  git add <逐个列出的文件>            # 不用 git add -A
+  git switch main
+  git pull --ff-only                   # 先同步，避免非快进
+  git add <逐个列出的文件>              # 不用 git add -A
   git commit -m "feat(vehicle): ..."
-  git push -u origin feature/<主题>   # 只推功能分支
+  git push origin main
   ```
 
-  然后在 Gitee 提 PR：`origin/feature/<主题>` → `origin/main`，等管理员审核合并。
-  PR 链接格式：`https://gitee.com/mao-yuqi-12/mobile-app-permission-check/pull/new/mao-yuqi-12:feature/<主题>...mao-yuqi-12:main`
+  推送被拒只说明远端有新提交：重新 `git pull --ff-only` 再推，**不要用 `--force` 解冲突**。
 
-- **整体收敛流程（2026-11-26 首次执行，可复用）**：
+- **什么时候才开分支**（可选，不是默认）：
+  - 用户明确要求开分支 / 提 PR；
+  - 一次可能整体丢弃的高风险实验，用 `feature/<主题>` 隔离；可用就合回 `main`，不可用直接删；
+  - `main` 被设为保护分支时（管理员在「管理 → 分支设置」开启），直接 push 会被拒，此时才改走
+    `feature/*` + PR。判断依据是 push 被拒，而不是"默认应该走 PR"。
+
+- **整体收敛流程（只在"远端已堆积多条未合并分支"时才用，2026-11-26 执行过一次）**：
   1. **先备份**：`git bundle create <备份目录>/all-refs.bundle --all`；给每条分支打
      `backup/<日期>/<分支>` tag；未提交改动另存文件副本。
   2. **建集成分支**：从内容最全的功能分支建 `integration/<主题>`，用 `git merge --no-ff` 逐条合并其余分支；
@@ -70,8 +74,8 @@ vscanner/
     回退前先 `git fetch`，用 `--force-with-lease=<ref>:<旧提交>` 锁定，避免覆盖他人提交。
   - **不在未验证 `--is-ancestor` 的情况下删除任何分支**。
   - 不用 `git add -A`：临时验证脚本（`_*.py`）和 `output/` 产物不该进提交。
-- **推送后自检**：`git rev-parse origin/main` 应等于集成分支提交；
-  `git log --oneline origin/main` 顶部应能看到各分支的合并提交。
+- **推送后自检**：`git rev-parse main` 应等于 `git rev-parse origin/main`；
+  `git status --porcelain` 应只剩你明确没打算提交的文件（并发会话的改动不算你的）。
 
 ## 环境事实（当前主机；入口 environment.ps1）
 
