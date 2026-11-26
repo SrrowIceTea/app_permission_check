@@ -3,6 +3,7 @@ import './java_bootstrap.js';
 import './vehicle_transport.js';
 import './hook_vhal.js';
 import './hook_privacy.js';
+import './hook_classload.js';
 import './hook_egress.js';
 import './ssl_pinning_bypass.js';
 import { armVehicleTls } from './hook_vehicle_tls.js';

@@ -8,16 +8,28 @@ import { locationEvidence } from './privacy_location.js';
 import { WATCH, META } from './privacy_targets.generated.js';
 import { webhookSummary } from './ha_webhook_body.js';
 import { syncBody } from './abs_sync_body.js';
+import { attribute, callerClass } from './classload_attribution.js';
 
 const methods = new Map(), events = [];
 let returnValue = 'abcdef1234567890', originalError = null, calls = 0, observerFails = false;
 let adIdPermission = 0;
 const context = {
   WATCH, META, describe, sha256hex16, describeException, locationEvidence,
+  attribute, callerClass,
   packages: () => ['test.owned'], procName: () => 'test.owned',
   makeLogger: () => (ev, extra) => events.push({ev, ...extra}),
   contactTracker: () => () => {},
-  withStack: value => { if (observerFails) throw Error('observer failed'); return value; },
+  // F1: headLimit 打开时补一段真实形态的栈顶——被挂钩的 API 帧 + 反射帧 + SDK 调用方。
+  withStack: (value, pkg, maxContext, maxApp, headLimit) => {
+    if (observerFails) throw Error('observer failed');
+    if (headLimit) {
+      const api = String(value.api || '').replace(/\(.*$/, '');
+      value.stack_head = [api + '(Api.java:1)',
+        'java.lang.reflect.Method.invoke(Method.java:500)',
+        'com.google.android.gms.ads.identifier.AdvertisingIdClient.getAdvertisingIdInfo(AdvertisingIdClient.java:66)'];
+    }
+    return value;
+  },
   Java: {perform: fn => fn(), use: name => {
     if (name === 'android.os.Process') return {myUid: () => 1012345};
     if (name === 'android.os.Build$VERSION') return {SDK_INT: {value: 35}};
@@ -47,6 +59,10 @@ const invoke = key => method.implementation.call({}, {}, key);
 
 assert.equal(invoke('android_id'), returnValue);
 assert.equal(events.at(-1).collection_state, 'obtained');
+const read = events.find(e => e.ev === 'PRIVACY_READ');
+assert.equal(read.origin, 'third_party:com.google.android.gms',
+  'F1: 读取应归因到调用方 SDK，而不是被挂钩的平台 API');
+assert.equal(read.origin_class, 'com.google.android.gms.ads.identifier.AdvertisingIdClient');
 const before = events.length;
 assert.equal(invoke('enabled_input_methods'), returnValue);
 assert.equal(events.length, before, 'other secure settings must not become Android ID');

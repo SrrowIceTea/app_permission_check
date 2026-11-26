@@ -6,6 +6,16 @@
 - [2026-11-19 至 2026-11-22 分卷](DEVELOPMENT_LOG_20261119_20261122.md)
 - [2026-11-24 车载环境搭建分卷](DEVELOPMENT_LOG_20261124_SETUP.md)
 
+## 2026-11-27 · F1 类加载归因钩子与读取调用方归因（离线）
+
+- 范围：补 AGENTS 明列“仍未做”的 F1 类加载归因；只动钩子层与文档，不改采集流水线、不改规则库、不碰并行会话正在改的 `mobile/`。
+- 新增 `vehicle/hooks/classload_attribution.js`（纯模块，Node 可直接跑）：`origin` 三值口径 host / `third_party:<prefix>` / unknown；30 条主流 SDK 包前缀种子表（最长匹配）；宿主判定按 `host + '.'` 包边界（targetapp / targetapp2 前缀坑）；归一化数组描述符与内部类；`callerClass` 穿透反射/Binder 帧。未命中种子表一律 unknown，`class_kind`（platform / support_library）只用于解释 unknown 的噪声构成。
+- 新增 `vehicle/hooks/hook_classload.js`：挂 `BaseDexClassLoader.findClass`（所有 APK dex 类首次加载的必经点）与 `ClassLoader.defineClass`（自定义加载器/加壳器路径）。先执行原实现再记录，异常原对象重抛；按类名首次出现去重，200 条 / 3 秒批量发送；默认 8000 类上限并显式发 `CLASSLOAD_TRUNCATED`（含 dropped），失败加载只留 20 条样本（`CLASSLOAD_MISSING`）。
+- `hook_privacy.js`：`PRIVACY_READ` / `PRIVACY_REGISTER` 新增 `origin` / `origin_class` / `origin_sdk`。调用方取 `stack_head`（`stack_capture.js` 新增可选第 5 参，默认不采集）穿过透明帧后的第一个真实帧；取不到记 unknown，不从 `app_frames` 倒推（那里按定义只有宿主帧）。
+- 接线：`hook_vehicle_all.js` 与 `hook_vehicle_general.js` 均 import；`core/frida_host/build.py` 的 `VEHICLE_SCRIPTS` 增加 `hook_classload.js`；根回归新增 `classload` 组。
+- 验证：`node test_classload.mjs` 覆盖宿主边界 / 种子表 / unknown / 数组与内部类 / 反射穿透 / 返回值与异常透传 / 去重 / 批量，通过；`node test_privacy.mjs` 补 `origin=third_party:com.google.android.gms` 断言后通过；`core/frida_host/build.py --platform vehicle --only hook_classload.js` 产出 742 KB bundle，两个组合入口（909 KB / 835 KB）依赖解析成功。
+- 待办：设备侧验收（当前 `adb devices` 为空）——需在已知含 SDK 的自有 APK 上确认 `third_party` 前缀稳定复现、未知仍为 unknown；静态类集差集（动态加载/加壳证据）尚未接进分析产物；`hook_vehicle_general` 的额外开销未做基准。
+
 ## 2026-11-27 · 流程改为默认直接在 main 提交推送
 
 - 范围：只改 `AGENTS.md` 的提交/推送约定，并补本条日志；不动代码、不动规则库、不碰并发会话的改动。

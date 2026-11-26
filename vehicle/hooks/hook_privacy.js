@@ -8,6 +8,7 @@ import { describeException } from '../../core/privacy/dispatch.js';
 import { contactTracker } from './privacy_contacts.js';
 import { WATCH, META } from './privacy_targets.generated.js';
 import { REGISTER, armRegistration } from './privacy_registration.js';
+import { attribute, callerClass } from './classload_attribution.js';
 
 const log = makeLogger('privacy', '/data/local/tmp/vscan-vehicle-privacy.log');
 const AD_ID = 'com.google.android.gms.permission.AD_ID';
@@ -98,6 +99,20 @@ function callOutcome(entry, info, values, args) {
   return ['denied', 'error'].includes(values.collection_state) ? values.collection_state : 'ok';
 }
 
+// F1：把一次读取归到"谁发起的"。调用方取栈顶穿过反射/Binder 帧后的第一个真实帧；
+// 取不到就是 unknown——绝不从 app_frames 倒推：那里面按定义只有宿主帧，倒推等于把
+// 每次 SDK 读取都写成宿主自己，而且看不出来是编的。
+function withOrigin(record, entry, pkg) {
+  try {
+    const caller = callerClass(record.stack_head, entry.cls, entry.method);
+    const attribution = attribute(caller || '', pkg);
+    record.origin = attribution.origin;
+    record.origin_class = caller;
+    if (attribution.sdk_prefix) record.origin_sdk = attribution.sdk_name;
+  } catch (e) { record.origin = 'unknown'; }
+  return record;
+}
+
 function main() {
   try {
     const pkg = procName(), allowed = packages();
@@ -113,7 +128,7 @@ function main() {
         data_types: [entry.data_type], api: entry.api || entry.cls + '.' + entry.method + entry.desc,
         outcome, privacy_catalog_sha256: META.sha256, ...values};
       if (error) extra.exc_class = error.class_name;
-      log('PRIVACY_READ', withStack(extra, pkg, 8, 48));
+      log('PRIVACY_READ', withOrigin(withStack(extra, pkg, 8, 48, 4), entry, pkg));
     };
     const track = contactTracker(emit, gap);
     const armed = [], failed = [];
@@ -154,7 +169,7 @@ function main() {
         value_capture_gap: 'registration_or_async_no_return_value',
         privacy_catalog_sha256: META.sha256};
       if (error) extra.exc_class = error.class_name;
-      log('PRIVACY_REGISTER', withStack(extra, pkg, 8, 48));
+      log('PRIVACY_REGISTER', withOrigin(withStack(extra, pkg, 8, 48, 4), entry, pkg));
     };
     const reg = armRegistration(REGISTER, emitRegister, gap);
     log('ARMED', {pkg, uid, user_id: Math.floor(uid / 100000), sdk,

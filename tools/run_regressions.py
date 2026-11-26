@@ -112,6 +112,9 @@ CHECKS = [
     ('vehicle-ledger-ui', 'vehicle/frontend', ['node', '--test', 'test_ledger_panel.mjs', 'test_connection.mjs']),
     ('runtime', 'vehicle/hooks', ['node', 'test_runtime.mjs']),
     ('privacy-runtime', 'vehicle/hooks', ['node', 'test_privacy.mjs']),
+    # F1 类加载归因：归因口径（宿主边界/种子表/未知一律 unknown）与钩子透传行为。
+    # 不需要设备；设备侧只能标 pending，见 vehicle/hooks/README.md。
+    ('classload', 'vehicle/hooks', ['node', 'test_classload.mjs']),
     ('parity', 'vehicle/rules', [sys.executable, 'android/tools/verify_schema_parity.py']),
     # core/static 的用例全部离线（不需要 jadx、不需要设备、不需要 APK）。
     # 需要真的反编译的验证在 tools/workbench_acceptance.py，那里慢，不进回归。

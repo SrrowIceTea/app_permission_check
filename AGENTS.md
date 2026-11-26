@@ -242,7 +242,8 @@ B2 VScanBench 最小版已复验两个自有 APK 的五档重放和一条独立�
 A5-1 protectionLevel 标定已覆盖车载规则库全部 180 条权限。Android 13/14/15/16 分别有 10/10/150/10 条，
 各自保留定义包和构建指纹。Android 16 的证据来自 AAOS 36.1 r01 预览镜像。 [设备标定](vehicle/rules/device_calibration/README.md)
 
-仍待完成的事项包括 F1 类加载归因（无 `hook_classload.js`）、G1 UI 探索覆盖率度量和 A4 分段自愈。
+F1 类加载归因已实现 `hook_classload.js` + 30 条 SDK 种子前缀的离线归因回归，设备侧验收待做。
+仍待完成的事项包括 G1 UI 探索覆盖率度量和 A4 分段自愈。
 
 **拆分进度**（已提交、每步回归全绿）：
 - ✅ 建 git 仓库 + 快照（ce1859d）

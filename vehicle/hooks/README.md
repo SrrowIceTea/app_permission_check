@@ -39,12 +39,15 @@ python build.py                  # 产出 dist/*.bundle.js
 | `hook_tls_meta.js` | TLS 元数据：SNI + 主动挂 keylog 回调（给 `tshark` 解包用），剥符号时的兜底 |
 | `hook_flutter_ssl.js` | Flutter 静态 BoringSSL：按**代码形状**回扫序言定位，不依赖符号 |
 | `hook_cipher.js` | JCE `Cipher.update/doFinal` 入参明文（自绘加密，不走 native） |
+| `hook_classload.js` | **F1**：`BaseDexClassLoader.findClass` / `ClassLoader.defineClass` 记录运行时类加载并归因（host / third_party / unknown） |
+| `classload_attribution.js` | 上者的纯归因模块：30 条 SDK 种子前缀、宿主包边界、数组/内部类归一化、调用方穿透反射帧 |
 | `subscription_hooks.js` | 订阅回调观测（只读，不替换 callback） |
 | `fixture_control.js` | 触发自有夹具按钮（`btnRead`/`btnEgressHttp`/`btnOkHttp`），不是审计 Hook |
 | `scope.js` | 主机注入的显式包名白名单，禁止空白名单或默认全进程 |
 | `stack_capture.js` | 共用 Java 栈采集：只挑应用自己的帧（行号定位唯一依据） |
 | `vscan_runtime.js` | **各入口共用**的观测运行时：事件记录格式、落盘双通道、进程名 |
 | `test_runtime.mjs` | 上者的离线回归（`node test_runtime.mjs`），**不需要设备、不需要 Frida** |
+| `test_classload.mjs` | F1 归因口径 + 钩子透传/去重/批量的离线回归（`node test_classload.mjs`） |
 | `analyze_log.py` | 解析 JSONL，统计与还原 |
 | `build.py` | 注入 bridge shim + 调 frida-compile |
 | `run.py` | 主机侧驱动：attach、接收 `send()`、写 JSONL |
@@ -56,6 +59,36 @@ python build.py                  # 产出 dist/*.bundle.js
 所以 `build.py` 把临时入口文件放在**源码同目录**（`.entry.<name>.js`）而不是子目录——
 相对导入是按入口文件自身所在目录解析的，放子目录里会静默变成"模块找不到"。
 `dist/*.bundle.js` 仍是单文件产物，设备侧不需要额外文件。
+
+## F1 类加载归因（2026-11-27）
+
+**要回答的问题**：静态分析只知道 dex 里"引用了什么"，回答不了运行时"真正加载了什么"。
+反射加载、动态 dex、加壳残留、第三方 SDK 是否真的被装载，只有运行时能给出证据。
+
+**挂载点**：`dalvik.system.BaseDexClassLoader.findClass` 是所有 APK dex 类首次加载的必经点
+（PathClassLoader / DexClassLoader / InMemoryDexClassLoader 都继承它，`Class.forName` 也走这里）；
+父加载器里的 `java.*` / `android.*` 不经过它，正好挡掉平台类噪声。另挂
+`ClassLoader.defineClass`，覆盖自定义加载器/加壳器直接定义字节码的路径。
+
+**归因口径**（`classload_attribution.js`）：`origin` 只有三值——`host`、`third_party:<prefix>`、
+`unknown`。前两者分别由宿主包边界（`host + '.'`，不是子串）与 30 条主流 SDK 种子前缀决定；
+**没命中种子表的一律 `unknown`**，不按"看起来像"猜前缀。`class_kind`（platform /
+support_library / sdk / other）只用于解释 unknown 的构成，不改变 origin。种子表是**有界**的，
+报告必须同时给出 `uncovered_by_design`。
+
+**事件**（`src=classload`）：`CLASSLOAD_START` / `CLASSLOAD_BATCH`（`items` 为
+`[cls, origin, class_kind, sdk_prefix, loader_id, source]`，`source` 取 `find` 或 `define`）/
+`CLASSLOAD_MISSING`（反射探测的失败样本）/ `CLASSLOAD_TRUNCATED`（默认 8000 类上限，
+显式报 `dropped`，不静默截断）/ `ARMED`。按类名首次出现去重，按 200 条或 3 秒批量发送。
+
+**同一套归因也用于隐私读取**：`PRIVACY_READ` / `PRIVACY_REGISTER` 新增 `origin`、
+`origin_class`、`origin_sdk`。调用方取栈顶穿过反射/Binder 帧后的第一个真实帧；
+取不到就是 `unknown`——**不从 `app_frames` 倒推**，那里按定义只有宿主帧。
+
+**验证状态**：`node test_classload.mjs` 与 `node test_privacy.mjs` 离线通过，
+`core/frida_host/build.py --platform vehicle` 可产出 `hook_classload.bundle.js` 并被两个入口引用。
+**设备侧尚未验收**（当前无 AAOS 设备）：没有"已知含 SDK 的自有 APK 上稳定复现
+`third_party` 前缀"的实测证据，设备条目只能标 pending。
 
 ## 运行
 

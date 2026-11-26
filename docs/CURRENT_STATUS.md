@@ -23,8 +23,8 @@
 - 验证：`vehicle.policy.test_assessment` 9/9、`core.static.test_sdk_fingerprint` 7/7、
   定位相关 56/56；根离线回归 22/22 全 0，工程守卫 exit=0。
   [根回归](../output/vehicle-local-verify-20261126/regression/verification.json)
-- 仍未做（需真机/样本，见 §3）：独立样本单次读取对齐→30s 阈值、F1 钩子、B2 完整矩阵、
-  YAABSA/G1/A4、PCAPdroid、split APK/OEM、`main` 保护分支（需管理员）。
+- 仍未做（需真机/样本，见 §3）：独立样本单次读取对齐→30s 阈值、F1 设备验收（钩子与离线
+  归因已实现）、B2 完整矩阵、YAABSA/G1/A4、PCAPdroid、split APK/OEM、`main` 保护分支（需管理员）。
 
 ## 车载 v2 导航与接口复验（2026-11-25）
 
@@ -112,7 +112,7 @@ VScanBench 新增同一自有 APK 的只读负控与发送对照。两个 AAOS �
 - HA 电量正文与订阅/控制各自建立了新 session。服务端确认电量 73% 和 61%，App 侧各有一条同值完整请求关联，电池模拟已恢复。订阅重连、旧连接消失和两次控制均通过。最终复验为 `ha-body-03/` 与 `ha-socket-02/`。两轮各封存两条当轮服务端回执，`binding-verification.json` 均为 `binding_consistent`，人工签核仍待完成。
 - **YAABSA v1.17.0 AAOS x86_64** 已从 [官方发布资产](https://api.github.com/repos/Vito0912/yaabsa/releases/assets/724915285) 续传，签名及装机摘要 `5a00d096…f58873` 已核验。设备 Wi-Fi 已启用但未连接时，客户端将本地 Audiobookshelf 标为不可达。接回 `AndroidWifi` 后，原生车载媒体库加载合成音频，前后台各完成一次播放和暂停。独立服务端确认两次进度变化、累计听音分别增加 13.316 秒与 13.429 秒，暂停对照进度保持稳定。服务端进度与媒体会话暂停位置分别差 6.994 秒和 7.184 秒，未达到本轮 4 秒对齐判据。新通用采集健康，审计为 `no_target_general_reads`，业务回执保存在外部验收记录，采集会话绑定仍不完整。旧版专用发送契约仍只覆盖 v1.16.0。证据在 `yaabsa-v117-business/playback-03/verification.json`。
 - 权限库共 180 行，Android 13/14/15/16 分别为 10/10/150/10 行。11-18 将 AAOS 35 A6 的 **150/150** 条编译整数作为独立设备来源纳入发布库和 Room 资产。A6 模拟器覆盖升级和应用进程重启后，Room 两次回读逐条匹配冻结证据。该轮未采集 Android 13/14/16 的编译声明。 [入库验证](../output/vehicle-permission-import-20261118/verification.json) · [运行验收](../output/vehicle-permission-room-20261118/device-003/verification.json)
-- 基准、盲评、政策评估、SDK 调用栈归属、AAOS 35 覆盖表与进程生命周期监测均已有实现。仍缺独立参考与样本评测、SDK 库指纹侧车、扩展政策结构化、跨版本设备验收及晚启动/重启捕获。类加载归因、UI 探索覆盖率、分段自愈、独立设备侧连接对照和定位格式扩展仍无完整车载交付。普通第三方设备入口仍会拒绝 split APK，OEM 适配待实测。
+- 基准、盲评、政策评估、SDK 调用栈归属、AAOS 35 覆盖表与进程生命周期监测均已有实现。仍缺独立参考与样本评测、SDK 库指纹侧车、扩展政策结构化、跨版本设备验收及晚启动/重启捕获。类加载归因已补钩子与离线回归（设备验收待做）、UI 探索覆盖率、分段自愈、独立设备侧连接对照和定位格式扩展仍无完整车载交付。普通第三方设备入口仍会拒绝 split APK，OEM 适配待实测。
 - 车载账本按目标包和会话排除无归属的事件及回执。修复了 Windows 路径含 `#` 时无法只读加载显式规则快照的问题。新增 HA 专用验收在采集结束前封存独立 REST 回执。根离线回归 22/22 组通过，证据见 `output/vehicle-kickoff-host-final-20261114-214942/verification.json`。
 
 ### YAABSA 暂停同步复验（2026-11-15）
@@ -186,7 +186,7 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0
 | 1 | 车载 B1 已签核两个自有 APK 的五档重放。Car Stats Viewer 已验收车速上传与 5 条断网行驶点补传。移动 Android ID 自有夹具已完成五档重放 | [车载复核](../vehicle/bench/WINDOW_CALIBRATION.md) · [移动基准](../mobile/lab/WINDOW_CALIBRATION.md) | 车载和移动的跨应用窗口验证均缺独立参考 |
 | 2 | `protection_level_value`：车载四版本 180 条已入库。移动 40 条未断言 | 本文「Android 16 车载编译权限级别标定」+ mobile「未完成」 | 移动端需独立来源 |
 | 3 | B2 VScanBench 已加入后台只读和发送对照，两轮均通过 11 项健康检查 | [车载基准](../vehicle/bench/README.md#aaos-后台读取与发送对照) | 继续扩充场景矩阵，签核窗口仍由既有 90 对验证 |
-| 4 | F1 类加载归因（无 `hook_classload.js`） | AGENTS「未做」 | 需新钩子 + 设备验收 |
+| 4 | F1 类加载归因：`hook_classload.js` + 30 条 SDK 种子前缀已实现，离线归因/透传回归通过；`PRIVACY_READ` 已带 `origin` | [钩子说明](../vehicle/hooks/README.md#f1-类加载归因2026-11-27) | 设备侧（已知含 SDK 的自有 APK 稳定复现 third_party）待验收 |
 | 5 | G1 已验证自有三页夹具，手动和自动各覆盖 3/3 页及 4/4 动作 | [多页设备对照](../vehicle/bench/UI_COVERAGE.md#2026-11-25-三页自有-apk-对照) | 普通第三方车载应用的多页面发现待验证 |
 | 6 | A4 车载分段采集与一次进程退出恢复 | [分段入口与证据](../vehicle/pipeline/CAPTURE_SEGMENTS.md) | 入口已实现。下一轮可扩展到多进程退出和自动恢复范围的设备对照 |
 | 7 | AI 跨运行一致性 / 幻觉率无量化数据 | mobile「未完成」 | 需多次真实 key 调用，成本与口径未定 |
