@@ -34,11 +34,15 @@ export function main() {
               !/^[a-f0-9]{64}$/.test(marker.value_sha256)) {
             throw new Error('invalid read marker');
           }
-          log('PRIVACY_READ', {
+          const read = {
             api: target.cls + '.' + target.method + target.desc, api_role: 'query',
             data_types: ['android_id'], outcome: 'ok', value_hash: marker.value_sha256.slice(0, 16),
             observation_run: marker.run, fixture_batch: marker.batch, hook: KIND
-          });
+          };
+          // 后台只读/补传的新增强字段：旧字段不变，仅可选透传。
+          if (typeof marker.origin === 'string') read.fixture_origin = marker.origin;
+          if (typeof marker.thread === 'string') read.fixture_thread = marker.thread;
+          log('PRIVACY_READ', read);
         } catch (error) {
           log('SCRIPT_ERROR', {where: TAG, msg: String(error)});
         }

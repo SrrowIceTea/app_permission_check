@@ -16,8 +16,15 @@ OBSERVATION = "fixture_native_log"
 WINDOWS = (5000, 10000, 30000, 60000, 120000)
 STEPS = {"read_only": ("read-a",), "immediate": ("read-a", "send-a"),
          "delayed": ("read-a", "send-a"), "cross_batch": ("read-a", "read-b", "send-a")}
+# 后台与断网补传对照（追加，不改旧四组）：步骤里的 wifi_off/wifi_on 是环境动作，不是 Activity 触发。
+OFFLINE_STEPS = {
+    "bg_read_only": ("bg-read-a",),
+    "bg_send": ("bg-read-a", "bg-send-a"),
+    "offline_resend": ("bg-read-a", "bg-offline-send-a", "wifi_off", "wifi_on", "bg-flush-a"),
+}
 INPUTS = ("reads.jsonl", "flows.jsonl", "egress.jsonl", "actor.json", "receipts.json", "steps.json",
           "hook-driver-verification.json", "collector-health.json")
+ALL_STEPS = {**STEPS, **OFFLINE_STEPS}
 
 
 def sha(raw):

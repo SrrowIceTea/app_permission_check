@@ -434,3 +434,25 @@
 - 页面级验收：无头 Chrome 走 CDP 加载 8090 的 `app.html`，选中真新任务 → 结果卡显示"全流程完成" → ZIP 链接下载 200 → 动态页回显两条复核 → 刷新后复核仍在，无 JS 异常。 [页面验收](../output/mobile-audit-delivery-20261126/browser-full-run-verification.json) · [页面下载 ZIP](../output/mobile-audit-delivery-20261126/full-run-browser-evidence.zip) · [复算](../output/mobile-audit-delivery-20261126/full-run-replay/verification.json)
 - 验证：`unittest`（5 个 pipeline 模块）17/17、`mobile/tools/run_mobile_checks.py` 63/63、`git diff --check` 干净。本次未改产品代码，仅补构建产物（node_modules/dist，不入库）。
 - 边界与待办：本轮跑在 API37.2 的 VScan_Phone（冷启动、非 root），系统 CA 与外网相关判据未过，因此没有 HTTPS 明文与完整 egress 关联；生产读取 Hook 的 API36 稳定性见第 1 步复验结论。下一步为第 3 步后台读取与断网补传对照。
+
+## 2026-11-26 · 移动端读取 Hook 稳定性复验（进行中）
+
+- 范围：在自有 API 36 手机模拟器（指纹与 real-06 相同、user build、nonroot shell）上缩小 Java 读取 Hook 的 ART/JIT 崩溃复现条件，验证稳定的真实读取观测方式；改动仅在 `feature/mobile-window-benchmark` worktree，证据落 `output/mobile-hookstab-20261126/`（不入库）。
+- 方法：新增受控编排（起驱动→等 ARMED→触发单次真实读取→抓崩溃缓冲与 pid→收尾），同设备同夹具对照 Java ArtMethod 替换 Hook 与 native observer。判据为进程存活、PRIVACY_READ 事件、日志完整三态。
+- 复现结论：Java ArtMethod 替换 Hook（`real-06` 的单 API window-benchmark bundle，SHA `5297c1b1…`）在 API 36 本轮 **0/17 崩溃**（6 轮短窗口 + 8 轮 35s 长窗口 + 3 轮单进程 20 次读取压力），每轮均抓到真实 `PRIVACY_READ`、进程存活、日志完整；在 API 37.2（16K 页）本轮 **1/4 崩溃**（`api37-java-02`：`SIGSEGV/SEGV_ACCERR @ Jit thread pool` + `detached: connection-terminated`，与 real-06 同型）。同型崩溃在 API37 被稳定复现一次，印证 M042/D-054b 的"概率性 ART/JIT 竞态、未消除"。不声称已修复。
+- 稳定观察方式：native observer（`hook_window_benchmark.bundle.js`，SHA `4baff714…`，零 ArtMethod 替换，`Interceptor.attach(__android_log_buf_write)`）在 API 36 3/3、API 37.2 3/3 全部存活，每轮 2 条真实读取事件、驱动 passed。边界：它依赖自有夹具显式日志标记，独立第三方 App 的真实读取观测仍需 Java 替换路线并按分段采集+覆盖率记账兜底。
+- 设备：API36 与 real-06 指纹一致（`…BE4B.251210.005:user/release-keys`）；API37.2 为 `…CP41.260831.007:userdebug/dev-keys`（16K 页）。两个 AVD 用 `-read-only` 隔离，均由私有夹具进程收尾、转发已释放。
+- 验证命令（仅授权测试）：`python -u output/mobile-hookstab-20261126/repro.py <label> <bundle> <token> read-a <settle>`；多轮 `repro_loop.py <rounds> <settle>`；压力/A-B `repro_stress.py`。逐轮 `result.json` 与 [验收汇总](../output/mobile-hookstab-20261126/acceptance-summary.json)。
+- 证据全部在 `output/mobile-hookstab-20261126/`（不入库）。本次为设备复验与脚本编排，未改产品代码；`repro*.py` 属一次性复现脚本，不进提交。
+
+## 2026-11-27 · 移动夹具：后台读取与断网补传对照（进行中）
+
+- 范围：移植车载 `window_run`/`AuditScenarioState` 的后台线程读取与断网补传机制到自有 Android ID 夹具，覆盖后台只读、后台发送、断网失败入队、恢复联网补传；独立接收端按批次回执核对，再用移动关联器重放五档窗口。仅授权测试，代码在 `feature/mobile-window-benchmark` worktree。
+- 契约约束：旧四组 `STEPS`（read_only/immediate/delayed/cross_batch）的键、顺序、判据、`suite.json`/`verification.json` 结构、`--window-override-ms` 五档与 `pairs_from()` 四元组保持不变；新能力用追加 case + 可选字段，旧 case 走原 truth()。
+- 设计要点：断网发送走 `http://10.0.2.2:18960/collect`（不经 adb reverse，真正断网失败），恢复后走 `http://127.0.0.1:18960/collect`（reverse 补传）；队列用 SharedPreferences 持久化，含批次令牌；Wi-Fi 控制用移动版（车载 `vehicle_environment_actions.py` 有 AAOS feature 限制，移动模拟器不满足）。
+- 实现：新增 `ScenarioQueue.kt`（SharedPreferences 持久化批次队列）并扩展 `WindowBenchmarkActivity.kt`（后台只读 `bg-read-a/b`、后台发送 `bg-send-a`、断网 `bg-offline-send-a`、补传 `bg-flush-a`、队列清理；断网走 `10.0.2.2` 不经 adb reverse，恢复走 `127.0.0.1`，均带 `thread`/`origin` 标记）。`hook_window_benchmark.js` 可选透传 `fixture_origin`/`fixture_thread`（旧字段不变）。新增 `mobile_network_actions.py`（移动版 Wi-Fi 控制：nonroot shell 对 wlan0 无 ip link 权限，只用有权限的 `cmd wifi`；断网真实证据由 10.0.2.2 路径无回执 + offline-window 区间提供）、`offline_control.py`（三组判据 + 五档重放）、`offline_control_capture.py`（Receiver 多回执 + 批次令牌）、`test_offline_control.py`。`window_benchmark.py` 仅追加 `OFFLINE_STEPS`/`ALL_STEPS` 常量，旧四组零改动。
+- 设备验收（`output/mobile-offline-20261126/full/`，API36 与旧基准同指纹）：`bg_read_only` 0 外发、`bg_send` 后台线程读取并经独立接收端 200 回执、`offline_resend` 断网失败入队（cached_batches=1）→ 恢复后补带回执带 `source_batch_tokens=["a"]`；断网区间 0 回执。三组 manifest 全 passed，环境 cleanup_ok=true，夹具/转发已清理。
+- 五档重放（`output/mobile-offline-20261126/replay/verification.json`）：`bg_read_only` 五档均 0；`bg_send` 五档均 TP=1；`offline_resend` 5 秒漏配（FN=1）、10/30/60/120 秒命中（TP=1）——补传延迟超出 5 秒窗，与既有 delayed 组同型。独立应用案例仍为 0。
+- 过程修正（如实记录）：① 首轮 `environment-cleanup.json` 重复写、Wi-Fi 恢复误依赖 "Wifi is connected"（本镜像不自动重连）与 nonroot 无 wlan0 ip link 权限，已改为 `cmd wifi enabled` + eth0 判据；② 断网发送是后台线程 5 秒超时，编排原只等读取事件就切 Wi-Fi，导致 offline_failed 晚到，已改为等 offline_failed 落盘；③ 判据 `bg_send` 曾漏返回 positive 导致误报 outside_reference，已修正；④ truth 读 `body-0.bin`（接收端原始产物）而非复制后的 body.bin。
+- 验证：`unittest mobile.lab.test_window_benchmark mobile.lab.test_offline_control` 6/6（旧四组契约保持），`mobile/tools/run_mobile_checks.py` 63/63，`git diff --check` 干净。gadget provenance 重备仅改 config.so 换行，已恢复git版本，不提交构建产物。
+- 复现命令：`node mobile/hooks/build.mjs --only hook_window_benchmark` → `gradlew :app:assembleGadget --offline --no-daemon` → `-m mobile.lab.offline_control_capture --serial <owned> --apk <apk> --out <dir>` → `-m mobile.lab.offline_control --source <dir> --out <dir>/replay`。
