@@ -1,0 +1,112 @@
+{
+  "status": "complete",
+  "android_version": "13",
+  "source": "adb pm list permissions -f -g and aapt2 dump xmltree of the defining APK",
+  "value_kind": "compiled_manifest_declaration",
+  "device": {
+    "ro.build.version.release": "13",
+    "ro.build.version.sdk": "33",
+    "ro.build.characteristics": "automotive",
+    "ro.build.id": "TEA1.250515.001",
+    "ro.build.fingerprint": "google/sdk_gcar_x86_64/emulator_car64_x86_64:13/TEA1.250515.001/13505934:userdebug/dev-keys",
+    "ro.build.version.incremental": "13505934",
+    "ro.product.device": "emulator_car64_x86_64"
+  },
+  "database_sha256": "a1ced8129e1d741478f0a4bcb02686580cbb2d4e47d9dce51e82118643e7e50c",
+  "pm_output_sha256": "6e1d37039705e27b7773f8011fe99a91296055d6ea49e7a80c1ec46b3317ce38",
+  "device_facts_sha256": "bb2438627bb7aa032b94863d4743d5567f7521542f2107dd229c76876c02acfd",
+  "defining_apks": {
+    "android": {
+      "file": "android.apk",
+      "sha256": "c803f48e9c07611a4a955e9c4011b8fd0c18ce76b36bd4fe277c32eb97359772"
+    },
+    "com.android.car.updatable": {
+      "file": "com.android.car.updatable.apk",
+      "sha256": "a4be73d7c8539d26e6785862cd446f6c258b94cf07f937cb32fae5523a1ca060"
+    }
+  },
+  "total": 10,
+  "calibrated": [
+    {
+      "permission_name": "android.car.permission.CAR_ENERGY",
+      "defining_package": "com.android.car.updatable",
+      "stored_raw": "dangerous",
+      "observed_raw": "dangerous",
+      "stored_value": null,
+      "protection_level_value": 1
+    },
+    {
+      "permission_name": "android.car.permission.CAR_ENGINE_DETAILED",
+      "defining_package": "com.android.car.updatable",
+      "stored_raw": "signature|privileged",
+      "observed_raw": "signature|privileged",
+      "stored_value": null,
+      "protection_level_value": 18
+    },
+    {
+      "permission_name": "android.car.permission.CAR_IDENTIFICATION",
+      "defining_package": "com.android.car.updatable",
+      "stored_raw": "signature|privileged",
+      "observed_raw": "signature|privileged",
+      "stored_value": null,
+      "protection_level_value": 18
+    },
+    {
+      "permission_name": "android.car.permission.CAR_MILEAGE",
+      "defining_package": "com.android.car.updatable",
+      "stored_raw": "signature|privileged",
+      "observed_raw": "signature|privileged",
+      "stored_value": null,
+      "protection_level_value": 18
+    },
+    {
+      "permission_name": "android.car.permission.CAR_POWERTRAIN",
+      "defining_package": "com.android.car.updatable",
+      "stored_raw": "normal",
+      "observed_raw": "normal",
+      "stored_value": null,
+      "protection_level_value": 0
+    },
+    {
+      "permission_name": "android.car.permission.CAR_SPEED",
+      "defining_package": "com.android.car.updatable",
+      "stored_raw": "dangerous",
+      "observed_raw": "dangerous",
+      "stored_value": null,
+      "protection_level_value": 1
+    },
+    {
+      "permission_name": "android.permission.ACCESS_COARSE_LOCATION",
+      "defining_package": "android",
+      "stored_raw": "dangerous|instant",
+      "observed_raw": "dangerous|instant",
+      "stored_value": null,
+      "protection_level_value": 4097
+    },
+    {
+      "permission_name": "android.permission.ACCESS_FINE_LOCATION",
+      "defining_package": "android",
+      "stored_raw": "dangerous|instant",
+      "observed_raw": "dangerous|instant",
+      "stored_value": null,
+      "protection_level_value": 4097
+    },
+    {
+      "permission_name": "android.permission.READ_CONTACTS",
+      "defining_package": "android",
+      "stored_raw": "dangerous",
+      "observed_raw": "dangerous",
+      "stored_value": null,
+      "protection_level_value": 1
+    },
+    {
+      "permission_name": "android.permission.RECORD_AUDIO",
+      "defining_package": "android",
+      "stored_raw": "dangerous|instant",
+      "observed_raw": "dangerous|instant",
+      "stored_value": null,
+      "protection_level_value": 4097
+    }
+  ],
+  "unresolved": []
+}

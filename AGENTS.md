@@ -220,9 +220,10 @@ B1 自有 AAOS 夹具补采已完成两名独立 subagent 复核与第三名仲�
 B2 VScanBench 最小版已复验两个自有 APK 的五档重放和一条独立应用补传业务，完整场景矩阵待补。
 入口见 [车载基准](vehicle/bench/README.md#b2-vscanbench-最小基准)。
 
-仍**未做**（勿当成已完成）：A5-1 protectionLevel 标定（Android 15 的 150 条已用 AAOS 35 A6 编译声明入库；
-Android 13/14/16 共 30 条的整数值仍为 NULL，待逐版本取证）、
-F1 类加载归因（无 `hook_classload.js`）、G1 UI 探索覆盖率度量、A4 分段自愈。
+A5-1 protectionLevel 标定已覆盖车载规则库全部 180 条权限。Android 13/14/15/16 分别有 10/10/150/10 条，
+各自保留定义包和构建指纹。Android 16 的证据来自 AAOS 36.1 r01 预览镜像。 [设备标定](vehicle/rules/device_calibration/README.md)
+
+仍待完成的事项包括 F1 类加载归因（无 `hook_classload.js`）、G1 UI 探索覆盖率度量和 A4 分段自愈。
 
 **拆分进度**（已提交、每步回归全绿）：
 - ✅ 建 git 仓库 + 快照（ce1859d）

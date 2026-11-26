@@ -290,3 +290,15 @@ A6 复核报告固定内容摘要、设备指纹与镜像 ID。构建逐条核�
 以摘要匹配的旧 APK 首装，再覆盖安装带 A6 整数值的新 APK。升级备份用旧运行库文件摘要核对，
 生效版本用资产摘要与内容摘要核对。AAOS 35 A6 自有模拟器上，升级后与应用进程重启后两次
 Room 回读均逐项匹配 150 条 A6 权限值及来源。见 [运行验收](../../output/vehicle-permission-room-20261118/device-003/verification.json)。
+
+## D020 AAOS 34 ext9 r05 编译权限值（2026-11-24）
+
+Android 14 的 10 条原始级别与本轮 PackageManager 观测一致。发布构建验证 r05 设备指纹和冻结报告摘要，把编译整数与 APK 证据附加到原权限行。保留 AOSP 原始来源与 `source_verified`。 [标定记录](device_calibration/README.md#android-14-编译权限值2026-11-24)
+
+## D021 AAOS 33 r05 编译权限值（2026-11-24）
+
+Android 13 的 10 条编译整数均来自 `TEA1.250515.001` 对应 APK 和 PackageManager。构建按源码版本绑定各自的冻结报告及设备指纹。 [标定记录](device_calibration/README.md#android-13-编译权限值2026-11-24)
+
+## D022 AAOS 36.1 r01 编译权限值（2026-11-25）
+
+Android 16 的 10 条来自 Google API 36.1 r01 预览镜像的 `BAA1.261113.001.A1`。校准器只检查本轮版本中待标定的权限名，仍拒绝范围内的重复声明。这样可重验完整的系统清单，并保留实际定义包的摘要与设备指纹。 [设备与发布记录](device_calibration/README.md#android-16-编译权限值2026-11-25)

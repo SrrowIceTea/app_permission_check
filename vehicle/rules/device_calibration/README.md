@@ -126,4 +126,22 @@ $aapt2 = "$env:LOCALAPPDATA/Android/Sdk/build-tools/36.0.0/aapt2.exe"
 
 仅写新报告。原始级别、定义包或显式整数证据有缺口时，报告逐条列入 `unresolved`。
 四版本构建自动读取 [冻结的 A6 报告](protection-level-aaos35-a6.json) 并核对其内容摘要。每条 Android 15 权限同时保留 A1 原始观测和独立的 A6 编译值来源，含定义包 APK 摘要。
-重建命令见 [四版本构建](../CLAUDE.md)。Android 13/14/16 的 30 条整数级别等待分别取证。
+重建命令见 [四版本构建](../CLAUDE.md)。
+
+## Android 14 编译权限值（2026-11-24）
+
+使用 Google SDK 仓库的 AAOS 34 ext9 x86_64 r05 镜像，镜像摘要 SHA-1 为 `a24cc4b1fb8aa31d50663b2b681ae7493a31106c`。启动后核对 `UAA1.250512.001`、API 34 和完整指纹，从 PackageManager 查到两个定义包，再用同一设备的 APK 编译清单复核。10 条中 6 条由 `com.android.car.updatable` 定义，4 条由 `android` 定义。 [冻结证据](protection-level-aaos34-r05.json) · [Google SDK 车载镜像索引](https://dl.google.com/android/repository/sys-img/android-automotive/sys-img2-3.xml)
+
+四版本构建校验报告摘要、API、版本、指纹和原始级别，补入 10 个编译整数并追加定义包 APK 的出处。Android 14 行继续保留 AOSP 源码基线与 `source_verified`。 [发布核对](../../../output/vehicle-permission-api34-20261124/publication-verification.json)
+
+## Android 13 编译权限值（2026-11-24）
+
+Google SDK 的 AAOS 33 x86_64 r05 镜像 SHA-1 为 `4657b6da29ad4273986f3b8fa9b1caac3bb5195f`。在 `TEA1.250515.001` 上记录运行时指纹及 PackageManager 原始级别，用实际定义包 APK 复核 10 条编译整数。6 条由 `com.android.car.updatable` 定义，4 条由 `android` 定义。 [冻结证据](protection-level-aaos33-r05.json) · [Google SDK 车载镜像索引](https://dl.google.com/android/repository/sys-img/android-automotive/sys-img2-3.xml)
+
+四版本构建按版本验证冻结报告。Android 13 保留 AOSP 源码证据及 `source_verified`，追加 API 33 编译值的出处。 [发布核对](../../../output/vehicle-permission-api33-20261124/publication-verification.json)
+
+## Android 16 编译权限值（2026-11-25）
+
+Google SDK 的 AAOS 36.1 x86_64 r01 预览镜像 SHA-1 为 `29338babe8f39b3ccbfbf01b954b003a28b1255b`。专用 AVD 读回 Android 16、API 36、完整 SDK 36.1 及构建 `BAA1.261113.001.A1`。PackageManager 与 `android`、`com.android.car.updatable` 实际定义包的编译清单逐条一致，10 条均得到明确整数。 [冻结证据](protection-level-aaos36.1-r01.json) · [Google SDK 车载镜像索引](https://dl.google.com/android/repository/sys-img/android-automotive/sys-img2-3.xml)
+
+Android 16 的 10 条发布记录保留各自的 AOSP 定义出处和 `source_verified`，补入编译整数及设备证据。四版本 180 条均具备编译整数。 [入库核对](../../../output/vehicle-permission-api36-20261125/publication-verification.json)
