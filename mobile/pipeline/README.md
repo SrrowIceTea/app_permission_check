@@ -121,3 +121,7 @@ cd frontend && "$PY" -m http.server 8090   # 8080 被本机 httpd.exe 占用，�
   未配 key 走 dry-run；调用失败不影响报告生成（报告标注「未生成 AI 研判」）；
 - **设备**：动态采集依赖模拟器在线；离线时只出静态结论；
 - 静态结论等级封顶 `candidate`；不产出 `policy_violation`。
+
+## 证据交付和复核
+
+[证据 ZIP、离线重放、失败日志、任务重试及按条复核](DELIVERY.md)。

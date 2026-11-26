@@ -13,15 +13,12 @@
 """
 from __future__ import annotations
 
-import argparse
 import json
 import re
-import shutil
 import sys
 import tempfile
-import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -30,48 +27,15 @@ ROOT = HERE.parent.parent
 
 sys.path.insert(0, str(ROOT))
 
-from mobile.pipeline import stages  # noqa: E402
-from mobile.pipeline.runner import PipelineJob, run_pipeline  # noqa: E402
+from mobile.pipeline import stages, task_actions  # noqa: E402
+from mobile.pipeline.registry import JobError, Registry  # noqa: E402
+from mobile.pipeline.runner import PipelineJob  # noqa: E402
 
 MAX_APK_BYTES = 512 * 1024 * 1024
 DEFAULT_WORKDIR = "D:/vscanner-tp/pipeline"
 
 # 回环来源白名单（与 vehicle/workbench 同口径）：服务只绑 127.0.0.1，跨域只对本机页面放行。
 _LOCAL_ORIGIN = re.compile(r"https?://(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?")
-
-
-class Registry:
-    def __init__(self, workdir: Path, runtime=None):
-        self.runtime = runtime
-        self.workdir = workdir
-        self.workdir.mkdir(parents=True, exist_ok=True)
-        self._jobs: dict[str, PipelineJob] = {}
-        self._lock = threading.Lock()
-
-    def submit(self, apk: Path, name: str, seconds: int, category: str,
-               tls_bypass: bool = False) -> PipelineJob:
-        if self.runtime and any(j.state in ("queued", "running") for j in self._jobs.values()):
-            raise ValueError("已有检测任务运行中，请等待当前任务完成")
-        job = PipelineJob(apk, self.workdir / "job", name=name, seconds=seconds,
-                          category=category, tls_bypass=tls_bypass)
-        # 目录名用 job.id，短且无包名（规避 Windows 260 路径）。
-        job.out = self.workdir / job.id
-        job.formal_runtime = self.runtime
-        job.out.mkdir(parents=True, exist_ok=True)
-        job.events = job.out / "events.jsonl"
-        job.apk = job.out / "uploaded.apk"
-        shutil.move(str(apk), str(job.apk))
-        with self._lock:
-            self._jobs[job.id] = job
-        from mobile.pipeline.history import remember
-        remember(job)
-        threading.Thread(target=run_pipeline, args=(job,), daemon=True,
-                         name=f"pipeline-{job.id}").start()
-        return job
-
-    def get(self, job_id: str) -> PipelineJob | None:
-        from mobile.pipeline.history import lookup
-        return lookup(self, job_id)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -130,6 +94,8 @@ class Handler(BaseHTTPRequestHandler):
                                    for sid, label in stages.STAGES])
             if path.startswith("/api/pipeline/"):
                 return self._pipeline_get(path, parse_qs(parts.query))
+        except JobError as exc:
+            return self._json({"code": exc.code, "error": str(exc)}, exc.status)
         except Exception as exc:  # noqa: BLE001
             return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
         self._send_error(404, "没有这个端点")
@@ -140,6 +106,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/pipeline":
                 return self._upload(parse_qs(parts.query))
+            if path.startswith("/api/pipeline/"):
+                origin = self.headers.get("Origin")
+                if origin and not _LOCAL_ORIGIN.fullmatch(origin):
+                    raise JobError(403, "local_origin_required", "此操作仅允许本机审核页面。")
+                return task_actions.post(self, path)
+        except JobError as exc:
+            return self._json({"code": exc.code, "error": str(exc)}, exc.status)
         except Exception as exc:  # noqa: BLE001
             return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
         self._send_error(404, "没有这个端点")
@@ -160,24 +133,21 @@ class Handler(BaseHTTPRequestHandler):
         seconds = int((query.get("seconds") or [str(defaults["seconds"])])[0])
         category = (query.get("category") or [defaults["category"]])[0]
 
-        staging = Path(tempfile.mkdtemp(prefix="pipeline-up-"))
-        target = staging / "uploaded.apk"
         self.connection.settimeout(300)
         remaining = length
-        with target.open("wb") as handle:
-            while remaining > 0:
-                block = self.rfile.read(min(1 << 20, remaining))
-                if not block:
-                    break
-                handle.write(block)
-                remaining -= len(block)
-        if remaining != 0:
-            shutil.rmtree(staging, ignore_errors=True)
-            return self._json({"error": f"上传不完整，还差 {remaining} 字节"}, 400)
-
-        job = self.registry.submit(target, name, seconds, category,
-                                   tls_bypass=bool(defaults.get("tls_bypass", False)))
-        shutil.rmtree(staging, ignore_errors=True)
+        with tempfile.TemporaryDirectory(prefix="pipeline-up-") as staging:
+            target = Path(staging) / "uploaded.apk"
+            with target.open("wb") as handle:
+                while remaining > 0:
+                    block = self.rfile.read(min(1 << 20, remaining))
+                    if not block:
+                        break
+                    handle.write(block)
+                    remaining -= len(block)
+            if remaining:
+                return self._json({"error": f"上传不完整，还差 {remaining} 字节"}, 400)
+            job = self.registry.submit(target, name, seconds, category,
+                                       tls_bypass=bool(defaults.get("tls_bypass", False)))
         return self._json({"id": job.id, "name": job.name,
                            "note": "流水线已在后台启动；订阅 /api/pipeline/<id>/events 看进度。"})
 
@@ -195,6 +165,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if action == "events":
             return self._sse(job)
+        if len(seg) == 5 and action in ("evidence.zip", "logs", "reviews"):
+            return task_actions.get(self, job, action, query or {})
         if action == "report":
             if self.registry.runtime and job.state != "done": return self._json({"error":"本轮未通过完整检测"},409)
             return self._file(job.out / "out" / "mobile-report.pdf", "application/pdf")
@@ -216,6 +188,7 @@ class Handler(BaseHTTPRequestHandler):
         if action == "source":
             return self._pipeline_source(job, (query or {}).get("path", [""])[0])
         return self._json({"id": job.id, "state": job.state, "error": job.error,
+                           "retry_of": getattr(job, "retry_of", None),
                            "name": job.name, "result": job.result})
 
     def _pipeline_source(self, job: PipelineJob, rel: str):

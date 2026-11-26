@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="coverage_home" type="id" />
+    <item name="coverage_read" type="id" />
+    <item name="coverage_settings" type="id" />
+    <item name="coverage_open_read" type="id" />
+    <item name="coverage_read_id" type="id" />
+    <item name="coverage_open_settings" type="id" />
+    <item name="coverage_save" type="id" />
+</resources>

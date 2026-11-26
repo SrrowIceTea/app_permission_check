@@ -84,17 +84,15 @@ from mobile.pipeline.legacy_command import _run
 
 
 def finalize(job: PipelineJob, state: str, error: str | None = None) -> None:
-    job.state = state
-    job.error = error
-    if error: job.result["error"] = error
-    (job.out / "pipeline.json").write_text(json.dumps(
-        {"id": job.id, "state": job.state, "error": job.error, "name": job.name,
-         "apk": str(job.apk), "result": job.result},
-        ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     # 前置代理的生命周期终点：run_pipeline 的所有退出路径都会经过 finalize，
     # 放这里收最稳（漏了它会把 8888 端口泄漏给下一单——下一单的 start_mitm 预检
     # 会直接报"端口被占用"）。
     dboot.cleanup_early_mitm(job.id, job.out / "kill-early-mitm.log")
+    from mobile.pipeline.history import remember
+    job.state = state
+    job.error = error
+    if error: job.result["error"] = error
+    remember(job)
 
 
 def run_pipeline(job: PipelineJob) -> None:
@@ -210,6 +208,7 @@ def run_pipeline(job: PipelineJob) -> None:
         # AI 真实调用失败），报告已如实记录这些缺口，前端据 verification 展示「未通过项」，
         # 而不是把一单「报告已可用」的检测整单判失败。
         if report.exists():
+            job.result["evidence_zip"] = (out / "replay-inputs/inputs.json").is_file()
             finalize(job, "done")
         else:
             finalize(job, "failed", f"设备检测失败 rc={rc}，且未产出报告")

@@ -48,16 +48,17 @@
         if (!Array.isArray(rows)) return;
         rows.forEach(function(row) {
           if (!state.history.some(function(e){return e.id === row.id;})) state.history.push({id:row.id,name:row.name,
-            staticData:null,tree:null,fin:{state:row.state,error:row.error,result:row.result}});
+            staticData:null,tree:null,retryOf:row.retry_of,fin:{state:row.state,error:row.error,result:row.result}});
         });
         if (!state.current && state.history.length) {
           state.current=state.history[0];loadPipelineArtifacts(state.current.id);loadCheckedAI(state.current);
+          renderCurrentApkBar();
           if (state.current.fin.state === 'queued' || state.current.fin.state === 'running') {
             pipelineState.jobId=state.current.id;subscribePipeline(state.current.id);
           } else showPipelineResult(state.current,state.current.fin);
         }
         renderCurrentApkBar();updateCurrentPage();
-      }).catch(function(){});
+      }).catch(function(error) { console.warn('任务历史加载失败', error); });
   }
 
   // ---------- 工具 ----------
@@ -687,18 +688,24 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.error) { setPipelineJob('上传失败：' + data.error); return; }
-        pipelineState.jobId = data.id;
-        var entry = { id: data.id, name: data.name || file.name,
-                      staticData: null, tree: null, fin: null, stageStatus: null };
-        state.current = entry;
-        state.history.push(entry);
-        renderCurrentApkBar();
-        setPipelineJob('任务 ' + data.id + ' · ' + entry.name + '（流水线启动中…）');
-        subscribePipeline(data.id);
+        openNewPipeline(data, file.name);
       })
       .catch(function (err) {
         setPipelineJob('上传失败：' + err + '（一键审计后端 127.0.0.1:8771 是否已启动？）');
       });
+  }
+
+  function openNewPipeline(data, name) {
+    resetPipelineResult();
+    pipelineState.jobId = data.id;
+    pipelineState.stages.forEach(function (s) { pipelineState.status[s.id] = {status:'pending',message:''}; });
+    var entry = {id:data.id, name:data.name || name, retryOf:data.retry_of, staticData:null, tree:null, fin:null};
+    state.current = entry;
+    state.history.push(entry);
+    renderCurrentApkBar();
+    setPipelineJob('任务 ' + entry.id + ' · ' + entry.name);
+    switchPage('pipeline');
+    subscribePipeline(entry.id);
   }
 
   function subscribePipeline(id) {
@@ -751,7 +758,7 @@
     loadCheckedAI(entry);
     // 兜底：万一 static done 事件先于订阅到达，这里再拉一次
     if (!entry.staticData) loadPipelineArtifacts(id);
-    showPipelineResult(entry, fin);
+    if (state.current && state.current.id === id) showPipelineResult(entry, fin);
     renderCurrentApkBar();
     if (state.current && state.current.id === id) updateCurrentPage();
   }
@@ -792,81 +799,12 @@
   }
 
   function showPipelineResult(entry, fin) {
-    var host = document.getElementById('pipeline-result');
-    host.textContent = '';
-    host.style.display = '';
-
-    var card = el('div', 'pipeline-card');
-    card.appendChild(el('h3', null, '审计结果'));
-
-    var result = (fin && fin.result) || {};
-    var badgeCls = fin.state === 'done' ? 'done'
-      : (fin.state === 'static_only' ? 'static_only' : 'failed');
-    var badgeText = fin.state === 'done' ? '全流程完成'
-      : (fin.state === 'static_only' ? '仅静态（动态不可用）' : '失败');
-    card.appendChild(el('span', 'pl-status ' + badgeCls, badgeText));
-
-    if (fin.state === 'static_only' && result.device_unavailable) {
-      host.appendChild(el('div', 'pl-warn',
-        '动态分析跳过：' + result.device_unavailable + '。静态结论仍有效；接入模拟器后重新拖入同一 APK 即可跑完整流程。'));
-    }
-    if (fin.state === 'failed') {
-      host.appendChild(el('div', 'pl-warn', '流水线失败：' + (result.error || '未知错误')));
-    }
-
-    // 静态摘要
-    var st = result.static || {};
-    var dl = el('dl', 'pl-kv');
-    plKv(dl, '包名', st.package || '—');
-    if (st.app_label) plKv(dl, '应用名', st.app_label);
-    plKv(dl, '静态命中', (st.findings_total != null ? st.findings_total : '—') + ' 条'
-      + (st.supplement_findings != null ? '（补充扫描 ' + st.supplement_findings + ' 条）' : ''));
-    plKv(dl, '求值规则', st.rules_evaluated != null ? st.rules_evaluated + ' 条' : '—');
-    if (st.decompile) {
-      plKv(dl, '反编译', (st.decompile.classes_written || 0) + ' 个类'
-        + (st.decompile.errors ? '（' + st.decompile.errors + ' 个类失败）' : ''));
-    }
-    card.appendChild(dl);
-
-    // 跳转按钮：静态审计结果 / 源码查看 / 动态审计 / AI 报告
-    var navs = el('div', 'pl-links');
-    [['查看静态审计结果', 'static'], ['查看源码', 'source'],
-     ['查看动态审计', 'dynamic'], ['查看 AI 报告', 'ai-report']].forEach(function (pair) {
-      var a = el('a', 'pl-btn', pair[0]);
-      a.href = '#';
-      a.addEventListener('click', function (e) {
-        e.preventDefault();
-        switchPage(pair[1]);
-      });
-      navs.appendChild(a);
+    if (!window.VScanTaskActions) return;
+    window.VScanTaskActions.resultCard(entry, fin, PIPELINE_API_BASE, el, switchPage, openNewPipeline, function (id) {
+      var select = document.getElementById('apk-switch');
+      select.value = id;
+      select.dispatchEvent(new Event('change'));
     });
-    if (result.report) {
-      var ra = el('a', 'pl-btn primary', '下载动态审计报告（PDF）');
-      ra.href = PIPELINE_API_BASE + '/api/pipeline/' + entry.id + '/report';
-      ra.target = '_blank';
-      navs.appendChild(ra);
-    }
-    if (result.bundle) {
-      var ba = el('a', 'pl-btn', '查看证据包（JSON）');
-      ba.href = PIPELINE_API_BASE + '/api/pipeline/' + entry.id + '/bundle';
-      ba.target = '_blank';
-      navs.appendChild(ba);
-    }
-    card.appendChild(navs);
-    host.appendChild(card);
-
-    // 验证摘要
-    var v = result.verification;
-    if (v && v.passed === false) {
-      host.appendChild(el('div', 'pl-warn',
-        '报告已生成，但动态检测有 ' + (v.failed || []).length + ' 项判据未通过：' +
-        (v.failed || []).join('、') + '。详见「动态审计」页与报告中的缺口说明。'));
-    }
-  }
-
-  function plKv(dl, k, v) {
-    dl.appendChild(el('dt', null, k));
-    dl.appendChild(el('dd', null, v));
   }
 
 })();

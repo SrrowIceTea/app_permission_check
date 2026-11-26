@@ -24,6 +24,7 @@ const BUNDLES = [
   ['hook_privacy', "import { main, flushLocationReads } from './hook_privacy.js';\nrpc.exports.vscanFlushLocationReads = flushLocationReads;\nJava.perform(main);"],
   ['hook_consent', "import { main } from './hook_consent.js';\nJava.perform(main);"],
   ['hook_egress_tp', "import { main } from './hook_egress_tp.js';\nJava.perform(main);"],
+  ['hook_window_benchmark', "import { main } from './hook_window_benchmark.js';\nmain();"],
   ['ssl_pinning_tp', "import { main } from './ssl_pinning_tp.js';\nJava.perform(main);"],
   ['hook_all', [
     // 内存 Hook（native TLS 明文 / JCE 明文）并入同一 agent（2026-10-18 接线）。

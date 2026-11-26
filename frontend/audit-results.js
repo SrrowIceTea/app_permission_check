@@ -112,6 +112,9 @@
     const raw=node('details');raw.appendChild(node('summary','','查看本轮存储/加密证据'));
     raw.appendChild(node('pre','evidence-json',JSON.stringify(d.storage_crypto||{},null,2)));storage.appendChild(raw);
     list(host,'采集范围与缺口',b.gaps||[]);
+    if (global.VScanTaskActions && entry.fin.state === 'done') {
+      global.VScanTaskActions.reviews(section(host,'逐条人工复核'), entry, 'http://127.0.0.1:8771');
+    }
     const a=node('a','pl-btn','打开本轮完整证据 JSON');a.target='_blank';a.rel='noopener';
     a.href='http://127.0.0.1:8771/api/pipeline/'+encodeURIComponent(entry.id)+'/bundle';host.appendChild(a);
   }

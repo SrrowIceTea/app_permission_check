@@ -152,11 +152,11 @@ def extract(pcap: Path, out_jsonl: Path, tshark: str | None = None,
              "streams": 0, "by_proto": {}, "checksum_bad": 0, "partial_lines": 0,
              "binary_payloads": 0, "stream_gaps": 0, "conflicting_streams": 0,
              "malformed_rows": 0, "http_streams_skipped": 0, "truncated_at": None, "error": None}
-    if not stats["tshark"]:
-        stats["error"] = "未找到 tshark（装 Wireshark 或设 VSCAN_TSHARK）"
-        return stats
     if not pcap.exists() or pcap.stat().st_size <= 24:
         stats["error"] = f"pcap 不存在或为空：{pcap}"
+        return stats
+    if not stats["tshark"]:
+        stats["error"] = "未找到 tshark（装 Wireshark 或设 VSCAN_TSHARK）"
         return stats
 
     query = f"(tcp.len > 0 or tcp.flags.syn == 1) and not (icmp or icmpv6 or ({FRIDA_LOOPBACK}))"
