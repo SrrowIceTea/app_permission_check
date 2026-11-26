@@ -133,3 +133,14 @@
 - 验证：七页逐页渲染（Edge headless `--dump-dom` 与 1440×980 截图，均在 `output/v2-acceptance/`）：概览「22 条结论 / 候选 22」、静态「22 / 22 条」并显示中文标题、源码页取到 jadx 文件树与 `AuditConsentActivity.java` 正文、动态页五阶段（2 完成 / 3 跳过）、AI 页降级文案、PDF 页禁用提示、复核页「未发布本轮证据复核」。未完成任务的 `/report`、`/dashboard`、`/evidence.zip`、`/summary`、`/coverage` 均为 404 + `audit_not_completed`。
 - `tools/python313.ps1 -m unittest vehicle.webapp.test_presentation vehicle.webapp.test_server vehicle.webapp.test_workflow vehicle.webapp.test_integration` 46/46；新增 4 例（静态计数只认 `conclusion_level`、`static_only` 标来源、`done` 仍用摘要、`/static` 带标题）。全量 `tools/run_regressions.py` 21/22，唯一红仍是 `completion`：`vehicle/frontend/vehicle.css` 426 行、`v2/app.js` 317 行，均为远程 main 带入且未登记基线。
 - 待办：`completion` 要绿只能拆分这两个文件（守卫 `--update` 只允许收紧，不能新增条目）；v2 的采集/关联审计/看板三页需接设备跑 `live` 或 `replay` 任务；AI 页对静态任务可给出更准确的原因文案。
+
+## 2026-11-26 · 移动读取与外发窗口基准
+
+- 范围为复用自有移动夹具，新增 Android ID 只读、即时发送、延迟发送和同值跨批四组对照，通过独立本机回执核对来源并复用移动关联器重放五档窗口。
+- 自有 Gadget 变体新增受 `android.permission.DUMP` 限制的测试 Activity，读取并缓存 A/B，仅发送 A 到本机回环。复用现有 Gadget 驱动、移动代理、规则库和关联器，封存 APK、观测脚本、会话与输入的摘要。
+- API 36 手机模拟器多次复现 Java 读取 Hook 的 ART/JIT 崩溃，保留 [设备失败日志](../output/mobile-window-20261126/real-06/read_only/device-crash.log)。最终基准使用自有夹具真实读取后发出的原生日志标记。读取观测口径为 `fixture_native_log`。
+- 修复关联器读取移动规则维表时的 Windows SQLite URI 转义，缺失 PCAP 时优先报告输入缺失。
+- 离线构建 `:app:assembleGadget --offline --no-daemon` 成功，`-m unittest mobile.lab.test_window_benchmark core.test_rules_contract` 14/14。`tools/run_regressions.py --prepare --mobile` 通过 23/24，唯一失败 `completion` 报告两个已有车载文件超过 300 行，以及隔离工作树缺既有登记的车载 Gradle 构建报告。 [根离线回归](../output/mobile-window-20261126/regression-root-prepared/verification.json)
+- `mobile/tools/run_mobile_checks.py` 63/63，`tools/check_mobile_branch.py` 26/26。 [移动离线回归](../output/mobile-window-20261126/mobile-checks-native/verification.json) · [移动分支回归](../output/mobile-window-20261126/mobile-branch-native/verification.json)
+- `-m mobile.lab.window_benchmark_capture` 在 API 36 非 root 仿真环境封存四组，专用夹具已卸载，转发和模拟器已释放。两次 `-m mobile.lab.window_benchmark` 重放报告摘要相同。5/10/30 秒漏掉约 36 秒的旧批次发送，60/120 秒纳入，五档均误配同值 B。 [设备会话](../output/mobile-window-20261126/real-07/suite.json) · [清理记录](../output/mobile-window-20261126/device-cleanup-7.json) · [窗口验收](../output/mobile-window-20261126/verification.json)
+- 待办为独立移动应用的窗口取证和生产读取 Hook 的 API 36 兼容性复验。沿用生产窗口 30 秒。

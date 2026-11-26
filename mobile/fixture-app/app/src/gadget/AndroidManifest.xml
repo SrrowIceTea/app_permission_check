@@ -8,5 +8,8 @@
         tools:replace="android:extractNativeLibs">
         <activity android:name=".AuditProbeActivity" android:exported="true"
             android:theme="@android:style/Theme.Material.Light" />
+        <activity android:name=".WindowBenchmarkActivity" android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:launchMode="singleTop" android:theme="@android:style/Theme.Material.Light" />
     </application>
 </manifest>

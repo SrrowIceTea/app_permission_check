@@ -1,6 +1,6 @@
 # V-Scanner 当前状态与本周工单（唯一入口）
 
-> 更新：2026-11-23｜本轮以 `main` 的 `a71895b` 为基线；§1–2 保留 11-12 工程验收快照。
+> 更新于 2026-11-26。车载 11-23 验收以 `main` 的 `a71895b` 为基线。§1–2 保留 11-12 工程验收快照。
 > 仅用于授权测试（自有设备与自有 APK）。本文只写**状态与工单**，不新增任何检测结论。
 > `docs/` 下 16 份计划/方案类文档与根目录那份副本顶部都已标注「历史快照（2026-11-11 归档，
 > 不作当前清单）」——它们保留证据与来龙去脉，但**不再互相替代**；要判断"现在做什么"只看本文。
@@ -23,6 +23,8 @@
 VScanBench 新增同一自有 APK 的只读负控与发送对照。两个 AAOS 会话各通过 10 项健康检查。只读轮 0 个请求、0 个外发配对。发送轮 1 个 HTTP 200 回执、5 个经正文核对的主读取配对。两轮计为一个夹具工作流，沿用两份已签核样本的统计。 [原始证据复验](../output/vscanbench-read-send-20261123/run-02/control-verification.json)
 
 配对模式回归已覆盖只读 `0/0/0` 和发送 `8/5/5`。90 个签核配对重放经两个子代理独立复核一致。支持批次标识的夹具在五档组合模式下均命中 10 对正例、0 个额外候选，未丢失时间窗已命中的正例。第二夹具按时间窗重放。 [基准报告](../output/vscanbench-pairing-20261123/pilot-final.json) · [双人复核](../output/vscanbench-pairing-20261123/review-verification.json)
+
+2026-11-26 移动端移植了自有 APK 的 Android ID 读取与发送四组对照，五档重放分别计入漏配和同值跨批误配。独立应用取证仍待补，生产窗口沿用 30 秒。 [移动窗口基准](../mobile/lab/WINDOW_CALIBRATION.md)
 
 ## 车载 v2 工作台真实数据验收（2026-11-23）
 
@@ -115,7 +117,7 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0
 
 | # | 未完成项 | 来源 | 为什么不在本周 A 组 |
 | --- | --- | --- | --- |
-| 1 | 车载 B1 已签核两个自有 APK 的五档重放。Car Stats Viewer 已验收车速上传与 5 条断网行驶点补传 | [车载复核](../vehicle/bench/WINDOW_CALIBRATION.md) + mobile「未完成」 | 独立应用窗口仍缺可唯一对齐到单次 VHAL 读取的延迟证据，移动 30000ms 待实测 |
+| 1 | 车载 B1 已签核两个自有 APK 的五档重放。Car Stats Viewer 已验收车速上传与 5 条断网行驶点补传。移动 Android ID 自有夹具已完成五档重放 | [车载复核](../vehicle/bench/WINDOW_CALIBRATION.md) · [移动基准](../mobile/lab/WINDOW_CALIBRATION.md) | 车载和移动的跨应用窗口验证均缺独立参考 |
 | 2 | `protection_level_value`：车载 Android 15 的 150 条已入库；Android 13/14/16 的 30 条待补。移动 40 条未断言 | 本文「车载复核」+ mobile「未完成」 | 各版本使用各自来源 |
 | 3 | B2 VScanBench 最小版已交付，完整场景矩阵待扩展 | [车载基准](../vehicle/bench/README.md#b2-vscanbench-最小基准) | 新场景仍需独立参考与负控 |
 | 4 | F1 类加载归因（无 `hook_classload.js`） | AGENTS「未做」 | 需新钩子 + 设备验收 |
@@ -129,7 +131,7 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0
 
 **合并与剔除规则**（14 → 11）：
 
-- 车载跨应用阈值验证与移动侧 30000ms 校准归在时间窗议题 → #1（-1）；
+- 车载与移动的独立应用窗口验证归在时间窗议题 → #1（-1）；
 - AGENTS 的 protectionLevel 与 mobile 的 40 条是同一件事（级别映射）→ #2（-1）；
 - VEHICLE_ONLY「未完成 4」写「前端未改」，但该文件 §7 已记录"本轮补齐"，HEAD `81f14dc`
   的提交标题就是车载前端面板 → **该项已交付、不是未完成项**，剔除（-1）；

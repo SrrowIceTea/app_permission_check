@@ -30,7 +30,7 @@ from core.collector.attribution import CONNECT_AGE_MS  # noqa: E402  连接→�
 from core.evidence import codeloc  # noqa: E402  复用（车载/移动共用一套行号提取）
 from core.evidence.app_classes import load_app_classes  # noqa: E402  R8 混淆类的权威判据
 from core.io_utils import load_jsonl_counting  # noqa: E402  JSONL 唯一实现（§8.2 B-2）
-from core.rules_contract import load_rule_rows  # noqa: E402  规则行唯一读库入口
+from core.rules_contract import _readonly as open_rules_readonly, load_rule_rows  # noqa: E402
 import evaluation_mobile as ev  # noqa: E402
 from read_semantics import read_gaps
 # 同意链四态观测判定拆自本文件（correlate_mobile 曾超 300 行硬线）。
@@ -84,7 +84,7 @@ def load_rules(db: Path, version: str) -> list[dict]:
 
 def load_data_types(db: Path, version: str) -> tuple[dict, dict, dict]:
     """→ (data_type→中文名, data_type→[权限短名], category_key→category)"""
-    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    conn = open_rules_readonly(db)
     conn.row_factory = sqlite3.Row
     zh, hints = {}, {}
     for r in conn.execute("SELECT data_type_key, name_zh, permission_hint FROM"
@@ -103,7 +103,7 @@ def load_category(db: Path, version: str, key: str | None) -> dict:
     if not key:
         return {"key": None, "known": False,
                 "note": "未声明 App 类目：over_collection 判定不可用"}
-    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    conn = open_rules_readonly(db)
     conn.row_factory = sqlite3.Row
     row = conn.execute("SELECT name_zh, basic_function, necessary_data_json,"
                        " no_personal_info_required FROM app_categories WHERE category_key=?"

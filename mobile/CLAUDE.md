@@ -207,8 +207,8 @@ AI 三阶段研判（含编造校验）、PDF 报告（十章 + 三附录）、�
 详见 `output/mobile-device-20261003-041553/`。
 
 **未完成**：
-- 时间窗 30000ms 是**声明值，尚未由移动夹具校准**（`WINDOW_CALIBRATION.md` 待建）。
-  E2E 已能量出真实的"读取→外发"间隔分布，下一步据此校准。
+- 移动规则沿用 30000ms。自有 Android ID 夹具已覆盖只读、即时、延迟和同值跨批四组，
+  详见[五档窗口基准](lab/WINDOW_CALIBRATION.md)。独立应用的窗口校准待完成。
 - 权限 `protectionLevel` 40 条全部未断言（链路已修通，产出步骤见
   `rules/calibration/README.md`；无实测数据前不得编造级别）。
 - AI 阶段**已用真实 key 跑过**（keepass / camera 两次真实调用，见 §8.1 A13）：提示词渲染、

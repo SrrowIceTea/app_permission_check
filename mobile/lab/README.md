@@ -26,6 +26,7 @@ Root 路径运行官方原始 APK，独立展示批次结果；与非 root 衍�
 原包记录身份 → Gadget 重打包 → 采集 → 关联/AI/报告，见 `workbench/README.audit.md`；
 但"支持上传"不等于"任意加固包都能插桩解密"，能力边界仍见下文。）
 论文测试集及分层指标见 [README.benchmarks.md](README.benchmarks.md)。
+Android ID 只读、发送及窗口重放见 [移动端窗口基准](WINDOW_CALIBRATION.md)。
 
 ## 2026-10-17 实测
 
