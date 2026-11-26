@@ -153,3 +153,15 @@
 - 自有 Android 16 三页夹具标注参考及自动轮各完成 3/3 页、4/4 个运行时确认动作。首轮等待设备电话服务，第二轮遇到顶部区域点击未进入目标页。最终夹具用无标题栏主题和安全内边距复验，专用模拟器与安装已释放，离线重新评分摘要一致。 [G1 设备验收](../output/mobile-audit-delivery-20261126/ui-coverage-03/verification.json) · [清理记录](../output/mobile-audit-delivery-20261126/device-cleanup-3.json)
 - `mobile/tools/run_mobile_checks.py` 63/63，`tools/check_mobile_branch.py` 26/26，`unittest discover -s mobile/pipeline -p 'test_*.py'` 17/17，前端流水线契约 7/7。根回归 23/24，`completion` 受既有车载 CSS/JS 行数和本隔离树构建报告基线影响。 [移动回归](../output/mobile-audit-delivery-20261126/mobile-checks/verification.json) · [移动分支回归](../output/mobile-audit-delivery-20261126/mobile-branch-final/verification.json) · [根回归](../output/mobile-audit-delivery-20261126/regression-final/verification.json)
 - 待办为独立移动应用的 G1 多页面覆盖验证。
+
+## 2026-11-27 · 正式一键审计：真新任务闭环验收
+
+- 范围为补上上一轮未覆盖的一环：用自有 APK 通过正式服务 `POST /api/pipeline` 跑一次**完整新任务**（非夹具、非封存会话重放），从页面下载证据 ZIP、离线复算、提交并回读人工复核。证据全部在 `output/mobile-audit-delivery-20261126/`（不入库）。
+- 服务用 `mobile/pipeline/server.py --port 8771 --workdir <audit-run-20261126> --seconds 60` 启动（注意 `service.py` 只是配置模块、无 main 守卫，直接跑会静默退出）；前端 `python -m http.server 8090`。直接跑脚本需显式 `PYTHONPATH=<worktree 根>`，否则 `No module named 'mobile'`。
+- 首轮任务 `05793de9629b` 到 `done` 但 `evidence_zip=false`：`hook-all.log` 报 `no such script: dist/hook_all.bundle.js`——该隔离 worktree 的 dist 只有窗口基准 bundle，缺生产 `hook_all`。根因是构建产物缺失，不是代码缺陷。
+- 修复构建前置：`npm ci --ignore-scripts --offline` 装 frida-java-bridge 7.0.13；其 `class-factory.js` 与 `02-class-factory-transition-ref.patch` 基准行号不符，`git apply` 失败，复用已打好该补丁的同版本源文件后 `node build.mjs --only hook_all` 成功（`hook_all.bundle.js` SHA `fc57af79…`，marker `promoteTransitionRef` 命中）。
+- 第二轮真新任务 `cb41891ef671`：`state=done`、`evidence_zip=true`，30 项判据中 25 项通过，未通过 5 项均为环境能力项（`tshark_available`/`network_up`/`system_ca`/`http_messages_extracted`/`startup_calls_covered`），Hook 挂载三项（`hook_privacy_armed`/`hook_consent_armed`/`runtime_events_captured`）全部通过。静态 10 条发现 + 补充 16 条，敏感面签名 7/8、调用点 9/10。报告按"报告生成即完成"如实呈现缺口，不整单判失败。
+- ZIP 经页面接口下载（302206 字节、14 个成员，含真实 `reads.jsonl`/`egress.jsonl`/`consent.jsonl`）。`-m mobile.pipeline.evidence_archive replay` 复算 `status=passed`、`kind=mobile_correlation`、APK 摘要 `230bbd03…` 一致、17 条发现一致。提交两条人工复核（`confirmed` / `needs_more_evidence`）并回读，重新下载 ZIP 已含 `finding-reviews.json`，带复核 ZIP 再复算仍通过。
+- 页面级验收：无头 Chrome 走 CDP 加载 8090 的 `app.html`，选中真新任务 → 结果卡显示"全流程完成" → ZIP 链接下载 200 → 动态页回显两条复核 → 刷新后复核仍在，无 JS 异常。 [页面验收](../output/mobile-audit-delivery-20261126/browser-full-run-verification.json) · [页面下载 ZIP](../output/mobile-audit-delivery-20261126/full-run-browser-evidence.zip) · [复算](../output/mobile-audit-delivery-20261126/full-run-replay/verification.json)
+- 验证：`unittest`（5 个 pipeline 模块）17/17、`mobile/tools/run_mobile_checks.py` 63/63、`git diff --check` 干净。本次未改产品代码，仅补构建产物（node_modules/dist，不入库）。
+- 边界与待办：本轮跑在 API37.2 的 VScan_Phone（冷启动、非 root），系统 CA 与外网相关判据未过，因此没有 HTTPS 明文与完整 egress 关联；生产读取 Hook 的 API36 稳定性见第 1 步复验结论。下一步为第 3 步后台读取与断网补传对照。
