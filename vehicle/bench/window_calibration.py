@@ -28,7 +28,7 @@ def supports_token_replay(manifest, label):
 
 
 def calibrate(capture, label_path, windows=(5000, 10000, 30000, 60000, 120000), *,
-              pairing='window', rules=None, include_pairs=False):
+              pairing='window', rules=None, include_pairs=False, evidence_root=ROOT):
     if pairing not in PAIRING_MODES:
         raise ValueError('invalid pairing mode')
     capture, label_path = Path(capture), Path(label_path)
@@ -51,7 +51,7 @@ def calibrate(capture, label_path, windows=(5000, 10000, 30000, 60000, 120000), 
     sha = manifest['installed_apk_sha256']
     session = manifest['session']
     # Validation also checks reference hashes before running a sweep.
-    pair_metrics([], label, sha, session)
+    pair_metrics([], label, sha, session, root=evidence_root)
     if pairing != 'window' and not supports_token_replay(manifest, label):
         raise ValueError('token replay requires sealed VHAL evidence for the owned fixture')
     vhal_rules = load_rules(database, version) if manifest.get('data_scope') != 'general' else []
@@ -68,11 +68,11 @@ def calibrate(capture, label_path, windows=(5000, 10000, 30000, 60000, 120000), 
             findings, _ = evaluate(reads, flows, package, session, version, general)
         vhal = evaluate_data_egress(vhal_rules, reads, flows, window_override_ms=window, pairing=pairing)
         findings.extend(vhal)
-        row = {'window_ms': window, **pair_metrics(findings, label, sha, session)}
+        row = {'window_ms': window, **pair_metrics(findings, label, sha, session, root=evidence_root)}
         if include_pairs:
             row['matched_pairs'] = [list(pair) for pair in sorted(matched_pairs(findings))]
         if pairing != 'window':
-            row.update(batch_evidence(vhal, label, sha, session))
+            row.update(batch_evidence(vhal, label, sha, session, evidence_root=evidence_root))
         rows.append(row)
     result = {'status': 'agent_initial_evaluation' if label['origin'] == 'agent_review' else 'evaluated',
             'capture': str(capture.resolve()), 'label_sha256': digest(label_path),
@@ -93,7 +93,7 @@ def calibrate(capture, label_path, windows=(5000, 10000, 30000, 60000, 120000), 
     return result
 
 
-def batch_evidence(findings, label, sha, session):
+def batch_evidence(findings, label, sha, session, *, evidence_root=ROOT):
     counts, refs, token_findings = Counter(), [], []
     for finding in findings:
         token_pairs = []
@@ -106,7 +106,7 @@ def batch_evidence(findings, label, sha, session):
                 'read_src', 'read_event_id', 'flow_src', 'flow_event_id', 'delta_ms',
                 'token_sha256', 'token_role', 'claim_match_ms')}})
         token_findings.append({**finding, 'pairs': token_pairs})
-    token_metrics = pair_metrics(token_findings, label, sha, session)
+    token_metrics = pair_metrics(token_findings, label, sha, session, root=evidence_root)
     return {'by_pair_basis': dict(counts), 'corroborated_claims': len(refs),
             'token_aligned': token_metrics['tp'], 'token_missed': token_metrics['fn'],
             'token_extra_candidates': token_metrics['fp'], 'corroborated_refs': refs}

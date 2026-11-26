@@ -379,3 +379,11 @@
 - `python -m vehicle.bench.carstats_speed` 与 `python -m vehicle.bench.carstats_queue` 用原始读数、HTTPS 正文及 SQLite 证据重放，两份输出均与封存参考逐字段一致。`python -m vehicle.bench.window_calibration --include-pairs` 用冻结规则库重放两个自有夹具，五档计数均与各自签核报告一致。证据在 `output/b1-independent-qualification-20261125/verification.json`。
 - `python -m unittest vehicle.bench.test_window_calibration vehicle.bench.test_vscanbench` 在功能分支 15/15，在保留 11/24 车速重放改动的原工作树 17/17。两个工作树均使用项目 Python。
 - Capy、Drive Assist、Android-AAOS 只做源码审查。独立可计分案例 0，沿用 30 秒生产窗口。 [候选及待验收条件](../vehicle/bench/INDEPENDENT_WINDOW_QUALIFICATION.md)
+
+## 2026-11-25 · B2 后台读取与发送对照
+
+- 范围为复用自有 AAOS 夹具的 `read_only` 和 `plain` 两个动作，记录切至桌面前后及动作结束的原始显示状态，核对 VHAL 主读取、归因流和独立回执，再将通过的对照加入 VScanBench。
+- `vehicle.lab.read_send_control --background` 附加同一自有 APK，保留主屏 Home 前和动作前后快照。离线 `vehicle.bench.background_control` 从原始 Activity、同会话 VHAL、代理流与独立回执读取证据。VScanBench 扩展清单校验参考摘要，工作流单列。首轮离线复核发现配对引用的元组与落盘 JSON 数组不等，以及隔离工作树的证据根未传入窗口标签校验，已修复。
+- 专用 AAOS 35 / user 10 中，主屏 Activity 在两个后台快照均为 `STOPPED` 且不可见。两轮健康检查各 11/11、各有 5 个成功主读取。只读轮 0 请求、0 外发配对，发送轮 1 条 HTTP 200、原始正文摘要与代理一致，三模式配对数为 8/5/5。专用模拟器及 ADB 已关闭，转发无残留。
+- 原始回放与 VScanBench 扩展分别复跑两次，各自输出字节一致。pilot 的两个 APK、五档 90 个签核配对及既有工作流逐字段一致。独立可计分案例为 0。证据目录 `output/vehicle-b2-background-20261125/`，汇总 `verification.json`，扩展清单 `vscanbench-background.json`。
+- `tools/python313.ps1 -m unittest vehicle.bench.test_background_control vehicle.bench.test_vscanbench vehicle.bench.test_window_calibration` 20/20，`tools/python313.ps1 tools/run_regressions.py --out <本轮输出>/regression-final` 22/22，`git diff --check` 通过。后台上下文由动作前后快照限定。 [使用说明](../vehicle/bench/README.md#aaos-后台读取与发送对照)
