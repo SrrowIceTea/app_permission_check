@@ -20,7 +20,7 @@ from vehicle.pipeline import readiness
 from vehicle.pipeline.capture_device import Device, wait_until, write_manifest
 from vehicle.pipeline.capture_forward import allocate_forward, verify_forward_cleanup
 from vehicle.pipeline.capture_lifecycle import observe_until, observe_with_lifecycle, stop_workers
-from vehicle.pipeline.capture_process import attached_pid, process_alive
+from vehicle.pipeline.capture_process import attached_pid, observe_original_process, process_alive
 from vehicle.pipeline.ui_exploration import exploration_window
 from vehicle.pipeline.capture_proxy import proxy_state, restore_proxy, restore_reverse, verify_restore, verify_reversible
 from vehicle.pipeline.proxy_log import ProxyLog
@@ -34,7 +34,7 @@ from vehicle.privacy import owntracks_contract as owntracks
 def capture_app(package, serial, user, seconds, output, activity=None, scope='all',
                 preserve_system_proxy=False, frida_port=27043, ha_webhook=False, ha_websocket=False,
                 mg4_webview=False, abs_send=False, owntracks_location=False, owntracks_host='198.18.0.1',
-                tls_bypass=True, multi_process=True, auto_explore=False):
+                tls_bypass=True, multi_process=True, auto_explore=False, expected_apk_sha256=None):
     if not re.fullmatch(r'[A-Za-z]\w*(?:\.\w+)+', package) or seconds <= 0:
         raise AuditError('invalid_capture_target', '包名无效或采集时长非正数。', '明确指定授权包名与时长。')
     if sum((ha_webhook, ha_websocket, mg4_webview, abs_send, owntracks_location)) > 1:
@@ -44,7 +44,6 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
     if owntracks_location:
         sample_mode = owntracks
     output = Path(output).resolve()
-    # 产物新鲜度闸（2026-11-10）：在**任何**设备动作之前拒绝落后的 dist 产物。
     bundle, hook_bundle = gated_hook_bundle(scope, sample_mode)
     bundle_name = bundle.name
     output.mkdir(parents=True, exist_ok=False)
@@ -69,6 +68,8 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
 
     try:
         identity = device.ordinary_identity(package, user, scope)
+        if expected_apk_sha256 is not None and identity['installed_apk_sha256'] != expected_apk_sha256:
+            raise AuditError('installed_apk_mismatch', '装机 APK 与授权 APK 的摘要不同。', '核对授权构建和设备用户。')
         if owntracks_location:
             from vehicle.privacy.owntracks_endpoint import allowed_host
             if not allowed_host(owntracks_host):
@@ -136,8 +137,7 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
             if not re.fullmatch(re.escape(package) + r'/[\w.$]+', activity):
                 raise AuditError('invalid_activity', 'Activity 必须属于授权包名。', '提供完整 package/.Activity。')
             device.call('shell', 'am', 'start', '--user', user, '-W', '-n', activity)
-        # Attach to a running app; launch is explicit because AAOS media services
-        # may not have a launcher Activity. Never silently select another process.
+        # Attach only to an explicitly selected, running package.
         pid_text = device.call('shell', 'pidof', package)
         if not pid_text:
             raise AuditError('app_not_running', '目标进程未运行。', '打开授权应用或提供 --activity 后重跑。')
@@ -149,24 +149,24 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
             '--stop-file', str(output / '.stop'), '--seconds', str(seconds + 40),
             '--out', str(output / 'reads.jsonl'), '--session', session,
             '--event-db', str(output / 'events.sqlite'),
-            # 显式开关（2026-11-10）：默认传，保持既有交付行为；--no-tls-bypass 才关。
-            # 开关值可 grep 处：reads.log「分档模式」行、reads.jsonl TLS_SWITCH 事件、verification.json。
             *(['--tls-bypass'] if tls_bypass else []),
             *(['--multi-process'] if multi_process else [])], 'reads', env)
         def hooks_ready():
             if driver.poll() is not None:
                 raise AuditError('driver_exited', 'Hook 驱动提前退出。', '查看 reads.log。')
             from vehicle.privacy.catalog import catalog_hash
-            # 就绪集合只由 readiness.required_events 定义：preflight 用同一份，
-            # 关闭 TLS 不再被审计入口误判为 Hook 未武装。
+            # 与 preflight 共用 readiness 判据，支持 TLS 关闭。
             return readiness.ready(load_jsonl(output / 'reads.jsonl'),
                 tls_bypass=tls_bypass, scope=scope, sample_mode=sample_mode,
                 catalog_hash_value=catalog_hash(),
                 extra=(('http_write', 'ARMED'),) if mg4_webview else ())
         wait_until(hooks_ready, 30, 'Hook 就绪')
+        verification['checks']['hooks_ready'] = True
         text = (output / 'reads.log').read_text(encoding='utf-8')
         # pid 来源优先级：钩子事件 > 生命周期采样 > 驱动日志（日志行会与就绪判据竞态）。
         initial_pid, pid_source = attached_pid(load_jsonl(output / 'reads.jsonl'), text)
+        if expected_apk_sha256 is not None:
+            verification['initial_process'] = observe_original_process(device, package, initial_pid, pid_text)
         from vehicle.lab.abs_capture import capture_syncs
         workers = [('mitm', proxy), ('reads', driver)]
         exploration = (exploration_window(workers, seconds, device, package, user, session, verification)
@@ -179,7 +179,6 @@ def capture_app(package, serial, user, seconds, output, activity=None, scope='al
                 observe_until_fn=observe_until)
         if wire is not None:
             abs_rows = wire.result()
-        verification['checks']['hooks_ready'] = True
     except Exception as error:
         verification['error'] = error.record() if isinstance(error, AuditError) else {
             'code': 'capture_failed', 'exception_type': type(error).__name__,

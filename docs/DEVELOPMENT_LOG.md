@@ -394,3 +394,11 @@
 - `:app:assembleUiCoverage :app:assembleDebug --offline --no-daemon` 通过。AAPT2 清单检查确认三页只进 `com.vscanner.targetapp.g1`。多页采集绑定 APK SHA-256，自动控制核对当前 Activity、资源 ID 及标签。评分需要实际目的页面、同会话成功车速读取及成功注册后的档位回调，清理时间不延长 36 秒窗口。
 - 最终 APK 在专用 AAOS 35 / user 10 两个独立 36 秒会话中，手动和自动均 3/3 页、4/4 动作，健康各 11/11，未记录代理 HTTP 流。每轮保留读取与订阅证据事件编号。报告复算两次字节一致。首轮历史报告重放仅因独立工作树的 CRLF 改变了标注文件字节摘要，指定原封存标注文件后两个历史报告逐字节一致。
 - `tools/python313.ps1 -m unittest vehicle.bench.test_ui_coverage vehicle.pipeline.test_capture_lifecycle` 21/21，`tools/python313.ps1 tools/run_regressions.py --out <本轮输出>/regression-final` 22/22，`git diff --check` 通过。设备、ADB 和回环转发收尾核对见 `output/vehicle-g1-multipage-20261125/device-cleanup.json`，最终报告及 APK 摘要见同目录 `verification.json`。普通第三方车载应用仍待独立对照。
+
+## 2026-11-25 · A4 车载分段采集与进程退出恢复
+
+- 范围为新增显式启用的分段采集入口。每段封存独立会话，确证原进程退出并通过收尾后，最多重启授权 Activity 一次。用故障注入验证退出段的证据保留、重采会话隔离和失败停止条件。
+- `vehicle.ps1 capture-segmented` 按段核验装机摘要，关闭 TLS 绕过。原 PID 必须在 Hook 就绪时可见、退出后消失。ADB 未知和收尾失败时停止。恢复前核对失败段的读数、流量和验证摘要。各段仍由原有 `audit` 入口独立验收。 [使用与状态](../vehicle/pipeline/CAPTURE_SEGMENTS.md)
+- 自有 AAOS 35 / user 10 上点击夹具「读取 VHAL」并确认日志后，用 `am force-stop` 注入一次退出。PID 4736 的 13 条读取记录保留，重启到 PID 4903 后完成两个 24 秒健康段，各保留 13 条读取记录并通过 11/11 健康检查。三个会话独立，运行状态为 `completed_with_gaps`。退出段被 `audit --no-pdf` 拒绝，两个健康段各生成 11 条结论记录。专用模拟器和 ADB 已关闭。证据存于 `output/vehicle-a4-recovery-20261125/` 的 `injected-exit-final-verification.json`、`audit-segment-verification.json` 和 `device-cleanup.json`。
+- 首轮设备验收被新鲜度闸拒绝，重建当前 Hook 后通过。根回归首轮独立工作树缺完整 Hook 构建和既有守卫登记的 Gradle 报告，补齐后重跑。多进程单独退出、切段间隙退出和真机恢复仍待单独验证。
+- `tools/python313.ps1 tools/run_regressions.py --out <本轮输出>/regression-final` 为 22/22，其中 `vehicle-pipeline` 为 379/379。`git diff --check` 通过。
