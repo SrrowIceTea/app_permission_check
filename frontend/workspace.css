@@ -80,3 +80,30 @@
 .results-table td {white-space:normal;} .topbar-left{min-width:0;} .apk-switch{max-width:360px;} .page-head{padding-top:12px;padding-bottom:12px;}
 
 .report-section-title{font-family:var(--font-ui);letter-spacing:0;}
+
+.task-actions summary { cursor:pointer;color:var(--live); }
+.task-actions label { display:flex;align-items:center;gap:8px;margin:12px 0; }
+.task-actions label input { accent-color:var(--live); }
+.task-actions pre:empty { display:none; }
+.task-review-form { display:grid;gap:12px;max-width:540px;margin-top:12px; }
+.task-review-form label { display:grid;gap:6px; }
+.task-review-form input,.task-review-form textarea,.task-review-form select,
+.task-actions select {
+  max-width:100%;
+  background:#0d151e;
+  border:1px solid var(--line-2);
+  color:var(--paper);
+  padding:8px 10px;
+  font:inherit;
+}
+.task-review-form textarea { resize:vertical; }
+.task-review-form .pl-btn { justify-self:start; }
+
+@media(max-width:600px) {
+  .topbar { gap:8px;padding-inline:12px; }
+  .topbar-left { flex:1;gap:6px; }
+  .topbar-right { flex-shrink:0;gap:6px; }
+  .topbar-left .current-apk-name,.topbar-left .apk-switch { min-width:0; }
+  .topbar-left .apk-switch { max-width:100%; }
+  .topbar .service-addr { max-width:52px;overflow:hidden;text-overflow:ellipsis; }
+}

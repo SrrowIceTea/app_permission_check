@@ -30,6 +30,7 @@ def run(job, runtime, finalize):
     job.state='running'
     try:
         binding=audit_inputs.configuration(runtime)
+        job.result['retry_binding']={key:binding[key] for key in ('serial','mode')}
         emit('prepare','done','真实正控已通过；检测模式 '+binding['mode'])
         emit('static','running','扫描当前上传原包并反编译')
         uploaded=runtime.upload(job.apk,job.name)
@@ -52,6 +53,9 @@ def run(job, runtime, finalize):
         scenario={'com.absinthe.libchecker':'libchecker','me.ash.reader':'readyou'}.get(task['apk']['package'],'launch')
         operation=runtime.operate(task_id,'audit',{'authorized':True,**{k:binding[k] for k in ('mode','serial')},
             'scenario':scenario,'seconds':job.seconds,'pcap_sidecar':False,'consent_timeout':180})
+        job.result['audit_attempt_id']=operation['job_id']
+        from mobile.pipeline.history import remember
+        remember(job)
         attempt=runtime.store.task_dir(task_id)/'attempts'/operation['job_id']
         core=attempt/('core-'+operation['job_id'])
         emit('boot','running','在正控同设备 '+binding['serial']+' 上实际运行')
@@ -92,12 +96,30 @@ def run(job, runtime, finalize):
         verified.update(checks=[{'name':n,'exit_code':0 if val is True else 1}
                                 for n,val in captured.get('checks',{}).items()],failed=[])
         write_json(job.out/'verification.json',verified)
+        job.result['evidence_zip']=publish_replay(job,core)
         job.result.update(report=str(target/'mobile-report.pdf'),bundle=str(target/'bundle.json'),
             verification=verified,mode=binding['mode'],coverage_gaps=verified.get('quality_gaps',[]),
             counts=bundle.get('counts',{}),risk=runtime.store.get(task_id).get('risk_assessment'))
         finalize(job,'done')
     except Exception as exc:
-        emit('report','failed','本轮未通过完整门控，不发布成功报告')
+        if not any(value[0]=='failed' for value in emitted.values()):
+            active=next((sid for sid in reversed(emitted) if emitted[sid][0]=='running'),'prepare')
+            emit(active,'failed','本阶段未完成，请查看本轮任务日志')
         # Do not leave an unchecked report downloadable even if copy failed midway.
         for name in ('mobile-report.pdf','ai.json'):(job.out/'out'/name).unlink(missing_ok=True)
         finalize(job,'failed',f'{type(exc).__name__}: {exc}')
+
+
+def publish_replay(job, core):
+    if not (core/'replay-inputs/inputs.json').is_file():
+        return False
+    try:
+        shutil.copytree(core/'replay-inputs',job.out/'replay-inputs')
+        for name in ('summary.json','findings.jsonl'):
+            shutil.copy2(core/'out'/name,job.out/'out'/name)
+    except OSError as error:
+        job.result['evidence_zip_error']='本轮原件封存失败，可查看任务日志。'
+        with (job.out/'evidence-archive.log').open('a',encoding='utf-8') as log:
+            print(error,file=log)
+        return False
+    return True

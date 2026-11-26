@@ -31,6 +31,7 @@ from core.evidence import codeloc  # noqa: E402  复用（车载/移动共用一
 from core.evidence.app_classes import load_app_classes  # noqa: E402  R8 混淆类的权威判据
 from core.io_utils import load_jsonl_counting  # noqa: E402  JSONL 唯一实现（§8.2 B-2）
 from core.rules_contract import _readonly as open_rules_readonly, load_rule_rows  # noqa: E402
+from mobile.analyze.replay_inputs import load_policy
 import evaluation_mobile as ev  # noqa: E402
 from read_semantics import read_gaps
 # 同意链四态观测判定拆自本文件（correlate_mobile 曾超 300 行硬线）。
@@ -138,6 +139,8 @@ def main() -> int:
     ap.add_argument("--policy-store", default=None)
     ap.add_argument("--version-code", default=None, help="APK versionCode, for local policy association")
     ap.add_argument("--apk-sha256", default=None, help="Full APK SHA-256, for exact local policy association")
+    ap.add_argument("--replay-inputs")
+    ap.add_argument("--frozen-policy", help=argparse.SUPPRESS)
     ap.add_argument("--package", required=True)
     ap.add_argument("--app-category", default=None)
     ap.add_argument("--window-override-ms", type=int, default=None)
@@ -197,10 +200,7 @@ def main() -> int:
 
     sys.path.insert(0, str(ROOT / "mobile" / "policy"))
     import policy_lint
-    from policy_library import load_policy
-    policy = load_policy(Path(args.policy_store) if args.policy_store else None,
-        package=args.package, version_code=args.version_code, apk_sha256=args.apk_sha256,
-        allow_legacy=bool(args.policy_store and args.package == "com.vscanner.privacydemo"))
+    policy = load_policy(args, LINE_EGRESS)
     gaps.extend(policy.get("gaps", []))
     if policy["available"]:
         policy["disclosure_scan"] = policy_lint.disclosure_scan(policy["text"], policy_lint.load_keywords())

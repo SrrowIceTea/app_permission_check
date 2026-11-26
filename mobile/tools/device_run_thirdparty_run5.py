@@ -149,6 +149,7 @@ def _stage_finalize(ctx) -> None:
          "--static-dir", str(out / "static"),
          *policy_id_args,
          *policy_args,
+         "--replay-inputs", str(out / "replay-inputs"),
          "--out", str(o / "findings.jsonl"), "--summary", str(o / "summary.json")],
         out / "correlate.log"))
     emit("correlate", "done", "关联完成，结论写入 findings.jsonl")

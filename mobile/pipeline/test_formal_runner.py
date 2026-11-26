@@ -26,7 +26,8 @@ class FormalTests(TestCase):
             write_json(core/'verification.json',{'passed':passed,'task_id':'abc','stages':{'ai':{'request_count':3}}})
             write_json(target/'bundle.json',{'counts':{}});(target/'mobile-report.pdf').write_bytes(b'%PDF-unit-only')
             out=root/'pipeline';out.mkdir()
-            job=SimpleNamespace(state='queued',apk=root/'input.apk',name='test.apk',result={},events=out/'events.jsonl',out=out,seconds=5)
+            job=SimpleNamespace(id='123456abcdef',state='queued',error=None,apk=root/'input.apk',
+                name='test.apk',result={},events=out/'events.jsonl',out=out,seconds=5)
             finish=Mock()
             with patch('mobile.pipeline.formal_runner.audit_inputs.configuration',return_value={'mode':'nonroot-gadget','serial':'emulator-5560'}),patch('mobile.pipeline.formal_runner.wait_job'),patch('mobile.ai.review_gates.load_checked_stages',return_value=({f'stage{n}':{} for n in (1,2,3)},{})):
                 run(job,runtime,finish)

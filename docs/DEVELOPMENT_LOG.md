@@ -144,3 +144,12 @@
 - `mobile/tools/run_mobile_checks.py` 63/63，`tools/check_mobile_branch.py` 26/26。 [移动离线回归](../output/mobile-window-20261126/mobile-checks-native/verification.json) · [移动分支回归](../output/mobile-window-20261126/mobile-branch-native/verification.json)
 - `-m mobile.lab.window_benchmark_capture` 在 API 36 非 root 仿真环境封存四组，专用夹具已卸载，转发和模拟器已释放。两次 `-m mobile.lab.window_benchmark` 重放报告摘要相同。5/10/30 秒漏掉约 36 秒的旧批次发送，60/120 秒纳入，五档均误配同值 B。 [设备会话](../output/mobile-window-20261126/real-07/suite.json) · [清理记录](../output/mobile-window-20261126/device-cleanup-7.json) · [窗口验收](../output/mobile-window-20261126/verification.json)
 - 待办为独立移动应用的窗口取证和生产读取 Hook 的 API 36 兼容性复验。沿用生产窗口 30 秒。
+
+## 2026-11-26 · 移动审计交付与复核
+
+- 范围为证据 ZIP 与离线重放、任务失败日志与重试、移动夹具多页面覆盖率、逐条人工复核。以已推送的移动窗口基准提交为父提交。
+- 一键审计关联阶段封存规则、实际选用的政策与原始输入。HTTP 下载按任务绑定，CLI 复用移动关联器。拒绝错误的 APK 摘要、已变化的输入和混入的会话。四组手机原件全部从 ZIP 重放，五档报告摘要与上轮一致。 [四组离线结果](../output/mobile-audit-delivery-20261126/portable-window-final/verification.json)
+- 失败任务日志按固定名称读取，重试复用经核对的原 APK 和任务设置，独立记录任务 ID 和原单。复核由本任务的发现 ID 定位，单独保存人工状态、复核人、时间和依据。Chrome 用封存的真实手机会话验收下载与复核回读，用受控失败验收重试和回看原单。浏览器下载包离线核对四条原始发现一致。 [页面验收](../output/mobile-audit-delivery-20261126/browser-verification.json) · [下载包复算](../output/mobile-audit-delivery-20261126/browser-zip-replay/verification.json)
+- 自有 Android 16 三页夹具标注参考及自动轮各完成 3/3 页、4/4 个运行时确认动作。首轮等待设备电话服务，第二轮遇到顶部区域点击未进入目标页。最终夹具用无标题栏主题和安全内边距复验，专用模拟器与安装已释放，离线重新评分摘要一致。 [G1 设备验收](../output/mobile-audit-delivery-20261126/ui-coverage-03/verification.json) · [清理记录](../output/mobile-audit-delivery-20261126/device-cleanup-3.json)
+- `mobile/tools/run_mobile_checks.py` 63/63，`tools/check_mobile_branch.py` 26/26，`unittest discover -s mobile/pipeline -p 'test_*.py'` 17/17，前端流水线契约 7/7。根回归 23/24，`completion` 受既有车载 CSS/JS 行数和本隔离树构建报告基线影响。 [移动回归](../output/mobile-audit-delivery-20261126/mobile-checks/verification.json) · [移动分支回归](../output/mobile-audit-delivery-20261126/mobile-branch-final/verification.json) · [根回归](../output/mobile-audit-delivery-20261126/regression-final/verification.json)
+- 待办为独立移动应用的 G1 多页面覆盖验证。

@@ -194,6 +194,7 @@ def run(args):
         if args.app_category:
             common += ['--app-category', args.app_category]
         command(['mobile/analyze/correlate_mobile.py', *common, '--permissions', permissions,
+                 '--replay-inputs', out / 'replay-inputs',
                  '--out', target / 'findings.jsonl', '--summary', target / 'summary.json'], out / 'correlate.log', cancel_file=getattr(args, 'cancel_file', None))
         verification['stages'][stage] = {'state': 'done'}
         stage = 'bundle'
