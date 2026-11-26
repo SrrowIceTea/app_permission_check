@@ -217,7 +217,10 @@ def violations(current: dict, baseline: dict) -> list[str]:
                        - set(baseline.get('syntax_errors', []))):
         bad.append(f'Python 语法错误（不再静默跳过）: {item}')
     # 把登记过的文件搬出扫描面不应洗白：原路径消失且不再超限时才允许自然移除。
+    # 例外：Gradle 的 */build/ 是 gitignore 的生成产物，干净工作树本来就没有它。
     for rel in baseline.get('max_lines', {}):
+        if '/build/' in rel:
+            continue
         if rel not in current.get('max_lines', {}) and not (ROOT / rel).is_file():
             bad.append(f'基线登记的文件已不在原路径: {rel}（移动/删除需显式更新基线）')
     return bad

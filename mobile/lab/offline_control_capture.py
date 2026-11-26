@@ -211,8 +211,8 @@ def capture_case(adb, user, apk_sha, case, token, folder, bundle, network):
         try:
             crash = adb("shell", "logcat", "-d", "-b", "crash", "--pid", pid, timeout=10)
             (folder / "device-crash.log").write_text(crash.stdout + crash.stderr, encoding="utf-8")
-        except (OSError, subprocess.SubprocessError):
-            pass
+        except (OSError, subprocess.SubprocessError) as error:
+            print(f"device_crash_log_failed: {error}", file=sys.stderr)
         raise
     finally:
         save(folder / "receipts.json", server.receipts if "server" in locals() else [])
