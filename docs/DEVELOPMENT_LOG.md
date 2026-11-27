@@ -9,6 +9,15 @@
 - [开发日志分卷 A](DEVELOPMENT_LOG_20261123_20261126_A.md)
 - [开发日志分卷 B](DEVELOPMENT_LOG_20261123_20261127_B.md)
 
+## 2026-11-27 · 自有夹具 HTTPS 采集复验
+
+- 范围：核对移动自有 Gadget 夹具到本地接收端的 HTTPS 采集；修复设备验收发现的 TLS 审计开关传递问题。仅用于授权测试，TLS 校验收宽仅用于白名单进程的流量捕获。
+- 首轮 `output/mobile-device-gadget-20261127-140301-430200/verification.json` 失败，Gadget 驱动未传递 `VSCAN_TLS_BYPASS`，TLS 钩子报告关闭，就绪门控在触发外发前停止。
+- 修复 Gadget 驱动向 bundle 传递显式开关，默认关闭，包名固定为自有夹具。关闭时就绪检查立即给出诊断；增加默认关闭、显式开启、白名单及关闭诊断回归。
+- 在自有 API 36 userdebug 模拟器中显式启用审计开关复跑，47 项检查通过，HTTP 和客户端 HTTPS 各捕获一条归因流和 200 响应，响应内字节数与请求正文 SHA-256 均匹配。收集端位于本机 HTTP 反向代理上游，响应经代理记录；未保存独立服务端回执文件。证据见 `output/mobile-device-gadget-20261127-140622-473900/verification.json` 和 `https-capture-verification.json`。
+- 验证：夹具定向回归 26/26；根回归含移动检查 24/24（`output/mobile-https-final-20261127/root/verification.json`）；移动分支回归 26/26（`output/mobile-https-final-20261127/branch/verification.json`）；工程守卫通过。隔离模拟器已关闭，ADB 转发已释放。
+- 待办：PCAP 报文重组、独立服务端回执及正式一键审计新任务的证据 ZIP 离线复算需另行完成。当前环境未配置 tshark。
+
 ## 2026-11-27 · 移动权限保护级别设备标定
 
 - 范围：核对 API 36 手机模拟器的 40 条权限保护级别，保留设备指纹和原始证据，验证构建器及规则库的来源与数值。仅用于授权测试。

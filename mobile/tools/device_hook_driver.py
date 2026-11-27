@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import threading
 import time
@@ -68,7 +69,8 @@ def attach_scripts(device, plan: list, session_dir: Path, capture: MultiCapture)
             body = Path(item["script"]).read_text(encoding="utf-8")
             if "frida-java-bridge" not in body:
                 raise ValueError(f"{item['script']} 未包含 Java bridge")
-            script = session.create_script(configure(body, [PKG]))
+            tls_bypass = os.environ.get("VSCAN_TLS_BYPASS", "").strip() == "1"
+            script = session.create_script(configure(body, [PKG], tls_bypass=tls_bypass))
             script.on("message", capture.callback(session_dir / item["output"]))
             script.load()
             scripts.append(script)

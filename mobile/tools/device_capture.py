@@ -146,8 +146,11 @@ def hook_readiness(session: Path, mode: str) -> list:
         fatal = any(ev.get("ev") in ("SCRIPT_ERROR", "CAPTURE_ERROR", "MALFORMED_EVENT")
                     for ev in events)
         ok = isinstance(count, int) and count > 0 and not fatal
+        disabled = item["name"] == "tls" and any(ev.get("ev") == "TLS_BYPASS_DISABLED" for ev in events)
+        note = "TLS 审计开关未开启；白名单夹具验收可显式设置 VSCAN_TLS_BYPASS=1" if disabled else (
+            None if ok else "未确认非零挂载，或采集脚本失败")
         checks.append({"name": f"hook_{item['name']}_armed", "exit_code": 0 if ok else 1,
-                       "armed": armed, "note": None if ok else "未确认非零挂载，或采集脚本失败"})
+                       "armed": armed, "note": note, "disabled": disabled})
     if mode == "gadget":
         starts = [ev for ev in read_events(session / "reads.jsonl") if ev.get("ev") == "START"]
         start = starts[0] if starts else {}
@@ -162,6 +165,8 @@ def wait_hooks(session: Path, mode: str, processes: list, timeout: int = 50) -> 
     while time.monotonic() < end:
         checks = hook_readiness(session, mode)
         if all(check["exit_code"] == 0 for check in checks):
+            return checks
+        if any(check.get("disabled") for check in checks):
             return checks
         if any(process.poll() is not None for process in processes):
             return checks

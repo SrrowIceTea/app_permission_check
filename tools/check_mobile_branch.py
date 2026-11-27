@@ -17,7 +17,7 @@ from core.regression_output import create_output, publish_latest
 CHECKS = [
     ("upstream_mobile", ".", [PY, "mobile/tools/run_mobile_checks.py"]),
     ("mobile_workbench", ".", [PY, "-m", "unittest", "discover", "-s", "mobile/workbench", "-p", "test_*.py"]),
-    ("fixture_pipeline", "mobile/tools", [PY, "-m", "unittest", "test_device_pipeline", "test_device_trigger", "test_device_runtime", "test_device_permissions", "test_device_cleanup"]),
+    ("fixture_pipeline", "mobile/tools", [PY, "-m", "unittest", "test_device_pipeline", "test_device_tls_switch", "test_device_trigger", "test_device_runtime", "test_device_permissions", "test_device_cleanup"]),
     # 断点续跑的完成判据（verification.json.passed + 报告在），反例是"目录齐全但判据未通过"。
     # 与 supervise_batch.batch_progress 同口径，改任一处都该有这条红。
     ("batch_plan", "mobile/tools", [PY, "-m", "unittest", "test_batch_plan_resume"]),

@@ -37,7 +37,9 @@ Gadget 构建检查 provenance 与实际文件摘要；普通 Debug 不依赖准
 启动到挂钩完成之间的行为**不在观测窗口**，不能据此声称覆盖任意 App 的冷启动行为。
 普通 Debug 与 Gadget 使用同一包名及签名，不应并行安装或并行运行。
 
-采集入口为仓库中的 `mobile/tools/device_fixture_run.py --mode gadget --serial SERIAL --skip-ai`，
+夹具的 HTTPS 流量验收需要显式设置 `VSCAN_TLS_BYPASS=1`，只对自有白名单进程生效；
+不开启时脚本在就绪检查中说明原因。采集入口为仓库中的
+`mobile/tools/device_fixture_run.py --mode gadget --serial SERIAL --skip-ai`，
 也可先执行 `--preflight-only`。它记录 `shell id`、`ro.debuggable`、`ro.build.type`、
 固件指纹与初始权限，不执行 `adb root`、`su`、frida-server 或系统 CA 安装。
 若镜像仍是 `userdebug` / `ro.debuggable=1`，仅可称**受限非 root 路径模拟**，

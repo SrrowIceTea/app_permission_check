@@ -244,7 +244,7 @@ class SingleSessionContracts(unittest.TestCase):
             source = path / "script.js"
             source.write_text("// frida-java-bridge", encoding="utf-8")
             plan = [{"script": str(source), "output": f"hook{i}.jsonl"} for i in range(4)]
-            with patch.object(driver, "configure", side_effect=lambda body, packages: body):
+            with patch.object(driver, "configure", side_effect=lambda body, packages, **kwargs: body):
                 _, scripts, metadata = driver.attach_scripts(device, plan, path, Mock())
             self.assertEqual(len(scripts), 4)
             device.attach.assert_called_once_with(123)
@@ -260,7 +260,7 @@ class SingleSessionContracts(unittest.TestCase):
             path = Path(tmp)
             source = path / "script.js"
             source.write_text("// frida-java-bridge", encoding="utf-8")
-            with patch.object(driver, "configure", side_effect=lambda body, packages: body):
+            with patch.object(driver, "configure", side_effect=lambda body, packages, **kwargs: body):
                 with self.assertRaisesRegex(RuntimeError, "bad script"):
                     driver.attach_scripts(device, [{"script": str(source), "output": "one.jsonl"}], path, Mock())
         device.attach.return_value.detach.assert_called_once()
