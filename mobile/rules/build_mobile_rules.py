@@ -129,9 +129,9 @@ def summarize(out: Path, info: dict, version: str, pl_stats: dict | None = None)
         "window_note": "30000ms 为声明值，尚未由移动夹具校准；不是法律阈值，也不是通用参数。",
         "permissions_protection_level": {
             "asserted": pl_stats.get("asserted", 0),
+            "numeric_asserted": pl_stats.get("numeric_asserted", 0),
             "total": info["counts"]["permissions"],
-            "note": "未断言保护级别的权限，其 over_permission 规则缺少「保护级别」这一维；"
-                    "本项必须随设备实测更新，不得当作已完成。",
+            "note": "设备观测仅适用于所记录的系统版本和构建；未知标志保留原文并将数值留空。",
         },
         "api_source": "android.jar (SDK platform 36) via javap -s",
         "permission_source": ("seed + 设备实测" if pl_stats.get("asserted")
@@ -180,9 +180,10 @@ def main() -> int:
             for p in problems:
                 print(f"[fatal] {p}", file=sys.stderr)
             raise SystemExit(1)
-        pl_stats = {"asserted": conn.execute(
-            "SELECT COUNT(*) FROM permissions WHERE android_version=?"
-            " AND protection_level_raw IS NOT NULL", (args.version,)).fetchone()[0]}
+        asserted, numeric_asserted = conn.execute(
+            "SELECT COUNT(protection_level_raw), COUNT(protection_level_value)"
+            " FROM permissions WHERE android_version=?", (args.version,)).fetchone()
+        pl_stats = {"asserted": asserted, "numeric_asserted": numeric_asserted}
     except BaseException:
         # 任何失败（含未预期异常）都不得留下半成品 DB ——
         # 半成品和成功产物在文件系统上长得一模一样，是最难发现的静默失败。

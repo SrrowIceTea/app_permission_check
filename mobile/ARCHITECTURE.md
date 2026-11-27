@@ -128,7 +128,7 @@
 
 - **加固壳**：`apk_packer_probe.py` 仅标注「结论受限」，不脱壳。
 - **明文来源六条**：mitmproxy 解密 / Java TLS 校验收宽 / native TLS / native 应用层加密 / TLS 元数据(SNI+keylog) / pcap+tshark。覆盖导出符号的模块；符号被剥/内联的静态 BoringSSL、Flutter 仅到「绕过校验」为止；自研算法（XOR 等）仍在覆盖外。
-- **尚未校准/未完成**：时间窗 30000ms 仍为声明值（`WINDOW_CALIBRATION.md` 待建）；权限 `protectionLevel` 40 条未断言；AI 幻觉率无量化数据；写入类 API 与覆写型服务（无障碍/通知监听）未覆盖。
+- **尚未校准/未完成**：时间窗 30000ms 的跨应用适用性待验证；权限 `protectionLevel` 已完成 API 36 设备观测，其他版本待核验；AI 幻觉率无量化数据；写入类 API 与覆写型服务（无障碍/通知监听）未覆盖。
 - **样本死在窗口内** 如实记录（`app-death.json`，`alive_at_end` 三态），不掩盖。
 
 ---

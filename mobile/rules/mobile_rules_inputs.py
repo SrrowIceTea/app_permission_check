@@ -50,7 +50,7 @@ def jdump(obj) -> str:
     return json.dumps(obj, sort_keys=True, ensure_ascii=False)
 
 
-def load_calibration(calib_dir: Path | None = None) -> dict[str, dict]:
+def load_calibration(calib_dir: Path | None = None, version: str | None = None) -> dict[str, dict]:
     """设备实测权限 → {permission_name: {"observations": [...], "protection_level_raw", ...}}。
 
     没有标定文件时返回空。**注意**：`definition_status` 一律保持 pending——schema 规定
@@ -65,27 +65,36 @@ def load_calibration(calib_dir: Path | None = None) -> dict[str, dict]:
     calib_dir = calib_dir or CALIB
     out: dict[str, dict] = {}
     for row in read_jsonl(calib_dir / "permissions-device.jsonl"):
+        observation = row.get("observation")
+        provenance = row.get("provenance")
+        if not observation and isinstance(provenance, dict) and provenance.get("device"):
+            observation = {"device": provenance["device"], "provenance": provenance}
+        device_version = observation.get("android_sdk") if isinstance(observation, dict) else None
+        if device_version is None and isinstance(observation, dict):
+            device = observation.get("device")
+            device_version = device.get("android_sdk") if isinstance(device, dict) else None
+        if version and device_version is not None and str(device_version) != str(version):
+            continue
         entry = out.setdefault(row["permission_name"], {"observations": [],
                                                         "protection_level_raw": None,
                                                         "protection_level_value": None})
-        if row.get("observation"):
-            entry["observations"].append(row["observation"])
+        if observation:
+            entry["observations"].append(observation)
         # 兼容车载侧标定产物的字段名（protection_level_raw），使同一格式可直接复用。
         raw = row.get("protection_level") or row.get("protection_level_raw")
         if raw:
             entry["protection_level_raw"] = raw
             pv = _protection_level_value(raw)
-            if pv is not None:
-                entry["protection_level_value"] = pv
+            entry["protection_level_value"] = pv
     return out
 
 
 # AOSP AndroidManifest.xml 里 protectionLevel 的位值（同一套值车载侧已用）
-PROTECTION_LEVEL_BITS = {"normal": 0, "dangerous": 1, "signature": 2, "privileged": 4,
+PROTECTION_LEVEL_BITS = {"normal": 0, "dangerous": 1, "signature": 2, "privileged": 0x10,
                          "system": 0x10, "development": 0x20, "appop": 0x40,
                          "pre23": 0x80, "installer": 0x100, "verifier": 0x200,
                          "preinstalled": 0x400, "setup": 0x800, "instant": 0x1000,
-                         "runtime_only": 0x2000}
+                         "runtime": 0x2000, "runtime_only": 0x2000, "retaildemo": 0x1000000}
 
 
 def _protection_level_value(raw: str) -> int | None:
@@ -94,7 +103,8 @@ def _protection_level_value(raw: str) -> int | None:
     known = False
     for part in str(raw).split("|"):
         part = part.strip().lower()
-        if part in PROTECTION_LEVEL_BITS:
-            total |= PROTECTION_LEVEL_BITS[part]
-            known = True
+        if part not in PROTECTION_LEVEL_BITS:
+            return None
+        total |= PROTECTION_LEVEL_BITS[part]
+        known = True
     return total if known else None

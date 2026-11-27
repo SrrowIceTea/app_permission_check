@@ -9,6 +9,10 @@
 
 ---
 
+## 移动 API 36 权限标定（2026-11-27）
+
+- 自有 Android 16 模拟器的 40 条权限保护级别已入库，原始设备输出、构建指纹与逐条来源见 [移动权限标定](../mobile/rules/calibration/README.md)。整数与 SDK 36 标志值逐项核对，未知标志留空，设备观测保持 `pending`。其他系统版本仍待验证。
+
 ## 三块可本地验证增量完成（2026-11-26）
 
 > 本轮无 AAOS 设备（当前 emulator-5554 为 Android 17 / API 37 普通 emulator、user 0），
@@ -184,7 +188,7 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0
 | # | 未完成项 | 来源 | 为什么不在本周 A 组 |
 | --- | --- | --- | --- |
 | 1 | 车载 B1 已签核两个自有 APK 的五档重放。Car Stats Viewer 已验收车速上传与 5 条断网行驶点补传。移动 Android ID 自有夹具已完成五档重放 | [车载复核](../vehicle/bench/WINDOW_CALIBRATION.md) · [移动基准](../mobile/lab/WINDOW_CALIBRATION.md) | 车载和移动的跨应用窗口验证均缺独立参考 |
-| 2 | `protection_level_value`：车载四版本 180 条已入库。移动 40 条未断言 | 本文「Android 16 车载编译权限级别标定」+ mobile「未完成」 | 移动端需独立来源 |
+| 2 | `protection_level_value`：车载四版本 180 条、移动 API 36 的 40 条已按各自设备观测入库 | [移动设备标定](../mobile/rules/calibration/README.md) | 移动其他系统版本仍需各自核验 |
 | 3 | B2 VScanBench 已加入后台只读和发送对照，两轮均通过 11 项健康检查 | [车载基准](../vehicle/bench/README.md#aaos-后台读取与发送对照) | 继续扩充场景矩阵，签核窗口仍由既有 90 对验证 |
 | 4 | F1 类加载归因：`hook_classload.js` + 30 条 SDK 种子前缀已实现，离线归因/透传回归通过；`PRIVACY_READ` 已带 `origin` | [钩子说明](../vehicle/hooks/README.md#f1-类加载归因2026-11-27) | 设备侧（已知含 SDK 的自有 APK 稳定复现 third_party）待验收 |
 | 5 | G1 已验证自有三页夹具，手动和自动各覆盖 3/3 页及 4/4 动作 | [多页设备对照](../vehicle/bench/UI_COVERAGE.md#2026-11-25-三页自有-apk-对照) | 普通第三方车载应用的多页面发现待验证 |

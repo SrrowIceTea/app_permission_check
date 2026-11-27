@@ -180,9 +180,33 @@ class RuleLibraryTest(unittest.TestCase):
         sys.path.insert(0, str(HERE))
         import build_mobile_rules as bmr
         self.assertEqual(bmr._protection_level_value("dangerous"), 1)
-        self.assertEqual(bmr._protection_level_value("signature|privileged"), 2 | 4)
+        self.assertEqual(bmr._protection_level_value("signature|privileged"), 2 | 0x10)
+        self.assertEqual(bmr._protection_level_value("signature|retailDemo"), 2 | 0x1000000)
         self.assertEqual(bmr._protection_level_value("normal"), 0)
         self.assertIsNone(bmr._protection_level_value("完全认不出的级别"))
+        self.assertIsNone(bmr._protection_level_value("dangerous|未知标志"))
+
+    def test_published_device_calibration_evidence(self):
+        calib = HERE / "calibration"
+        raw = (calib / "permissions-api36-pm.txt").read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        facts = json.loads((calib / "device-api36.json").read_text(encoding="utf-8"))
+        records = [json.loads(line) for line in
+                   (calib / "permissions-device.jsonl").read_text(encoding="utf-8").splitlines()]
+        published = sqlite3.connect(HERE / "rules_mobile.db")
+        try:
+            for record in records:
+                row = published.execute(
+                    "SELECT protection_level_raw, device_calibration_json FROM permissions"
+                    " WHERE android_version=? AND permission_name=?",
+                    (facts["android_sdk"], record["permission_name"])).fetchone()
+                self.assertIsNotNone(row, record["permission_name"])
+                self.assertEqual(row[0], record["protection_level_raw"])
+                self.assertEqual(json.loads(row[1])[0]["source_sha256"], digest)
+                self.assertEqual(json.loads(row[1])[0]["build_fingerprint"], facts["build_fingerprint"])
+            self.assertEqual(len(records), 40)
+        finally:
+            published.close()
 
     def test_device_calibration_reaches_protection_level(self):
         """回归一条曾经的**死路**：permissions 的 INSERT 没写 protection_level_raw，
@@ -195,9 +219,14 @@ class RuleLibraryTest(unittest.TestCase):
         calib.mkdir(exist_ok=True)
         (calib / "permissions-device.jsonl").write_text(
             json.dumps({"permission_name": "android.permission.CAMERA",
-                        "protection_level_raw": "dangerous"}) + "\n"
+                        "protection_level_raw": "dangerous",
+                        "provenance": {"device": {"android_sdk": "36",
+                                                   "build_fingerprint": "fixture"}}}) + "\n"
             + json.dumps({"permission_name": "android.permission.USE_BIOMETRIC",
-                          "protection_level_raw": "signature|privileged"}) + "\n",
+                          "protection_level_raw": "signature|privileged"}) + "\n"
+            + json.dumps({"permission_name": "android.permission.INTERNET",
+                          "protection_level_raw": "normal",
+                          "provenance": {"device": {"android_sdk": "35"}}}) + "\n",
             encoding="utf-8")
         out = Path(self.tmp.name) / "calibrated.db"
         proc = build(out, {"VSCAN_MOBILE_CALIB": str(calib)})
@@ -211,13 +240,19 @@ class RuleLibraryTest(unittest.TestCase):
         self.assertEqual(row[0], "dangerous")
         self.assertEqual(row[1], 1)
         self.assertEqual(row[2], "pending", "设备观测不得标 source_verified")
+        observed = conn.execute("SELECT device_calibration_json FROM permissions WHERE permission_name=?",
+                                ("android.permission.CAMERA",)).fetchone()[0]
+        self.assertEqual(json.loads(observed)[0]["device"]["build_fingerprint"], "fixture")
         self.assertEqual(conn.execute(
             "SELECT protection_level_raw FROM permissions WHERE permission_name=?",
             ("android.permission.USE_BIOMETRIC",)).fetchone()[0], "signature|privileged")
+        self.assertEqual(conn.execute(
+            "SELECT protection_level_value FROM permissions WHERE permission_name=?",
+            ("android.permission.USE_BIOMETRIC",)).fetchone()[0], 0x12)
         self.assertIsNone(conn.execute(
             "SELECT protection_level_raw FROM permissions WHERE permission_name=?",
             ("android.permission.INTERNET",)).fetchone()[0],
-            "没有标定的权限必须留 NULL，不得猜")
+            "其他 Android 版本的观测不能用于当前规则库")
         conn.close()
 
     def test_jvm_descriptor_to_frida_types(self):

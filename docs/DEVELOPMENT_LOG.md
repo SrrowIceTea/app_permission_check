@@ -9,6 +9,15 @@
 - [开发日志分卷 A](DEVELOPMENT_LOG_20261123_20261126_A.md)
 - [开发日志分卷 B](DEVELOPMENT_LOG_20261123_20261127_B.md)
 
+## 2026-11-27 · 移动权限保护级别设备标定
+
+- 范围：核对 API 36 手机模拟器的 40 条权限保护级别，保留设备指纹和原始证据，验证构建器及规则库的来源与数值。仅用于授权测试。
+- 设备指纹、`pm list permissions -f -g` 原文及 40 条解析记录随库保存于 `mobile/rules/calibration/`。设备为 API 36 userdebug 模拟器，定义包均为 `android`。40 条原文和整数已进入发布库，`definition_status` 保持 `pending`，每条设备观测保存指纹及原文 SHA-256。
+- 修复保护级别转换：`privileged` 从错误的 4 改为 SDK 36 声明的 `0x10`，补 `retailDemo`，任何未知标志导致整数留空。带设备版本的观测只用于对应版本，解析器的来源信息会写入设备观测。位值逐条与 SDK 36 `attrs_manifest.xml` 对照，源文件 SHA-256 为 `8164b282928162d32dbe775c7fb956adbd724076d8fbe5217a4e3584f5d7f441`。
+- 候选库逐项比较 40 条权限及其他表，其他表内容一致。旧摘要写 API 58 条，与原库实际 68 条不一致，重建摘要后与数据库一致。核验记录在 `output/mobile-calibration-candidate-20261127/publication/verification.json`。
+- 验证：`-m unittest mobile.rules.test_rules` 14/14；`tools/engineering_guards.py` 通过；`tools/run_regressions.py --mobile --out output/mobile-permission-final-20261127/root` 24/24；`tools/check_mobile_branch.py --out output/mobile-permission-final-20261127/branch` 26/26。来源追溯回归在全量回归启动后新增，已单独复跑通过。
+- 待办：其他系统版本需使用各自设备观测。HTTPS 本地链路与两端独立应用验收仍待继续。
+
 ## 2026-11-27 · 两端后续工作与工程守卫复验
 
 - 范围：复验移动后台断网对照，排查回归守卫，核对手机权限标定证据。仅用于授权测试。

@@ -209,8 +209,8 @@ AI 三阶段研判（含编造校验）、PDF 报告（十章 + 三附录）、�
 **未完成**：
 - 移动规则沿用 30000ms。自有 Android ID 夹具已覆盖只读、即时、延迟和同值跨批四组，
   详见[五档窗口基准](lab/WINDOW_CALIBRATION.md)。独立应用的窗口校准待完成。
-- 权限 `protectionLevel` 40 条全部未断言（链路已修通，产出步骤见
-  `rules/calibration/README.md`；无实测数据前不得编造级别）。
+- 权限 `protectionLevel` 已完成 API 36 模拟器 40 条设备标定；其他系统版本仍需各自核验，
+  设备来源与原始记录见 `rules/calibration/README.md`。
 - AI 阶段**已用真实 key 跑过**（keepass / camera 两次真实调用，见 §8.1 A13）：提示词渲染、
   校验逻辑与真实调用均已跑通；跨多次运行的一致性与幻觉率仍无量化数据（§2 B3 缺口未补）。
 - 写入类 API（`ContentResolver.insert` 等）与覆写型服务（无障碍/通知监听）未覆盖，

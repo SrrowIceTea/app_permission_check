@@ -4,15 +4,19 @@
 
 `build_mobile_rules.py` 会在构建时读本目录下的 **`permissions-device.jsonl`**（若存在），
 把设备实测到的 `protectionLevel` 写进 `permissions.protection_level_raw` /
-`protection_level_value`。没有这个文件时，这两列保持 NULL，构建摘要里会写明
-`permissions_protection_level.asserted = 0/N` —— **这是当前状态，不是「已完成」**。
+`protection_level_value`。没有标定文件时，这两列保持 NULL。
+
+2026-11-27 已冻结 Android 16 / API 36 自有模拟器的 40 条权限观测。设备指纹见
+`device-api36.json`，原始输出见 `permissions-api36-pm.txt`，逐条解析与摘要见
+`permissions-device.jsonl` 和 `permissions-device.summary.json`。发布库 40 条原文与
+整数均已核对。结果适用于该构建，其他系统版本需要各自标定。
 
 ## 为什么需要它
 
 `over_permission` 规则要判「清单里声明的隐私权限是否超出必要范围」，
 权限的**保护级别**（normal / dangerous / signature / privileged …）是关键维度：
 `dangerous` 才是用户可见可拒的隐私权限，`signature` 只给系统同签名应用。
-目前 40 条移动隐私权限种子的保护级别全部未断言，所以该维度是空的。
+本次设备观测覆盖了 40 条移动隐私权限种子。
 
 **注意**：设备实测**不等于**源码事实。schema 规定 `definition_status` 只能是
 `source_verified`（= 从可核对的权威来源抽取，本库即 `javap` 输出）或 `pending`，
@@ -25,17 +29,18 @@
 
 ```bash
 # 1) 在已授权的设备上抓 pm 输出（-f 才会带 protectionLevel，-d 只给 dangerous 组，不要用）
-adb shell pm list permissions -f -g > permissions-phone-android35.txt
+adb shell pm list permissions -f -g > permissions-phone-android36.txt
 
-# 2) 解析成标定文件（复用车载那份解析器，只换前缀）
+# 2) 在本轮 device-api36.json 记录 android_sdk 和 build_fingerprint，再解析
 PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/Users/毛宇淇/...
 "$PY" vehicle/rules/python/extract_device_calibration.py \
-      --pm-output permissions-phone-android35.txt \
-      --prefix android.permission. \
-      --out mobile/rules/calibration/permissions-device.jsonl \
-      --summary mobile/rules/calibration/permissions-device.summary.json
+      --pm-output permissions-phone-android36.txt \
+      --prefix android.permission. --device-facts device-api36.json \
+      --out output/phone-api36/permissions-device.jsonl \
+      --summary output/phone-api36/permissions-device.summary.json
 
-# 3) 重建规则库（会读上面的 jsonl）
+# 3) 核验新记录与设备事实后，提供标定目录并重建规则库
+export VSCAN_MOBILE_CALIB="$PWD/output/phone-api36"
 cd mobile/rules && "$PY" build_mobile_rules.py --force
 ```
 
@@ -53,9 +58,14 @@ cd mobile/rules && "$PY" build_mobile_rules.py --force
 | `protection_level_raw` | 是 | 原样字符串，如 `dangerous` / `signature\|privileged`；另兼容 `protection_level` |
 | `observation` | 否 | 其它设备观测，原样进 `device_calibration_json` |
 
+提取器生成且包含设备事实的 `provenance` 也会进入 `device_calibration_json`。
+
 `protection_level_value` 由 `build_mobile_rules.py` 按 AOSP 位值表（normal=0、
-dangerous=1、signature=2、privileged=4、instant=0x1000 …）自动按位或算出；
+dangerous=1、signature=2、privileged=0x10、instant=0x1000 …）自动按位或算出；
 出现认不出的级别词时该列留 NULL（**不编造**），原始串仍保留在 `protection_level_raw`。
+本轮位值逐项对照 SDK 36 的 `data/res/values/attrs_manifest.xml`，该文件 SHA-256 为
+`8164b282928162d32dbe775c7fb956adbd724076d8fbe5217a4e3584f5d7f441`。
+有 `observation.android_sdk` 的记录只用于同版本规则库。
 
 ## 不可越过的边界
 

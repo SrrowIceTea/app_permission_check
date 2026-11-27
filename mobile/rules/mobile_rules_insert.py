@@ -32,7 +32,7 @@ def insert_all(conn: sqlite3.Connection, *, version: str, window_ms: int) -> dic
     facts = read_jsonl(BUILD / "api_facts.jsonl")
     if not facts:
         sys.exit("[fatal] build/api_facts.jsonl 为空或不存在，先跑 extract_android_apis.py")
-    calib = load_calibration()
+    calib = load_calibration(version=version)
     reg_index = rule_gen.regulation_index(REG)
 
     # --- permissions ---
