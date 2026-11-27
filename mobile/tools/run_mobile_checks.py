@@ -60,7 +60,7 @@ def main() -> int:
         # 可达性过滤的四种情形（2026-11-09）：App 直接调用 / 仅库内部 / 路径经库 /
         # 断链未知。判错的方向是「把断链当不可达」——会静默地把真读取藏起来。
         ("reachability", MOBILE / "tools",
-         [PY, "-m", "unittest", "test_reachability", "test_reachability_wrapper"]),
+         [PY, "-m", "unittest", "test_reachability", "test_reachability_counts", "test_reachability_wrapper"]),
         # L2 只读覆盖统计（2026-11-10）：含**正对照**——现场 javac+d8 编一个夹具，
         # 里面故意放一条闭集没登记的敏感调用（method_gap / class_gap / 字段读取），
         # 报不出来就说明 observed_surface 只是在复述闭集。缺 SDK 时该组 skip 而不是假红。

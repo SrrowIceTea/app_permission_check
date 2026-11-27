@@ -164,7 +164,7 @@ clone 后 `skills/` 下只有两个索引文件。需要时按 [skills/SKILLS.md
 
 ```bash
 # 统一入口：固定解析到项目 Python 3.13（VSCAN_PYTHON > .venv > Python313 安装目录）
-.\tools\python313.ps1 tools/run_regressions.py        # 22 组（--mobile 23、--prepare --mobile 24）：
+.\tools\python313.ps1 tools/run_regressions.py        # 23 组（--mobile 24、--prepare --mobile 25）：
                                                       #  completion / rules-contract / event-store / log-rotation /
                                                       #  codeloc / correlate / vehicle-evidence / vehicle-pipeline /
                                                       #  collector / vehicle-method / vehicle-optimizations /

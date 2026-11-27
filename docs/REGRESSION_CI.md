@@ -1,5 +1,5 @@
 # Windows 离线回归与 Gitee 接入
-<!-- regression-manifest: root=22 root-mobile=23 root-prepare-mobile=24 mobile-checks=63 branch=26 -->
+<!-- regression-manifest: root=23 root-mobile=24 root-prepare-mobile=25 mobile-checks=63 branch=26 -->
 
 仅用于授权测试。回归执行使用 Python 3.13、Node.js 24 与 npm。它需要本机回环 HTTP，首次安装依赖需要访问 PyPI 和 npm。
 
@@ -12,8 +12,8 @@
 
 `--prepare` 调用现有的车载准备入口，安装锁文件对应的 Hook 依赖并构建车载与共享 bundle。
 准备失败时停止本轮测试，保存 `prepare.log`、准备阶段的独立日志和 `verification.json`。
-准备成功后运行 22 组根回归，`--mobile` 追加 1 组移动侧检查，`--prepare` 再加 1 组准备
-（即 24 组）；CI 另跑 `tools/check_mobile_branch.py`（26 组）与 `tools/engineering_guards.py`。
+准备成功后运行 23 组根回归，`--mobile` 追加 1 组移动侧检查，`--prepare` 再加 1 组准备
+（即 25 组）；CI 另跑 `tools/check_mobile_branch.py`（26 组）与 `tools/engineering_guards.py`。
 每次运行使用新目录。GitHub Actions 和 Jenkins 共用此入口。
 **组数以代码为唯一来源**：`tools/run_regressions.py::CHECKS`、
 `tools/check_mobile_branch.py::CHECKS`、`mobile/tools/run_mobile_checks.py::EXPECTED_CHECKS`；
@@ -120,7 +120,7 @@ Gitee Go 官方云端 Python 插件文档列出 Linux 镜像和最高 Python 3.9
 ## 本机部署验收（2026-11-05）
 
 > 本节至「主线接管」各段的组数是 2026-11-05 的当时口径：16 组根回归 + 移动侧 1 组 = 17 组，
-> 移动侧 29 项。现行口径为 22 组根回归（带 `--mobile` 为 23 组、`--prepare --mobile` 为 24 组）、
+> 移动侧 29 项。现行口径为 23 组根回归（带 `--mobile` 为 24 组、`--prepare --mobile` 为 25 组）、
 > 移动侧 63 项、分支 26 组；见上文「统一回归入口」与页首机器标记。下文数字按当时构建如实保留，
 > 不按现行口径改写。
 

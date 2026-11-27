@@ -57,7 +57,8 @@ def _has_emulator_process() -> bool:
                 ps = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {image}", "/NH"],
                                     capture_output=True, text=True, encoding="utf-8",
                                     errors="replace", timeout=20)
-            except (OSError, subprocess.SubprocessError):
+            except (OSError, subprocess.SubprocessError) as exc:
+                print(f"检查模拟器进程失败（{image}）：{exc}", file=sys.stderr, flush=True)
                 continue
             if image.lower() in (ps.stdout or "").lower():
                 return True
