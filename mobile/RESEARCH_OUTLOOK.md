@@ -12,7 +12,7 @@
 ## 摘要
 
 项目当前是一条**可端到端复现的工程链路**（规则库 → 采集 → 政策 → 关联判定 → AI 研判 → PDF 报告），
-最强的两点在别的研究工作里反而是稀缺品：**证据来源可追溯**（58 条 `javap -s` 实证签名 + 运行时栈行号 + 值哈希）和**诚实性工程**（gaps 显式化、结论等级封顶、AI 输出机器校验、加壳样本如实标注"结论受限"）。
+最强的两点在别的研究工作里反而是稀缺品：**证据来源可追溯**（68 条 `javap -s` 实证签名 + 运行时栈行号 + 值哈希）和**诚实性工程**（gaps 显式化、结论等级封顶、AI 输出机器校验、加壳样本如实标注"结论受限"）。
 
 最大的结构性不足同样清晰：**只有"行为观测"，没有"数据流证明"**（无污点/数据流分析）、**值证据只支持原值或等价哈希**（对任意变换无效）、**触发依赖手工脚本**（覆盖率不可度量）、**缺少第三方 SDK 与 App 类目的自动归属**、**没有 ground truth 评测**（召回率未知）。
 
@@ -30,7 +30,7 @@
 | --- | --- | --- |
 | 风险规则 | 223 条 / 8 种 `rule_type` | `mobile/rules/build_mobile_rules.py` + `rules_mobile.db` |
 | 数据类别 | 28 类 `sensitive_data_types` | `seed/sensitive_data_types.json` |
-| API 抓手 | 58 条 `javap -s` 实证签名（**`api_missing.json` = 0**） | `extract_android_apis.py` → `build/api_facts.jsonl` |
+| API 抓手 | 68 条 `javap -s` 实证签名（**`api_missing.json` = 0**） | `extract_android_apis.py` → `build/api_facts.jsonl` |
 | 权限 | 40 条 | `seed/permissions.json` |
 | App 类目必要信息 | 39 类 | `app_categories` |
 | 政策要求 | 16 条 | `policy_requirements` |
@@ -43,7 +43,7 @@
 ### 1.2 采集层：值级证据是本项目最有辨识度的一步
 
 - **Frida 钩子**：`hooks/gen_targets.py` 从规则库生成监视表（签名不手抄），
-  覆盖 58 条签名 / 28 类数据；多对多分派走 `observation_spec_json`（`content_uri` /
+  覆盖 68 条签名 / 28 类数据；多对多分派走 `observation_spec_json`（`content_uri` /
   `provider_arg` / `string_key_arg`），未映射实参留痕 `UNMAPPED_ARG`（M004）。
 - **同意时序**：`PERM_RESULT` / `POLICY_VIEW`（均为代理信号，逐权限使用 granted/denied，M007）。
 - **值哈希（M005/M011）**：钩子只落 `sha256(值)[:16]` + 长度 + 前 6 字符预览，

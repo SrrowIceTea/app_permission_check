@@ -17,7 +17,7 @@ node mobile/hooks/test_privacy_implementation.mjs
 
 ## 原始输出
 
-- `session/reads.jsonl`：规则库生成的 58 个敏感 API，保留 canonical API 身份。
+- `session/reads.jsonl`：规则库生成的 68 个敏感 API，保留 canonical API 身份。
 - `session/consent.jsonl`：权限请求、权限结果、政策页面线索；不代表直接政策接受。
 - `session/egress.jsonl`：应用进程内真实出网连接和 URL 观测。
 - `session/flows.jsonl`：复用原 mitmproxy collector 的响应流、时间归因与脱敏令牌。
@@ -30,7 +30,7 @@ HTTPS 不安装测试 CA、不绕过固定证书；因此此入口不声称可�
 
 ## 本轮复现与修复
 
-1. 原敏感钩子独立加载在 API 36 自有正控上可以捕到事件，并非全量 58 个 API 必然崩溃。
+1. 原敏感钩子独立加载在 API 36 自有正控上可以捕到事件，并非全量 68 个 API 必然崩溃。
 2. 多个独立 Java bridge 在冷启动阶段产生 `Application.attach` 递归：改为单 bundle、共享一个 Java bridge；失败现场保留在 run1。
 3. `PackageManager` 是抽象类，挂声明但实际子类覆盖会出现“ARMED 但安装列表零事件”。运行时映射到 `ApplicationPackageManager`，仍引用 android.jar 生成的 canonical API，并额外记录 `hook_class`。
 4. 夹具 run3 真实捕获 12 条读取、4 条权限事件、1 条 HTTP 200 流；Android ID 读取与发送令牌哈希相同。安装列表成功返回 249 项。

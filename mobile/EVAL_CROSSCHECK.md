@@ -90,7 +90,7 @@ PY="$LOCALAPPDATA/Programs/Python/Python313/python.exe"   # 原开发机是 C:/U
 
 # 规则库：抽取 → 构建（含覆盖守护）
 cd mobile/rules
-"$PY" extract_android_apis.py            # → build/api_facts.jsonl（58 条，missing=0）
+"$PY" extract_android_apis.py            # → build/api_facts.jsonl（68 条，missing=0）
 "$PY" build_mobile_rules.py --force      # → rules_mobile.db（223 条规则）
 cd ../hooks && "$PY" gen_targets.py && node build.mjs && cd ../..
 

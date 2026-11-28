@@ -2,7 +2,7 @@
 
 > 仅用于授权测试（已获授权的样本与设备）。
 > 面向第九届浙江省大学生网络与信息安全竞赛企业命题（浙江省质量科学研究院）。
-> 本文档基于 `mobile/CLAUDE.md`、`mobile/README.md`、`mobile/RISK_SCORE_MODEL.md` 与目录实际结构整理，状态截至 2026-10-24（含风险量化 RL 优化模块）。
+> 本文档基于 `mobile/CLAUDE.md`、`mobile/README.md`、`mobile/RISK_SCORE_MODEL.md` 与目录实际结构整理，状态截至 2026-11-28（含风险量化 RL 优化、审计/重签工具链与离线重放正控）。
 
 ---
 
@@ -16,7 +16,7 @@
 | 入口 | 前端 `frontend/index.html` → 工作台 `frontend/app.html` → `mobile/pipeline/server.py`（端口 **8771**） |
 | 兼容旧端 | `mobile/workbench/server.py`（端口 **8772**，旧隐私工作台，可并行） |
 | 运行模式 | Root 模拟器（frida-server 直挂）/ 非 root Gadget 重签衍生包（两轮正控均已通过） |
-| 离线优先 | 绝大多数能力无需设备即可回归（`run_mobile_checks.py` 63 项、`check_mobile_branch.py` 24 组） |
+| 离线优先 | 绝大多数能力无需设备即可回归（`run_mobile_checks.py` 63 项、`check_mobile_branch.py` 26 组） |
 
 ---
 
@@ -59,7 +59,7 @@
 ## 3. 七大模块职责
 
 ### 3.1 规则层 `rules/`
-- **规则库**：`rules_mobile.db`（schema v2），当前 **223 条规则 / 8 种类型 / 58 个 android.jar 实证 API / 28 类数据 / 39 类 App 必要信息 / 16 条政策条款**。
+- **规则库**：`rules_mobile.db`（schema v2），当前 **223 条规则 / 8 种类型 / 68 个 android.jar 实证 API（android-36）/ 28 类数据 / 39 类 App 必要信息 / 16 条政策条款**。
 - **签名抽取**：`extract_android_apis.py` 用 `javap -s` 从本机 `android.jar` 抽取 `(类名, 方法, JVM 描述符)` 三元组，抽不到的落 `build/api_missing.json` 作 TODO——**绝不手写签名**。
 - **构建器**：`build_mobile_rules.py`（异常即清理半成品 DB）、`rule_gen.py`、`mobile_rules_*.py`。
 - **法规原文**：`regulations/`（认定方法 / 必要信息规定 / 个保法 / GB-T 35273，带条款号与 URL）。
@@ -80,6 +80,11 @@
 - 透明代理 `transparent.py`（算启动参数 + 装系统 CA）；强制代理实测需 `-http-proxy 127.0.0.1` 且先于模拟器存在。
 - **完整报文链路（M038）**：`pcap_capture.py`（设备端 `tcpdump`，仅 `su 0`）+ `pcap_http.py`（keylog 喂 `tshark` 解密重组，TCP/TLS/gzip 全由 tshark 完成）。
 - **QUIC 压制（M041）**：`am start` 前 `iptables -I OUTPUT -p udp --dport 443 -j DROP` 逼回退 TCP。
+
+**非 root 重签与审计探针**（2026-11 起并入 `check_mobile_branch.py`）
+- `repack/`：Gadget 重签 / 注入工具链（`inject.py` / `toolchain.py` / `prepare.py`），产出非 root 衍生包。
+- `audit/`：存储加密 / 编译探针（`cipher_storage.py` / `storage_crypto.js` / `assess_probe.py`）。
+- `lab/`：`offline_control*.py`（离线重放正控）、`resend_receiver.py`（后台读取/重发正控），见 `lab/README.*`。
 
 ### 3.3 内核层 `core/`（平台无关，与车载共用）
 - `event_store.py`：SQLite 单机时序事件库（audit_store 迁移而来）。

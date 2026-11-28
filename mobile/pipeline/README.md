@@ -9,7 +9,7 @@
 
 ```
 mobile/pipeline/
-├── stages.py    # 阶段定义（16 个）+ 事件读写（emit_events / read_events）
+├── stages.py    # 阶段定义（17 个）+ 事件读写（emit_events / read_events）
 ├── runner.py    # 流水线执行器：静态 → 设备自愈 → 动态 → AI → 报告（后台线程）
 └── server.py    # HTTP + SSE 服务（上传 / 阶段流 / 产物下载）
 

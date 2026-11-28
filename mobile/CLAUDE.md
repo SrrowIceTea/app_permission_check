@@ -22,6 +22,9 @@
 | `workbench/` | 隐私审计工作台（工作流 / 运行时导入 / 合并布局 / 一键审计，带独立测试）；自带前端 `workbench/frontend/` |
 | `pipeline/` | **一键审计流水线**：17 阶段定义 `stages.py`（第 4 阶段 `surface` = L2 只读覆盖统计）、执行器 `runner.py`、HTTP+SSE `server.py`、`surface_stage.py`；前端在根 `frontend/`。默认 **8771**（`workbench/server.py` 默认 **8772**，两套可同时起），见根 `README.md` |
 | `fixture-app/` | 自有靶子 App（隐私演示），用于端到端验证 |
+| `lab/` | 实验室交付入口：core / nonroot / root 采集与 UI 覆盖、窗口/基准标定、离线重放与后台读取正控（`offline_control*.py` / `resend_receiver.py`）、第三方正控等（README 见目录内） |
+| `audit/` | 审计侧探针：存储加密/编译探针（`cipher_storage.py` / `storage_crypto.js` / `assess_probe.py`）及其回归 |
+| `repack/` | Gadget 重签与注入工具链（`inject.py` / `toolchain.py` / `prepare.py`），供非 root 衍生包流程使用 |
 
 ## 怎么跑（离线优先，不需要设备）
 
@@ -161,7 +164,7 @@ crash 缓冲 0 行）。
 
 ## 状态（2026-10-03，计数更新于 2026-10-13）
 
-规则库（223 条规则 / 8 种类型 / 58 个 android.jar 实证 API / 28 类数据 /
+规则库（223 条规则 / 8 种类型 / 68 个 android.jar 实证 API（android-36）/ 28 类数据 /
 39 类 App 必要信息 / 16 条政策条款）、移动钩子（敏感读取 + 同意时序）、流量打标
 （含值哈希令牌）、隐私政策三件套（获取 / 抽取 / 检查）、关联引擎（八种谓词）、
 AI 三阶段研判（含编造校验）、PDF 报告（十章 + 三附录）、自有靶子 App 与设备端端到端
